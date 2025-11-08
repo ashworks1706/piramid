@@ -1,3 +1,3 @@
 # Piramid
-A database for the new agentic age.
+A database for the agentic age.
 
