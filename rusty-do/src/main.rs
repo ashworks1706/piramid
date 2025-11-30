@@ -4,12 +4,15 @@
 // [X] Add ability to view tasks
 // [X] Add ability to save and load tasks from a file (JSON format)
 // [X] Add ability to mark tasks as completed
+// [X] Add ability to delete all completed tasks
 // [X] Add ability to edit task names
-// [ ] Add ability to delete all completed tasks
-// [ ] Add ability to prioritize tasks
-// [ ] Add ability to set deadlines for tasks
+// [X] Add ability to set task priorities (low, medium, high)
+// [X] Add ability to change task priorities (low, medium, high)
+// [X] Add ability to set deadlines for tasks
+// [X] Add ability to edit deadlines for tasks
 // [ ] Add ability to sort tasks by priority or deadline
 // [ ] Add ability to search tasks by name
+// [ ] Optimize functions and code structure
 
 use std::io;
 use std::fs;
@@ -18,11 +21,23 @@ use serde::{Serialize, Deserialize}; // serde is a popular serialization/deseria
 // Now we need to tell Rust that our Structs are 
 // allowed to be turned into JSON. We do this with 
 // a "Macro" called derive
+use chrono::NaiveDate; // chrono is a popular date and time library in Rust. we will use it for
+                       // deadlines.
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+enum Priority{
+    Low,
+    Medium,
+    High,
+}
+
 #[derive(Serialize, Deserialize)]
 struct TodoItem{
     id: u64,
     name: String, //Notice we use String and not &str. In a Struct, you generally want the Struct to own its data.
     completed:bool,
+    priority: Priority,
+    deadline : Option<NaiveDate>, // Option type is used to represent a value that can be either
+                                  // Some(value) or None
 }
 
 #[derive(Serialize, Deserialize)]
@@ -56,26 +71,45 @@ impl TodoList{
     }
 
     fn edit_task_name(&mut self, id: u64, new_name: String)->bool{
-        for item in &mut self.items{
-            if item.id==id{
-                item.name=new_name;
-                return true;
-            }
+       // for item in &mut self.items{
+        //  if item.id==id{
+         //     item.name=new_name;
+          //    return true;
+          //}
+      //}
+      // more faster and optimzed way using iterator
+      if let Some(item) = self.items.iter_mut().find(|item| item.id==id){
+        if  item.name.to_lowercase()==new_name.to_lowercase() {
+            return false; // no change
         }
+        item.name=new_name;
+        println!("Name updated");
+        return true;
+      }
+        false
+    }
+
+    fn edit_task_priority(&mut self, id: u64, new_priority: Priority) -> bool {
+       if let Some(item) = self.items.iter_mut().find(|item| item.id==id){ 
+            item.priority = new_priority;
+            println!("Priority updated");
+            return true;
+       }
         false
     }
 
     fn complete_item(&mut self, id: u64) -> bool { 
-        for item in &mut self.items {
-            if item.id == id {
-                item.completed = true;
-                return true;
-            }
+       
+        if let Some(item) = self.items.iter_mut().find(|item| item.id==id){
+            item.completed = true;
+            println!("Task marked as completed");
+            return true;
         }
         false
     }
-    fn add_item(&mut self, name: String) -> bool{
+    fn add_item(&mut self, name: String, priority: Option<String>, deadline : Option<String>) -> bool{
         if self.items.iter().any(|item| item.name.to_lowercase()==name.to_lowercase()){
+            println!("Task with the same name already exists");
             return false;
         }
        let id = self.next_id;
@@ -83,13 +117,41 @@ impl TodoList{
             id,
             name,
             completed : false,
+            priority: match priority{
+                Some(p)=>{
+                    match p.to_lowercase().as_str(){
+                        "low" => Priority::Low,
+                        "medium" => Priority::Medium,
+                        "high" => Priority::High,
+                        _ => Priority::Medium, // default
+                    }
+                },
+                None => Priority::Medium, // default
+            },
+            deadline: match deadline{
+                Some(d)=>{
+                    match NaiveDate::parse_from_str(&d, "%Y-%m-%d"){ // this works because we
+                    // imported chrono in format
+                    // YYYY-MM-DD 
+                        Ok(date) => Some(date),
+                        Err(_) => {
+                            println!("Invalid date format. Use YYYY-MM-DD");
+                            None
+                        }
+                    }
+                },
+                None => None,
+            },
         };
         self.next_id+=1;
         self.items.push(new_item);
+        println!("Task added successfully");
+        self.print();
        return true;
     }
     fn delete_all_completed(&mut self){
         self.items.retain(|item| !item.completed);
+        println!("All completed tasks deleted");
     }
     fn delete_item(&mut self, id: u64) -> bool{
         // first find if the item exists in the list or not?? WRONG!! rust does not work like that
@@ -108,13 +170,41 @@ impl TodoList{
             }
         }
     }
+    fn edit_task_deadline(&mut self, id: u64, new_deadline: Option<String>)-> bool{
+        if let Some(item) = self.items.iter_mut().find(|item| item.id==id){
+            item.deadline = match new_deadline{
+                Some(d)=>{
+                    match NaiveDate::parse_from_str(&d, "%Y-%m-%d"){
+                        Ok(date) => Some(date),
+                        Err(_) => {
+                            println!("Invalid date format. Use YYYY-MM-DD");
+                            return false;
+                        }
+                    }
+                },
+                None => None,
+            };
+            println!("Deadline updated");
+            return true;
+        }
+        false
+    }
     fn print(&self){
-        println!("==============================");
+        println!("================================================================");
+            println!("ID\tStatus\tPriority\tDue Date\tName");
+        println!("================================================================");
         for item in &self.items{
             let status = if item.completed {"[X]"} else {"[ ]"};
-            println!("{} {} ---- {}",  item.id, status, item.name);
+            let deadline_str = match item.deadline{
+                Some(date) => date.to_string(),
+                None => "No deadline".to_string(),
+            };
+            println!("{}\t{}\t{:?}\t\t{:?}\t\t{}",  item.id, status, item.priority, deadline_str,item.name);
+
+        println!("----------------------------------------------------------------");
+
         }
-        println!("==============================");
+        println!("================================================================");
     }
     
 fn save(&self) -> Result<(),std::io::Error>{
@@ -137,22 +227,29 @@ fn get_input() -> String{
 fn main(){
     let mut todolist = TodoList::new();
     loop{
-        println!("Hello!");
         println!("1. Task name to add");
         println!("2. View tasks");
         println!("3. Delete the task");
         println!("4. Mark task as completed");
         println!("5. Delete all completed tasks");
         println!("6. Edit task name");
-        println!("7. Exit");
+        println!("7. Edit task priority");
+        println!("8. Edit task deadline");
+        println!("9. Exit");
         let input = get_input();
         match input.as_str() {
             "1"=> {
                 println!("Task name!");
                 let task_name = get_input();
+                println!("Enter priority (low, medium, high) or leave empty for medium");
+                let priority_input = get_input();
+                let priority = if priority_input.is_empty(){ None } else { Some(priority_input) };
+                println!("Enter deadline (YYYY-MM-DD) or leave empty for no deadline");
+                let deadline_input = get_input();
+                let deadline = if deadline_input.is_empty(){ None } else { Some(deadline_input) };
                 if task_name.is_empty(){
                     println!("Cannot add empty task");
-                } else if todolist.add_item(task_name) {
+                } else if todolist.add_item(task_name, priority, deadline){
                     println!("Added task!");
                     todolist.save().expect("Failed to save the data");
                 } else{
@@ -218,6 +315,53 @@ fn main(){
                 }
             },
             "7"=>{
+                println!("Enter the task ID");
+                let input = get_input();
+                match input.parse::<u64>(){
+                    Ok(id)=>{
+                        println!("Enter new priority (low, medium, high)");
+                        let new_priority_input = get_input();
+                        let new_priority = match new_priority_input.to_lowercase().as_str(){
+                            "low" => Priority::Low,
+                            "medium" => Priority::Medium,
+                            "high" => Priority::High,
+                            _ => {
+                                println!("Invalid priority");
+                                continue;
+                            }
+                        };
+                        if todolist.edit_task_priority(id, new_priority){
+                            todolist.save().expect("Failed to save the data");
+                            println!("Task priority updated");
+                        } else{
+                            println!("Task not found");
+                        }}
+                    Err(_)=>{
+                        println!("Invalid ID number");
+                    },
+
+
+                }
+            },
+             "8"=>{
+                println!("Enter the task ID");
+                let input = get_input();
+                match input.parse::<u64>(){
+                    Ok(id)=>{
+                        println!("Enter new deadline (YYYY-MM-DD) or leave empty for no deadline");
+                        let new_deadline_input = get_input();
+                        let new_deadline = if new_deadline_input.is_empty(){ None } else { Some(new_deadline_input) };
+                        if todolist.edit_task_deadline(id, new_deadline){
+                            todolist.save().expect("Failed to save the data");
+                            println!("Task deadline updated");
+                        } else{
+                            println!("Task not found");
+                        }},
+                    Err(_)=>{
+                        println!("Invalid ID number");
+                    },
+            }
+             },"9"=>{
                 println!("Bye!");
                 break;
             },
