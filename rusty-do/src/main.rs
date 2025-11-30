@@ -3,8 +3,8 @@
 // [X] Add ability to add tasks
 // [X] Add ability to view tasks
 // [X] Add ability to save and load tasks from a file (JSON format)
-// [ ] Add ability to mark tasks as completed
-// [ ] Add ability to edit task names
+// [X] Add ability to mark tasks as completed
+// [X] Add ability to edit task names
 // [ ] Add ability to delete all completed tasks
 // [ ] Add ability to prioritize tasks
 // [ ] Add ability to set deadlines for tasks
@@ -54,6 +54,26 @@ impl TodoList{
         }
     }
     }
+
+    fn edit_task_name(&mut self, id: u64, new_name: String)->bool{
+        for item in &mut self.items{
+            if item.id==id{
+                item.name=new_name;
+                return true;
+            }
+        }
+        false
+    }
+
+    fn complete_item(&mut self, id: u64) -> bool { 
+        for item in &mut self.items {
+            if item.id == id {
+                item.completed = true;
+                return true;
+            }
+        }
+        false
+    }
     fn add_item(&mut self, name: String) -> bool{
         if self.items.iter().any(|item| item.name.to_lowercase()==name.to_lowercase()){
             return false;
@@ -67,6 +87,9 @@ impl TodoList{
         self.next_id+=1;
         self.items.push(new_item);
        return true;
+    }
+    fn delete_all_completed(&mut self){
+        self.items.retain(|item| !item.completed);
     }
     fn delete_item(&mut self, id: u64) -> bool{
         // first find if the item exists in the list or not?? WRONG!! rust does not work like that
@@ -118,7 +141,10 @@ fn main(){
         println!("1. Task name to add");
         println!("2. View tasks");
         println!("3. Delete the task");
-        println!("4. Exit");
+        println!("4. Mark task as completed");
+        println!("5. Delete all completed tasks");
+        println!("6. Edit task name");
+        println!("7. Exit");
         let input = get_input();
         match input.as_str() {
             "1"=> {
@@ -150,10 +176,53 @@ fn main(){
                 println!("Task deletion {}", res)
             },
             "4"=>{
+                println!("Mark task as completed. Enter task Id");
+                let input = get_input();
+                match input.parse::<u64>(){
+                    Ok(id)=>{
+                        if todolist.complete_item(id){
+                            todolist.save().expect("Failed to save the data");
+                            println!("Task marked as completed");
+                        } else{
+                            println!("Task not found");
+                        }
+                    },
+                    Err(_)=>{
+                        println!("Invalid ID number");
+                    }
+                }
+            },
+             "5"=>{
+                todolist.delete_all_completed();
+                todolist.save().expect("Failed to save the data");
+                println!("All completed tasks deleted");
+            },  "6"=>{
+                println!("Enter the task ID");
+                let input = get_input();
+                match input.parse::<u64>(){
+                    Ok(id)=>{
+                        println!("Enter new task name");
+                        let new_task_name = get_input();
+                        if new_task_name.is_empty(){
+                            println!("Task name cannot be empty");
+                        } else if todolist.edit_task_name(id, new_task_name){
+                            todolist.save().expect("Failed to save the data");
+                            println!("Task name updated");
+                        } else{
+                            println!("Task not found");
+                        }
+                    },
+                    Err(_)=>{
+                        println!("Invalid ID number");
+                    }
+                }
+            },
+            "7"=>{
                 println!("Bye!");
                 break;
             },
-            _ => println!("Invalid choice!"),
+            
+           _ => println!("Invalid choice!"),
         }
     }
 
