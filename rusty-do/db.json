@@ -1,31 +1,17 @@
 {
   "items": [
     {
-      "id": 2,
-      "name": "s",
-      "completed": true,
-      "priority": "High",
-      "deadline": "2025-12-20"
-    },
-    {
-      "id": 4,
-      "name": "Learn Rust CLI",
-      "completed": true,
-      "priority": "High",
-      "deadline": "2024-12-31"
+      "id": 6,
+      "name": "temporary",
+      "completed": false,
+      "priority": "Medium",
+      "deadline": null
     },
     {
       "id": 5,
       "name": "temp",
       "completed": false,
-      "priority": "High",
-      "deadline": null
-    },
-    {
-      "id": 6,
-      "name": "temporary",
-      "completed": false,
-      "priority": "Medium",
+      "priority": "Low",
       "deadline": null
     }
   ],
