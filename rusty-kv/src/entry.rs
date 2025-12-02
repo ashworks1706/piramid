@@ -68,8 +68,16 @@ impl Entry{
         let timestamp_bytes : [u8; 16] = data[0..16].try_into().unwrap();
         let timestamp = u128::from_be_bytes(timestamp_bytes);
 
+        // u32::from_be_bytes(bytes) takes a fixed-size array of 
+        // bytes (like [0, 0, 1, 244]) and mathematically converts it back into the number 500.
+
+        // If we didn't use this, we would just have a list of numbers [0, 0, 1, 244] and 
+        // wouldn't know it represents the integer 500.
+
         let klen_bytes : [u8; 4] = data[16..20].try_into().unwrap();
         let klen = u32::from_be_bytes(klen_bytes) as usize;
+
+        // u128::from_be_bytes expects an Array of exactly 16 bytes [u8; 16].
 
         let vlen_bytes : [u8; 4] = data[20..24].try_into().unwrap();
         let vlen = u32::from_be_bytes(vlen_bytes) as usize;
