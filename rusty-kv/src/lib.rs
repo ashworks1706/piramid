@@ -160,9 +160,25 @@ mod tests{
     fn test_kv_store(){
         let path = "test_database.db"
 
-        let _ = std::fs::remove_files(path);
+        let _ = std::fs::remove_file(path);
 
         let mut store = RustyKV::open(path).expect("Failed to open the DB")
+
+        store.set("key1".to_string(), "value1".to_string()).expect("Failed to set");
+
+        store.set("key2".to_string(), "value2".to_string()).expect("Failed to set");
+
+        let val1 = store.get("key1".to_String()).expect("Failed to get").unwrap();
+        let val2 = store.get("key2".to_String()).expect("Failed to get").unwrap();
+
+        assert_eq!(val1, "value1");
+        assert_eq!(val2, "value2");
+
+        let missing = store.get("key3".to_string()).expect("Failed to get");
+
+        assert_eq!(missing, None);
+
+        std::fs::remove_file(path).unwrap();
 
     }
 }
