@@ -25,10 +25,12 @@ impl RustyKV{
             .create(true)
             .append(true) // always write at the end
             .open(path)?;
-        let store = RustyKV{
+        let mut store = RustyKV{
             file,
             index: HashMap::new();
         };
+
+        store.load()?;
 
         // we will add core here t read the file and rebuild the index if database
         // exists already
@@ -138,11 +140,67 @@ impl RustyKV{
 
 
     } 
+    // we keep this private because only our engine should call this, this is like utility function
+    // the purpose of load method is to read only the keys and their offset on the go and read the
+    // values only when needed
+    // basically-
+    // start from byte 0
+    // read the header (24 bytes) -> extract key_len and val_len
+    // read the key -> store (key, current offset) in the hashmap
+    // we keep seeking forward by val_len bytes
+    // repeat until we hit EOF
+
+    fn load(&mut self) -> io::Result<()>{
+        let mut current_pos = 0;
+
+        self.file.seek(SeekFrom::Start(0))?;
+
+        loop {
+            // we try to read the header
+            let mut header = [0u8;24];
+
+            // basically a graceful handle method such that if this fails in EOF issues, we just
+            // break it
+            match self.file.read_exact(&mut header) {
+                Ok(_) =>{},
+                Err(ref e) if e.kind() == io:ErrorKind::UnexpectedEof=>{
+                    // end of file error so we're good 
+                    break;
+                }
+                Err(e) => return Err(e), // now this is serious
+            }
+
+            let klen_bytes : [u8, 4] = header[16..20].try_into().unwrap();
+            let klen = u32::from_be_bytes(klen_bytes) as usize;
+
+            let vlen_bytes : [u8, 4] = header[20..24].try_into().unwrap();
+            let vlen = u32::from_be_bytes(vlen_bytes) as usize;
+
+            
+            let mut key_buffer = vec![0u8; klen];
+            self.file.read_exact(&mut key_buffer)?;
+
+
+            let key= String::from_utf8(key_buffer).map_err(|e| io::Error::new(io::ErrorKind::InvalidData,e))?;
+
+            // offset is where the entry started 
+            self.index.insert(key, current_pos);
+
+            // we advance 'current_pos' by the total size of this entry
+            let total_size = 24+klen+vlen;
+
+            // seek the cursor past the value
+            self.file.seek(SeekFrom::Current(vlen as i64))?;
+
+            // update our tracker
+            current_pos += total_size as u64;
+
+        }
+
+        Ok(())
+    }
+
 }
-
-
-
-
 
 // now we will create test as usual to -
 // 1. Index lookup for checking ram to find the address 
@@ -182,14 +240,5 @@ mod tests{
 
     }
 }
-
-
-
-
-
-
-
-
-
 
 

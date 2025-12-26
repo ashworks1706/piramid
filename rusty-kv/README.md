@@ -40,7 +40,7 @@ Bitcask databases or riak databases work by keeping a log disk and index in ram.
 
 we only append to that file, we never go back and overwrtie old data, which is very fast because the disk head just keeps moving forward.
 the index in ram is a hashmap, which is just a long list of ytes as a table of contents in memory to know where things are 
-[ RAM: The Index ]                  [ DISK: The Log File ]
+     [ RAM: The Index ]                  [ DISK: The Log File ]
   ---------------------------           ---------------------------
   Key       | Location (Offset)         Byte 0:   [Entry: key="A"]
   "user1"   | 0               --------> Byte 50:  [Entry: key="B"]
