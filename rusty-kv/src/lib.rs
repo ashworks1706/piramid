@@ -199,41 +199,43 @@ impl RustyKV{
 
         Ok(())
     }
-    pub fn get(&mut self, key: String) -> io::Result<Option<String>> {
-        // check the index, if the key isnt in our hashmap, its not in the database
-        let offset = match self.index.get(&key){
-            Some(&o)=> o,
-            None => return Ok(None),
+    // this is supposed to be prviate 
+    fn load(&mut self) -> io::Result<()> {
+        let mut current_pos = 0;
+
+        self.file.seek(SeekFrom::Start(0))?;
+
+        loop{
+            // try to reard the header
+            let mut header = [0u8; 24];
+
+            // handle EOF gracefullyo
+            match self.file.read_exact(&mut header){
+                Ok(_) =>{},
+                Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof=>{
+                    break;
+                }
+                Err(e) => return Err(e);
+            }
+            
+            let klen_bytes: [u8; 4] = header[16..20].try_into().unwrap();
+            let kln = u32::from_be_bytes(klen_bytes) as usize;
+
+            let vlen_bytes: [u8; 4] = header[16..20].try_into().unwrap();
+            let vln = u32::from_be_bytes(vlen_bytes) as usize;
+
+            // read the key for the hashmape
+            let mut key_buffer = vec![0u8; klen];
+            self.file.read_exact(&mut key_buffer)?;
+
+            let key = String::from_utf8(key_buffer)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+            // key starts at 'current_pos'
+            self.index.insert(key, current_pos)
+            
+
         }
-
-        // jump to the location where the byte offset is stored
-        self.file.seek(SeekFrom::Start(offset))?;
-
-        // read the header (first 24 byteso)
-        let mut header = [0u8;24];
-        self.file.read_exact(&mut header)?;
-
-        // we need to know how much more to read 
-        let klen_bytes : [u8;4] = header[16..20].try_into().unwrap();
-        let klen = u32::from_be_bytes(klen_bytes) as usize;
-
-        // value length is at bytes 20..24
-        let vlen_bytes : [u8;4] = header[20..24].try_into().unwrap();
-        let vlen = u32::from_be_bytes(vlen_bytes) as usize;
-
-        // now we know eactly how big the key + value is 
-        let mut payload = vec![0u8; klen+vlen];
-        self.file.read_exact(&mut payload)?;
-
-        // payload : [ Key Bytes... | Value Bytes ... ]
-        let value_bytes = &payload[klen..];
-
-        // convert bytes back to string
-        let value = String::from_utf8(value_bytes.to_vec()).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-
-        Ok(Some(value))
-
-
 
     }
 
