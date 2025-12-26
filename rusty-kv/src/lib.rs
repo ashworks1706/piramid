@@ -280,4 +280,43 @@ mod tests{
     }
 }
 
+#[test]
+fn test_persistence() {
+    let path = "persistent_test.db";
+    let _ = std::fs::remove_file(path); //clean start
+    // write the data 
+    {
+        let mut store = RustyKV::open(path).expect("Failed to open DB");
+        store.set("persistent_key".to_string(), "persistent_value".to_string()).expect("Failed to set");
+        // when this block ends, 'store' is dropped (var is destroyed)
+        // this simulates closing the program
+    }
+    {
+        let mut store = RustyKV::open(path).expect("Failed to reopen DB");
+
+        // at this point, the hashmap entry is memory
+        // but store.load() should have run and refilled it 
+        let val = store.get("persistent_key".to_string()).expect("Failed to get").unwrap();
+        assert_eq!(val, "persistent_value");
+
+    }
+
+    std::fs::remove_file(path).unwrap();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
