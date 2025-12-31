@@ -134,8 +134,6 @@ impl RustyKV{
         let value = String::from_utf8(value_bytes.to_vec()).map_err(|e| io::Error::new(io::ErrorKind::InvalidData,e))?;
 
         Ok(Some(value))
-
-
     } 
 
     pub fn delete(&mut self, key: String) -> io::Result<()>{

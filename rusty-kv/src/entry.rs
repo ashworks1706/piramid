@@ -2,7 +2,7 @@
 // the sizes are not explicitly stored because vector<i8> already knows the size, we just store the
 // size so we know how many bytes to read back
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum EntryKind{
     Insert = 0,
     Delete = 1,

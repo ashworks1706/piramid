@@ -43,12 +43,12 @@ fn main(){
         },
         "rm" =>{
             if args.len() < 3{
-                println!("Error : rm requires a key")
+                println!("Error : rm requires a key");
                 return;
             }
             else{
                 let key= args[2].clone();
-                store.delte(key).expect("Failed to delete");
+                store.delete(key).expect("Failed to delete");
                 println!("ok");
             }
 
