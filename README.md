@@ -6,8 +6,9 @@
 
 ---
 
+## Roadmap
 
-### Phase 1: Core Foundation 
+### Phase 1: Core Foundation ✅
 - [x] Basic vector storage (HashMap + file persistence)
 - [x] Binary serialization with bincode
 - [x] UUID-based document IDs
@@ -16,28 +17,28 @@
 - [x] Get all vectors
 - [x] Persistence to disk
 
-### Phase 2: Search & Similarity 
-- [ ] **Distance metrics module**
-  - [ ] Cosine similarity
-  - [ ] Euclidean distance
-  - [ ] Dot product
-- [ ] **Similarity search API**
-  - [ ] `search(query_vector, top_k)` → returns nearest neighbors
-  - [ ] Return results with scores
-- [ ] **Metadata support**
-  - [ ] Add `metadata: HashMap<String, Value>` to VectorEntry
-  - [ ] JSON-like metadata storage
-- [ ] **Filtered search**
-  - [ ] Filter by metadata during search
-  - [ ] Support basic operators (eq, gt, lt, in)
+### Phase 2: Search & Similarity ✅
+- [x] **Distance metrics module**
+  - [x] Cosine similarity
+  - [x] Euclidean distance
+  - [x] Dot product
+- [x] **Similarity search API**
+  - [x] `search(query_vector, top_k)` → returns nearest neighbors
+  - [x] Return results with scores
+- [x] **Metadata support**
+  - [x] Add `metadata: HashMap<String, Value>` to VectorEntry
+  - [x] JSON-like metadata storage
+- [x] **Filtered search**
+  - [x] Filter by metadata during search
+  - [x] Support basic operators (eq, ne, gt, gte, lt, lte, in)
 
-### Phase 3: Data Operations
-- [ ] **Delete operations**
-  - [ ] Delete by ID
+### Phase 3: Data Operations (In Progress)
+- [x] **Delete operations**
+  - [x] Delete by ID
   - [ ] Bulk delete
-- [ ] **Update operations**
-  - [ ] Update vector by ID
-  - [ ] Update metadata by ID
+- [x] **Update operations**
+  - [x] Update vector by ID
+  - [x] Update metadata by ID
 - [ ] **Batch operations**
   - [ ] Batch insert (insert many vectors at once)
   - [ ] Batch search (multiple queries)
@@ -98,6 +99,46 @@
 
 ---
 
+## Quick Start
+
+```rust
+use piramid::{VectorEntry, VectorStorage, DistanceMetric, Filter, metadata};
+
+// Open or create storage
+let mut storage = VectorStorage::open("vectors.db").unwrap();
+
+// Store a vector with metadata
+let entry = VectorEntry::with_metadata(
+    vec![0.1, 0.2, 0.3, 0.4],  // embedding
+    "Hello world".to_string(), // text
+    metadata([
+        ("category", "greeting".into()),
+        ("importance", 5i64.into()),
+    ]),
+);
+let id = storage.store(entry).unwrap();
+
+// Search for similar vectors
+let query = vec![0.1, 0.2, 0.3, 0.4];
+let results = storage.search(&query, 5, DistanceMetric::Cosine);
+
+for result in results {
+    println!("{}: {} (score: {})", result.id, result.text, result.score);
+}
+
+// Filtered search
+let filter = Filter::new()
+    .eq("category", "greeting")
+    .gt("importance", 3i64);
+let filtered = storage.search_with_filter(&query, 5, DistanceMetric::Cosine, Some(&filter));
+```
+
+## Run the Example
+
+```bash
+cargo run --example basic
+```
+
 ## License
 
-
+MIT
