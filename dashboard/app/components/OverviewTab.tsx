@@ -12,12 +12,11 @@ interface OverviewTabProps {
 
 export function OverviewTab({ collection }: OverviewTabProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <StatCard title="Vectors" value={collection.vector_count.toLocaleString()} icon="📊" />
-      <StatCard title="Dimension" value={collection.dimension?.toString() || 'N/A'} icon="📐" />
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <StatCard title="Vectors" value={collection.count.toLocaleString()} icon="📊" />
       <StatCard title="Status" value="Ready" icon="✅" />
       
-      <div className="md:col-span-3 bg-[var(--bg-secondary)] rounded-xl p-6 border border-[var(--border-color)]">
+      <div className="md:col-span-2 bg-[var(--bg-secondary)] rounded-xl p-6 border border-[var(--border-color)]">
         <h3 className="font-semibold mb-4">Quick Insert</h3>
         <QuickInsert collection={collection.name} />
       </div>

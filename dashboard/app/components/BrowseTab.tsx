@@ -4,7 +4,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { Collection, searchVectors, deleteVector, SearchResult } from '../lib/api';
+import { Collection, deleteVector } from '../lib/api';
 import { fetchAPI } from '../lib/api';
 
 interface BrowseTabProps {
@@ -26,20 +26,15 @@ export function BrowseTab({ collection }: BrowseTabProps) {
       setLoading(true);
       const info = await fetchAPI<Collection>(`/collections/${collection}`);
       
-      if (info.dimension && info.vector_count > 0) {
-        // Use zero vector to get all vectors (hack until we have a list endpoint)
-        const zeroVector = new Array(info.dimension).fill(0);
-        const res = await searchVectors(collection, {
-          vector: zeroVector,
-          limit: 100,
-          metric: 'euclidean',
-        });
-        
-        setVectors(res.results.map(r => ({
-          id: r.id,
-          text: r.text,
-          metadata: r.metadata,
+      if (info.count > 0) {
+        // Get vectors via list endpoint
+        const vectors = await fetchAPI<VectorEntry[]>(`/collections/${collection}/vectors?limit=100`);
+        setVectors(vectors.map(v => ({
+          id: v.id,
+          text: v.text,
+          metadata: v.metadata,
         })));
+        
       } else {
         setVectors([]);
       }

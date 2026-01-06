@@ -65,8 +65,7 @@ export function Sidebar({
                 >
                   <div className="font-medium truncate">{col.name}</div>
                   <div className="text-xs opacity-70">
-                    {col.vector_count} vectors
-                    {col.dimension && ` • ${col.dimension}d`}
+                    {col.count} vectors
                   </div>
                 </button>
               </li>

@@ -135,8 +135,7 @@ export default function Dashboard() {
                 <div>
                   <h2 className="text-2xl font-bold">{selectedCollection}</h2>
                   <p className="text-[var(--text-secondary)]">
-                    {currentCollection.vector_count} vectors
-                    {currentCollection.dimension && ' • ' + currentCollection.dimension + ' dimensions'}
+                    {currentCollection.count} vectors
                   </p>
                 </div>
                 <button

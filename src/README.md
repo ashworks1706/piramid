@@ -26,11 +26,19 @@ Read in order:
 ### 5. Error handling → `error.rs`
 Short file showing Rust's `Result<T, E>` pattern and `thiserror`
 
-### 6. Supporting files (skim)
+### 6. HTTP Server → `server/`
+The web layer that exposes our library via HTTP:
+1. `mod.rs` - module organization
+2. `state.rs` - shared state with `Arc<RwLock<T>>`
+3. `types.rs` - request/response JSON structs
+4. `handlers.rs` - endpoint logic (extractors, error handling)
+5. `routes.rs` - URL → handler mapping
+
+### 7. Supporting files (skim)
 - `search.rs` - just a struct for search results
 - `config.rs` - trivial config struct
 
-### 7. See it in action → `examples/basic.rs`
+### 8. See it in action → `examples/basic.rs`
 Run `cargo run --example basic` while reading to see how it all fits together
 
 ---
@@ -73,6 +81,8 @@ User calls storage.search(query_vector, k, metric)
 | `cosine.rs` | Tests, `#[cfg(test)]`, assertions |
 | `error.rs` | `Result`, `thiserror`, type aliases |
 | `filter.rs` | Builder pattern, `Option::map_or` |
+| `server/state.rs` | `Arc`, `RwLock`, shared mutable state |
+| `server/handlers.rs` | async fn, extractors, error returns |
 
 ---
 
@@ -91,7 +101,15 @@ src/
 │   ├── cosine.rs    # Cosine similarity (most common)
 │   ├── euclidean.rs # L2 distance
 │   └── dot.rs       # Dot product
-└── query/           # Search filtering
-    ├── mod.rs       
-    └── filter.rs    # Metadata filters
+├── query/           # Search filtering
+│   ├── mod.rs       
+│   └── filter.rs    # Metadata filters
+├── server/          # HTTP API (axum)
+│   ├── mod.rs       # Module exports
+│   ├── state.rs     # Shared app state
+│   ├── types.rs     # JSON request/response types
+│   ├── handlers.rs  # Endpoint implementations
+│   └── routes.rs    # URL routing
+└── bin/
+    └── server.rs    # Main entry point
 ```
