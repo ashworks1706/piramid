@@ -79,11 +79,11 @@
   - [ ] Metadata schema validation
 
 ### Phase 7: Production Features
-- [ ] **Async API**
-  - [ ] Async storage operations
-  - [ ] Tokio integration
-- [ ] **Server mode** (optional)
-  - [ ] REST API
+- [x] **Async API**
+  - [x] Async storage operations
+  - [x] Tokio integration
+- [x] **Server mode**
+  - [x] REST API (axum)
   - [ ] gRPC API
 - [ ] **Observability**
   - [ ] Metrics (insert latency, search latency, index size)
@@ -100,6 +100,8 @@
 ---
 
 ## Quick Start
+
+### As a Library
 
 ```rust
 use piramid::{VectorEntry, VectorStorage, DistanceMetric, Filter, metadata};
@@ -133,6 +135,20 @@ let filter = Filter::new()
 let filtered = storage.search_with_filter(&query, 5, DistanceMetric::Cosine, Some(&filter));
 ```
 
+### Via HTTP API
+
+```bash
+# Store a vector
+curl -X POST http://localhost:6333/api/collections/docs/vectors \
+  -H "Content-Type: application/json" \
+  -d '{"vector": [0.1, 0.2, 0.3], "text": "hello", "metadata": {"tag": "test"}}'
+
+# Search
+curl -X POST http://localhost:6333/api/collections/docs/search \
+  -H "Content-Type: application/json" \
+  -d '{"vector": [0.1, 0.2, 0.3], "k": 5}'
+```
+
 ## Run the Example
 
 ```bash
@@ -141,14 +157,12 @@ cargo run --example basic
 
 ---
 
-## Running the Server & Dashboard
+## Running the Server
 
-### Server (Python)
+### Development
 
 ```bash
-cd server
-pip install -r requirements.txt
-python main.py
+cargo run --bin piramid-server
 ```
 
 Server runs at `http://localhost:6333`

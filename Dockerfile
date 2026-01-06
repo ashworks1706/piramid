@@ -1,6 +1,6 @@
 # =============================================================================
 # PIRAMID DOCKERFILE
-# Python FastAPI server + Next.js dashboard
+# Full Rust server + Next.js dashboard
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -10,50 +10,48 @@ FROM node:20-slim AS dashboard-builder
 
 WORKDIR /app/dashboard
 
-# Copy package files
 COPY dashboard/package.json dashboard/package-lock.json ./
-
-# Install dependencies
 RUN npm ci
 
-# Copy source files
 COPY dashboard ./
-
-# Build static export
 RUN npm run build
 
 # -----------------------------------------------------------------------------
-# Stage 2: Python runtime
+# Stage 2: Build Rust server
 # -----------------------------------------------------------------------------
-FROM python:3.12-slim
+FROM rust:1.75-slim AS rust-builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY server/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y pkg-config && rm -rf /var/lib/apt/lists/*
 
-# Copy server code
-COPY server/*.py ./
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
 
-# Copy dashboard from builder
+RUN cargo build --release --bin piramid-server
+
+# -----------------------------------------------------------------------------
+# Stage 3: Runtime
+# -----------------------------------------------------------------------------
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
+COPY --from=rust-builder /app/target/release/piramid-server ./piramid-server
 COPY --from=dashboard-builder /app/dashboard/out ./dashboard
 
-# Create data directory
 RUN mkdir -p /app/data
 
-# Environment variables
-ENV PIRAMID_HOST=0.0.0.0
-ENV PIRAMID_PORT=6333
-ENV PIRAMID_DATA_DIR=/app/data
-ENV PIRAMID_DASHBOARD_PATH=/app/dashboard
+ENV PORT=6333
+ENV DATA_DIR=/app/data
+ENV RUST_LOG=info
 
-# Expose the port
 EXPOSE 6333
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:6333/api/health || exit 1
 
-# Run the server
-CMD ["python", "main.py"]
+CMD ["./piramid-server"]
+

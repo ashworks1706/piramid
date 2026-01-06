@@ -50,8 +50,7 @@ export async function checkHealth(): Promise<boolean> {
 
 export interface Collection {
   name: string;
-  vector_count: number;
-  dimension: number | null;
+  count: number;  // Rust server returns 'count' not 'vector_count'
 }
 
 export async function listCollections(): Promise<Collection[]> {
@@ -100,20 +99,19 @@ export async function deleteVector(collection: string, id: string): Promise<void
 
 export interface SearchRequest {
   vector: number[];
-  limit?: number;
+  k?: number;  // Rust uses 'k' not 'limit'
   metric?: 'cosine' | 'euclidean' | 'dot';
 }
 
 export interface SearchResult {
   id: string;
   score: number;
-  text: string | null;
+  text: string;
   metadata: Record<string, unknown>;
 }
 
 export interface SearchResponse {
   results: SearchResult[];
-  took_ms: number;
 }
 
 export async function searchVectors(
