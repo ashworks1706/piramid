@@ -8,7 +8,7 @@
 
 ## Roadmap
 
-### Phase 1: Core Foundation ✅
+### Phase 1: Core Foundation 
 - [x] Basic vector storage (HashMap + file persistence)
 - [x] Binary serialization with bincode
 - [x] UUID-based document IDs
@@ -17,7 +17,7 @@
 - [x] Get all vectors
 - [x] Persistence to disk
 
-### Phase 2: Search & Similarity ✅
+### Phase 2: Search & Similarity 
 - [x] **Distance metrics module**
   - [x] Cosine similarity
   - [x] Euclidean distance
@@ -139,6 +139,3 @@ let filtered = storage.search_with_filter(&query, 5, DistanceMetric::Cosine, Som
 cargo run --example basic
 ```
 
-## License
-
-MIT
