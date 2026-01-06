@@ -3,10 +3,13 @@ target/
 /target/
 **/*.rs.bk
 Cargo.lock
+*/venv/
+*/.venv/
 
 # debug files
 debug/
 *.pdb
+*/__pycache__/
 
 # test artifacts
 *.db

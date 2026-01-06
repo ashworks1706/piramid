@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Piramid Dashboard
 
-## Getting Started
+A React dashboard for managing your Piramid vector database.
 
-First, run the development server:
+## Structure
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+dashboard/
+├── app/
+│   ├── page.tsx              # Main dashboard (orchestration only)
+│   ├── layout.tsx            # Root layout with theme
+│   ├── globals.css           # CSS variables & dark theme
+│   ├── lib/
+│   │   └── api.ts            # API client - all server communication
+│   └── components/
+│       ├── Sidebar.tsx       # Collection list & navigation
+│       ├── OverviewTab.tsx   # Stats & quick insert
+│       ├── SearchTab.tsx     # Vector search playground
+│       ├── BrowseTab.tsx     # Vector list & management
+│       ├── Modal.tsx         # Create collection dialog
+│       └── ServerOffline.tsx # Offline state UI
+├── package.json
+├── next.config.ts
+└── tailwind.config.ts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Running
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Install dependencies
+npm install
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Development server (port 3000)
+npm run dev
 
-## Learn More
+# Build for production (static export)
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Building for Production
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The dashboard builds to static HTML/JS/CSS that can be served by the Python server:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+# Output goes to ./out/
+```
 
-## Deploy on Vercel
+The server will serve these files at `http://localhost:6333/`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Customization
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Theme colors are defined as CSS variables in `globals.css`:
+
+```css
+:root {
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
+  --accent: #8b5cf6;
+  --success: #10b981;
+  --error: #ef4444;
+}
+```
+
+## API Client
+
+All server communication goes through `lib/api.ts`:
+
+```typescript
+import { listCollections, searchVectors } from './lib/api';
+
+// List collections
+const collections = await listCollections();
+
+// Search
+const results = await searchVectors('my-collection', {
+  vector: [0.1, 0.2, 0.3],
+  limit: 10,
+  metric: 'cosine',
+});
+```

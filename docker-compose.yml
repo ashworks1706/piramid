@@ -1,0 +1,30 @@
+# =============================================================================
+# PIRAMID DOCKER COMPOSE
+# Easy local development and deployment
+# =============================================================================
+
+services:
+  piramid:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "6333:6333"
+    volumes:
+      # Persist data across container restarts
+      - piramid-data:/app/data
+    environment:
+      - PIRAMID_HOST=0.0.0.0
+      - PIRAMID_PORT=6333
+      - RUST_LOG=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  piramid-data:
+    driver: local
