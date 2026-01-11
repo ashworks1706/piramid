@@ -296,3 +296,141 @@ pub async fn search_vectors(
     
     Ok(Json(SearchResponse { results }))
 }
+
+// =============================================================================
+// EMBEDDING ENDPOINTS
+// =============================================================================
+
+/// POST /api/collections/:collection/embed - embed text and store
+pub async fn embed_text(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+    Json(req): Json<EmbedRequest>,
+) -> Result<Json<EmbedResponse>, (StatusCode, String)> {
+    state.get_or_create_collection(&collection)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Get embedder from state
+    let embedder = state.embedder.as_ref()
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "Embedding service not configured".to_string()))?;
+
+    // Generate embedding
+    let response = embedder.embed(&req.text).await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Embedding failed: {}", e)))?;
+
+    // Store the vector
+    let metadata = json_to_metadata(req.metadata);
+    let entry = VectorEntry::with_metadata(
+        response.embedding.clone(),
+        req.text,
+        metadata,
+    );
+
+    let mut collections = state.collections.write().unwrap();
+    let storage = collections.get_mut(&collection)
+        .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
+
+    let id = storage.store(entry)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(EmbedResponse {
+        id: id.to_string(),
+        embedding: response.embedding,
+        tokens: response.tokens,
+    }))
+}
+
+/// POST /api/collections/:collection/embed/batch - batch embed texts
+pub async fn embed_batch(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+    Json(req): Json<EmbedBatchRequest>,
+) -> Result<Json<EmbedBatchResponse>, (StatusCode, String)> {
+    if req.texts.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "No texts provided".to_string()));
+    }
+
+    state.get_or_create_collection(&collection)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Get embedder from state
+    let embedder = state.embedder.as_ref()
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "Embedding service not configured".to_string()))?;
+
+    // Generate embeddings in batch
+    let responses = embedder.embed_batch(&req.texts).await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Batch embedding failed: {}", e)))?;
+
+    // Store all vectors
+    let mut collections = state.collections.write().unwrap();
+    let storage = collections.get_mut(&collection)
+        .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
+
+    let mut ids = Vec::with_capacity(responses.len());
+    let mut total_tokens = 0u32;
+
+    for (idx, response) in responses.into_iter().enumerate() {
+        let metadata = if idx < req.metadata.len() {
+            json_to_metadata(req.metadata[idx].clone())
+        } else {
+            crate::Metadata::new()
+        };
+
+        let entry = VectorEntry::with_metadata(
+            response.embedding,
+            req.texts[idx].clone(),
+            metadata,
+        );
+
+        let id = storage.store(entry)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        ids.push(id.to_string());
+        if let Some(tokens) = response.tokens {
+            total_tokens += tokens;
+        }
+    }
+
+    Ok(Json(EmbedBatchResponse {
+        ids,
+        total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+    }))
+}
+
+/// POST /api/collections/:collection/search/text - search by text query
+pub async fn search_by_text(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+    Json(req): Json<TextSearchRequest>,
+) -> Result<Json<SearchResponse>, (StatusCode, String)> {
+    state.get_or_create_collection(&collection)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Get embedder from state
+    let embedder = state.embedder.as_ref()
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "Embedding service not configured".to_string()))?;
+
+    // Generate embedding for query
+    let response = embedder.embed(&req.query).await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Embedding failed: {}", e)))?;
+
+    // Search with the embedding
+    let metric = parse_metric(req.metric);
+
+    let collections = state.collections.read().unwrap();
+    let storage = collections.get(&collection)
+        .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
+
+    let results: Vec<SearchResultResponse> = storage
+        .search(&response.embedding, req.k, metric)
+        .into_iter()
+        .map(|r| SearchResultResponse {
+            id: r.id.to_string(),
+            score: r.score,
+            text: r.text,
+            metadata: metadata_to_json(&r.metadata),
+        })
+        .collect();
+
+    Ok(Json(SearchResponse { results }))
+}

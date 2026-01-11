@@ -54,22 +54,19 @@
 
 ### Phase 5: Built-in Embeddings (Next Priority)
 *no need to embed before storing*
-- [ ] **Embedding providers module**
-  - [ ] OpenAI (text-embedding-3-small, text-embedding-3-large)
-  - [ ] Azure OpenAI
-  - [ ] Cohere (embed-english-v3.0)
-  - [ ] Ollama (local models - nomic-embed-text, mxbai-embed-large)
-  - [ ] Voyage AI
+- [x] **Embedding providers module**
+  - [x] OpenAI (text-embedding-3-small, text-embedding-3-large)
+  - [x] Ollama (local models - nomic-embed-text, mxbai-embed-large)
   - [ ] HuggingFace Inference API
-- [ ] **Text-to-vector API endpoints**
-  - [ ] `POST /api/collections/{name}/embed` - embed text and store
-  - [ ] `POST /api/collections/{name}/search/text` - search by text query
-- [ ] **Configuration**
-  - [ ] Provider selection via env vars / config
-  - [ ] API key management
-  - [ ] Model selection per collection
-- [ ] **Batch embedding**
-  - [ ] Batch embed multiple texts in one request
+- [x] **Text-to-vector API endpoints**
+  - [x] `POST /api/collections/{name}/embed` - embed text and store
+  - [x] `POST /api/collections/{name}/search/text` - search by text query
+- [x] **Configuration**
+  - [x] Provider selection via env vars / config
+  - [x] API key management
+  - [x] Model selection per collection
+- [x] **Batch embedding**
+  - [x] Batch embed multiple texts in one request
   - [ ] Rate limiting / retry logic
 
 ### Phase 6: Document Ingestion 
@@ -282,6 +279,11 @@ src/
 ├── query/           # Filtering
 │   ├── mod.rs
 │   └── filter.rs    # Filter builder + FilterCondition
+├── embeddings/      # Embedding providers
+│   ├── mod.rs       # Embedder trait + types
+│   ├── openai.rs    # OpenAI provider
+│   ├── ollama.rs    # Ollama provider
+│   └── providers.rs # Provider factory
 ├── server/          # HTTP API (axum)
 │   ├── mod.rs
 │   ├── routes.rs    # Route definitions
@@ -348,6 +350,43 @@ curl -X POST http://localhost:6333/api/collections/docs/vectors \
 curl -X POST http://localhost:6333/api/collections/docs/search \
   -H "Content-Type: application/json" \
   -d '{"vector": [0.1, 0.2, 0.3], "k": 5}'
+
+# Embed text and store (requires EMBEDDING_PROVIDER env var)
+curl -X POST http://localhost:6333/api/collections/docs/embed \
+  -H "Content-Type: application/json" \
+  -d '{"text": "The quick brown fox", "metadata": {"category": "example"}}'
+
+# Search by text (auto-embeds the query)
+curl -X POST http://localhost:6333/api/collections/docs/search/text \
+  -H "Content-Type: application/json" \
+  -d '{"query": "fast animals", "k": 5}'
+
+# Batch embed multiple texts
+curl -X POST http://localhost:6333/api/collections/docs/embed/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "texts": ["First document", "Second document", "Third document"],
+    "metadata": [{"source": "doc1"}, {"source": "doc2"}, {"source": "doc3"}]
+  }'
+```
+
+### Embedding Configuration
+
+Enable embedding support by setting environment variables:
+
+```bash
+# Using OpenAI
+export EMBEDDING_PROVIDER=openai
+export EMBEDDING_MODEL=text-embedding-3-small
+export OPENAI_API_KEY=sk-...
+
+# Using Ollama (local)
+export EMBEDDING_PROVIDER=ollama
+export EMBEDDING_MODEL=nomic-embed-text
+export EMBEDDING_BASE_URL=http://localhost:11434
+
+# Then start the server
+cargo run --bin piramid-server
 ```
 
 ## Run the Example

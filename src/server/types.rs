@@ -114,3 +114,48 @@ pub struct DeleteResponse {
 pub struct CountResponse {
     pub count: usize,
 }
+
+// =============================================================================
+// EMBEDDINGS
+// =============================================================================
+
+/// Request to embed text and store as a vector
+#[derive(Deserialize)]
+pub struct EmbedRequest {
+    pub text: String,
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Response from embedding and storing
+#[derive(Serialize)]
+pub struct EmbedResponse {
+    pub id: String,
+    pub embedding: Vec<f32>,
+    pub tokens: Option<u32>,
+}
+
+/// Request for batch embedding
+#[derive(Deserialize)]
+pub struct EmbedBatchRequest {
+    pub texts: Vec<String>,
+    #[serde(default)]
+    pub metadata: Vec<HashMap<String, serde_json::Value>>,
+}
+
+/// Response from batch embedding
+#[derive(Serialize)]
+pub struct EmbedBatchResponse {
+    pub ids: Vec<String>,
+    pub total_tokens: Option<u32>,
+}
+
+/// Request to search by text query (auto-embeds)
+#[derive(Deserialize)]
+pub struct TextSearchRequest {
+    pub query: String,
+    #[serde(default = "default_k")]
+    pub k: usize,
+    #[serde(default)]
+    pub metric: Option<String>,
+}

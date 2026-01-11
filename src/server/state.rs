@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use crate::VectorStorage;
+use crate::embeddings::Embedder;
 
 /// The shared state that lives for the lifetime of the server.
 /// 
@@ -22,6 +23,8 @@ pub struct AppState {
     pub collections: RwLock<HashMap<String, VectorStorage>>,
     /// where .db files live (e.g., "./piramid_data")
     pub data_dir: String,
+    /// Optional embedder for generating vectors from text
+    pub embedder: Option<Arc<dyn Embedder>>,
 }
 
 impl AppState {
@@ -33,6 +36,18 @@ impl AppState {
         Self {
             collections: RwLock::new(HashMap::new()),
             data_dir: data_dir.to_string(),
+            embedder: None,
+        }
+    }
+
+    /// Create app state with an embedder
+    pub fn with_embedder(data_dir: &str, embedder: Arc<dyn Embedder>) -> Self {
+        std::fs::create_dir_all(data_dir).ok();
+        
+        Self {
+            collections: RwLock::new(HashMap::new()),
+            data_dir: data_dir.to_string(),
+            embedder: Some(embedder),
         }
     }
 

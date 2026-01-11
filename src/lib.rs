@@ -15,6 +15,7 @@ pub mod query;
 pub mod search;
 pub mod server;
 pub mod storage;
+pub mod embeddings;
 
 pub use config::Config;
 pub use metrics::SimilarityMetric;
@@ -23,3 +24,4 @@ pub use metadata::{Metadata, MetadataValue, metadata};
 pub use query::{Filter, FilterCondition};
 pub use search::SearchResult;
 pub use storage::{VectorEntry, VectorStorage};
+pub use embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingError};

@@ -28,5 +28,9 @@ axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 
+# HTTP client for embedding providers
+reqwest = { version = "0.12", features = ["json"] }
+async-trait = "0.1"
+
 [dev-dependencies]
 # For testing
