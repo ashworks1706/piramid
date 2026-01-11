@@ -77,7 +77,7 @@ export function SearchTab({ collection }: SearchTabProps) {
               : 'bg-[var(--bg-secondary)] border border-[var(--border-color)]'
           }`}
         >
-          🔤 Text Search
+          Text Search
         </button>
         <button
           onClick={() => setMode('vector')}
@@ -87,7 +87,7 @@ export function SearchTab({ collection }: SearchTabProps) {
               : 'bg-[var(--bg-secondary)] border border-[var(--border-color)]'
           }`}
         >
-          🔢 Vector Search
+          Vector Search
         </button>
       </div>
 
