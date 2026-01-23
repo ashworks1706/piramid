@@ -44,7 +44,8 @@ Example search flow:
 -----------------------------------------------------------------------------------------------------------------------------------------
 
 Testing & Debugging:
-
+```
+```
   # Run all tests (27 tests, all should pass)
   cargo test
   
@@ -64,7 +65,8 @@ Testing & Debugging:
   
   curl -X POST http://localhost:6333/api/collections/test/vectors \
     -d '{"vector": [0.1, 0.2, 0.3], "text": "hello"}'
-
+```
+```
 Debug tips:
 
   - Add println!("DEBUG: {:?}", variable); anywhere
