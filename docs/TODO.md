@@ -2,10 +2,6 @@
 
 **Use this as your single source of truth for what to build and when.**
 
----
-
-## 🎯 BUILD ORDER
-
 **Follow this exact order. Each step depends on the previous.**
 
 ### Core Foundation
@@ -24,7 +20,7 @@
 - [x] Embedding providers (OpenAI, Ollama)
 - [x] Batch embedding endpoints
 
-### 1️⃣ Performance & Indexing 
+### Performance & Indexing 
 
 **Why first:** Without HNSW, everything else is unusably slow at scale.
 
