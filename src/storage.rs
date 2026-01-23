@@ -1,38 +1,30 @@
-//  `use` brings types into scope. `serde` is THE serialization library.
-// Derive macros auto-generate code - Serialize/Deserialize let us save to disk.
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;  
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};  // Traits for file I/O
+use std::io::{Read, Seek, SeekFrom, Write};
 use uuid::Uuid;
 
-use crate::metrics::SimilarityMetric;  // `crate::` means "from this project"
+use crate::metrics::SimilarityMetric;
 use crate::error::Result;
 use crate::metadata::Metadata;
 use crate::query::Filter;
 use crate::search::SearchResult;
 
-// A single vector entry - what you store in the database
-//  #[derive(...)] auto-generates trait implementations
-// - Debug: lets you print with {:?}
-// - Clone: lets you duplicate with .clone()
-// - Serialize/Deserialize: serde magic for saving/loading
+/// A single vector entry stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorEntry {
     pub id: Uuid,
-    pub vector: Vec<f32>,  // Vec = growable array, f32 = 32-bit float
+    pub vector: Vec<f32>,
     pub text: String,
-    #[serde(default)]      // If missing when loading, use Default (empty HashMap)
+    #[serde(default)]
     pub metadata: Metadata,
 }
 
-//  `impl` block adds methods to a struct
 impl VectorEntry {
-    // `Self` = the type we're implementing (VectorEntry)
     pub fn new(vector: Vec<f32>, text: String) -> Self {
         Self {
-            id: Uuid::new_v4(),  // v4 = random UUID
-            vector,              // shorthand for `vector: vector`
+            id: Uuid::new_v4(),
+            vector,
             text,
             metadata: Metadata::new(),
         }
@@ -48,21 +40,25 @@ impl VectorEntry {
     }
 }
 
-/// The storage engine. Keeps all vectors in RAM, syncs to disk.
+/// Vector storage engine
+/// 
+/// Keeps all vectors in RAM with persistence to disk using bincode serialization.
+/// 
+/// # Note
+/// Current implementation does full file rewrites on each mutation.
+/// Phase 9.5 will add WAL for durability and better performance.
 pub struct VectorStorage {
-    file: File,                           // no `pub` = private field
-    vectors: HashMap<Uuid, VectorEntry>,  // our in-memory "database"
+    file: File,
+    vectors: HashMap<Uuid, VectorEntry>,
 }
 
 impl VectorStorage {
-    //  no `self` param = "static method", called as VectorStorage::open()
     pub fn open(path: &str) -> Result<Self> {
-        //  chain methods to configure, then .open()
         let file = OpenOptions::new()
             .read(true)
             .write(true)
-            .create(true)  // create if doesn't exist
-            .open(path)?;  // `?` = return early if error
+            .create(true)
+            .open(path)?;
 
         let mut storage = Self {
             file,
@@ -70,20 +66,17 @@ impl VectorStorage {
         };
 
         storage.load()?;
-        Ok(storage)  //  last expression without ; is the return value
+        Ok(storage)
     }
 
-    // `&mut self` = we're modifying the storage
     pub fn store(&mut self, entry: VectorEntry) -> Result<Uuid> {
-        let id = entry.id;  // copy the id before entry moves into the HashMap
-        self.vectors.insert(id, entry);  // entry is "moved" here, can't use it after
+        let id = entry.id;
+        self.vectors.insert(id, entry);
         self.save()?;
         Ok(id)
     }
 
-    // `&self` = we're just reading, not modifying
     pub fn get(&self, id: &Uuid) -> Option<VectorEntry> {
-        // .cloned() because HashMap stores the value, we return a copy
         self.vectors.get(id).cloned()
     }
 
@@ -95,43 +88,41 @@ impl VectorStorage {
         self.vectors.len()
     }
 
-    /// Brute-force search: compare query against ALL vectors.
-    /// O(n) complexity - fine for <10k vectors, need indexing for more.
+    /// Brute-force similarity search
+    /// 
+    /// # Performance
+    /// O(n) complexity - compares query against all vectors.
+    /// Suitable for <10k vectors. Phase 9 will add HNSW indexing.
     pub fn search(&self, query: &[f32], k: usize, metric: SimilarityMetric) -> Vec<SearchResult> {
         self.search_with_filter(query, k, metric, None)
     }
 
-    /// Same as search(), but filter by metadata first
+    /// Similarity search with metadata filtering
     pub fn search_with_filter(
         &self,
-        query: &[f32],        // &[f32] = slice, a view into any contiguous f32s
-        k: usize,             // usize = unsigned integer, size depends on platform
+        query: &[f32],
+        k: usize,
         metric: SimilarityMetric,
-        filter: Option<&Filter>,  // Option = might be None or Some(value)
+        filter: Option<&Filter>,
     ) -> Vec<SearchResult> {
-        // Rust iterators: lazy, chainable, zero-cost abstractions
         let mut results: Vec<SearchResult> = self.vectors
-            .values()                    // iterate over HashMap values
-            .filter(|entry| {            // |entry| is a closure (lambda)
-                // map_or(default, fn): if None use default, if Some apply fn
+            .values()
+            .filter(|entry| {
                 filter.map_or(true, |f| f.matches(&entry.metadata))
             })
-            .map(|entry| {               // transform each entry into SearchResult
+            .map(|entry| {
                 let score = metric.calculate(query, &entry.vector);
                 SearchResult::new(
                     entry.id,
                     score,
-                    entry.text.clone(),   // clone because we're borrowing entry
+                    entry.text.clone(),
                     entry.vector.clone(),
                     entry.metadata.clone(),
                 )
             })
-            .collect();  // consume iterator, collect into Vec
+            .collect();
 
-        // partial_cmp for floats (might be NaN), unwrap_or handles that edge case
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Return top k results
         results.truncate(k);
         results
     }
@@ -173,7 +164,6 @@ impl VectorStorage {
             return Ok(());
         }
 
-        // bincode = fast binary serialization, much smaller than JSON
         self.vectors = bincode::deserialize(&buf)?;
         Ok(())
     }
@@ -207,7 +197,7 @@ mod tests {
         std::fs::remove_file("test.db").unwrap();
     }
 
-    #[test] //tests 
+    #[test]
     fn test_persistence() {
         let _ = std::fs::remove_file("test2.db");
 

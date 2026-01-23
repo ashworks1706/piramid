@@ -1,13 +1,3 @@
-//! HTTP request handlers
-//!
-//! Each function here handles one endpoint:
-//! 1. Extract what you need from the request (State, Path, Json, Query)
-//! 2. Do the work (call into our library)
-//! 3. Return JSON response or error
-//!
-//! Axum uses "extractors" - types that know how to pull data from requests.
-//! Order matters! State first, then Path, then Query/Json.
-
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -20,10 +10,7 @@ use crate::{SimilarityMetric, MetadataValue, VectorEntry};
 use super::state::SharedState;
 use super::types::*;
 
-/// Convert JSON values to our Metadata type
-/// 
-/// serde_json::Value is a tree of JSON. We flatten it to our enum.
-/// This is the "adapter pattern" - translating between two representations.
+/// Convert JSON values to internal Metadata type
 fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> crate::Metadata {
     let mut metadata = crate::Metadata::new();
     
@@ -31,18 +18,17 @@ fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> crate::Metadata
         let value = match v {
             serde_json::Value::String(s) => MetadataValue::String(s),
             serde_json::Value::Number(n) => {
-                // JSON numbers could be int or float
                 if let Some(i) = n.as_i64() {
                     MetadataValue::Integer(i)
                 } else if let Some(f) = n.as_f64() {
                     MetadataValue::Float(f)
                 } else {
-                    continue;  // skip weird numbers
+                    continue;
                 }
             }
             serde_json::Value::Bool(b) => MetadataValue::Boolean(b),
             serde_json::Value::Null => MetadataValue::Null,
-            _ => continue,  // skip arrays/objects for now
+            _ => continue,
         };
         metadata.insert(k, value);
     }
@@ -50,7 +36,7 @@ fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> crate::Metadata
     metadata
 }
 
-/// Convert our Metadata back to JSON for responses
+/// Convert internal Metadata to JSON for responses
 fn metadata_to_json(metadata: &crate::Metadata) -> HashMap<String, serde_json::Value> {
     metadata
         .iter()

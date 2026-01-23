@@ -1,19 +1,19 @@
-
-/// Why cosine? Most LLM embeddings are normalized, meaning the vector's length
-/// doesn't matter - only its direction. Cosine ignores magnitude and just
-/// measures the angle. 
+/// Cosine similarity between two vectors
+/// 
+/// Measures the cosine of the angle between vectors, ignoring magnitude.
+/// Ideal for normalized embeddings where direction matters more than length.
+/// 
+/// Returns value in range [-1, 1] where:
+/// - 1.0 = identical direction
+/// - 0.0 = orthogonal (perpendicular)
+/// - -1.0 = opposite direction
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    //  assert! panics if condition is false. Good for catching bugs early.
     assert_eq!(a.len(), b.len(), "Vectors must have same length");
     
-    let mut dot = 0.0;    // `mut` = mutable, can change
+    let mut dot = 0.0;
     let mut norm_a = 0.0;
     let mut norm_b = 0.0;
 
-    // Cosine similarity: cos(θ) = (A · B) / (||A|| × ||B||)
-    
-    // .iter() gives references, .zip() pairs them up
-    // (x, y) destructures the tuple
     for (x, y) in a.iter().zip(b.iter()) {
         dot += x * y;
         norm_a += x * x;
@@ -22,7 +22,6 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     
     let denominator = norm_a.sqrt() * norm_b.sqrt();
     
-    //  if/else is an expression - returns a value
     if denominator == 0.0 {
         0.0
     } else {
@@ -30,16 +29,14 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
-// #[cfg(test)] = only compile this when running `cargo test`
 #[cfg(test)]
 mod tests {
-    use super::*;  // import everything from parent module
+    use super::*;
 
-    #[test]  // marks this fn as a test
+    #[test]
     fn test_identical_vectors() {
-        let v = vec![1.0, 2.0, 3.0];  // vec! macro creates a Vec
-        let similarity = cosine_similarity(&v, &v);  // &v = borrow, don't move
-        // floats are imprecise, so we check if "close enough"
+        let v = vec![1.0, 2.0, 3.0];
+        let similarity = cosine_similarity(&v, &v);
         assert!((similarity - 1.0).abs() < 1e-6);
     }
 
