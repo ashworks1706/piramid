@@ -240,14 +240,3 @@
 - [ ] Privacy Mode (GDPR/HIPAA, encryption)
 - [ ] Auto-Pilot (self-tuning, auto-optimization)
 
----
-
-## Current Status
-
-**Focus:** Performance & Indexing (HNSW)  
-**Next:** Data Durability (WAL)  
-**Then:** Production Features (Metrics)  
-**Finally:** Security (Auth)
-
-**Philosophy:** Build foundation first, add features later. Production-ready beats feature-rich.
-
