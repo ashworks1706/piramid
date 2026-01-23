@@ -7,7 +7,7 @@ use piramid::{EmbeddingConfig, embeddings};
 
 #[tokio::main]
 async fn main() {
-    println!("🔺 Piramid Vector Database");
+    println!(" Piramid Vector Database");
     println!("   Version: {}", env!("CARGO_PKG_VERSION"));
     println!();
     

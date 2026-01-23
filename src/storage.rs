@@ -12,7 +12,7 @@ use crate::metadata::Metadata;
 use crate::query::Filter;
 use crate::search::SearchResult;
 
-/// A single vector entry - what you store in the database
+// A single vector entry - what you store in the database
 //  #[derive(...)] auto-generates trait implementations
 // - Debug: lets you print with {:?}
 // - Clone: lets you duplicate with .clone()
