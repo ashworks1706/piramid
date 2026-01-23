@@ -8,7 +8,6 @@
     <a href="#quick-start">Quick Start</a> •
     <a href="#features">Features</a> •
     <a href="#usage">Usage</a> •
-    <a href="docs/ROADMAP.md">Roadmap</a> •
     <a href="#contributing">Contributing</a>
 </p>
 
@@ -179,7 +178,7 @@ cd dashboard && npm install && npm run dev
 
 ## Contributing
 
-We welcome contributions! See [docs/TODO.md](docs/TODO.md) for documentation needs.
+We welcome contributions! See [docs/TODO.md](docs/TODO.md) for documentation.
 
 ---
 
