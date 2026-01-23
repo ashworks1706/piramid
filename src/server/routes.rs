@@ -20,9 +20,6 @@ use super::state::SharedState;
 // 2. Adds CORS middleware 
 // 3. Attaches shared state
 pub fn create_router(state: SharedState) -> Router {
-    // CORS = Cross-Origin Resource Sharing
-    // Without this, browsers block requests from different domains
-    // (e.g., dashboard on :3000 calling API on :6333)
     let cors = CorsLayer::new()
         .allow_origin(Any)    // any domain can call us
         .allow_methods(Any)   // GET, POST, etc
