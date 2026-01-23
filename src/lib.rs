@@ -1,5 +1,3 @@
-//! Piramid - Vector database for agentic applications
-//!
 //! Store embeddings, find similar ones. That's what vector databases do.
 //!
 //! ## Crate organization

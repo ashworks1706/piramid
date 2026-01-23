@@ -68,7 +68,27 @@ cargo build --release --bin piramid-server
 
 ## Roadmap
 
-### Phase 1: Core Foundation 
+**Current Status:** Phase 5 Complete ✅  
+**Next Priority:** Phase 9 → 9.5 → 10 → 10.5 (Path to Production)
+
+### 🎯 Recommended Implementation Order
+
+**Track 1: Production-Ready Core** (Phases 9, 9.5, 10, 10.5)
+- These phases are **critical** for production deployment
+- Must be completed before Phases 6-8 for stability
+- Focus: Performance, reliability, security
+
+**Track 2: Feature Expansion** (Phases 6, 7, 8)
+- Build on top of production-ready foundation
+- Can be implemented in parallel after Track 1 is stable
+
+**Track 3: Advanced/Experimental** (Phases 11-18)
+- Cutting-edge features and optimizations
+- Differentiation from competitors (GPU, WASM, Agent Memory)
+
+---
+
+### Phase 1: Core Foundation ✅ **COMPLETED** 
 - [x] Basic vector storage (HashMap + file persistence)
 - [x] Binary serialization with bincode
 - [x] UUID-based document IDs
@@ -77,7 +97,7 @@ cargo build --release --bin piramid-server
 - [x] Get all vectors
 - [x] Persistence to disk
 
-### Phase 2: Search & Similarity 
+### Phase 2: Search & Similarity ✅ **COMPLETED**
 - [x] **Similarity metrics module**
   - [x] Cosine similarity
   - [x] Euclidean distance
@@ -92,14 +112,14 @@ cargo build --release --bin piramid-server
   - [x] Filter by metadata during search
   - [x] Support basic operators (eq, ne, gt, gte, lt, lte, in)
 
-### Phase 3: Data Operations 
+### Phase 3: Data Operations ✅ **COMPLETED** 
 - [x] **Delete operations**
   - [x] Delete by ID
 - [x] **Update operations**
   - [x] Update vector by ID
   - [x] Update metadata by ID
 
-### Phase 4: HTTP Server 
+### Phase 4: HTTP Server ✅ **COMPLETED** 
 - [x] **REST API (axum)**
   - [x] Health endpoint
   - [x] Collections CRUD
@@ -112,7 +132,7 @@ cargo build --release --bin piramid-server
   - [x] Vector browsing
   - [x] Search interface
 
-### Phase 5: Built-in Embeddings (Next Priority)
+### Phase 5: Built-in Embeddings ✅ **COMPLETED**
 *no need to embed before storing*
 - [x] **Embedding providers module**
   - [x] OpenAI (text-embedding-3-small, text-embedding-3-large)
@@ -127,7 +147,7 @@ cargo build --release --bin piramid-server
   - [x] Model selection per collection
 - [x] **Batch embedding**
   - [x] Batch embed multiple texts in one request
-  - [ ] Rate limiting / retry logic
+  - [ ] Rate limiting / retry logic (→ moved to Phase 10.5)
 
 ### Phase 6: Document Ingestion 
 *Upload docs, auto-chunk, auto-embed*
@@ -166,7 +186,7 @@ cargo build --release --bin piramid-server
 - [ ] **Full-text search endpoint**
   - [ ] `POST /api/collections/{name}/search/hybrid`
 
-### Phase 9: Performance & Indexing 
+### Phase 9: Performance & Indexing ⚡ **HIGH PRIORITY**
 - [ ] **HNSW (Hierarchical Navigable Small World)**
   - [ ] Build HNSW graph on insert
   - [ ] Approximate nearest neighbor search
@@ -180,6 +200,41 @@ cargo build --release --bin piramid-server
 - [ ] **Parallel processing**
   - [ ] Parallel search with rayon
   - [ ] Concurrent inserts
+
+### Phase 9.5: Data Durability & Integrity 🔴 **CRITICAL - MUST DO BEFORE PRODUCTION**
+*Production databases don't lose your data*
+- [ ] **Write-Ahead Log (WAL)**
+  - [ ] Append-only log for all mutations
+  - [ ] Recovery from WAL on crash/restart
+  - [ ] Periodic checkpointing to main storage
+  - [ ] Configurable fsync strategies (performance vs durability)
+- [ ] **ACID Transactions**
+  - [ ] Atomic batch operations (all-or-nothing)
+  - [ ] Rollback on failure
+  - [ ] Isolation levels (at least serializable)
+  - [ ] Transaction log for debugging
+- [ ] **Graceful shutdown & recovery**
+  - [ ] Flush pending writes on SIGTERM/SIGINT
+  - [ ] Clean lock release on shutdown
+  - [ ] Corrupted file detection on startup
+  - [ ] Auto-repair minor corruption
+  - [ ] Emergency read-only mode
+- [ ] **Backup & Restore**
+  - [ ] Snapshot API (copy-on-write)
+  - [ ] Point-in-time recovery (PITR)
+  - [ ] Export/import collections (portable format)
+  - [ ] Incremental backups
+  - [ ] Verify backup integrity
+- [ ] **Error handling hardening**
+  - [ ] Replace all .unwrap() with proper error types
+  - [ ] Graceful degradation on failures
+  - [ ] Poison-free lock handling (no panics while holding locks)
+  - [ ] Retry logic with exponential backoff
+- [ ] **Async storage I/O**
+  - [ ] Non-blocking disk writes
+  - [ ] Async file handles (tokio-fs)
+  - [ ] Background flush worker
+  - [ ] Write batching/coalescing
 
 ### Phase 10: Production Features 
 - [ ] **Batch operations**
@@ -198,6 +253,31 @@ cargo build --release --bin piramid-server
   - [ ] Metadata schema validation
 - [ ] **gRPC API**
   - [ ] Alternative to REST for performance
+
+### Phase 10.5: Security & Authentication 🔒 **HIGH PRIORITY**
+*Don't let anyone delete your production data*
+- [ ] **Authentication**
+  - [ ] API key authentication
+  - [ ] JWT token support
+  - [ ] Multi-tenant isolation
+  - [ ] Service-to-service auth (mTLS)
+- [ ] **Authorization**
+  - [ ] Role-based access control (RBAC)
+  - [ ] Collection-level permissions (read/write/admin)
+  - [ ] Read-only vs read-write users
+  - [ ] Fine-grained operation permissions
+- [ ] **Rate limiting & quotas**
+  - [ ] Per-client rate limits (requests/second)
+  - [ ] Per-collection quotas (vector count, storage size)
+  - [ ] Quota enforcement
+  - [ ] DDoS protection (connection limits)
+  - [ ] Slow-query detection & throttling
+- [ ] **Security hardening**
+  - [ ] Input validation & sanitization
+  - [ ] SQL injection prevention (if adding SQL features)
+  - [ ] Request size limits
+  - [ ] TLS/SSL enforcement
+  - [ ] Security headers (CORS, CSP)
 
 ### Phase 11: GPU Acceleration 
 *most vector DBs are CPU-only*
@@ -318,6 +398,52 @@ cargo build --release --bin piramid-server
   - [ ] Suggest embedding model based on your data
   - [ ] Warn about dimension mismatches
   - [ ] Performance recommendations in dashboard
+
+---
+
+## 🏆 Production Readiness Tracker
+
+### Phases Required for Production (v1.0)
+| Phase | Status | Priority | Blocks Production? |
+|-------|--------|----------|-------------------|
+| Phase 1-5 | ✅ Complete | N/A | Already done |
+| **Phase 9** | ⏳ Pending | 🔴 Critical | **YES** - Need HNSW indexing |
+| **Phase 9.5** | ⏳ Pending | 🔴 Critical | **YES** - Need WAL/ACID |
+| **Phase 10** | ⏳ Pending | 🔴 Critical | **YES** - Need observability |
+| **Phase 10.5** | ⏳ Pending | 🔴 Critical | **YES** - Need auth/security |
+
+### Feature Expansion (v1.x)
+| Phase | Priority | Can Deploy Without? |
+|-------|----------|---------------------|
+| Phase 6 | 🟡 Medium | Yes - users can chunk manually |
+| Phase 7 | 🟡 Medium | Yes - MCP is nice-to-have |
+| Phase 8 | 🟡 Medium | Yes - vector-only is viable |
+
+### Advanced Features (v2.0+)
+| Phase | Status | Competitive Advantage |
+|-------|--------|----------------------|
+| Phase 11 | 🟢 Future | **HIGH** - GPU acceleration (unique) |
+| Phase 12 | 🟢 Future | Medium - Replication/sharding (table stakes) |
+| Phase 13 | 🟢 Future | **HIGH** - Semantic cache (unique) |
+| Phase 14 | 🟢 Future | **HIGH** - WASM (unique) |
+| Phase 15 | 🟢 Future | **HIGH** - Agent memory (unique) |
+| Phase 16-18 | 🟢 Future | Medium - Nice differentiators |
+
+### Comparison with Competitors (After Phases 9-10.5)
+| Feature | Piramid v1.0 | Qdrant | HelixDB | Milvus |
+|---------|--------------|--------|---------|--------|
+| HNSW Indexing | ✅ (Phase 9) | ✅ | ✅ | ✅ |
+| SIMD Acceleration | ✅ (Phase 9) | ✅ | ✅ | ✅ |
+| WAL/ACID | ✅ (Phase 9.5) | ✅ | ✅ | ✅ |
+| Auth/RBAC | ✅ (Phase 10.5) | ✅ | ✅ | ✅ |
+| Observability | ✅ (Phase 10) | ✅ | ✅ | ✅ |
+| Replication | ❌ (Phase 12) | ✅ | ✅ | ✅ |
+| **GPU Acceleration** | 🎯 (Phase 11) | ❌ | ❌ | Limited |
+| **Semantic Cache** | 🎯 (Phase 13) | ❌ | ❌ | ❌ |
+| **WASM Support** | 🎯 (Phase 14) | ❌ | ❌ | ❌ |
+| **Agent Memory** | 🎯 (Phase 15) | ❌ | ❌ | ❌ |
+
+🎯 = Unique competitive advantage after implementation
 
 ---
 

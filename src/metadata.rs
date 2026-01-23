@@ -1,9 +1,5 @@
 //! Metadata - extra data you store alongside vectors
 //!
-//! You often want to filter:
-//! "find similar documents, but only from 2024" or "only in category X"
-//! That's what metadata is for - key-value pairs attached to each vector.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

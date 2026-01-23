@@ -7,7 +7,7 @@ use crate::metadata::Metadata;
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     pub id: Uuid,
-    pub score: f32,       // higher = more similar
+    pub score: f32,      
     pub text: String,
     pub vector: Vec<f32>,
     pub metadata: Metadata,

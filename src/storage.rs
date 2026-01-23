@@ -1,7 +1,7 @@
 //  `use` brings types into scope. `serde` is THE serialization library.
 // Derive macros auto-generate code - Serialize/Deserialize let us save to disk.
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;  // Like dict in Python, object in JS
+use std::collections::HashMap;  
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};  // Traits for file I/O
 use uuid::Uuid;
