@@ -1,7 +1,7 @@
 // Functions return Ok(value) on success, Err(error) on failure.
 
 use std::io;
-use thiserror::Error;  // makes defining errors easier
+use thiserror::Error;  
 
 // Type alias: now we can write `Result<T>` instead of `Result<T, PiramidError>`
 pub type Result<T> = std::result::Result<T, PiramidError>;
