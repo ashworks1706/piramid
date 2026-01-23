@@ -1,5 +1,3 @@
-# Piramid TODO - Build Order & Documentation
-
 **Use this as your single source of truth for what to build and when.**
 
 **Follow this exact order. Each step depends on the previous.**
