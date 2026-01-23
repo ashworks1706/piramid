@@ -12,6 +12,7 @@ pub mod search;
 pub mod server;
 pub mod storage;
 pub mod embeddings;
+pub mod index;
 
 pub use config::Config;
 pub use metrics::SimilarityMetric;
