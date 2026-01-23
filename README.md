@@ -186,7 +186,7 @@ We welcome contributions! See [docs/TODO.md](docs/TODO.md) for documentation nee
 
 ## License
 
-[Add license here - MIT or Apache-2.0 recommended]
+Soon
 
 ---
 
