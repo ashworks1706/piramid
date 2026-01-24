@@ -40,5 +40,28 @@ pub struct HnswIndex{
     config: HnswConfig,
     nodes: Hashmap<Uuid, HnswNode>,
     max_level: isize,
-
+    start_node: Option<Uuid>,
 }
+
+impl HnswIndex{
+    pub fn new(config: HnswConfig) -> Self{
+        HnswIndex{
+            config : HnswConfig,
+            nodes: Hashmap::new(),
+            max_level: -1,
+            start_node: None,
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
