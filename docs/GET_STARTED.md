@@ -105,3 +105,17 @@ Common Gotchas:
   - Full file rewrites - Every mutation writes entire DB (Phase 9.5 will add WAL)
   - No indexes yet - Search is O(n) brute force (Phase 1 adds HNSW)
   - Thread-safe via Arc<Mutex> - Multiple requests can access collections safely
+
+Recommended Papers / Resources to read:
+
+  - Rust Basics: https://doc.rust-lang.org/book/ch01-03-hello-cargo.html
+  - Rust Async: https://rust-lang.github.io/async-book/
+  - Axum Framework: https://docs.rs/axum/latest/axum/
+  - Rayon for Parallelism: https://docs.rs/rayon/latest/rayon/
+  - Comprehensive Survey of Vector Database Systems : https://arxiv.org/pdf/2310.11703
+  - Vector Similarity Search Overview: https://arxiv.org/abs/1908.10084
+  - HNSW: https://arxiv.org/abs/1603.09320
+  - SIMD in Rust: https://doc.rust-lang.org/std/simd/
+  - Write-Ahead Logging: https://en.wikipedia.org/wiki/Write-ahead_logging
+  - ACID Transactions: https://en.wikipedia.org/wiki/ACID
+
