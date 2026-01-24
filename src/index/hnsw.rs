@@ -69,20 +69,24 @@ fn random_layer(&self) -> usize{
 
 fn insert(&mut self, id: Uuid, vector: Vec<f32>){
     // determine the layer for the new node 
-    let layer = self.random_layer();
+    let layer = self.random_layer(); // this gives us a layer based on exponential decay
 
     // if first node, make it entry point and return 
     if self.start_node.is_none(){
-        self.start_node = Some(id);
-        self.max_level = layer as isize;
-        let node = HnswNode{
+        self.start_node = Some(id); // set entry point
+        self.max_level = layer as isize; // we do this because levels are 0-indexed and this makes
+                                         // sure max_level is always the highest level
+        let node = HnswNode{ 
             id,
             vector,
             level: layer as isize,
-        };
-        self.nodes.insert(id, node);
+        }; // create the node
+        self.nodes.insert(id, node); // insert into the index
         return;
     }
+
+    // otherwise, we need to find the best entry point for each layer down to 0
+    // start from the highest layer of the current entry point
 
 
 }
