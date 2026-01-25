@@ -176,35 +176,11 @@
 
 **Implementation:**
 - [x] **HNSW** (current default)
-  - Best general-purpose (speed + accuracy)
-  - Works 1k to 100M vectors
-  - High memory usage
 - [ ] **Flat/Brute Force** (2-3 hours)
-  - 100% accuracy
-  - Best for <10k vectors
-  - No index overhead
-  - Use case: Small datasets, exact search required
 - [ ] **IVF (Inverted File Index)** (8-12 hours)
-  - Medium memory usage
-  - Good for 10M+ vectors
-  - Configurable speed/accuracy trade-off
-  - Use case: Memory-constrained environments
 - [ ] **Product Quantization (PQ)** (12-16 hours)
-  - 4x-8x memory reduction
-  - Lower accuracy (~85%)
-  - Best for 100M+ vectors
-  - Use case: Massive scale, limited RAM
 - [ ] **Annoy (Spotify's algorithm)** (6-8 hours)
-  - Memory-mapped, disk-based
-  - Good for read-heavy workloads
-  - Static index (rebuild for updates)
-  - Use case: Infrequent updates, large datasets
 - [ ] **ScaNN (Google's algorithm)** (16-20 hours)
-  - State-of-art speed/accuracy
-  - Complex implementation
-  - Best overall performance
-  - Use case: Maximum performance needs
-
 
 **Goal:** Be the most flexible vector DB - let users choose the right tool
 

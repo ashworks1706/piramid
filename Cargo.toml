@@ -30,13 +30,11 @@ tower-http = { version = "0.6", features = ["cors", "fs"] }
 # HTTP client for embedding providers
 reqwest = { version = "0.12", features = ["json"] }
 async-trait = "0.1"
+rand = "0.8"
 
 [dev-dependencies]
 # Logging
 log = "0.4"
-
-# Utility 
-rand = "0.8"
 
 # For testing
 criterion = {version = "0.5", features = ["html_reports"]}
