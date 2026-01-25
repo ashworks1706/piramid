@@ -81,34 +81,6 @@ curl -X POST http://localhost:6333/api/collections/docs/search \
   -d '{"vector": [0.1, 0.2, 0.3, 0.4], "k": 5}'
 ```
 
-### Rust Library
-
-```rust
-use piramid::{VectorEntry, VectorStorage, SimilarityMetric};
-
-fn main() -> piramid::Result<()> {
-    let mut storage = VectorStorage::open("vectors.db")?;
-    
-    let entry = VectorEntry::new(
-        vec![0.1, 0.2, 0.3, 0.4],
-        "Hello world".to_string()
-    );
-    storage.store(entry)?;
-    
-    let results = storage.search(
-        &[0.1, 0.2, 0.3, 0.4],
-        5,
-        SimilarityMetric::Cosine
-    );
-    
-    for result in results {
-        println!("{}: {}", result.text, result.score);
-    }
-    
-    Ok(())
-}
-```
-
 ### With Embeddings
 
 ```bash

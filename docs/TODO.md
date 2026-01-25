@@ -31,7 +31,7 @@
   - [x] Post-search filtering support
   - [x] Tests: insert, search, filter, delete, update
   - [x] HNSW index persistence to disk (save/load graph structure - 3-5 hours) 
-  - [ ] Benchmark suite (4-6 hours)
+  - [x] Benchmark suite (4-6 hours)
 - [ ] **SIMD acceleration**
   - [ ] SIMD distance calculations (AVX2/AVX-512)
   - [ ] Portable SIMD fallback

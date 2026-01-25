@@ -40,3 +40,13 @@ async-trait = "0.1"
 
 [dev-dependencies]
 # For testing
+criterion = {version = "0.5", features = ["html_reports"]}
+
+[[bench]]
+name = "hnsw_performance"
+harness = false
+
+
+[[bench]]
+name = "hnsw_accuracy"
+harness = false

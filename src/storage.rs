@@ -67,10 +67,10 @@ impl VectorStorage {
             .collect()
     }
 
-    /// Get the HNSW index file path from the database file path
-    /// Converts "data/docs.db" -> "data/.hnsw.db"
-    /// Converts "docs.db" -> ".hnsw.db"
-    /// This keeps all *.db files covered by a single .gitignore rule
+    // Get the HNSW index file path from the database file path
+    // Converts "data/docs.db" -> "data/.hnsw.db"
+    // Converts "docs.db" -> ".hnsw.db"
+    // This keeps all *.db files covered by a single .gitignore rule
     fn index_path(&self) -> String {
         let path = std::path::Path::new(&self.path);
         if let Some(parent) = path.parent() {
