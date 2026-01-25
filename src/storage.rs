@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use uuid::Uuid;
 
-use crate::metrics::SimilarityMetric;
+use crate::metrics::Metric;
 use crate::error::Result;
 use crate::metadata::Metadata;
 use crate::query::Filter;
@@ -124,7 +124,7 @@ impl VectorStorage {
 
     // Search for k nearest neighbors using HNSW index
     // Time complexity: O(log n) approximate search
-    pub fn search(&self, query: &[f32], k: usize, metric: SimilarityMetric) -> Vec<SearchResult> {
+    pub fn search(&self, query: &[f32], k: usize, metric: Metric) -> Vec<SearchResult> {
         self.search_with_filter(query, k, metric, None)
     }
 
@@ -135,7 +135,7 @@ impl VectorStorage {
         &self,
         query: &[f32],
         k: usize,
-        metric: SimilarityMetric,
+        metric: Metric,
         filter: Option<&Filter>,
     ) -> Vec<SearchResult> {
         // Create vector map for HNSW
@@ -310,7 +310,7 @@ mod tests {
 
         // Search with HNSW
         let query = vec![1.0, 0.0, 0.0];
-        let results = storage.search(&query, 2, SimilarityMetric::Cosine);
+        let results = storage.search(&query, 2, Metric::Cosine);
 
         assert_eq!(results.len(), 2);
         assert!(results[0].text == "vec0" || results[0].text == "vec3"); // Should find similar vectors
@@ -342,7 +342,7 @@ mod tests {
         // Search with filter
         let filter = Filter::new().eq("category", "A");
         let query = vec![1.0, 0.0];
-        let results = storage.search_with_filter(&query, 5, SimilarityMetric::Cosine, Some(&filter));
+        let results = storage.search_with_filter(&query, 5, Metric::Cosine, Some(&filter));
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].text, "doc1");

@@ -6,7 +6,7 @@ use axum::{
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::{SimilarityMetric, MetadataValue, VectorEntry};
+use crate::{Metric, MetadataValue, VectorEntry};
 use super::state::SharedState;
 use super::types::*;
 
@@ -63,11 +63,11 @@ fn metadata_to_json(metadata: &crate::Metadata) -> HashMap<String, serde_json::V
 }
 
 // Parse similarity metric from string
-fn parse_metric(s: Option<String>) -> SimilarityMetric {
+fn parse_metric(s: Option<String>) -> Metric {
     match s.as_deref() {  // Option<String> → Option<&str>
-        Some("euclidean") => SimilarityMetric::Euclidean,
-        Some("dot") | Some("dot_product") => SimilarityMetric::DotProduct,
-        _ => SimilarityMetric::Cosine,  // default
+        Some("euclidean") => Metric::Euclidean,
+        Some("dot") | Some("dot_product") => Metric::DotProduct,
+        _ => Metric::Cosine,  // default
     }
 }
 

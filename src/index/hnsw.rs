@@ -1,7 +1,7 @@
 use uuid::Uuid;
 use std::collections::{HashMap, HashSet, BinaryHeap};
 use std::cmp::Ordering;
-use crate::metrics::SimilarityMetric;
+use crate::metrics::Metric;
 
 
 // HNSW (Hierarchical Navigable Small World) index configuration
@@ -20,7 +20,7 @@ pub struct HnswConfig{
     pub m_max: usize,  // max connections for layer 0 (typically 2*M)
     pub ef_construction: usize,  // size of the dynamic list for the construction phase
     pub ml: f32,  // layer multiplier: 1/ln(M)
-    pub metric: SimilarityMetric,  // similarity metric (converted to distance internally for HNSW)
+    pub metric: Metric,  // similarity metric (converted to distance internally for HNSW)
 }
 // impl means we are implementing methods for the struct where each method has &self as first
 // parameter, meaning it operates on an instance of the struct, similar to classes in other
@@ -40,7 +40,7 @@ impl Default for HnswConfig {
             m_max: m * 2,
             ef_construction: 200, // size of the dynamic list for the construction phase
             ml: 1.0 / (m as f32).ln(),  // layer multiplier: 1/ln(M)
-            metric: SimilarityMetric::Cosine,  // default to cosine similarity
+            metric: Metric::Cosine,  // default to cosine similarity
         }
     }
 }
@@ -373,9 +373,9 @@ impl HnswIndex{
         // But our metrics return similarity scores (higher = better for Cosine/Dot)
         // So we need to invert for those metrics
         match self.config.metric {
-            SimilarityMetric::Cosine => 1.0 - self.config.metric.calculate(a, b),
-            SimilarityMetric::DotProduct => 1.0 - self.config.metric.calculate(a, b),
-            SimilarityMetric::Euclidean => self.config.metric.calculate(a, b),
+            Metric::Cosine => 1.0 - self.config.metric.calculate(a, b),
+            Metric::DotProduct => 1.0 - self.config.metric.calculate(a, b),
+            Metric::Euclidean => self.config.metric.calculate(a, b),
         }
     }
 

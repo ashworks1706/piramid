@@ -15,7 +15,7 @@ pub mod embeddings;
 pub mod index;
 
 pub use config::Config;
-pub use metrics::SimilarityMetric;
+pub use metrics::Metric;
 pub use error::{PiramidError, Result};
 pub use metadata::{Metadata, MetadataValue, metadata};
 pub use query::{Filter, FilterCondition};

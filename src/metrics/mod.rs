@@ -15,25 +15,30 @@ pub use cosine::cosine_similarity;
 pub use euclidean::euclidean_distance;
 pub use dot::dot_product;
 
+/// Distance/similarity metric for vector comparison.
+/// 
+/// Different metrics have different semantics:
+/// - Similarity metrics (Cosine, DotProduct): higher = more similar
+/// - Distance metrics (Euclidean): lower = more similar
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SimilarityMetric {
-    #[default]  // used when you call SimilarityMetric::default()
+pub enum Metric {
+    #[default]  // used when you call Metric::default()
     Cosine,
     Euclidean,
     DotProduct,
 }
 
-impl SimilarityMetric {
+impl Metric {
     pub fn calculate(&self, a: &[f32], b: &[f32]) -> f32 {
         //  `match` must handle ALL variants (exhaustive)
         // This is great - compiler catches if you add a new variant
         match self {
-            SimilarityMetric::Cosine => cosine_similarity(a, b),
-            SimilarityMetric::Euclidean => {
+            Metric::Cosine => cosine_similarity(a, b),
+            Metric::Euclidean => {
                 let dist = euclidean_distance(a, b);
                 1.0 / (1.0 + dist)  // flip: distance -> similarity
             }
-            SimilarityMetric::DotProduct => dot_product(a, b),
+            Metric::DotProduct => dot_product(a, b),
         }
     }
 }
@@ -47,8 +52,8 @@ mod tests {
         let v = vec![1.0, 2.0, 3.0];
         
         // Identical vectors should have max similarity
-        assert!((SimilarityMetric::Cosine.calculate(&v, &v) - 1.0).abs() < 1e-6);
-        assert!((SimilarityMetric::Euclidean.calculate(&v, &v) - 1.0).abs() < 1e-6);
+        assert!((Metric::Cosine.calculate(&v, &v) - 1.0).abs() < 1e-6);
+        assert!((Metric::Euclidean.calculate(&v, &v) - 1.0).abs() < 1e-6);
     }
 
     #[test]
@@ -57,6 +62,6 @@ mod tests {
         let v2 = vec![0.0, 1.0];
         
         // Orthogonal vectors have 0 cosine similarity
-        assert!(SimilarityMetric::Cosine.calculate(&v1, &v2).abs() < 1e-6);
+        assert!(Metric::Cosine.calculate(&v1, &v2).abs() < 1e-6);
     }
 }

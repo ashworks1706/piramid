@@ -6,7 +6,7 @@
 // 3. Store and search by text
 
 use piramid::{
-    VectorStorage, VectorEntry, SimilarityMetric,
+    VectorStorage, VectorEntry, Metric,
     embeddings::{EmbeddingConfig, providers::create_embedder},
 };
 
@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let response = embedder.embed(query).await?;
         
         // Search with the embedded query
-        let results = storage.search(&response.embedding, 3, SimilarityMetric::Cosine);
+        let results = storage.search(&response.embedding, 3, Metric::Cosine);
         
         for (rank, result) in results.iter().enumerate() {
             println!("      {}. Score: {:.4} - {}", 
