@@ -44,11 +44,18 @@
   - [ ] Parallel search with rayon
   - [ ] Concurrent inserts
   - [ ] Linear scaling with CPU cores
+- [ ] **Embeddings optimization** (Before Phase 3)
+  - [ ] LRU cache for repeated embeddings (save 50-90% API costs)
+  - [ ] Native batch API support (OpenAI/Ollama - 2x-10x speedup)
+  - [ ] Retry with exponential backoff (production reliability)
+  - [ ] Request metrics (count, latency, tokens, cost)
+  - [ ] Type-safe config (enum-based instead of strings)
 
 **Current Performance:**
 - Search: O(log n) with HNSW
 - Insert: O(log n) to update graph
 - Memory: Full vector storage in RAM
+- Embeddings: No caching, sequential batching
 
 **Goal:** Search 1M vectors in <10ms
 

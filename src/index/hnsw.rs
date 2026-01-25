@@ -157,8 +157,7 @@ impl HnswIndex{
         for lc in (0..=layer).rev() { // 0..=layer means we go from layer down to 0 since we are
                                       // doing rev()
             // Search for ef_construction nearest neighbors at this layer
-            current_entry = self.search_layer( // ef_construction means we want to find this many
-                                               // neighbors
+            current_entry = self.search_layer( // ef_construction means we want to find this many neighbors
                 vector,
                 &current_entry,
                 self.config.ef_construction,
@@ -183,11 +182,8 @@ impl HnswIndex{
                 }
 
                 // Add edge from neighbor to new node
-                if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) { // get mutable reference
-                                                                           // to neighbor why?
-                                                                           // because we want to
-                                                                           // modify its
-                                                                           // connections
+                if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) { // get mutable reference to neighbor why?
+                    // because we want to modify it's connections
                     if lc < neighbor.connections.len() {
                         neighbor.connections[lc].push(id);
 
