@@ -24,9 +24,9 @@
 
 **Implementation:**
 - [ ] **HNSW indexing**
-  - [ ] Build HNSW graph on insert
-  - [ ] Approximate nearest neighbor search (O(log n))
-  - [ ] Configurable ef_construction and M parameters
+  - [x] Build HNSW graph on insert
+  - [x] Approximate nearest neighbor search (O(log n))
+  - [x] Configurable ef_construction and M parameters
   - [ ] Benchmark: 1M vectors in <10ms
 - [ ] **SIMD acceleration**
   - [ ] SIMD distance calculations (AVX2/AVX-512)
