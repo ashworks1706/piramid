@@ -1,5 +1,4 @@
 use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet, BinaryHeap};
 use std::cmp::Ordering;
 use crate::metrics::SimilarityMetric;
@@ -17,11 +16,11 @@ use crate::metrics::SimilarityMetric;
 
 
 pub struct HnswConfig{
-    pub m: usize,  // max number of connections per nodes
+    pub m: usize,  // max number of connections per node
     pub m_max: usize,  // max connections for layer 0 (typically 2*M)
     pub ef_construction: usize,  // size of the dynamic list for the construction phase
     pub ml: f32,  // layer multiplier: 1/ln(M)
-    pub metric: SimilarityMetric,  // distance metric to use
+    pub metric: SimilarityMetric,  // similarity metric (converted to distance internally for HNSW)
 }
 // impl means we are implementing methods for the struct where each method has &self as first
 // parameter, meaning it operates on an instance of the struct, similar to classes in other
@@ -48,7 +47,6 @@ impl Default for HnswConfig {
 
 #[derive(Debug, Clone)]
 struct HnswNode{
-    id: Uuid,
     // connections[layer] = Vec of neighbor IDs at that layer
     // Layer 0 is at index 0
     connections: Vec<Vec<Uuid>>,
@@ -138,7 +136,6 @@ impl HnswIndex{
             self.start_node = Some(id); // set entry point
             self.max_level = layer as isize; // this makes sure max_level is always the highest level
             let node = HnswNode{ 
-                id,
                 connections: vec![Vec::new(); layer + 1], // this creates empty connections for
                                                           // each layer
             }; // create the node
@@ -221,7 +218,6 @@ impl HnswIndex{
 
         // Create and insert the new node
         let new_node = HnswNode{
-            id,
             connections: vec![Vec::new(); layer + 1],
         };
         self.nodes.insert(id, new_node);
