@@ -18,16 +18,20 @@
 - [x] Embedding providers (OpenAI, Ollama)
 - [x] Batch embedding endpoints
 
-### Performance & Indexing 
+### 1️⃣ Performance & Indexing 
 
 **Why first:** Without HNSW, everything else is unusably slow at scale.
 
 **Implementation:**
-- [ ] **HNSW indexing**
+- [x] **HNSW indexing**
   - [x] Build HNSW graph on insert
   - [x] Approximate nearest neighbor search (O(log n))
   - [x] Configurable ef_construction and M parameters
-  - [ ] Benchmark: 1M vectors in <10ms
+  - [x] Integrated into VectorStorage (production-grade, no brute-force fallback)
+  - [x] Post-search filtering support
+  - [x] Tests: insert, search, filter, delete, update
+  - [ ] Benchmark: 1M vectors in <10ms (TODO: create benchmark suite)
+  - [ ] HNSW index persistence to disk (TODO: save/load from file)
 - [ ] **SIMD acceleration**
   - [ ] SIMD distance calculations (AVX2/AVX-512)
   - [ ] Portable SIMD fallback
@@ -40,6 +44,11 @@
   - [ ] Parallel search with rayon
   - [ ] Concurrent inserts
   - [ ] Linear scaling with CPU cores
+
+**Current Performance:**
+- Search: O(log n) with HNSW
+- Insert: O(log n) to update graph
+- Memory: Full vector storage in RAM
 
 **Goal:** Search 1M vectors in <10ms
 
