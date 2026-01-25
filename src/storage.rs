@@ -67,10 +67,22 @@ impl VectorStorage {
             .collect()
     }
 
-    // get the hnsw index file path from the database file path 
+    /// Get the HNSW index file path from the database file path
+    /// Converts "data/docs.db" -> "data/.hnsw.db"
+    /// Converts "docs.db" -> ".hnsw.db"
+    /// This keeps all *.db files covered by a single .gitignore rule
     fn index_path(&self) -> String {
-        // right now only hnsw
-        format!("{}.hnsw", self.path)
+        let path = std::path::Path::new(&self.path);
+        if let Some(parent) = path.parent() {
+            let dir = parent.to_str().unwrap_or(".");
+            if dir.is_empty() {
+                ".hnsw.db".to_string()
+            } else {
+                format!("{}/.hnsw.db", dir)
+            }
+        } else {
+            ".hnsw.db".to_string()
+        }
     }
 
     // Create storage with default HNSW configuration
@@ -301,7 +313,7 @@ mod tests {
     #[test]
     fn test_hnsw_search() {
         let _ = std::fs::remove_file("test_hnsw.db");
-        let _ = std::fs::remove_file("test_hnsw.db.hnsw");
+        let _ = std::fs::remove_file(".hnsw.db");
         
         // Create storage with default HNSW config
         let mut storage = VectorStorage::open("test_hnsw.db").unwrap();
@@ -327,7 +339,7 @@ mod tests {
         assert!(results[0].text == "vec0" || results[0].text == "vec3"); // Should find similar vectors
 
         std::fs::remove_file("test_hnsw.db").unwrap();
-        let _ = std::fs::remove_file("test_hnsw.db.hnsw");
+        let _ = std::fs::remove_file(".hnsw.db");
     }
 
     #[test]

@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn test_filtered_search() {
         let _ = std::fs::remove_file("test_filtered_search.db");
-        let _ = std::fs::remove_file("test_filtered_search.db.hnsw");
+        let _ = std::fs::remove_file(".hnsw.db");
         let mut storage = VectorStorage::open("test_filtered_search.db").unwrap();
 
         // Insert vectors with metadata
@@ -93,6 +93,6 @@ mod tests {
         assert_eq!(results[0].text, "rust doc");
 
         std::fs::remove_file("test_filtered_search.db").unwrap();
-        let _ = std::fs::remove_file("test_filtered_search.db.hnsw");
+        let _ = std::fs::remove_file(".hnsw.db");
     }
 }
