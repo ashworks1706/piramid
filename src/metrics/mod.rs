@@ -15,11 +15,11 @@ pub use cosine::cosine_similarity;
 pub use euclidean::euclidean_distance;
 pub use dot::dot_product;
 
-/// Distance/similarity metric for vector comparison.
-/// 
-/// Different metrics have different semantics:
-/// - Similarity metrics (Cosine, DotProduct): higher = more similar
-/// - Distance metrics (Euclidean): lower = more similar
+// Distance/similarity metric for vector comparison.
+// 
+// Different metrics have different semantics:
+// - Similarity metrics (Cosine, DotProduct): higher = more similar
+// - Distance metrics (Euclidean): lower = more similar
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Metric {
     #[default]  // used when you call Metric::default()
