@@ -58,6 +58,14 @@ impl VectorStorage {
     pub fn get_vectors(&self) -> &HashMap<Uuid, VectorEntry> {
         &self.vectors
     }
+    // Internal helper to create vector map (reused across insert/update/rebuild)
+    fn create_vector_map_internal(&self) -> HashMap<Uuid, Vec<f32>> {
+        self.vectors
+            .iter()
+            .map(|(id, entry)| (*id, entry.vector.clone()))
+            .collect()
+    }
+
     // Create storage with default HNSW configuration
     pub fn open(path: &str) -> Result<Self> {
         Self::with_hnsw(path, HnswConfig::default())
@@ -92,10 +100,7 @@ impl VectorStorage {
         let config = HnswConfig::default(); // Get current config or use default
         let mut new_index = HnswIndex::new(config);
         
-        let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
-            .iter()
-            .map(|(id, entry)| (*id, entry.vector.clone()))
-            .collect();
+        let vector_map = self.create_vector_map_internal();
 
         for (id, entry) in &self.vectors {
             new_index.insert(*id, &entry.vector, &vector_map);
@@ -108,10 +113,7 @@ impl VectorStorage {
         let id = entry.id;
         
         // Update HNSW index
-        let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
-            .iter()
-            .map(|(id, entry)| (*id, entry.vector.clone()))
-            .collect();
+        let vector_map = self.create_vector_map_internal();
         self.hnsw_index.insert(id, &entry.vector, &vector_map);
         
         self.vectors.insert(id, entry);
@@ -183,10 +185,7 @@ impl VectorStorage {
             
             // Update HNSW index: remove old entry and re-insert with new vector
             self.hnsw_index.remove(id);
-            let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
-                .iter()
-                .map(|(id, entry)| (*id, entry.vector.clone()))
-                .collect();
+            let vector_map = self.create_vector_map_internal();
             self.hnsw_index.insert(*id, &vector, &vector_map);
             
             self.save()?;

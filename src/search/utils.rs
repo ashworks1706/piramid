@@ -7,8 +7,8 @@ use crate::storage::{VectorStorage, VectorEntry};
 use crate::metrics::Metric;
 use crate::search::SearchResult;
 
-/// Create a vector map from storage (used by index for searching)
-/// This is a common operation needed by all search types
+// Create a vector map from storage (used by index for searching)
+// This is a common operation needed by all search types
 pub(crate) fn create_vector_map(storage: &VectorStorage) -> HashMap<Uuid, Vec<f32>> {
     storage
         .get_vectors()
@@ -17,7 +17,7 @@ pub(crate) fn create_vector_map(storage: &VectorStorage) -> HashMap<Uuid, Vec<f3
         .collect()
 }
 
-/// Convert a VectorEntry to SearchResult with calculated score
+// Convert a VectorEntry to SearchResult with calculated score
 pub(crate) fn entry_to_result(
     entry: &VectorEntry,
     query: &[f32],
@@ -33,7 +33,7 @@ pub(crate) fn entry_to_result(
     )
 }
 
-/// Sort search results by score (descending) and truncate to k
+// Sort search results by score (descending) and truncate to k
 pub(crate) fn sort_and_truncate(results: &mut Vec<SearchResult>, k: usize) {
     results.sort_by(|a, b| {
         b.score

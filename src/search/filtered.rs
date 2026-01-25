@@ -6,21 +6,21 @@ use crate::query::Filter;
 use crate::search::SearchResult;
 use super::utils::{create_vector_map, entry_to_result, sort_and_truncate};
 
-/// Perform filtered vector similarity search
-/// 
-/// Combines vector similarity search with metadata filtering.
-/// Note: Filtering is applied post-search, so we search for more candidates
-/// (k * 10) to ensure we get k results after filtering.
-/// 
-/// # Arguments
-/// * `storage` - The vector storage to search in
-/// * `query` - Query vector
-/// * `k` - Number of results to return (after filtering)
-/// * `metric` - Distance/similarity metric to use
-/// * `filter` - Metadata filter to apply
-/// 
-/// # Returns
-/// Vector of k most similar results matching the filter, sorted by score
+// Perform filtered vector similarity search
+// 
+// Combines vector similarity search with metadata filtering.
+// Note: Filtering is applied post-search, so we search for more candidates
+// (k * 10) to ensure we get k results after filtering.
+// 
+// # Arguments
+// * `storage` - The vector storage to search in
+// * `query` - Query vector
+// * `k` - Number of results to return (after filtering)
+// * `metric` - Distance/similarity metric to use
+// * `filter` - Metadata filter to apply
+// 
+// # Returns
+// Vector of k most similar results matching the filter, sorted by score
 pub fn filtered_search(
     storage: &VectorStorage,
     query: &[f32],

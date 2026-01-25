@@ -6,16 +6,16 @@ use crate::metrics::Metric;
 use crate::search::SearchResult;
 use super::utils::{create_vector_map, entry_to_result, sort_and_truncate};
 
-/// Perform k-nearest neighbor vector similarity search
-/// 
-/// # Arguments
-/// * `storage` - The vector storage to search in
-/// * `query` - Query vector
-/// * `k` - Number of results to return
-/// * `metric` - Distance/similarity metric to use
-/// 
-/// # Returns
-/// Vector of k most similar results, sorted by score (highest first)
+// Perform k-nearest neighbor vector similarity search
+// 
+// # Arguments
+// * `storage` - The vector storage to search in
+// * `query` - Query vector
+// * `k` - Number of results to return
+// * `metric` - Distance/similarity metric to use
+// 
+// # Returns
+// Vector of k most similar results, sorted by score (highest first)
 pub fn vector_search(
     storage: &VectorStorage,
     query: &[f32],
