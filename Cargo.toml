@@ -16,13 +16,6 @@ path = "src/bin/server.rs"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.3"
 serde_json = "1.0"
-
-# Logging
-log = "0.4"
-
-# Utility 
-rand = "0.8"
-
 # UUID for document IDs
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
@@ -39,6 +32,12 @@ reqwest = { version = "0.12", features = ["json"] }
 async-trait = "0.1"
 
 [dev-dependencies]
+# Logging
+log = "0.4"
+
+# Utility 
+rand = "0.8"
+
 # For testing
 criterion = {version = "0.5", features = ["html_reports"]}
 

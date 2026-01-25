@@ -65,3 +65,5 @@ fn bench_search(c: &mut Criterion) {
 
     group.finish();
 }
+criterion_group!(benches, bench_insert, bench_search); // define benchmark group
+criterion_main!(benches); // main function for benchmarks
