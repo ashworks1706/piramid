@@ -1,2 +1,3 @@
 pub mod hnsw;
-pub use hnsw::HnswIndex;
+
+pub use hnsw::{HnswIndex, HnswConfig};

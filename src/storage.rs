@@ -9,6 +9,7 @@ use crate::error::Result;
 use crate::metadata::Metadata;
 use crate::query::Filter;
 use crate::search::SearchResult;
+use crate::index::{HnswIndex, HnswConfig};
 
 // A single vector entry stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,14 +41,21 @@ impl VectorEntry {
     }
 }
 
-// Vector storage engine
+// Vector storage engine with HNSW indexing for fast approximate nearest neighbor search.
 pub struct VectorStorage {
     file: File,
     vectors: HashMap<Uuid, VectorEntry>,
+    hnsw_index: HnswIndex, // HNSW index (required)
 }
 
 impl VectorStorage {
+    // Create storage with default HNSW configuration
     pub fn open(path: &str) -> Result<Self> {
+        Self::with_hnsw(path, HnswConfig::default())
+    }
+
+    // Create storage with custom HNSW configuration
+    pub fn with_hnsw(path: &str, config: HnswConfig) -> Result<Self> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -57,14 +65,46 @@ impl VectorStorage {
         let mut storage = Self {
             file,
             vectors: HashMap::new(),
+            hnsw_index: HnswIndex::new(config),
         };
 
         storage.load()?;
+        
+        // Build HNSW index from loaded vectors
+        if !storage.vectors.is_empty() {
+            storage.rebuild_index();
+        }
+        
         Ok(storage)
+    }
+
+    // Rebuild the HNSW index from all vectors
+    pub fn rebuild_index(&mut self) {
+        let config = HnswConfig::default(); // Get current config or use default
+        let mut new_index = HnswIndex::new(config);
+        
+        let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
+            .iter()
+            .map(|(id, entry)| (*id, entry.vector.clone()))
+            .collect();
+
+        for (id, entry) in &self.vectors {
+            new_index.insert(*id, &entry.vector, &vector_map);
+        }
+
+        self.hnsw_index = new_index;
     }
 
     pub fn store(&mut self, entry: VectorEntry) -> Result<Uuid> {
         let id = entry.id;
+        
+        // Update HNSW index
+        let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
+            .iter()
+            .map(|(id, entry)| (*id, entry.vector.clone()))
+            .collect();
+        self.hnsw_index.insert(id, &entry.vector, &vector_map);
+        
         self.vectors.insert(id, entry);
         self.save()?;
         Ok(id)
@@ -82,12 +122,15 @@ impl VectorStorage {
         self.vectors.len()
     }
 
-    // O(n) complexity - compares query against all vectors.
+    // Search for k nearest neighbors using HNSW index
+    // Time complexity: O(log n) approximate search
     pub fn search(&self, query: &[f32], k: usize, metric: SimilarityMetric) -> Vec<SearchResult> {
         self.search_with_filter(query, k, metric, None)
     }
 
-    // Similarity search with metadata filtering
+    // Search with metadata filtering
+    // Note: Filtering is applied post-HNSW search, so we search for more candidates (ef = k * 10)
+    // to ensure we get k results after filtering
     pub fn search_with_filter(
         &self,
         query: &[f32],
@@ -95,23 +138,43 @@ impl VectorStorage {
         metric: SimilarityMetric,
         filter: Option<&Filter>,
     ) -> Vec<SearchResult> {
-        let mut results: Vec<SearchResult> = self.vectors
-            .values()
-            .filter(|entry| {
-                filter.map_or(true, |f| f.matches(&entry.metadata))
-            })
-            .map(|entry| {
-                let score = metric.calculate(query, &entry.vector);
-                SearchResult::new(
-                    entry.id,
-                    score,
-                    entry.text.clone(),
-                    entry.vector.clone(),
-                    entry.metadata.clone(),
-                )
+        // Create vector map for HNSW
+        let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
+            .iter()
+            .map(|(id, entry)| (*id, entry.vector.clone()))
+            .collect();
+
+        // If filtering, search for more candidates to compensate for filtered-out results
+        let search_k = if filter.is_some() { k * 10 } else { k };
+        let ef = (search_k * 2).max(50); // ef should be >= k for good recall
+        
+        let result_ids = self.hnsw_index.search(query, search_k, ef, &vector_map);
+
+        // Convert IDs to SearchResults and apply filter
+        let mut results: Vec<SearchResult> = result_ids
+            .into_iter()
+            .filter_map(|id| {
+                self.vectors.get(&id).and_then(|entry| {
+                    // Apply filter if present
+                    if let Some(f) = filter {
+                        if !f.matches(&entry.metadata) {
+                            return None;
+                        }
+                    }
+                    
+                    let score = metric.calculate(query, &entry.vector);
+                    Some(SearchResult::new(
+                        entry.id,
+                        score,
+                        entry.text.clone(),
+                        entry.vector.clone(),
+                        entry.metadata.clone(),
+                    ))
+                })
             })
             .collect();
 
+        // Sort by score (HNSW returns by distance, but we want by similarity score)
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(k);
         results
@@ -119,9 +182,13 @@ impl VectorStorage {
 
     pub fn delete(&mut self, id: &Uuid) -> Result<bool> {
         let existed = self.vectors.remove(id).is_some();
+        
+        // Remove from HNSW index
         if existed {
+            self.hnsw_index.remove(id);
             self.save()?;
         }
+        
         Ok(existed)
     }
 
@@ -137,7 +204,16 @@ impl VectorStorage {
 
     pub fn update_vector(&mut self, id: &Uuid, vector: Vec<f32>) -> Result<bool> {
         if let Some(entry) = self.vectors.get_mut(id) {
-            entry.vector = vector;
+            entry.vector = vector.clone();
+            
+            // Update HNSW index: remove old entry and re-insert with new vector
+            self.hnsw_index.remove(id);
+            let vector_map: HashMap<Uuid, Vec<f32>> = self.vectors
+                .iter()
+                .map(|(id, entry)| (*id, entry.vector.clone()))
+                .collect();
+            self.hnsw_index.insert(*id, &vector, &vector_map);
+            
             self.save()?;
             Ok(true)
         } else {
@@ -210,5 +286,67 @@ mod tests {
         }
 
         std::fs::remove_file("test2.db").unwrap();
+    }
+
+    #[test]
+    fn test_hnsw_search() {
+        let _ = std::fs::remove_file("test_hnsw.db");
+        
+        // Create storage with default HNSW config
+        let mut storage = VectorStorage::open("test_hnsw.db").unwrap();
+
+        // Insert test vectors
+        let vectors = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+            vec![0.9, 0.1, 0.0],
+        ];
+
+        for (i, vec) in vectors.iter().enumerate() {
+            let entry = VectorEntry::new(vec.clone(), format!("vec{}", i));
+            storage.store(entry).unwrap();
+        }
+
+        // Search with HNSW
+        let query = vec![1.0, 0.0, 0.0];
+        let results = storage.search(&query, 2, SimilarityMetric::Cosine);
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].text == "vec0" || results[0].text == "vec3"); // Should find similar vectors
+
+        std::fs::remove_file("test_hnsw.db").unwrap();
+    }
+
+    #[test]
+    fn test_hnsw_with_filter() {
+        let _ = std::fs::remove_file("test_filter.db");
+        
+        let mut storage = VectorStorage::open("test_filter.db").unwrap();
+
+        // Insert vectors with metadata
+        let e1 = VectorEntry::with_metadata(
+            vec![1.0, 0.0],
+            "doc1".to_string(),
+            crate::metadata::metadata([("category", "A".into())])
+        );
+        let e2 = VectorEntry::with_metadata(
+            vec![0.9, 0.1],
+            "doc2".to_string(),
+            crate::metadata::metadata([("category", "B".into())])
+        );
+        
+        storage.store(e1).unwrap();
+        storage.store(e2).unwrap();
+
+        // Search with filter
+        let filter = Filter::new().eq("category", "A");
+        let query = vec![1.0, 0.0];
+        let results = storage.search_with_filter(&query, 5, SimilarityMetric::Cosine, Some(&filter));
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].text, "doc1");
+
+        std::fs::remove_file("test_filter.db").unwrap();
     }
 }

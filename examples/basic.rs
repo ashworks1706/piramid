@@ -7,10 +7,11 @@ fn main() {
     // Clean up any previous test data
     let _ = std::fs::remove_file("demo_vectors.db");
 
-    // Open/create a storage file
+    // Open/create a storage file (HNSW enabled by default)
     let mut storage = VectorStorage::open("demo_vectors.db").unwrap();
-
+    
     println!("=== Piramid Vector Database Demo ===\n");
+    println!("✓ HNSW index enabled (production-grade approximate search)\n");
 
     // Create some vector entries with metadata
     // In real use, these vectors would be embeddings from an LLM
