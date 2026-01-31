@@ -18,6 +18,7 @@ use crate::index::{HnswIndex, HnswConfig};
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::SearchResult;
+use crate::quantization::QuantizedVector;
 
 use super::entry::VectorEntry;
 
@@ -80,7 +81,7 @@ impl VectorStorage {
                 if offset + length <= mmap.len() {
                     let bytes = &mmap[offset..offset + length];
                     if let Ok(entry) = bincode::deserialize::<VectorEntry>(bytes) {
-                        vectors.insert(*id, entry.vector);
+                        vectors.insert(*id, entry.get_vector());  // Dequantize
                     }
                 }
             }
@@ -130,13 +131,14 @@ impl VectorStorage {
         // Persist index to disk
         self.save_index()?;
         
+        let vec_f32 = entry.get_vector();  // Dequantize for HNSW
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
         for (vec_id, _) in &self.index {
             if let Some(vec_entry) = self.get(vec_id) {
-                vectors.insert(*vec_id, vec_entry.vector);
+                vectors.insert(*vec_id, vec_entry.get_vector());  // Dequantize
             }
         }
-        self.hnsw_index.insert(id, &entry.vector, &vectors);
+        self.hnsw_index.insert(id, &vec_f32, &vectors);
         
         Ok(id)
     }
@@ -160,7 +162,7 @@ impl VectorStorage {
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
         for (id, _) in &self.index {
             if let Some(entry) = self.get(id) {
-                vectors.insert(*id, entry.vector);
+                vectors.insert(*id, entry.get_vector());  // Dequantize
             }
         }
         
@@ -169,12 +171,13 @@ impl VectorStorage {
         let mut results = Vec::new();
         for id in neighbor_ids {
             if let Some(entry) = self.get(&id) {
-                let score = metric.calculate(query, &entry.vector);
+                let vec = entry.get_vector();  // Dequantize
+                let score = metric.calculate(query, &vec);
                 results.push(SearchResult {
                     id,
                     score,
                     text: entry.text,
-                    vector: entry.vector,
+                    vector: vec,
                     metadata: entry.metadata.clone(),
                 });
             }
@@ -207,7 +210,7 @@ impl VectorStorage {
         let mut vectors = HashMap::new();
         for (id, _) in &self.index {
             if let Some(entry) = self.get(id) {
-                vectors.insert(*id, entry.vector);
+                vectors.insert(*id, entry.get_vector());  // Dequantize
             }
         }
         vectors
@@ -249,14 +252,14 @@ impl VectorStorage {
     
     pub fn update_vector(&mut self, id: &Uuid, vector: Vec<f32>) -> Result<bool> {
         if let Some(mut entry) = self.get(id) {
-            entry.vector = vector.clone();
+            entry.vector = QuantizedVector::from_f32(&vector);  // Quantize new vector
             self.delete(id)?;
             
             // Build vectors map for HNSW
             let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
             for (vec_id, _) in &self.index {
                 if let Some(vec_entry) = self.get(vec_id) {
-                    vectors.insert(*vec_id, vec_entry.vector);
+                    vectors.insert(*vec_id, vec_entry.get_vector());  // Dequantize
                 }
             }
             

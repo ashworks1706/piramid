@@ -13,6 +13,7 @@ pub mod server;
 pub mod storage;
 pub mod embeddings;
 pub mod index;
+pub mod quantization;
 
 pub use config::Config;
 pub use metrics::Metric;
@@ -23,3 +24,4 @@ pub use search::SearchResult;
 pub use storage::{VectorEntry, VectorStorage};
 pub use embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingError};
 pub use index::{HnswIndex, HnswConfig};
+pub use quantization::QuantizedVector;

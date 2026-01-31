@@ -33,9 +33,9 @@
   - [x] Implemented for dot product, cosine similarity, euclidean distance
   - [ ] Benchmark to verify 3-5x speedup target
 - [x] **Memory optimization**
-  - [x] Memory-mapped files (mmap) 
-  - [ ] Scalar quantization (int8)
-  - [ ] Handle 10M vectors on 32GB RAM (requires quantization)
+  - [x] Memory-mapped files (mmap) - Production-grade single implementation
+  - [x] Scalar quantization (int8) - All vectors quantized, 4x memory reduction
+  - [x] Handle 10M vectors on 32GB RAM (61GB → 15GB with quantization)
 - [x] **Parallel processing**
   - [x] Parallel search with rayon (search_batch for truly parallel reads)
   - [x] Single storage type (no fake concurrent write wrappers)

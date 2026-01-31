@@ -206,7 +206,7 @@ pub async fn get_vector(
     
     Ok(Json(VectorResponse {
         id: entry.id.to_string(),
-        vector: entry.vector,
+        vector: entry.get_vector(),  // Dequantize
         text: entry.text,
         metadata: metadata_to_json(&entry.metadata),
     }))
@@ -232,7 +232,7 @@ pub async fn list_vectors(
         .take(params.limit)
         .map(|e| VectorResponse {
             id: e.id.to_string(),
-            vector: e.vector.clone(),
+            vector: e.get_vector(),  // Dequantize
             text: e.text.clone(),
             metadata: metadata_to_json(&e.metadata),
         })

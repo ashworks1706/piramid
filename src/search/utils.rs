@@ -19,12 +19,13 @@ pub(crate) fn entry_to_result(
     query: &[f32],
     metric: Metric,
 ) -> SearchResult {
-    let score = metric.calculate(query, &entry.vector);
+    let vec = entry.get_vector();  // Dequantize
+    let score = metric.calculate(query, &vec);
     SearchResult::new(
         entry.id,
         score,
         entry.text.clone(),
-        entry.vector.clone(),
+        vec,
         entry.metadata.clone(),
     )
 }
