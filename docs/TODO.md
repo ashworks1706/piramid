@@ -124,43 +124,6 @@
 
 ---
 
-### Security & Authentication 
-
-**Implementation:**
-- [ ] **Authentication**
-  - [ ] API key authentication
-  - [ ] JWT token support
-  - [ ] Multi-tenant isolation
-  - [ ] Service-to-service auth (mTLS)
-- [ ] **Authorization**
-  - [ ] Role-based access control (RBAC)
-  - [ ] Collection-level permissions
-  - [ ] Read-only vs read-write users
-  - [ ] Admin APIs
-- [ ] **Rate limiting & quotas**
-  - [ ] Per-client rate limits (requests/second)
-  - [ ] Per-collection quotas
-  - [ ] DDoS protection
-  - [ ] Slow-query throttling
-- [ ] **Security hardening**
-  - [ ] Input validation & sanitization
-  - [ ] Request size limits
-  - [ ] TLS/SSL enforcement
-  - [ ] Security headers (CORS, CSP, HSTS)
-  - [ ] Audit logging
-
----
-
-**→ Deploy to production, get real users, gather feedback**
-
-**General v1.0 documentation:**
-- [ ] `CONTRIBUTING.md` - Contribution guidelines
-- [ ] `CHANGELOG.md` - Start version tracking
-- [ ] `docs/API.md` - Complete REST API reference
-- [ ] `docs/QUICKSTART.md` - 5-minute tutorial
-
----
-
 ### Index Algorithms 
 
 **Implementation:**
@@ -172,26 +135,6 @@
 - [ ] **ScaNN (Google's algorithm)** (16-20 hours)
 
 **Goal:** Be the most flexible vector DB - let users choose the right tool
-
----
-
-### Document Ingestion 
-
-- [ ] Chunking strategies (fixed-size, semantic, recursive)
-- [ ] Document upload endpoint (PDF, DOCX, Markdown, HTML)
-- [ ] Chunk metadata (index, source doc, parent-child)
-
-**Goal:** Upload PDF → auto-chunk → auto-embed → search
-
----
-
-### MCP Integration 
-
-- [ ] MCP server implementation
-- [ ] Tools: search_similar, get_document, list_collections, add_document
-- [ ] Agent-friendly responses (structured JSON-LD)
-
-**Goal:** Claude Desktop can use Piramid out of the box
 
 ---
 
@@ -225,6 +168,62 @@
 
 ---
 
+### WASM Support 
+- [ ] Compile core to WASM
+- [ ] Client-side vector search
+- [ ] Edge deployment (Cloudflare, Vercel)
+- [ ] Offline-first apps
+
+**Goal:** Vector search in browser
+
+---
+
+### Security & Authentication 
+
+**Implementation:**
+- [ ] **Authentication**
+  - [ ] API key authentication
+  - [ ] JWT token support
+  - [ ] Multi-tenant isolation
+  - [ ] Service-to-service auth (mTLS)
+- [ ] **Authorization**
+  - [ ] Role-based access control (RBAC)
+  - [ ] Collection-level permissions
+  - [ ] Read-only vs read-write users
+  - [ ] Admin APIs
+- [ ] **Rate limiting & quotas**
+  - [ ] Per-client rate limits (requests/second)
+  - [ ] Per-collection quotas
+  - [ ] DDoS protection
+  - [ ] Slow-query throttling
+- [ ] **Security hardening**
+  - [ ] Input validation & sanitization
+  - [ ] Request size limits
+  - [ ] TLS/SSL enforcement
+  - [ ] Security headers (CORS, CSP, HSTS)
+  - [ ] Audit logging
+
+**→ Deploy to production, get real users, gather feedback**
+
+**General v1.0 documentation:**
+- [ ] `CONTRIBUTING.md` - Contribution guidelines
+- [ ] `CHANGELOG.md` - Start version tracking
+- [ ] `docs/API.md` - Complete REST API reference
+- [ ] `docs/QUICKSTART.md` - 5-minute tutorial
+
+---
+
+
+### Document Ingestion 
+
+- [ ] Chunking strategies (fixed-size, semantic, recursive)
+- [ ] Document upload endpoint (PDF, DOCX, Markdown, HTML)
+- [ ] Chunk metadata (index, source doc, parent-child)
+
+**Goal:** Upload PDF → auto-chunk → auto-embed → search
+
+---
+
 ### Semantic Cache 
 - [ ] Semantic matching for LLM responses
 - [ ] TTL and LRU eviction
@@ -235,13 +234,13 @@
 
 ---
 
-### WASM Support 
-- [ ] Compile core to WASM
-- [ ] Client-side vector search
-- [ ] Edge deployment (Cloudflare, Vercel)
-- [ ] Offline-first apps
+### MCP Integration 
 
-**Goal:** Vector search in browser
+- [ ] MCP server implementation
+- [ ] Tools: search_similar, get_document, list_collections, add_document
+- [ ] Agent-friendly responses (structured JSON-LD)
+
+**Goal:** Claude Desktop can use Piramid out of the box
 
 ---
 
