@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::metadata::Metadata;
 
-/// A single vector entry stored in the database
+// A single vector entry stored in the database
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorEntry {
     pub id: Uuid,

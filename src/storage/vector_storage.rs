@@ -28,7 +28,7 @@ struct VectorIndex {
     length: u32,      // size of serialized entry
 }
 
-/// Vector storage engine with memory-mapped files and HNSW indexing
+// Vector storage engine with memory-mapped files and HNSW indexing
 pub struct VectorStorage {
     data_file: File,
     mmap: Option<MmapMut>,
