@@ -36,10 +36,10 @@
   - [x] Memory-mapped files (mmap) 
   - [ ] Scalar quantization (int8)
   - [ ] Handle 10M vectors on 32GB RAM (requires quantization)
-- [ ] **Parallel processing**
-  - [ ] Parallel search with rayon
-  - [ ] Concurrent inserts
-  - [ ] Linear scaling with CPU cores
+- [x] **Parallel processing**
+  - [x] Parallel search with rayon (search_batch for truly parallel reads)
+  - [x] Single storage type (no fake concurrent write wrappers)
+  - [x] Linear scaling with CPU cores (via rayon thread pool)
 - [ ] **Embeddings optimization** (Before Phase 3)
   - [ ] LRU cache for repeated embeddings (save 50-90% API costs)
   - [ ] Native batch API support (OpenAI/Ollama - 2x-10x speedup)

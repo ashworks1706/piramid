@@ -993,6 +993,7 @@ dependencies = [
  "log",
  "memmap2",
  "rand",
+ "rayon",
  "reqwest",
  "serde",
  "serde_json",

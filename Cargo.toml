@@ -38,6 +38,9 @@ wide = "0.7"
 # Memory optimization
 memmap2 = "0.9"
 
+# Parallel processing
+rayon = "1.10"
+
 [dev-dependencies]
 # Logging
 log = "0.4"

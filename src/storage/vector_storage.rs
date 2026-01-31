@@ -19,35 +19,7 @@ use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::SearchResult;
 
-// A single vector entry stored in the database
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VectorEntry {
-    pub id: Uuid,
-    pub vector: Vec<f32>,
-    pub text: String,
-    #[serde(default)]
-    pub metadata: Metadata,
-}
-
-impl VectorEntry {
-    pub fn new(vector: Vec<f32>, text: String) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            vector,
-            text,
-            metadata: Metadata::new(),
-        }
-    }
-
-    pub fn with_metadata(vector: Vec<f32>, text: String, metadata: Metadata) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            vector,
-            text,
-            metadata,
-        }
-    }
-}
+use super::entry::VectorEntry;
 
 // Index entry: maps UUID to location in mmap file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,7 +28,7 @@ struct VectorIndex {
     length: u32,      // size of serialized entry
 }
 
-// Vector storage engine with memory-mapped files and HNSW indexing
+/// Vector storage engine with memory-mapped files and HNSW indexing
 pub struct VectorStorage {
     data_file: File,
     mmap: Option<MmapMut>,
@@ -209,6 +181,18 @@ impl VectorStorage {
         }
         results
     }
+
+    // Batch search - search multiple queries in parallel
+    // Returns results for each query in the same order
+    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize, metric: Metric) -> Vec<Vec<SearchResult>> {
+        use rayon::prelude::*;
+        
+        queries
+            .par_iter()
+            .map(|query| self.search(query, k, metric))
+            .collect()
+    }
+
 
     // Get number of vectors
     pub fn count(&self) -> usize {
@@ -368,5 +352,37 @@ mod tests {
         
         std::fs::remove_file("test_search.db").unwrap();
         std::fs::remove_file("test_search.db.index").unwrap();
+    }
+
+    #[test]
+    fn test_batch_search() {
+        let _ = std::fs::remove_file("test_batch_search.db");
+        let _ = std::fs::remove_file("test_batch_search.db.index");
+        
+        let mut storage = VectorStorage::open("test_batch_search.db").unwrap();
+        
+        // Insert test vectors
+        for i in 0..10 {
+            let vec = vec![i as f32, 0.0, 0.0];
+            let entry = VectorEntry::new(vec, format!("vec{}", i));
+            storage.store(entry).unwrap();
+        }
+        
+        // Batch search with multiple queries
+        let queries = vec![
+            vec![0.0, 0.0, 0.0],
+            vec![5.0, 0.0, 0.0],
+            vec![9.0, 0.0, 0.0],
+        ];
+        
+        let results = storage.search_batch(&queries, 2, Metric::Euclidean);
+        
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].len(), 2);
+        assert_eq!(results[1].len(), 2);
+        assert_eq!(results[2].len(), 2);
+        
+        std::fs::remove_file("test_batch_search.db").unwrap();
+        std::fs::remove_file("test_batch_search.db.index").unwrap();
     }
 }
