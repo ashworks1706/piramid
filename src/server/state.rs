@@ -36,7 +36,8 @@ impl AppState {
 
     // Lazily load or create a collection
     pub fn get_or_create_collection(&self, name: &str) -> Result<(), String> {
-        let mut collections = self.collections.write().unwrap();
+        let mut collections = self.collections.write()
+            .map_err(|e| format!("Lock poisoned: {}", e))?;
         
         if !collections.contains_key(name) {
             let path = format!("{}/{}.db", self.data_dir, name);

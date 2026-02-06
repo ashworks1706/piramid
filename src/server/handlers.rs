@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{Metric, MetadataValue, VectorEntry};
 use super::state::SharedState;
 use super::types::*;
+use super::lock_helpers::LockHelper;
 
 // Convert JSON values to internal Metadata type
 fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> crate::Metadata {
@@ -89,9 +90,9 @@ pub async fn health_embeddings(State(state): State<SharedState>) -> StatusCode {
 
 
 // GET /api/collections - list all loaded collections
-pub async fn list_collections(State(state): State<SharedState>) -> Json<CollectionsResponse> {
+pub async fn list_collections(State(state): State<SharedState>) -> Result<Json<CollectionsResponse>, (StatusCode, String)> {
     // read() = shared lock (many readers allowed)
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     
     let infos: Vec<CollectionInfo> = collections
         .iter()
@@ -101,7 +102,7 @@ pub async fn list_collections(State(state): State<SharedState>) -> Json<Collecti
         })
         .collect();
     
-    Json(CollectionsResponse { collections: infos })
+    Ok(Json(CollectionsResponse { collections: infos }))
 }
 
 // POST /api/collections - create a new collection
@@ -112,7 +113,7 @@ pub async fn create_collection(
     state.get_or_create_collection(&req.name)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let count = collections.get(&req.name).map(|s| s.count()).unwrap_or(0);
     
     Ok(Json(CollectionInfo { name: req.name, count }))
@@ -126,7 +127,7 @@ pub async fn get_collection(
     state.get_or_create_collection(&name)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let count = collections.get(&name).map(|s| s.count()).unwrap_or(0);
     
     Ok(Json(CollectionInfo { name, count }))
@@ -137,7 +138,7 @@ pub async fn delete_collection(
     State(state): State<SharedState>,
     Path(name): Path<String>,
 ) -> Result<Json<DeleteResponse>, (StatusCode, String)> {
-    let mut collections = state.collections.write().unwrap();
+    let mut collections = state.collections.write_or_err()?;
     let existed = collections.remove(&name).is_some();
     
     // also delete the file
@@ -157,7 +158,7 @@ pub async fn collection_count(
     state.get_or_create_collection(&collection)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let count = collections.get(&collection).map(|s| s.count()).unwrap_or(0);
     
     Ok(Json(CountResponse { count }))
@@ -176,7 +177,7 @@ pub async fn store_vector(
     let entry = VectorEntry::with_metadata(req.vector, req.text, metadata);
     
     // write() = exclusive lock (we're modifying)
-    let mut collections = state.collections.write().unwrap();
+    let mut collections = state.collections.write_or_err()?;
     let storage = collections.get_mut(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
     
@@ -197,7 +198,7 @@ pub async fn get_vector(
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid UUID".to_string()))?;
     
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let storage = collections.get(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
     
@@ -221,7 +222,7 @@ pub async fn list_vectors(
     state.get_or_create_collection(&collection)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let storage = collections.get(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
     
@@ -252,7 +253,7 @@ pub async fn delete_vector(
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid UUID".to_string()))?;
     
-    let mut collections = state.collections.write().unwrap();
+    let mut collections = state.collections.write_or_err()?;
     let storage = collections.get_mut(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
     
@@ -273,7 +274,7 @@ pub async fn search_vectors(
     
     let metric = parse_metric(req.metric);
     
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let storage = collections.get(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
     
@@ -320,7 +321,7 @@ pub async fn embed_text(
         metadata,
     );
 
-    let mut collections = state.collections.write().unwrap();
+    let mut collections = state.collections.write_or_err()?;
     let storage = collections.get_mut(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
 
@@ -356,7 +357,7 @@ pub async fn embed_batch(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("Batch embedding failed: {}", e)))?;
 
     // Store all vectors
-    let mut collections = state.collections.write().unwrap();
+    let mut collections = state.collections.write_or_err()?;
     let storage = collections.get_mut(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
 
@@ -411,7 +412,7 @@ pub async fn search_by_text(
     // Search with the embedding
     let metric = parse_metric(req.metric);
 
-    let collections = state.collections.read().unwrap();
+    let collections = state.collections.read_or_err()?;
     let storage = collections.get(&collection)
         .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
 

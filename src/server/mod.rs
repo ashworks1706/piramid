@@ -9,7 +9,7 @@ pub mod state;
 pub mod types;
 pub mod handlers;
 pub mod routes;
+pub mod lock_helpers;
 
-// Re-export for convenience
 pub use state::{AppState, SharedState};
 pub use routes::create_router;

@@ -29,10 +29,13 @@
 ### Data Durability & Reliability
 
 **Error Handling**
-- [ ] Replace ALL `.unwrap()` with proper error handling
-- [ ] Graceful degradation for failures
-- [ ] Poison-free lock handling
-- [ ] Clear, actionable error messages
+- [x] Replace ALL `.unwrap()` with proper error handling
+- [x] Graceful degradation for failures
+- [x] Poison-free lock handling
+- [x] Clear, actionable error messages
+- [x] Domain-specific error types (Storage, Index, Server, Embedding)
+- [x] Error context helpers (.context(), .with_context())
+- [x] HTTP error response mapping
 
 **Write-Ahead Log (WAL)**
 - [ ] Append-only log for all mutations (insert/update/delete)

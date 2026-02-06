@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_basic_store_and_retrieve() {
         let _ = std::fs::remove_file("test.db");
-        let _ = std::fs::remove_file("test.db.index");
+        let _ = std::fs::remove_file("test.index.db");
         
         let mut storage = VectorStorage::open("test.db").unwrap();
         let entry = VectorEntry::new(vec![1.0, 2.0, 3.0], "test".to_string());
@@ -299,13 +299,13 @@ mod tests {
         assert_eq!(retrieved.get_vector(), vec![1.0, 2.0, 3.0]);
         
         std::fs::remove_file("test.db").unwrap();
-        std::fs::remove_file("test.db.index").unwrap();
+        std::fs::remove_file("test.index.db").unwrap();
     }
 
     #[test]
     fn test_persistence() {
         let _ = std::fs::remove_file("test_persist.db");
-        let _ = std::fs::remove_file("test_persist.db.index");
+        let _ = std::fs::remove_file("test_persist.index.db");
         
         let id1;
         let id2;
@@ -326,13 +326,13 @@ mod tests {
         }
         
         std::fs::remove_file("test_persist.db").unwrap();
-        std::fs::remove_file("test_persist.db.index").unwrap();
+        std::fs::remove_file("test_persist.index.db").unwrap();
     }
 
     #[test]
     fn test_search() {
         let _ = std::fs::remove_file("test_search.db");
-        let _ = std::fs::remove_file("test_search.db.index");
+        let _ = std::fs::remove_file("test_search.index.db");
         
         let mut storage = VectorStorage::open("test_search.db").unwrap();
         
@@ -354,13 +354,13 @@ mod tests {
         assert_eq!(results.len(), 2);
         
         std::fs::remove_file("test_search.db").unwrap();
-        std::fs::remove_file("test_search.db.index").unwrap();
+        std::fs::remove_file("test_search.index.db").unwrap();
     }
 
     #[test]
     fn test_batch_search() {
         let _ = std::fs::remove_file("test_batch_search.db");
-        let _ = std::fs::remove_file("test_batch_search.db.index");
+        let _ = std::fs::remove_file("test_batch_search.index.db");
         
         let mut storage = VectorStorage::open("test_batch_search.db").unwrap();
         
@@ -386,6 +386,6 @@ mod tests {
         assert_eq!(results[2].len(), 2);
         
         std::fs::remove_file("test_batch_search.db").unwrap();
-        std::fs::remove_file("test_batch_search.db.index").unwrap();
+        std::fs::remove_file("test_batch_search.index.db").unwrap();
     }
 }
