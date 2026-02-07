@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::index::{HnswIndex, HnswConfig};
+use crate::wal::Wal;
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::SearchResult;
@@ -36,6 +37,7 @@ pub struct VectorStorage {
     index: HashMap<Uuid, VectorIndex>,
     hnsw_index: HnswIndex,
     path: String,
+    wal: Wal,
 }
 
 impl VectorStorage {

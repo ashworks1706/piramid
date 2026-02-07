@@ -31,6 +31,10 @@ pub enum PiramidError {
     #[error("Serialization error: {0}")]
     Serialization(#[from] bincode::Error),
 
+    // JSON errors
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
     // Generic errors
     #[error("{0}")]
     Other(String),
@@ -49,6 +53,7 @@ impl PiramidError {
             Self::Embedding(e) => e.is_recoverable(),
             Self::Io(_) => false,
             Self::Serialization(_) => false,
+            Self::Json(_) => false,
             Self::Other(_) => false,
         }
     }
@@ -61,6 +66,7 @@ impl PiramidError {
             Self::Embedding(_) => StatusCode::BAD_GATEWAY,
             Self::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Serialization(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Json(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
