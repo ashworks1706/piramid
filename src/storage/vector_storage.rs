@@ -494,10 +494,10 @@ mod tests {
 
     #[test]
     fn test_search() {
-        let _ = std::fs::remove_file("test_search.db");
-        let _ = std::fs::remove_file("test_search.index.db");
+        let _ = std::fs::remove_file("piramid_data/tests/test_search.db");
+        let _ = std::fs::remove_file("piramid_data/tests/test_search.index.db");
         
-        let mut storage = VectorStorage::open("test_search.db").unwrap();
+        let mut storage = VectorStorage::open("piramid_data/tests/test_search.db").unwrap();
         
         let vectors = vec![
             vec![1.0, 0.0, 0.0],
@@ -516,16 +516,16 @@ mod tests {
         
         assert_eq!(results.len(), 2);
         
-        std::fs::remove_file("test_search.db").unwrap();
-        std::fs::remove_file("test_search.index.db").unwrap();
+        std::fs::remove_file("piramid_data/tests/test_search.db").unwrap();
+        std::fs::remove_file("piramid_data/tests/test_search.index.db").unwrap();
     }
 
     #[test]
     fn test_batch_search() {
-        let _ = std::fs::remove_file("test_batch_search.db");
-        let _ = std::fs::remove_file("test_batch_search.index.db");
+        let _ = std::fs::remove_file("piramid_data/tests/test_batch_search.db");
+        let _ = std::fs::remove_file("piramid_data/tests/test_batch_search.index.db");
         
-        let mut storage = VectorStorage::open("test_batch_search.db").unwrap();
+        let mut storage = VectorStorage::open("piramid_data/tests/test_batch_search.db").unwrap();
         
         // Insert test vectors
         for i in 0..10 {
@@ -548,7 +548,7 @@ mod tests {
         assert_eq!(results[1].len(), 2);
         assert_eq!(results[2].len(), 2);
         
-        std::fs::remove_file("test_batch_search.db").unwrap();
-        std::fs::remove_file("test_batch_search.index.db").unwrap();
+        std::fs::remove_file("piramid_data/tests/test_batch_search.db").unwrap();
+        std::fs::remove_file("piramid_data/tests/test_batch_search.index.db").unwrap();
     }
 }
