@@ -123,9 +123,6 @@ cargo build
 # Run tests
 cargo test
 
-# Run example
-cargo run --example basic
-
 # Run server
 cargo run --bin piramid-server
 
