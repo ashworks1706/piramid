@@ -2,6 +2,7 @@
 
 mod entry;
 mod vector_storage;
+mod utils;
 pub mod wal;
 
 pub use entry::VectorEntry;

@@ -6,29 +6,21 @@
 // - Index maps UUID -> file offset
 // - OS handles paging (loads only what's needed)
 
-use memmap2::{MmapMut, MmapOptions};
-use serde::{Deserialize, Serialize};
+use memmap2::MmapMut;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::Read;
 use uuid::Uuid;
 
 use crate::error::Result;
 use crate::index::{HnswIndex, HnswConfig};
 use super::wal::{Wal, WalEntry};
+use super::utils::{VectorIndex, save_index, load_index, get_wal_path, ensure_file_size, create_mmap, grow_mmap_if_needed};
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::SearchResult;
 use crate::quantization::QuantizedVector;
 
 use super::entry::VectorEntry;
-
-// Index entry: maps UUID to location in mmap file
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct VectorIndex {
-    offset: u64,      // byte offset in file
-    length: u32,      // size of serialized entry
-}
 
 // Vector storage engine with memory-mapped files and HNSW indexing
 pub struct VectorStorage {
@@ -52,39 +44,17 @@ impl VectorStorage {
             .create(true)
             .open(path)?;
 
-        let file_len = file.metadata()?.len();
-        if file_len == 0 {
-            file.set_len(1024 * 1024)?; // 1MB initial size
-        }
-
-        let mmap = unsafe { MmapOptions::new().map_mut(&file)? };
+        ensure_file_size(&file, 1024 * 1024)?; // 1MB initial size
+        let mmap = create_mmap(&file)?;
 
         // Load index from disk if exists
-        let index_path = if path.ends_with(".db") {
-            format!("{}.index.db", &path[..path.len()-3])
-        } else {
-            format!("{}.index", path)
-        };
-        let index: HashMap<Uuid, VectorIndex> = if let Ok(mut index_file) = File::open(&index_path) {
-            let mut index_data = Vec::new();
-            if index_file.read_to_end(&mut index_data).is_ok() {
-                bincode::deserialize(&index_data).unwrap_or_else(|_| HashMap::new())
-            } else {
-                HashMap::new()
-            }
-        } else {
-            HashMap::new()
-        };
+        let index = load_index(path)?;
 
         let mut hnsw_index = HnswIndex::new(config);
         
         // Initialize WAL
-        let wal_path = if path.ends_with(".db") {
-            format!("{}.wal", &path[..path.len()-3])
-        } else {
-            format!("{}.wal", path)
-        };
-        let mut wal = Wal::new(wal_path.into())?;
+        let wal_path = get_wal_path(path);
+        let wal = Wal::new(wal_path.into())?;
         
         // Replay WAL for crash recovery
         let wal_entries = wal.replay()?;
@@ -183,22 +153,14 @@ impl VectorStorage {
             .max()
             .unwrap_or(0);
 
-        let current_size = self.mmap.as_ref().unwrap().len() as u64;
         let required_size = offset + bytes.len() as u64;
-        if required_size > current_size {
-            drop(self.mmap.take());
-            self.data_file.set_len(required_size * 2)?;
-            self.mmap = Some(unsafe { MmapOptions::new().map_mut(&self.data_file)? });
-        }
+        grow_mmap_if_needed(&mut self.mmap, &self.data_file, required_size)?;
         
         let mmap = self.mmap.as_mut().unwrap();
         mmap[offset as usize..(offset as usize + bytes.len())]
             .copy_from_slice(&bytes);
         
-        let index_entry = VectorIndex {
-            offset,
-            length: bytes.len() as u32,
-        };
+        let index_entry = VectorIndex::new(offset, bytes.len() as u32);
         self.index.insert(id, index_entry);
         
         let vec_f32 = entry.get_vector();
@@ -266,12 +228,7 @@ impl VectorStorage {
         let required_size = current_offset + total_bytes;
         
         // Grow file if needed
-        let current_size = self.mmap.as_ref().unwrap().len() as u64;
-        if required_size > current_size {
-            drop(self.mmap.take());
-            self.data_file.set_len(required_size * 2)?;
-            self.mmap = Some(unsafe { MmapOptions::new().map_mut(&self.data_file)? });
-        }
+        grow_mmap_if_needed(&mut self.mmap, &self.data_file, required_size)?;
         
         // Write all entries to mmap
         let mut offset = current_offset;
@@ -312,14 +269,7 @@ impl VectorStorage {
     }
 
     fn save_index(&self) -> Result<()> {
-        let index_path = if self.path.ends_with(".db") {
-            format!("{}.index.db", &self.path[..self.path.len()-3])
-        } else {
-            format!("{}.index", self.path)
-        };
-        let index_data = bincode::serialize(&self.index)?;
-        std::fs::write(index_path, index_data)?;
-        Ok(())
+        save_index(&self.path, &self.index)
     }
 
     pub fn get(&self, id: &Uuid) -> Option<VectorEntry> {

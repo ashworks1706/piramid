@@ -1,20 +1,9 @@
-use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
-use uuid::Uuid;
-use serde::{Serialize, Deserialize};
 
 use crate::error::Result;
-use crate::metadata::MetadataValue;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum WalEntry{
-    Insert { id : Uuid, vector : Vec<f32>, text: String, metadata: HashMap<String, MetadataValue> },
-    Update { id: Uuid, vector : Vec<f32>, text: String, metadata: HashMap<String, MetadataValue> },
-    Delete { id: Uuid },
-    Checkpoint { timestamp: u64}
-}
+use super::entry::WalEntry;
 
 pub struct Wal {
     file: BufWriter<File>,
@@ -22,9 +11,6 @@ pub struct Wal {
 }
 
 impl Wal {
-/// Creates a new WAL instance by opening the specified file path for appending. If the file does
-/// not exist, it will be created. The WAL will be used to log operations for durability and
-/// recovery.
     pub fn new(path: PathBuf) -> Result<Self> {
         let file = OpenOptions::new()
             .create(true)
@@ -35,15 +21,14 @@ impl Wal {
             path,
         })
     }
-/// Logs an operation to the WAL file by serializing the WalEntry to JSON and writing it as a new
-/// line.
+
     pub fn log(&mut self, entry: &WalEntry) -> Result<()> {
         let json = serde_json::to_string(entry)?;
         writeln!(self.file, "{}", json)?;
         self.file.flush()?;
         Ok(())
     }
-/// Reads the WAL file and returns a vector of WalEntry for replaying the operations.
+
     pub fn replay(&self) -> Result<Vec<WalEntry>> {
         let file = File::open(&self.path)?;
         let reader = BufReader::new(file);
