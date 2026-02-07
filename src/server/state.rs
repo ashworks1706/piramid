@@ -48,6 +48,17 @@ impl AppState {
         
         Ok(())
     }
+
+    pub fn checkpoint_all(&self) -> Result<()> {
+        let mut collections = self.collections.write()
+            .map_err(|e| ServerError::Internal(format!("Lock poisoned: {}", e)))?;
+        for storage in collections.values_mut() {
+            storage.checkpoint()?;
+            storage.flush()?;
+        }
+        Ok(())
+    }
+
 }
 
 pub type SharedState = Arc<AppState>;

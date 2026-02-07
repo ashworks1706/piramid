@@ -43,10 +43,10 @@
 - [x] Periodic checkpointing to reduce replay time
 
 **Graceful Shutdown**
-- [ ] Handle SIGTERM/SIGINT signals
-- [ ] Flush all pending writes to disk
-- [ ] Clean lock release
-- [ ] Save HNSW index state
+- [x] Handle SIGTERM/SIGINT signals
+- [x] Flush all pending writes to disk
+- [x] Clean lock release
+- [x] Save HNSW index state
 - [ ] Drain connections before shutdown
 - [ ] Pre-shutdown warning to active clients
 
@@ -85,7 +85,7 @@
 - [x] Dimension consistency checks per collection
 - [ ] Vector normalization option
 - [ ] Vector format validation (NaN, infinity checks)
-- [ ] Request size limits
+- [x] Request size limits
 - [ ] Input validation & sanitization
 - [ ] Request timeout configuration
 - [ ] Runtime config validation
