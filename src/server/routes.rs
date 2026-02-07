@@ -6,6 +6,7 @@
 // - PATCH  = partial update (not used yet)
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{delete, get, post},
     Router,
 };
@@ -40,6 +41,7 @@ pub fn create_router(state: SharedState) -> Router {
         // Vectors CRUD
         .route("/api/collections/{collection}/vectors", get(handlers::list_vectors))
         .route("/api/collections/{collection}/vectors", post(handlers::store_vector))
+        .route("/api/collections/{collection}/vectors/batch", post(handlers::store_vectors_batch))
         .route("/api/collections/{collection}/vectors/{id}", get(handlers::get_vector))
         .route("/api/collections/{collection}/vectors/{id}", delete(handlers::delete_vector))
         
@@ -52,6 +54,7 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/api/collections/{collection}/search/text", post(handlers::search_by_text))
         
         // Middleware layers
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))  // 100MB for batch operations
         .layer(cors)
         // State available to all handlers
         .with_state(state)

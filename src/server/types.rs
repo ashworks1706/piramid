@@ -53,6 +53,22 @@ pub struct StoreVectorResponse {
     pub id: String,
 }
 
+// Batch store request
+#[derive(Deserialize)]
+pub struct BatchStoreVectorRequest {
+    pub vectors: Vec<Vec<f32>>,
+    pub texts: Vec<String>,
+    #[serde(default)]
+    pub metadata: Vec<HashMap<String, serde_json::Value>>,
+}
+
+// Batch store response
+#[derive(Serialize)]
+pub struct BatchStoreVectorResponse {
+    pub ids: Vec<String>,
+    pub count: usize,
+}
+
 // Full vector data returned to client
 #[derive(Serialize)]
 pub struct VectorResponse {

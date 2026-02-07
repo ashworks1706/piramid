@@ -61,7 +61,7 @@
 ### Production Essentials
 
 **Batch Operations**
-- [ ] Batch insert API (10k inserts in <1s)
+- [x] Batch insert API (10k inserts in <1s)
 - [ ] Batch search (multiple queries in one request)
 - [ ] Batch get vectors by IDs
 - [ ] Bulk delete

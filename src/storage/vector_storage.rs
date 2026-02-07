@@ -147,6 +147,71 @@ impl VectorStorage {
         Ok(id)
     }
 
+    pub fn store_batch(&mut self, entries: Vec<VectorEntry>) -> Result<Vec<Uuid>> {
+        let mut ids = Vec::with_capacity(entries.len());
+        
+        // Serialize all entries first
+        let mut serialized: Vec<(Uuid, Vec<u8>)> = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            let bytes = bincode::serialize(entry)?;
+            serialized.push((entry.id, bytes));
+        }
+        
+        // Calculate required space
+        let current_offset = self.index.values()
+            .map(|idx| idx.offset + idx.length as u64)
+            .max()
+            .unwrap_or(0);
+        
+        let total_bytes: u64 = serialized.iter().map(|(_, b)| b.len() as u64).sum();
+        let required_size = current_offset + total_bytes;
+        
+        // Grow file if needed
+        let current_size = self.mmap.as_ref().unwrap().len() as u64;
+        if required_size > current_size {
+            drop(self.mmap.take());
+            self.data_file.set_len(required_size * 2)?;
+            self.mmap = Some(unsafe { MmapOptions::new().map_mut(&self.data_file)? });
+        }
+        
+        // Write all entries to mmap
+        let mut offset = current_offset;
+        let mmap = self.mmap.as_mut().unwrap();
+        
+        for (id, bytes) in &serialized {
+            mmap[offset as usize..(offset as usize + bytes.len())]
+                .copy_from_slice(bytes);
+            
+            let index_entry = VectorIndex {
+                offset,
+                length: bytes.len() as u32,
+            };
+            self.index.insert(*id, index_entry);
+            ids.push(*id);
+            
+            offset += bytes.len() as u64;
+        }
+        
+        // Persist index once
+        self.save_index()?;
+        
+        // Build vectors map for HNSW
+        let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
+        for (vec_id, _) in &self.index {
+            if let Some(vec_entry) = self.get(vec_id) {
+                vectors.insert(*vec_id, vec_entry.get_vector());
+            }
+        }
+        
+        // Insert into HNSW index
+        for entry in entries {
+            let vec_f32 = entry.get_vector();
+            self.hnsw_index.insert(entry.id, &vec_f32, &vectors);
+        }
+        
+        Ok(ids)
+    }
+
     fn save_index(&self) -> Result<()> {
         let index_path = if self.path.ends_with(".db") {
             format!("{}.index.db", &self.path[..self.path.len()-3])

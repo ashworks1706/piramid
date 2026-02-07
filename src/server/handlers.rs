@@ -187,6 +187,54 @@ pub async fn store_vector(
     Ok(Json(StoreVectorResponse { id: id.to_string() }))
 }
 
+// POST /api/collections/:collection/vectors/batch - store multiple vectors at once
+pub async fn store_vectors_batch(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+    Json(req): Json<BatchStoreVectorRequest>,
+) -> Result<Json<BatchStoreVectorResponse>, (StatusCode, String)> {
+    if req.vectors.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "No vectors provided".to_string()));
+    }
+
+    if req.texts.len() != req.vectors.len() {
+        return Err((StatusCode::BAD_REQUEST, "vectors and texts length mismatch".to_string()));
+    }
+
+    state.get_or_create_collection(&collection)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Build entries
+    let mut entries = Vec::with_capacity(req.vectors.len());
+    for (idx, vector) in req.vectors.into_iter().enumerate() {
+        let metadata = if idx < req.metadata.len() {
+            json_to_metadata(req.metadata[idx].clone())
+        } else {
+            crate::Metadata::new()
+        };
+        
+        let entry = VectorEntry::with_metadata(
+            vector,
+            req.texts[idx].clone(),
+            metadata,
+        );
+        entries.push(entry);
+    }
+
+    // Store in batch
+    let mut collections = state.collections.write_or_err()?;
+    let storage = collections.get_mut(&collection)
+        .ok_or((StatusCode::NOT_FOUND, "Collection not found".to_string()))?;
+
+    let ids = storage.store_batch(entries)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let count = ids.len();
+    let ids_str: Vec<String> = ids.into_iter().map(|id| id.to_string()).collect();
+
+    Ok(Json(BatchStoreVectorResponse { ids: ids_str, count }))
+}
+
 // GET /api/collections/:collection/vectors/:id - get one vector
 pub async fn get_vector(
     State(state): State<SharedState>,
