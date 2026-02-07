@@ -1,0 +1,95 @@
+name: Dashboard CI
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/dashboard.yml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'dashboard/**'
+      - '.github/workflows/dashboard.yml'
+
+defaults:
+  run:
+    working-directory: dashboard
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run ESLint
+      run: npm run lint
+
+    - name: Type check
+      run: npx tsc --noEmit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build
+      run: npm run build
+
+    - name: Export static site
+      run: npm run export || echo "No export script"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dashboard-build
+        path: dashboard/out
+        if-no-files-found: warn
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    if: false  # Enable when tests are added
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: dashboard/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test

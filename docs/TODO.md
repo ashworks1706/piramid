@@ -162,7 +162,7 @@
 - [ ] Stress testing (memory limits, concurrent requests)
 
 **CI/CD**
-- [ ] GitHub Actions CI pipeline
+- [x] GitHub Actions CI pipeline
 - [x] Docker image publishing (Dockerfile exists)
 
 **Launch Prep**
