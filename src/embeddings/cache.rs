@@ -209,24 +209,27 @@ mod tests {
     async fn test_cache_eviction() {
         let call_count = Arc::new(AtomicUsize::new(0));
         let mock = MockEmbedder { call_count: call_count.clone() };
-        let cached = CachedEmbedder::new(mock, 2); // Small cache
+        let cached = CachedEmbedder::new(mock, 2); // Cache size 2
 
         // Fill cache
         cached.embed("first").await.unwrap();
         cached.embed("second").await.unwrap();
         assert_eq!(call_count.load(Ordering::SeqCst), 2);
 
-        // This should evict "first" (least recently used)
+        // Access both - they're already in cache
+        cached.embed("first").await.unwrap();
+        cached.embed("second").await.unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 2); // No new calls
+
+        // Add third - should evict least recently used ("first")
         cached.embed("third").await.unwrap();
         assert_eq!(call_count.load(Ordering::SeqCst), 3);
 
-        // "first" should be evicted, so this hits API again
-        cached.embed("first").await.unwrap();
+        // "first" was evicted, "second" and "third" are in cache
+        cached.embed("first").await.unwrap(); // Miss - new call
         assert_eq!(call_count.load(Ordering::SeqCst), 4);
-
-        // "second" and "third" should still be cached
-        cached.embed("second").await.unwrap();
-        cached.embed("third").await.unwrap();
-        assert_eq!(call_count.load(Ordering::SeqCst), 4); // No new calls!
+        
+        cached.embed("second").await.unwrap(); // Miss - was evicted when "first" was added back
+        assert_eq!(call_count.load(Ordering::SeqCst), 5);
     }
 }

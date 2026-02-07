@@ -58,7 +58,11 @@ impl VectorStorage {
         let mmap = unsafe { MmapOptions::new().map_mut(&file)? };
 
         // Load index from disk if exists
-        let index_path = format!("{}.index", path);
+        let index_path = if path.ends_with(".db") {
+            format!("{}.index.db", &path[..path.len()-3])
+        } else {
+            format!("{}.index", path)
+        };
         let index: HashMap<Uuid, VectorIndex> = if let Ok(mut index_file) = File::open(&index_path) {
             let mut index_data = Vec::new();
             if index_file.read_to_end(&mut index_data).is_ok() {
@@ -144,7 +148,11 @@ impl VectorStorage {
     }
 
     fn save_index(&self) -> Result<()> {
-        let index_path = format!("{}.index", self.path);
+        let index_path = if self.path.ends_with(".db") {
+            format!("{}.index.db", &self.path[..self.path.len()-3])
+        } else {
+            format!("{}.index", self.path)
+        };
         let index_data = bincode::serialize(&self.index)?;
         std::fs::write(index_path, index_data)?;
         Ok(())
