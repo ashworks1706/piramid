@@ -6,7 +6,7 @@ pub const COLLECTION_NOT_FOUND: &str = "Collection not found";
 pub const VECTOR_NOT_FOUND: &str = "Vector not found";
 pub const EMBEDDING_NOT_CONFIGURED: &str = "Embedding service not configured";
 
-/// Convert JSON values to internal Metadata type
+// Convert JSON values to internal Metadata type
 pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Metadata {
     let mut metadata = Metadata::new();
     
@@ -32,7 +32,7 @@ pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Metadata {
     metadata
 }
 
-/// Convert internal Metadata to JSON for responses
+// Convert internal Metadata to JSON for responses
 pub fn metadata_to_json(metadata: &Metadata) -> HashMap<String, serde_json::Value> {
     metadata
         .iter()

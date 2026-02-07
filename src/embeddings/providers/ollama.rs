@@ -25,7 +25,7 @@ pub struct OllamaEmbedder {
 }
 
 impl OllamaEmbedder {
-    /// Create a new Ollama embedder with automatic caching (10K embeddings)
+    // Create a new Ollama embedder with automatic caching (10K embeddings)
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let inner = OllamaEmbedderInner::new(config)?;
         Ok(Self {
@@ -33,7 +33,7 @@ impl OllamaEmbedder {
         })
     }
 
-    /// Create with custom cache size
+    // Create with custom cache size
     pub fn with_cache_size(config: &EmbeddingConfig, cache_size: usize) -> EmbeddingResult<Self> {
         let inner = OllamaEmbedderInner::new(config)?;
         Ok(Self {

@@ -44,6 +44,10 @@ pub(crate) fn sort_and_truncate(results: &mut Vec<SearchResult>, k: usize) {
 mod tests {
     use super::*;
     use crate::metadata::Metadata;
+    use crate::storage::VectorEntry;
+    use crate::VectorStorage;
+    use crate::metrics::Metric;
+    use crate::QuantizedVector;
 
     #[test]
     fn test_entry_to_result() {

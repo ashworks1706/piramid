@@ -26,7 +26,7 @@ pub struct OpenAIEmbedder {
 }
 
 impl OpenAIEmbedder {
-    /// Create a new OpenAI embedder with automatic caching (10K embeddings)
+    // Create a new OpenAI embedder with automatic caching (10K embeddings)
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let inner = OpenAIEmbedderInner::new(config)?;
         Ok(Self {
@@ -34,7 +34,7 @@ impl OpenAIEmbedder {
         })
     }
 
-    /// Create with custom cache size
+    // Create with custom cache size
     pub fn with_cache_size(config: &EmbeddingConfig, cache_size: usize) -> EmbeddingResult<Self> {
         let inner = OpenAIEmbedderInner::new(config)?;
         Ok(Self {

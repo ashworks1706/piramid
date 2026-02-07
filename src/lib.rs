@@ -23,5 +23,10 @@ pub use query::{Filter, FilterCondition};
 pub use search::SearchResult;
 pub use storage::{VectorEntry, VectorStorage};
 pub use embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingError};
-pub use index::{HnswIndex, HnswConfig};
+pub use index::{
+    HnswIndex, HnswConfig, 
+    FlatIndex, FlatConfig,
+    IvfIndex, IvfConfig,
+    VectorIndex, IndexConfig, IndexType, IndexStats,
+};
 pub use quantization::QuantizedVector;

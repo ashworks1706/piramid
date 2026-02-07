@@ -1,10 +1,10 @@
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, PoisonError};
 use crate::error::{Result, ServerError};
 
-/// Helper trait for RwLock error handling
-/// 
-/// Provides convenience methods to convert lock poisoning errors
-/// into our error type system.
+// Helper trait for RwLock error handling
+// 
+// Provides convenience methods to convert lock poisoning errors
+// into our error type system.
 pub trait LockHelper<T> {
     fn read_or_err(&self) -> Result<RwLockReadGuard<'_, T>>;
     fn write_or_err(&self) -> Result<RwLockWriteGuard<'_, T>>;
