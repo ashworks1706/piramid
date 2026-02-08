@@ -492,14 +492,14 @@ mod tests {
     #[test]
     fn test_basic_store_and_retrieve() {
         let test_path = ".piramid/tests/test_basic.db";
-        let test_index = ".piramid/tests/test_basic.index.db";
-        let test_wal = ".piramid/tests/test_basic.wal";
-        let test_hnsw = ".piramid/tests/test_basic.db.hnswindex.bin";
+        let test_index = ".piramid/tests/test_basic.db.index.db";
+        let test_wal = ".piramid/tests/test_basic.db.wal.db";
+        let test_vecindex = ".piramid/tests/test_basic.db.vecindex.db";
         
         let _ = std::fs::remove_file(test_path);
         let _ = std::fs::remove_file(test_index);
         let _ = std::fs::remove_file(test_wal);
-        let _ = std::fs::remove_file(test_hnsw);
+        let _ = std::fs::remove_file(test_vecindex);
         
         let mut storage = Collection::open(test_path).unwrap();
         let entry = Document::new(vec![1.0, 2.0, 3.0], "test".to_string());
@@ -513,20 +513,20 @@ mod tests {
         std::fs::remove_file(test_path).unwrap();
         std::fs::remove_file(test_index).unwrap();
         let _ = std::fs::remove_file(test_wal);
-        let _ = std::fs::remove_file(test_hnsw);
+        let _ = std::fs::remove_file(test_vecindex);
     }
 
     #[test]
     fn test_persistence() {
         let test_path = ".piramid/tests/test_persist.db";
-        let test_index = ".piramid/tests/test_persist.index.db";
-        let test_wal = ".piramid/tests/test_persist.wal";
-        let test_hnsw = ".piramid/tests/test_persist.db.hnswindex.bin";
+        let test_index = ".piramid/tests/test_persist.db.index.db";
+        let test_wal = ".piramid/tests/test_persist.db.wal.db";
+        let test_vecindex = ".piramid/tests/test_persist.db.vecindex.db";
         
         let _ = std::fs::remove_file(test_path);
         let _ = std::fs::remove_file(test_index);
         let _ = std::fs::remove_file(test_wal);
-        let _ = std::fs::remove_file(test_hnsw);
+        let _ = std::fs::remove_file(test_vecindex);
         
         let id1;
         let id2;
@@ -549,13 +549,15 @@ mod tests {
         std::fs::remove_file(test_path).unwrap();
         std::fs::remove_file(test_index).unwrap();
         let _ = std::fs::remove_file(test_wal);
-        let _ = std::fs::remove_file(test_hnsw);
+        let _ = std::fs::remove_file(test_vecindex);
     }
 
     #[test]
     fn test_search() {
         let _ = std::fs::remove_file(".piramid/tests/test_search.db");
-        let _ = std::fs::remove_file(".piramid/tests/test_search.index.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_search.db.index.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_search.db.wal.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_search.db.vecindex.db");
         
         let mut storage = Collection::open(".piramid/tests/test_search.db").unwrap();
         
@@ -576,14 +578,19 @@ mod tests {
         
         assert_eq!(results.len(), 2);
         
+        drop(storage);
         std::fs::remove_file(".piramid/tests/test_search.db").unwrap();
-        std::fs::remove_file(".piramid/tests/test_search.index.db").unwrap();
+        std::fs::remove_file(".piramid/tests/test_search.db.index.db").unwrap();
+        let _ = std::fs::remove_file(".piramid/tests/test_search.db.wal.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_search.db.vecindex.db");
     }
 
     #[test]
     fn test_batch_search() {
         let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db");
-        let _ = std::fs::remove_file(".piramid/tests/test_batch_search.index.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db.index.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db.wal.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db.vecindex.db");
         
         let mut storage = Collection::open(".piramid/tests/test_batch_search.db").unwrap();
         
@@ -608,7 +615,10 @@ mod tests {
         assert_eq!(results[1].len(), 2);
         assert_eq!(results[2].len(), 2);
         
+        drop(storage);
         std::fs::remove_file(".piramid/tests/test_batch_search.db").unwrap();
-        std::fs::remove_file(".piramid/tests/test_batch_search.index.db").unwrap();
+        std::fs::remove_file(".piramid/tests/test_batch_search.db.index.db").unwrap();
+        let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db.wal.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db.vecindex.db");
     }
 }

@@ -33,7 +33,10 @@ mod tests {
     #[test]
     fn test_vector_search() {
         let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db");
-        let _ = std::fs::remove_file(".hnsw.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db.index.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db.wal.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db.vecindex.db");
+        
         let mut storage = Collection::open(".piramid/tests/test_vector_search.db").unwrap();
 
         // Insert test vectors
@@ -55,7 +58,10 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert!(results[0].text == "doc0" || results[0].text == "doc2");
 
+        drop(storage);
         std::fs::remove_file(".piramid/tests/test_vector_search.db").unwrap();
-        let _ = std::fs::remove_file(".hnsw.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db.index.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db.wal.db");
+        let _ = std::fs::remove_file(".piramid/tests/test_vector_search.db.vecindex.db");
     }
 }

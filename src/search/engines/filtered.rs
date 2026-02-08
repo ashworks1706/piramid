@@ -61,13 +61,15 @@ mod tests {
     #[test]
     fn test_filtered_search() {
         let test_db = ".piramid/tests/test_filtered_search.db";
-        let test_index = ".piramid/tests/test_filtered_search.index.db";
-        let test_wal = ".piramid/tests/test_filtered_search.wal";
+        let test_index = ".piramid/tests/test_filtered_search.db.index.db";
+        let test_wal = ".piramid/tests/test_filtered_search.db.wal.db";
+        let test_vecindex = ".piramid/tests/test_filtered_search.db.vecindex.db";
         
         // Clean up any existing files
         let _ = std::fs::remove_file(test_db);
         let _ = std::fs::remove_file(test_index);
         let _ = std::fs::remove_file(test_wal);
+        let _ = std::fs::remove_file(test_vecindex);
         
         {
             let mut storage = Collection::open(test_db).unwrap();
@@ -100,5 +102,6 @@ mod tests {
         std::fs::remove_file(test_db).unwrap();
         std::fs::remove_file(test_index).unwrap();
         let _ = std::fs::remove_file(test_wal);
+        let _ = std::fs::remove_file(test_vecindex);
     }
 }

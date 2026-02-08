@@ -8,7 +8,7 @@ use crate::index::{SerializableIndex, VectorIndex, HnswIndex, IvfIndex, FlatInde
 
 // Get the index file path for a collection
 pub fn get_index_file_path(collection_path: &str) -> String {
-    format!("{}.hnswindex.bin", collection_path)
+    format!("{}.vecindex.db", collection_path)
 }
 
 // Save any index to disk

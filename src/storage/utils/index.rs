@@ -22,22 +22,14 @@ impl EntryPointer {
 }
 
 pub fn save_index(path: &str, index: &HashMap<Uuid, EntryPointer>) -> Result<()> {
-    let index_path = if path.ends_with(".db") {
-        format!("{}.index.db", &path[..path.len()-3])
-    } else {
-        format!("{}.index", path)
-    };
+    let index_path = format!("{}.index.db", path);
     let index_data = bincode::serialize(index)?;
     std::fs::write(index_path, index_data)?;
     Ok(())
 }
 
 pub fn load_index(path: &str) -> Result<HashMap<Uuid, EntryPointer>> {
-    let index_path = if path.ends_with(".db") {
-        format!("{}.index.db", &path[..path.len()-3])
-    } else {
-        format!("{}.index", path)
-    };
+    let index_path = format!("{}.index.db", path);
     
     if let Ok(mut index_file) = std::fs::File::open(&index_path) {
         use std::io::Read;
@@ -53,9 +45,5 @@ pub fn load_index(path: &str) -> Result<HashMap<Uuid, EntryPointer>> {
 }
 
 pub fn get_wal_path(storage_path: &str) -> String {
-    if storage_path.ends_with(".db") {
-        format!("{}.wal", &storage_path[..storage_path.len()-3])
-    } else {
-        format!("{}.wal", storage_path)
-    }
+    format!("{}.wal.db", storage_path)
 }
