@@ -179,6 +179,39 @@ pub async fn delete_vector(
     Ok(Json(DeleteResponse { deleted }))
 }
 
+// DELETE /api/collections/:collection/vectors/batch - delete multiple vectors at once
+pub async fn delete_vectors_batch(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+    Json(req): Json<BatchDeleteRequest>,
+) -> Result<Json<BatchDeleteResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
+    if req.ids.is_empty() {
+        return Err(ServerError::InvalidRequest("No vector IDs provided".to_string()).into());
+    }
+
+    state.get_or_create_collection(&collection)?;
+
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+
+    // Parse UUIDs
+    let mut uuids = Vec::with_capacity(req.ids.len());
+    for id_str in &req.ids {
+        let uuid = Uuid::parse_str(id_str)
+            .map_err(|_| ServerError::InvalidRequest(format!("Invalid UUID: {}", id_str)))?;
+        uuids.push(uuid);
+    }
+
+    let deleted_count = storage.delete_batch(&uuids)?;
+
+    Ok(Json(BatchDeleteResponse { deleted_count }))
+}
+
 // POST /api/collections/:collection/search - search for similar vectors
 pub async fn search_vectors(
     State(state): State<SharedState>,

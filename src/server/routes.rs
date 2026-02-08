@@ -43,6 +43,7 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/api/collections/{collection}/vectors", get(handlers::list_vectors))
         .route("/api/collections/{collection}/vectors", post(handlers::insert_vector))
         .route("/api/collections/{collection}/vectors/batch", post(handlers::insert_vectors_batch))
+        .route("/api/collections/{collection}/vectors/batch", delete(handlers::delete_vectors_batch))
         .route("/api/collections/{collection}/vectors/{id}", get(handlers::get_vector))
         .route("/api/collections/{collection}/vectors/{id}", delete(handlers::delete_vector))
         

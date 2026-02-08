@@ -404,6 +404,34 @@ impl Collection {
         }
     }
     
+    // Batch delete - delete multiple vectors at once
+    pub fn delete_batch(&mut self, ids: &[Uuid]) -> Result<usize> {
+        let mut deleted_count = 0;
+        
+        // Log all deletes to WAL first
+        for id in ids {
+            if self.index.contains_key(id) {
+                self.wal.log(&WalEntry::Delete { id: *id })?;
+            }
+        }
+        
+        // Perform deletions
+        for id in ids {
+            if self.index.contains_key(id) {
+                self.delete_internal(id);
+                deleted_count += 1;
+            }
+        }
+        
+        // Save index once at the end
+        if deleted_count > 0 {
+            self.save_index()?;
+            self.save_vector_index()?;
+        }
+        
+        Ok(deleted_count)
+    }
+    
     pub fn update_metadata(&mut self, id: &Uuid, metadata: Metadata) -> Result<bool> {
         if let Some(entry) = self.get(id) {
             let vector = entry.get_vector();
@@ -515,6 +543,7 @@ mod tests {
         let _ = std::fs::remove_file(test_wal);
         let _ = std::fs::remove_file(test_vecindex);
     }
+
 
     #[test]
     fn test_persistence() {

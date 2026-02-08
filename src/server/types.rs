@@ -53,22 +53,6 @@ pub struct InsertResponse {
     pub id: String,
 }
 
-// Batch store request
-#[derive(Deserialize)]
-pub struct BatchInsertRequest {
-    pub vectors: Vec<Vec<f32>>,
-    pub texts: Vec<String>,
-    #[serde(default)]
-    pub metadata: Vec<HashMap<String, serde_json::Value>>,
-}
-
-// Batch store response
-#[derive(Serialize)]
-pub struct BatchInsertResponse {
-    pub ids: Vec<String>,
-    pub count: usize,
-}
-
 // Full vector data returned to client
 #[derive(Serialize)]
 pub struct VectorResponse {
@@ -88,6 +72,27 @@ pub struct ListVectorsQuery {
 }
 
 fn default_limit() -> usize { 100 }
+
+// =============================================================================
+// BATCH INSERT
+// =============================================================================
+
+// Batch store request
+#[derive(Deserialize)]
+pub struct BatchInsertRequest {
+    pub vectors: Vec<Vec<f32>>,
+    pub texts: Vec<String>,
+    #[serde(default)]
+    pub metadata: Vec<HashMap<String, serde_json::Value>>,
+}
+
+// Batch store response
+#[derive(Serialize)]
+pub struct BatchInsertResponse {
+    pub ids: Vec<String>,
+    pub count: usize,
+}
+
 
 // =============================================================================
 // SEARCH
@@ -129,6 +134,20 @@ pub struct DeleteResponse {
 #[derive(Serialize)]
 pub struct CountResponse {
     pub count: usize,
+}
+
+// =============================================================================
+// BATCH DELETE
+// =============================================================================
+
+#[derive(Deserialize)]
+pub struct BatchDeleteRequest {
+    pub ids: Vec<String>,  // Vector IDs to delete
+}
+
+#[derive(Serialize)]
+pub struct BatchDeleteResponse {
+    pub deleted_count: usize,
 }
 
 // =============================================================================
