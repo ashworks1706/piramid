@@ -16,7 +16,7 @@ cargo bench --bench hnsw_accuracy
 open target/criterion/report/index.html
 ```
 
----
+ 
 
 ## Benchmark Suites
 
@@ -33,7 +33,7 @@ Measures speed and throughput.
 - Throughput (ops/sec)
 - Statistical analysis (mean, median, std dev)
 
----
+ 
 
 ### 2. **Accuracy Benchmarks** (`hnsw_accuracy.rs`)
 
@@ -51,7 +51,7 @@ Measures search quality.
 - Recall@10: >90% (good)
 - Note: Random vectors have low recall (no structure)
 
----
+ 
 
 ## Configuration
 
@@ -63,7 +63,7 @@ Measures search quality.
 
 **Distance metric:** Cosine similarity
 
----
+ 
 
 ## Interpreting Results
 
@@ -75,7 +75,7 @@ Measures search quality.
 - **Good**: Recall@10 >90%
 - **Excellent**: Recall@10 >95%
 
----
+ 
 
 ## Output Location
 
@@ -93,7 +93,7 @@ target/criterion/
     └── 10000/
 ```
 
----
+ 
 
 ## Benchmark Details
 
@@ -115,8 +115,8 @@ recall@10               Average: 92.4%
 - **change: [...]** - Performance vs previous run
 - **Average:** Mean across test queries
 
----
+ 
 
 See [Criterion docs](https://bheisler.github.io/criterion.rs/book/) for more.
 
----
+ 

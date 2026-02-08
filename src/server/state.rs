@@ -1,17 +1,18 @@
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}};
+use dashmap::DashMap;
 
-use crate::VectorStorage;
+use crate::Collection;
 use crate::embeddings::Embedder;
 use crate::error::{Result, ServerError};
 
 // Shared application state
-// Each collection is an independent VectorStorage with its own file.
-// RwLock allows concurrent reads but exclusive writes.
+// Each collection is an independent Collection with its own file.
+// DashMap allows concurrent access to different collections without blocking
 pub struct AppState {
-    pub collections: RwLock<HashMap<String, VectorStorage>>,
+    pub collections: DashMap<String, Arc<RwLock<Collection>>>,
     pub data_dir: String,
     pub embedder: Option<Arc<dyn Embedder>>,
+    pub shutting_down: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -19,9 +20,10 @@ impl AppState {
         std::fs::create_dir_all(data_dir).ok();
         
         Self {
-            collections: RwLock::new(HashMap::new()),
+            collections: DashMap::new(),
             data_dir: data_dir.to_string(),
             embedder: None,
+            shutting_down: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -29,36 +31,42 @@ impl AppState {
         std::fs::create_dir_all(data_dir).ok();
         
         Self {
-            collections: RwLock::new(HashMap::new()),
+            collections: DashMap::new(),
             data_dir: data_dir.to_string(),
             embedder: Some(embedder),
+            shutting_down: Arc::new(AtomicBool::new(false)),
         }
     }
 
     // Lazily load or create a collection
     pub fn get_or_create_collection(&self, name: &str) -> Result<()> {
-        let mut collections = self.collections.write()
-            .map_err(|e| ServerError::Internal(format!("Lock poisoned: {}", e)))?;
-        
-        if !collections.contains_key(name) {
+        if self.shutting_down.load(Ordering::Relaxed) {
+            return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
+        }
+
+        if !self.collections.contains_key(name) {
             let path = format!("{}/{}.db", self.data_dir, name);
-            let storage = VectorStorage::open(&path)?;
-            collections.insert(name.to_string(), storage);
+            let storage = Collection::open(&path)?;
+            self.collections.insert(name.to_string(), Arc::new(RwLock::new(storage)));
         }
         
         Ok(())
     }
 
     pub fn checkpoint_all(&self) -> Result<()> {
-        let mut collections = self.collections.write()
-            .map_err(|e| ServerError::Internal(format!("Lock poisoned: {}", e)))?;
-        for storage in collections.values_mut() {
-            storage.checkpoint()?;
-            storage.flush()?;
+        for mut entry in self.collections.iter_mut() {
+            let storage = entry.value_mut();
+            let mut storage_guard = storage.write()
+                .map_err(|e| ServerError::Internal(format!("Lock poisoned: {}", e)))?;
+            storage_guard.checkpoint()?;
+            storage_guard.flush()?;
         }
         Ok(())
     }
-
+    
+    pub fn initiate_shutdown(&self) {
+        self.shutting_down.store(true, Ordering::Relaxed);
+    }
 }
 
 pub type SharedState = Arc<AppState>;

@@ -41,6 +41,9 @@ memmap2 = "0.9"
 # Cache optimization 
 lru="0.16.3"
 
+# Concurrent data structures
+dashmap= "6.0"
+
 # Parallel processing
 rayon = "1.10"
 

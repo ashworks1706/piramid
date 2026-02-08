@@ -1,5 +1,7 @@
 use axum::{extract::{Path, State}, response::Json};
-use crate::{Metric, VectorEntry};
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use super::super::{
     state::SharedState,
@@ -7,6 +9,8 @@ use super::super::{
     sync::LockHelper,
     helpers::{json_to_metadata, metadata_to_json},
 };
+
+const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Parse similarity metric from string
 fn parse_metric(s: Option<String>) -> Metric {
@@ -23,6 +27,10 @@ pub async fn embed_text(
     Path(collection): Path<String>,
     Json(req): Json<EmbedRequest>,
 ) -> Result<Json<EmbedResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
 
     let embedder = state.embedder.as_ref()
@@ -31,17 +39,17 @@ pub async fn embed_text(
     let response = embedder.embed(&req.text).await?;
 
     let metadata = json_to_metadata(req.metadata);
-    let entry = VectorEntry::with_metadata(
+    let entry = Document::with_metadata(
         response.embedding.clone(),
         req.text,
         metadata,
     );
 
-    let mut collections = state.collections.write_or_err()?;
-    let storage = collections.get_mut(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
 
-    let id = storage.store(entry)?;
+    let id = storage.insert(entry)?;
 
     Ok(Json(EmbedResponse {
         id: id.to_string(),
@@ -56,6 +64,10 @@ pub async fn embed_batch(
     Path(collection): Path<String>,
     Json(req): Json<EmbedBatchRequest>,
 ) -> Result<Json<EmbedBatchResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     if req.texts.is_empty() {
         return Err(ServerError::InvalidRequest("No texts provided".to_string()).into());
     }
@@ -67,9 +79,9 @@ pub async fn embed_batch(
 
     let responses: Vec<crate::embeddings::EmbeddingResponse> = embedder.embed_batch(&req.texts).await?;
 
-    let mut collections = state.collections.write_or_err()?;
-    let storage = collections.get_mut(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
 
     let mut ids = Vec::with_capacity(responses.len());
     let mut total_tokens = 0u32;
@@ -81,13 +93,13 @@ pub async fn embed_batch(
             crate::Metadata::new()
         };
 
-        let entry = VectorEntry::with_metadata(
+        let entry = Document::with_metadata(
             response.embedding,
             req.texts[idx].clone(),
             metadata,
         );
 
-        let id = storage.store(entry)?;
+        let id = storage.insert(entry)?;
 
         ids.push(id.to_string());
         if let Some(tokens) = response.tokens {
@@ -107,6 +119,10 @@ pub async fn search_by_text(
     Path(collection): Path<String>,
     Json(req): Json<TextSearchRequest>,
 ) -> Result<Json<SearchResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
 
     let embedder = state.embedder.as_ref()
@@ -116,14 +132,14 @@ pub async fn search_by_text(
 
     let metric = parse_metric(req.metric);
 
-    let collections = state.collections.read_or_err()?;
-    let storage = collections.get(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
 
-    let results: Vec<SearchResultResponse> = storage
+    let results: Vec<HitResponse> = storage
         .search(&response.embedding, req.k, metric)
         .into_iter()
-        .map(|r| SearchResultResponse {
+        .map(|r| HitResponse {
             id: r.id.to_string(),
             score: r.score,
             text: r.text,

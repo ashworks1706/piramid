@@ -1,22 +1,29 @@
 use axum::{extract::{Path, State}, response::Json};
-use crate::error::Result;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+use crate::error::{Result, ServerError};
 use super::super::{
     state::SharedState,
     types::*,
     sync::LockHelper,
 };
 
+const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+
 // GET /api/collections - list all loaded collections
 pub async fn list_collections(State(state): State<SharedState>) -> Result<Json<CollectionsResponse>> {
-    let collections = state.collections.read_or_err()?;
-    
-    let infos: Vec<CollectionInfo> = collections
-        .iter()
-        .map(|(name, storage)| CollectionInfo {
-            name: name.clone(),
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
+    let mut infos = Vec::new();
+    for entry in state.collections.iter() {
+        let storage = entry.value().read_with_timeout(LOCK_TIMEOUT)?;
+        infos.push(CollectionInfo {
+            name: entry.key().clone(),
             count: storage.count(),
-        })
-        .collect();
+        });
+    }
     
     Ok(Json(CollectionsResponse { collections: infos }))
 }
@@ -26,10 +33,16 @@ pub async fn create_collection(
     State(state): State<SharedState>,
     Json(req): Json<CreateCollectionRequest>,
 ) -> Result<Json<CollectionInfo>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&req.name)?;
     
-    let collections = state.collections.read_or_err()?;
-    let count = collections.get(&req.name).map(|s| s.count()).unwrap_or(0);
+    let storage_ref = state.collections.get(&req.name)
+        .ok_or_else(|| ServerError::Internal("Collection not found after creation".into()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let count = storage.count();
     
     Ok(Json(CollectionInfo { name: req.name, count }))
 }
@@ -39,10 +52,16 @@ pub async fn get_collection(
     State(state): State<SharedState>,
     Path(name): Path<String>,
 ) -> Result<Json<CollectionInfo>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&name)?;
     
-    let collections = state.collections.read_or_err()?;
-    let count = collections.get(&name).map(|s| s.count()).unwrap_or(0);
+    let storage_ref = state.collections.get(&name)
+        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let count = storage.count();
     
     Ok(Json(CollectionInfo { name, count }))
 }
@@ -52,8 +71,11 @@ pub async fn delete_collection(
     State(state): State<SharedState>,
     Path(name): Path<String>,
 ) -> Result<Json<DeleteResponse>> {
-    let mut collections = state.collections.write_or_err()?;
-    let existed = collections.remove(&name).is_some();
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
+    let existed = state.collections.remove(&name).is_some();
     
     if existed {
         let path = format!("{}/{}.db", state.data_dir, name);
@@ -68,10 +90,16 @@ pub async fn collection_count(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<CountResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
     
-    let collections = state.collections.read_or_err()?;
-    let count = collections.get(&collection).map(|s| s.count()).unwrap_or(0);
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let count = storage.count();
     
     Ok(Json(CountResponse { count }))
 }

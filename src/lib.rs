@@ -20,8 +20,8 @@ pub use metrics::Metric;
 pub use error::{PiramidError, Result, ErrorContext};
 pub use metadata::{Metadata, MetadataValue, metadata};
 pub use query::{Filter, FilterCondition};
-pub use search::SearchResult;
-pub use storage::{VectorEntry, VectorStorage};
+pub use search::Hit;
+pub use storage::{Document, Collection};
 pub use embeddings::{EmbeddingConfig, EmbeddingProvider, EmbeddingError};
 pub use index::{
     HnswIndex, HnswConfig, 

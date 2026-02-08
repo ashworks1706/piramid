@@ -10,7 +10,7 @@
     <a href="#contributing">Contributing</a>
 </p>
 
----
+ 
 
 
 Piramid is a vector database built in Rust, designed specifically for AI agent applications. Store embeddings, search by similarity, and let agents discover and walk your data.
@@ -24,7 +24,7 @@ Piramid is a vector database built in Rust, designed specifically for AI agent a
 - Semantic Caching on LLM API costs
 - WASM support for running in browser/edge/mobile
 
----
+ 
 
 ## Quick Start
 
@@ -46,7 +46,7 @@ cargo build --release
 ./target/release/piramid-server
 ```
 
----
+ 
 
 ## Usage
 
@@ -72,7 +72,7 @@ curl -X POST http://localhost:6333/api/collections/docs/search \
   -H "Content-Type: application/json" \
   -d '{"vector": [0.1, 0.2, 0.3, 0.4], "k": 5}'
 ```
----
+ 
 
 ## Configuration
 
@@ -112,7 +112,7 @@ curl -X POST http://localhost:6333/api/collections/docs/search/text \
 ```
 
 
----
+ 
 
 ## Development
 

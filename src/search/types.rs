@@ -5,7 +5,7 @@ use crate::metadata::Metadata;
 
 // A search result containing the vector entry plus its similarity score
 #[derive(Debug, Clone)]
-pub struct SearchResult {
+pub struct Hit {
     pub id: Uuid,
     pub score: f32,      
     pub text: String,
@@ -13,7 +13,7 @@ pub struct SearchResult {
     pub metadata: Metadata,
 }
 
-impl SearchResult {
+impl Hit {
     pub fn new(id: Uuid, score: f32, text: String, vector: Vec<f32>, metadata: Metadata) -> Self {
         Self { id, score, text, vector, metadata }
     }

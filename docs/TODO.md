@@ -24,8 +24,6 @@
 - [x] Parallel search with rayon
 - [x] LRU cache for embeddings (50-90% cost savings)
 
----
-
 ### Data Durability & Reliability
 
 **Error Handling**
@@ -47,15 +45,13 @@
 - [x] Flush all pending writes to disk
 - [x] Clean lock release
 - [x] Save HNSW index state
-- [ ] Drain connections before shutdown
-- [ ] Pre-shutdown warning to active clients
+- [x] Drain connections before shutdown
+- [x] Pre-shutdown warning to active clients
 
 **Concurrent Safety**
-- [ ] Lock-free or fine-grained locking for writes
-- [ ] Deadlock detection/prevention
-- [ ] Write conflict resolution strategy
-
----
+- [x] Lock-free or fine-grained locking for writes
+- [x] Deadlock detection/prevention
+- [x] Write conflict resolution strategy
 
 ### Production 
 
@@ -105,6 +101,14 @@
 - [ ] Startup validation (check integrity on boot)
 - [ ] Startup health check (validate all collections load)
 
+**Index Algorithms**
+- [x] HNSW (current default)
+- [x] Flat/Brute Force (for small collections <10k vectors)
+- [x] IVF (Inverted File Index)
+- [ ] Product Quantization (PQ)
+- [ ] Annoy (Spotify's algorithm)
+- [ ] ScaNN (Google's algorithm)
+
 **Observability**
 - [ ] Metrics: insert/search latency, index size, memory usage
 - [ ] Structured logging with tracing crate
@@ -140,7 +144,7 @@
 - [ ] Security headers (CORS, CSP, HSTS)
 - [ ] TLS/SSL support
 
----
+ 
 
 ### Documentation & Testing
 
@@ -171,7 +175,7 @@
 - [ ] Basic CLI tool for admin operations
 - [ ] Example collection generator (demo data)
 
----
+ 
 
 ### Post-Launch Features
 
@@ -285,17 +289,9 @@
 - [ ] Error reporting (opt-in)
 - [ ] Feature usage tracking
 
----
+ 
 
 ### Future Considerations
-
-**Index Algorithms**
-- [x] HNSW (current default)
-- [x] Flat/Brute Force (for small collections <10k vectors)
-- [x] IVF (Inverted File Index)
-- [ ] Product Quantization (PQ)
-- [ ] Annoy (Spotify's algorithm)
-- [ ] ScaNN (Google's algorithm)
 
 **Semantic Cache**
 - [ ] Semantic matching for LLM responses

@@ -20,6 +20,21 @@ pub struct IvfIndex {
 }
 
 impl IvfIndex {
+    // IVF is different from HNSW
+    // It workes by clustering vectors into groups and only searching relevant clusters for a query 
+    // This is much faster than brute force for large datasets, but less accurate than HNSW 
+    // why? Because it relies on the quality of the clusters - if a query is near a cluster
+    // boundary, it may miss relevant vectors in neighboring clusters.
+    // IVF is a good choice for very large datasets where search speed is critical and some loss of
+    // accuracy is acceptable.
+    
+
+    // In contrast, HNSW builds a hierarchical graph structure that allows for more accurate search
+    // at the cost of increased memory usage and slower insertion times.
+    // IVF is often used in combination with other techniques (like PQ) to further reduce memory
+    // usage while maintaining good search performance.
+    
+
     pub fn new(config: IvfConfig) -> Self {
         IvfIndex {
             config,
@@ -32,6 +47,13 @@ impl IvfIndex {
     
     // Build clusters using k-means
     pub fn build_clusters(&mut self, vectors: &HashMap<Uuid, Vec<f32>>) {
+        // building clusters is an offline process that can be done periodically as new vectors are
+        // added
+        // on high level, it works by:
+        // 1. Randomly initialize centroids from existing vectors
+        // 2. Assign each vector to nearest centroid (forming clusters)
+        // 3. Update centroids by computing mean of assigned vectors
+        // 4. Repeat until convergence or max iterations
         if vectors.is_empty() {
             return;
         }
@@ -110,6 +132,7 @@ impl IvfIndex {
     }
     
     fn compute_centroid(&self, cluster: &[(Uuid, Vec<f32>)]) -> Vec<f32> {
+        // Compute mean vector for the cluster by summing all vectors and dividing by count 
         if cluster.is_empty() {
             return vec![0.0; self.dimensions];
         }

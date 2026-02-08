@@ -14,7 +14,7 @@ mod types;
 mod engines;
 mod utils;
 
-pub use types::SearchResult;
+pub use types::Hit;
 pub use engines::{vector_search, filtered_search};
 
 // Re-export for convenience

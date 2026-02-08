@@ -1,9 +1,9 @@
 // Filtered search - vector similarity search with metadata filtering
 
-use crate::storage::VectorStorage;
+use crate::storage::Collection;
 use crate::metrics::Metric;
 use crate::query::Filter;
-use crate::search::SearchResult;
+use crate::search::Hit;
 use crate::search::utils::{create_vector_map, entry_to_result, sort_and_truncate};
 
 // Perform filtered vector similarity search
@@ -22,12 +22,12 @@ use crate::search::utils::{create_vector_map, entry_to_result, sort_and_truncate
 // # Returns
 // Vector of k most similar results matching the filter, sorted by score
 pub fn filtered_search(
-    storage: &VectorStorage,
+    storage: &Collection,
     query: &[f32],
     k: usize,
     metric: Metric,
     filter: &Filter,
-) -> Vec<SearchResult> {
+) -> Vec<Hit> {
     // Create vector map for index
     let vector_map = create_vector_map(storage);
 
@@ -37,8 +37,8 @@ pub fn filtered_search(
     
     let result_ids = storage.index().search(query, search_k, ef, &vector_map);
 
-    // Convert IDs to SearchResults and apply filter
-    let mut results: Vec<SearchResult> = result_ids
+    // Convert IDs to Hits and apply filter
+    let mut results: Vec<Hit> = result_ids
         .into_iter()
         .filter_map(|id| {
             storage.get(&id).and_then(|entry| {
@@ -60,7 +60,7 @@ pub fn filtered_search(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::VectorEntry;
+    use crate::storage::Document;
     use crate::metadata;
 
     #[test]
@@ -75,22 +75,22 @@ mod tests {
         let _ = std::fs::remove_file(test_wal);
         
         {
-            let mut storage = VectorStorage::open(test_db).unwrap();
+            let mut storage = Collection::open(test_db).unwrap();
 
             // Insert vectors with metadata
-            let e1 = VectorEntry::with_metadata(
+            let e1 = Document::with_metadata(
                 vec![1.0, 0.0, 0.0],
                 "rust doc".to_string(),
                 metadata::metadata([("lang", "rust".into())])
             );
-            let e2 = VectorEntry::with_metadata(
+            let e2 = Document::with_metadata(
                 vec![0.9, 0.1, 0.0],
                 "python doc".to_string(),
                 metadata::metadata([("lang", "python".into())])
             );
             
-            storage.store(e1).unwrap();
-            storage.store(e2).unwrap();
+            storage.insert(e1).unwrap();
+            storage.insert(e2).unwrap();
 
             // Search with filter
             let filter = Filter::new().eq("lang", "rust");

@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use piramid::server::{AppState, create_router};
 use piramid::{EmbeddingConfig, embeddings};
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
@@ -75,19 +76,43 @@ async fn main() {
     
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     
+    let state_for_shutdown = state.clone();
+    
     // Graceful shutdown signal
     let shutdown_signal = async move {
         tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-        println!("\n⚡ Received shutdown signal, flushing collections...");
-        if let Err(e) = state.checkpoint_all() {
-            eprintln!("Error saving data during shutdown: {}", e);
+        println!("\n⚡ Received shutdown signal...");
+        
+        // Set shutdown flag to reject new requests
+        state_for_shutdown.initiate_shutdown();
+        println!("   ⏸️  Rejecting new requests");
+        
+        // Flush all collections
+        println!("   💾 Flushing collections...");
+        if let Err(e) = state_for_shutdown.checkpoint_all() {
+            eprintln!("   ❌ Error saving data during shutdown: {}", e);
+        } else {
+            println!("   ✅ All data saved");
         }
-        println!("Shutting down gracefully...");
+        
+        println!("   🔌 Draining connections (10s timeout)...");
     };
     
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal)
-        .await
-        .unwrap();
+    let server = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal);
+
+    // Give in-flight requests 10 seconds to complete
+    tokio::select! {
+        result = server => {
+            if let Err(e) = result {
+                eprintln!("Server error: {}", e);
+            }
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+            println!("   ⚠️  Force shutdown after 10s timeout");
+        }
+    }
+    
+    println!("👋 Goodbye!");
 }
 

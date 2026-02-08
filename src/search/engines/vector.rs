@@ -1,9 +1,9 @@
 // Vector similarity search (k-NN)
 // Find the k most similar vectors to a query vector
 
-use crate::storage::VectorStorage;
+use crate::storage::Collection;
 use crate::metrics::Metric;
-use crate::search::SearchResult;
+use crate::search::Hit;
 use crate::search::utils::{create_vector_map, entry_to_result, sort_and_truncate};
 
 // Perform k-nearest neighbor vector similarity search
@@ -17,11 +17,11 @@ use crate::search::utils::{create_vector_map, entry_to_result, sort_and_truncate
 // # Returns
 // Vector of k most similar results, sorted by score (highest first)
 pub fn vector_search(
-    storage: &VectorStorage,
+    storage: &Collection,
     query: &[f32],
     k: usize,
     metric: Metric,
-) -> Vec<SearchResult> {
+) -> Vec<Hit> {
     // Create vector map for index
     let vector_map = create_vector_map(storage);
 
@@ -30,8 +30,8 @@ pub fn vector_search(
     let ef = (k * 2).max(50);
     let result_ids = storage.index().search(query, k, ef, &vector_map);
 
-    // Convert IDs to SearchResults
-    let mut results: Vec<SearchResult> = result_ids
+    // Convert IDs to Hits
+    let mut results: Vec<Hit> = result_ids
         .into_iter()
         .filter_map(|id| {
             storage.get(&id).map(|entry| {
@@ -48,13 +48,13 @@ pub fn vector_search(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::VectorEntry;
+    use crate::storage::Document;
 
     #[test]
     fn test_vector_search() {
         let _ = std::fs::remove_file("piramid_data/tests/test_vector_search.db");
         let _ = std::fs::remove_file(".hnsw.db");
-        let mut storage = VectorStorage::open("piramid_data/tests/test_vector_search.db").unwrap();
+        let mut storage = Collection::open("piramid_data/tests/test_vector_search.db").unwrap();
 
         // Insert test vectors
         let vectors = vec![
@@ -64,8 +64,8 @@ mod tests {
         ];
 
         for (i, vec) in vectors.iter().enumerate() {
-            let entry = VectorEntry::new(vec.clone(), format!("doc{}", i));
-            storage.store(entry).unwrap();
+            let entry = Document::new(vec.clone(), format!("doc{}", i));
+            storage.insert(entry).unwrap();
         }
 
         // Search

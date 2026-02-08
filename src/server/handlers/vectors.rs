@@ -1,6 +1,8 @@
 use axum::{extract::{Path, Query, State}, response::Json};
 use uuid::Uuid;
-use crate::{Metric, VectorEntry};
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use super::super::{
     state::SharedState,
@@ -8,6 +10,8 @@ use super::super::{
     sync::LockHelper,
     helpers::{json_to_metadata, metadata_to_json},
 };
+
+const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Parse similarity metric from string
 fn parse_metric(s: Option<String>) -> Metric {
@@ -19,31 +23,39 @@ fn parse_metric(s: Option<String>) -> Metric {
 }
 
 // POST /api/collections/:collection/vectors - store a new vector
-pub async fn store_vector(
+pub async fn insert_vector(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
-    Json(req): Json<StoreVectorRequest>,
-) -> Result<Json<StoreVectorResponse>> {
+    Json(req): Json<InsertRequest>,
+) -> Result<Json<InsertResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
     
     let metadata = json_to_metadata(req.metadata);
-    let entry = VectorEntry::with_metadata(req.vector, req.text, metadata);
+    let entry = Document::with_metadata(req.vector, req.text, metadata);
     
-    let mut collections = state.collections.write_or_err()?;
-    let storage = collections.get_mut(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
     
-    let id = storage.store(entry)?;
+    let id = storage.insert(entry)?;
     
-    Ok(Json(StoreVectorResponse { id: id.to_string() }))
+    Ok(Json(InsertResponse { id: id.to_string() }))
 }
 
 // POST /api/collections/:collection/vectors/batch - store multiple vectors at once
-pub async fn store_vectors_batch(
+pub async fn insert_vectors_batch(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
-    Json(req): Json<BatchStoreVectorRequest>,
-) -> Result<Json<BatchStoreVectorResponse>> {
+    Json(req): Json<BatchInsertRequest>,
+) -> Result<Json<BatchInsertResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     if req.vectors.is_empty() {
         return Err(ServerError::InvalidRequest("No vectors provided".to_string()).into());
     }
@@ -63,7 +75,7 @@ pub async fn store_vectors_batch(
             crate::Metadata::new()
         };
         
-        let entry = VectorEntry::with_metadata(
+        let entry = Document::with_metadata(
             vector,
             req.texts[idx].clone(),
             metadata,
@@ -72,16 +84,16 @@ pub async fn store_vectors_batch(
     }
 
     // Store in batch
-    let mut collections = state.collections.write_or_err()?;
-    let storage = collections.get_mut(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
 
-    let ids: Vec<Uuid> = storage.store_batch(entries)?;
+    let ids: Vec<Uuid> = storage.insert_batch(entries)?;
 
     let count = ids.len();
     let ids_str: Vec<String> = ids.into_iter().map(|id: Uuid| id.to_string()).collect();
 
-    Ok(Json(BatchStoreVectorResponse { ids: ids_str, count }))
+    Ok(Json(BatchInsertResponse { ids: ids_str, count }))
 }
 
 // GET /api/collections/:collection/vectors/:id - get one vector
@@ -89,14 +101,18 @@ pub async fn get_vector(
     State(state): State<SharedState>,
     Path((collection, id)): Path<(String, String)>,
 ) -> Result<Json<VectorResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
     
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
     
-    let collections = state.collections.read_or_err()?;
-    let storage = collections.get(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
     
     let entry = storage.get(&uuid)
         .ok_or(ServerError::NotFound(super::super::helpers::VECTOR_NOT_FOUND.to_string()))?;
@@ -115,11 +131,15 @@ pub async fn list_vectors(
     Path(collection): Path<String>,
     Query(params): Query<ListVectorsQuery>,
 ) -> Result<Json<Vec<VectorResponse>>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
     
-    let collections = state.collections.read_or_err()?;
-    let storage = collections.get(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
     
     let vectors: Vec<VectorResponse> = storage.get_all()
         .into_iter()
@@ -141,14 +161,18 @@ pub async fn delete_vector(
     State(state): State<SharedState>,
     Path((collection, id)): Path<(String, String)>,
 ) -> Result<Json<DeleteResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
     
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
     
-    let mut collections = state.collections.write_or_err()?;
-    let storage = collections.get_mut(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
     
     let deleted = storage.delete(&uuid)?;
     
@@ -161,18 +185,22 @@ pub async fn search_vectors(
     Path(collection): Path<String>,
     Json(req): Json<SearchRequest>,
 ) -> Result<Json<SearchResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
     state.get_or_create_collection(&collection)?;
     
-    let collections = state.collections.read_or_err()?;
-    let storage = collections.get(&collection)
-        .ok_or(ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
     
     let metric = parse_metric(req.metric);
     let results = storage.search(&req.vector, req.k, metric);
     
-    let search_results: Vec<SearchResultResponse> = results
+    let search_results: Vec<HitResponse> = results
         .into_iter()
-        .map(|r| SearchResultResponse {
+        .map(|r| HitResponse {
             id: r.id.to_string(),
             score: r.score,
             text: r.text,

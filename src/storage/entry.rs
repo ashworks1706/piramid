@@ -11,7 +11,7 @@ use crate::quantization::QuantizedVector;
 // Vectors are stored as quantized int8 for 4x memory efficiency.
 // Users work with Vec<f32>, conversion happens automatically.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VectorEntry {
+pub struct Document {
     pub id: Uuid,
     pub vector: QuantizedVector,  // Stored as quantized
     pub text: String,
@@ -19,7 +19,7 @@ pub struct VectorEntry {
     pub metadata: Metadata,
 }
 
-impl VectorEntry {
+impl Document {
     // Create new entry from f32 vector (will be quantized)
     pub fn new(vector: Vec<f32>, text: String) -> Self {
         Self {

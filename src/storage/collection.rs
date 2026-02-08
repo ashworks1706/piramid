@@ -17,13 +17,13 @@ use super::wal::{Wal, WalEntry};
 use super::utils::{VectorIndex, save_index, load_index, get_wal_path, ensure_file_size, create_mmap, grow_mmap_if_needed};
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
-use crate::search::SearchResult;
+use crate::search::Hit;
 use crate::quantization::QuantizedVector;
 
-use super::entry::VectorEntry;
+use super::entry::Document;
 
 // Vector storage engine with memory-mapped files and HNSW indexing
-pub struct VectorStorage {
+pub struct Collection {
     data_file: File,
     mmap: Option<MmapMut>,
     index: HashMap<Uuid, VectorIndex>,
@@ -32,7 +32,7 @@ pub struct VectorStorage {
     wal: Wal,
 }
 
-impl VectorStorage {
+impl Collection {
     pub fn open(path: &str) -> Result<Self> {
         Self::with_hnsw(path, HnswConfig::default())
     }
@@ -73,25 +73,25 @@ impl VectorStorage {
             for entry in wal_entries {
                 match entry {
                     WalEntry::Insert { id, vector, text, metadata } => {
-                        let vec_entry = VectorEntry {
+                        let vec_entry = Document {
                             id,
                             vector: QuantizedVector::from_f32(&vector),
                             text,
                             metadata,
                         };
                         // Store without logging (already in WAL)
-                        let _ = temp_storage.store_internal(vec_entry);
+                        let _ = temp_storage.insert_internal(vec_entry);
                     }
                     WalEntry::Update { id, vector, text, metadata } => {
                         // Delete old version and insert new
                         temp_storage.delete_internal(&id);
-                        let vec_entry = VectorEntry {
+                        let vec_entry = Document {
                             id,
                             vector: QuantizedVector::from_f32(&vector),
                             text,
                             metadata,
                         };
-                        let _ = temp_storage.store_internal(vec_entry);
+                        let _ = temp_storage.insert_internal(vec_entry);
                     }
                     WalEntry::Delete { id } => {
                         temp_storage.delete_internal(&id);
@@ -122,7 +122,7 @@ impl VectorStorage {
                 let length = idx_entry.length as usize;
                 if offset + length <= mmap.len() {
                     let bytes = &mmap[offset..offset + length];
-                    if let Ok(entry) = bincode::deserialize::<VectorEntry>(bytes) {
+                    if let Ok(entry) = bincode::deserialize::<Document>(bytes) {
                         vectors.insert(*id, entry.get_vector());  // Dequantize
                     }
                 }
@@ -144,7 +144,7 @@ impl VectorStorage {
     }
 
     // Internal store without WAL logging (for recovery)
-    fn store_internal(&mut self, entry: VectorEntry) -> Result<Uuid> {
+    fn insert_internal(&mut self, entry: Document) -> Result<Uuid> {
         let id = entry.id;
         let bytes = bincode::serialize(&entry)?;
 
@@ -181,7 +181,7 @@ impl VectorStorage {
         self.hnsw_index.remove(id);
     }
 
-    pub fn store(&mut self, entry: VectorEntry) -> Result<Uuid> {
+    pub fn insert(&mut self, entry: Document) -> Result<Uuid> {
         // Log to WAL first
         let vector = entry.get_vector();
         self.wal.log(&WalEntry::Insert { 
@@ -194,10 +194,10 @@ impl VectorStorage {
         // Persist index to disk
         self.save_index()?;
         
-        self.store_internal(entry)
+        self.insert_internal(entry)
     }
 
-    pub fn store_batch(&mut self, entries: Vec<VectorEntry>) -> Result<Vec<Uuid>> {
+    pub fn insert_batch(&mut self, entries: Vec<Document>) -> Result<Vec<Uuid>> {
         let mut ids = Vec::with_capacity(entries.len());
         
         // Log to WAL first
@@ -272,7 +272,7 @@ impl VectorStorage {
         save_index(&self.path, &self.index)
     }
 
-    pub fn get(&self, id: &Uuid) -> Option<VectorEntry> {
+    pub fn get(&self, id: &Uuid) -> Option<Document> {
         let index_entry = self.index.get(id)?;
         let offset = index_entry.offset as usize;
         let length = index_entry.length as usize;
@@ -280,7 +280,7 @@ impl VectorStorage {
         bincode::deserialize(bytes).ok()
     }
 
-    pub fn search(&self, query: &[f32], k: usize, metric: Metric) -> Vec<SearchResult> {
+    pub fn search(&self, query: &[f32], k: usize, metric: Metric) -> Vec<Hit> {
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
         for (id, _) in &self.index {
             if let Some(entry) = self.get(id) {
@@ -295,7 +295,7 @@ impl VectorStorage {
             if let Some(entry) = self.get(&id) {
                 let vec = entry.get_vector();  // Dequantize
                 let score = metric.calculate(query, &vec);
-                results.push(SearchResult {
+                results.push(Hit {
                     id,
                     score,
                     text: entry.text,
@@ -309,7 +309,7 @@ impl VectorStorage {
 
     // Batch search - search multiple queries in parallel
     // Returns results for each query in the same order
-    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize, metric: Metric) -> Vec<Vec<SearchResult>> {
+    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize, metric: Metric) -> Vec<Vec<Hit>> {
         use rayon::prelude::*;
         
         queries
@@ -344,7 +344,7 @@ impl VectorStorage {
         k: usize,
         metric: Metric,
         filter: Option<&crate::query::Filter>,
-    ) -> Vec<SearchResult> {
+    ) -> Vec<Hit> {
         match filter {
             Some(f) => crate::search::filtered_search(self, query, k, metric, f),
             None => self.search(query, k, metric),
@@ -379,7 +379,7 @@ impl VectorStorage {
             let mut entry = entry;
             entry.metadata = metadata;
             self.delete(id)?;
-            self.store(entry)?;
+            self.insert(entry)?;
             Ok(true)
         } else {
             Ok(false)
@@ -408,14 +408,14 @@ impl VectorStorage {
                 }
             }
             
-            self.store(entry)?;
+            self.insert(entry)?;
             Ok(true)
         } else {
             Ok(false)
         }
     }
     
-    pub fn get_all(&self) -> Vec<VectorEntry> {
+    pub fn get_all(&self) -> Vec<Document> {
         let mut all_entries = Vec::new();
         for (id, _) in &self.index {
             if let Some(entry) = self.get(id) {
@@ -453,9 +453,9 @@ mod tests {
         let _ = std::fs::remove_file("test.db");
         let _ = std::fs::remove_file("test.index.db");
         
-        let mut storage = VectorStorage::open("test.db").unwrap();
-        let entry = VectorEntry::new(vec![1.0, 2.0, 3.0], "test".to_string());
-        let id = storage.store(entry).unwrap();
+        let mut storage = Collection::open("test.db").unwrap();
+        let entry = Document::new(vec![1.0, 2.0, 3.0], "test".to_string());
+        let id = storage.insert(entry).unwrap();
         
         let retrieved = storage.get(&id).unwrap();
         assert_eq!(retrieved.text, "test");
@@ -474,15 +474,15 @@ mod tests {
         let id2;
         
         {
-            let mut storage = VectorStorage::open("test_persist.db").unwrap();
-            let e1 = VectorEntry::new(vec![1.0, 2.0], "first".to_string());
-            let e2 = VectorEntry::new(vec![3.0, 4.0], "second".to_string());
-            id1 = storage.store(e1).unwrap();
-            id2 = storage.store(e2).unwrap();
+            let mut storage = Collection::open("test_persist.db").unwrap();
+            let e1 = Document::new(vec![1.0, 2.0], "first".to_string());
+            let e2 = Document::new(vec![3.0, 4.0], "second".to_string());
+            id1 = storage.insert(e1).unwrap();
+            id2 = storage.insert(e2).unwrap();
         }
         
         {
-            let storage = VectorStorage::open("test_persist.db").unwrap();
+            let storage = Collection::open("test_persist.db").unwrap();
             assert_eq!(storage.count(), 2);
             assert_eq!(storage.get(&id1).unwrap().text, "first");
             assert_eq!(storage.get(&id2).unwrap().text, "second");
@@ -497,7 +497,7 @@ mod tests {
         let _ = std::fs::remove_file("piramid_data/tests/test_search.db");
         let _ = std::fs::remove_file("piramid_data/tests/test_search.index.db");
         
-        let mut storage = VectorStorage::open("piramid_data/tests/test_search.db").unwrap();
+        let mut storage = Collection::open("piramid_data/tests/test_search.db").unwrap();
         
         let vectors = vec![
             vec![1.0, 0.0, 0.0],
@@ -507,8 +507,8 @@ mod tests {
         ];
         
         for (i, vec) in vectors.iter().enumerate() {
-            let entry = VectorEntry::new(vec.clone(), format!("vec{}", i));
-            storage.store(entry).unwrap();
+            let entry = Document::new(vec.clone(), format!("vec{}", i));
+            storage.insert(entry).unwrap();
         }
         
         let query = vec![1.0, 0.0, 0.0];
@@ -525,13 +525,13 @@ mod tests {
         let _ = std::fs::remove_file("piramid_data/tests/test_batch_search.db");
         let _ = std::fs::remove_file("piramid_data/tests/test_batch_search.index.db");
         
-        let mut storage = VectorStorage::open("piramid_data/tests/test_batch_search.db").unwrap();
+        let mut storage = Collection::open("piramid_data/tests/test_batch_search.db").unwrap();
         
         // Insert test vectors
         for i in 0..10 {
             let vec = vec![i as f32, 0.0, 0.0];
-            let entry = VectorEntry::new(vec, format!("vec{}", i));
-            storage.store(entry).unwrap();
+            let entry = Document::new(vec, format!("vec{}", i));
+            storage.insert(entry).unwrap();
         }
         
         // Batch search with multiple queries

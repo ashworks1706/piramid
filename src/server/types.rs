@@ -40,7 +40,7 @@ pub struct CreateCollectionRequest {
 
 // What the client sends to store a vector
 #[derive(Deserialize)]
-pub struct StoreVectorRequest {
+pub struct InsertRequest {
     pub vector: Vec<f32>,
     pub text: String,
     #[serde(default)]  // if missing in JSON, use Default (empty HashMap)
@@ -49,13 +49,13 @@ pub struct StoreVectorRequest {
 
 // What we return after storing
 #[derive(Serialize)]
-pub struct StoreVectorResponse {
+pub struct InsertResponse {
     pub id: String,
 }
 
 // Batch store request
 #[derive(Deserialize)]
-pub struct BatchStoreVectorRequest {
+pub struct BatchInsertRequest {
     pub vectors: Vec<Vec<f32>>,
     pub texts: Vec<String>,
     #[serde(default)]
@@ -64,7 +64,7 @@ pub struct BatchStoreVectorRequest {
 
 // Batch store response
 #[derive(Serialize)]
-pub struct BatchStoreVectorResponse {
+pub struct BatchInsertResponse {
     pub ids: Vec<String>,
     pub count: usize,
 }
@@ -105,7 +105,7 @@ pub struct SearchRequest {
 fn default_k() -> usize { 10 }
 
 #[derive(Serialize)]
-pub struct SearchResultResponse {
+pub struct HitResponse {
     pub id: String,
     pub score: f32,
     pub text: String,
@@ -114,7 +114,7 @@ pub struct SearchResultResponse {
 
 #[derive(Serialize)]
 pub struct SearchResponse {
-    pub results: Vec<SearchResultResponse>,
+    pub results: Vec<HitResponse>,
 }
 
 // =============================================================================
