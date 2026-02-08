@@ -37,6 +37,15 @@ pub fn validate_vectors(vectors: &[Vec<f32>]) -> Result<()> {
 
 // Normalize a vector to unit length (L2 normalization)
 // Useful for cosine similarity
+// why do production vector dbs need to noramlize vector ?
+// Normalization ensures consistent similarity calculations, especially for cosine similarity which
+// relies on vector direction rather than magnitude. It also helps prevent numerical instability
+// and improves performance by reducing the range of values.
+// Why L2? because L2 normalization (dividing by the vector's magnitude) is the most common method
+// for normalizing vectors in machine learning and information retrieval. It preserves the
+// direction of the vector while scaling it to have a length of 1, which is ideal for similarity
+// calculations. L1 normalization (dividing by the sum of absolute values) can be used in some
+// cases, but L2 is generally preferred for its mathematical properties and performance benefits.
 pub fn normalize_vector(vector: &[f32]) -> Vec<f32> {
     let magnitude: f32 = vector.iter().map(|&x| x * x).sum::<f32>().sqrt();
     
