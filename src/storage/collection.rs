@@ -404,6 +404,15 @@ impl Collection {
     pub fn count(&self) -> usize {
         self.index.len()
     }
+    
+    pub fn memory_usage_bytes(&self) -> usize {
+        // Estimate memory usage
+        let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0);
+        let index_size = self.index.len() * std::mem::size_of::<(Uuid, EntryPointer)>();
+        let vector_index_stats = self.vector_index.stats();
+        
+        mmap_size + index_size + vector_index_stats.memory_usage_bytes
+    }
 
     pub fn vector_index(&self) -> &dyn VectorIndex {
         self.vector_index.as_ref()

@@ -32,14 +32,25 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
         let storage = storage_ref.read_with_timeout(std::time::Duration::from_secs(5))?;
         let count = storage.count();
         let index_type = storage.vector_index().index_type().to_string();
+        let memory_usage_bytes = storage.memory_usage_bytes();
         
+        // Get latency stats for this collection
+        let (insert_latency_ms, search_latency_ms) = if let Some(tracker) = state.latency_tracker.get(&collection_name) {
+            (tracker.avg_insert_latency_ms(), tracker.avg_search_latency_ms())
+        } else {
+            (None, None)
+        };
+
         total_vectors += count;
         collection_metrics.push(CollectionMetrics {
             name: collection_name,
             vector_count: count,
             index_type,
+            memory_usage_bytes,
+            insert_latency_ms,
+            search_latency_ms,
         });
-    }
+    } 
     
     Ok(Json(MetricsResponse {
         total_collections: state.collections.len(),

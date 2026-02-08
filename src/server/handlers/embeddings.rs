@@ -1,6 +1,6 @@
 use axum::{extract::{Path, State}, response::Json};
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use super::super::{
@@ -136,6 +136,7 @@ pub async fn search_by_text(
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
 
+    let start = Instant::now();
     let results: Vec<HitResponse> = storage
         .search(&response.embedding, req.k, metric)
         .into_iter()
@@ -146,6 +147,15 @@ pub async fn search_by_text(
             metadata: metadata_to_json(&r.metadata),
         })
         .collect();
+    let duration = start.elapsed();
+    
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_search(duration);
+    }
 
-    Ok(Json(SearchResponse { results }))
+    Ok(Json(SearchResponse { 
+        results,
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }

@@ -8,12 +8,14 @@
 mod cosine;
 mod euclidean;
 mod dot;
+pub mod latency;
 
 // `pub use` re-exports: users can do `metrics::cosine_similarity`
 // instead of `metrics::cosine::cosine_similarity`
 pub use cosine::cosine_similarity;
 pub use euclidean::euclidean_distance;
 pub use dot::dot_product;
+pub use latency::{LatencyTracker, time_operation, time_operation_sync};
 
 // Distance/similarity metric for vector comparison.
 // 

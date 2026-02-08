@@ -102,7 +102,10 @@ pub async fn delete_collection(
         std::fs::remove_file(&path).ok();
     }
     
-    Ok(Json(DeleteResponse { deleted: existed }))
+    Ok(Json(DeleteResponse { 
+        deleted: existed,
+        latency_ms: None,  // Collection deletion is a filesystem operation
+    }))
 }
 
 // GET /api/collections/:name/count - just the count

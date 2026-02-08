@@ -3,6 +3,7 @@ use dashmap::DashMap;
 
 use crate::Collection;
 use crate::embeddings::Embedder;
+use crate::metrics::LatencyTracker;
 use crate::error::{Result, ServerError};
 
 // Shared application state
@@ -13,6 +14,7 @@ pub struct AppState {
     pub data_dir: String,
     pub embedder: Option<Arc<dyn Embedder>>,
     pub shutting_down: Arc<AtomicBool>,
+    pub latency_tracker: Arc<DashMap<String, LatencyTracker>>,  // Per-collection latency tracking
 }
 
 impl AppState {
@@ -24,6 +26,7 @@ impl AppState {
             data_dir: data_dir.to_string(),
             embedder: None,
             shutting_down: Arc::new(AtomicBool::new(false)),
+            latency_tracker: Arc::new(DashMap::new()),
         }
     }
 
@@ -35,6 +38,7 @@ impl AppState {
             data_dir: data_dir.to_string(),
             embedder: Some(embedder),
             shutting_down: Arc::new(AtomicBool::new(false)),
+            latency_tracker: Arc::new(DashMap::new()),
         }
     }
 
@@ -48,6 +52,9 @@ impl AppState {
             let path = format!("{}/{}.db", self.data_dir, name);
             let storage = Collection::open(&path)?;
             self.collections.insert(name.to_string(), Arc::new(RwLock::new(storage)));
+            
+            // Create latency tracker for this collection
+            self.latency_tracker.insert(name.to_string(), LatencyTracker::new());
         }
         
         Ok(())

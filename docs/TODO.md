@@ -111,7 +111,7 @@
 
 **Observability**
 - [x] Basic `/metrics` endpoint
-- [ ] Metrics: insert/search latency, index size, memory usage
+- [x] Metrics: insert/search latency, index size, memory usage
 - [ ] Structured logging with tracing crate
 - [ ] Request ID for tracing
 - [ ] Enhanced health checks (storage status, index health, disk space)

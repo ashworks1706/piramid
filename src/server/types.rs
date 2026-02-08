@@ -56,6 +56,8 @@ pub struct InsertRequest {
 #[derive(Serialize)]
 pub struct InsertResponse {
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 // Full vector data returned to client
@@ -98,6 +100,8 @@ pub struct BatchInsertRequest {
 pub struct BatchInsertResponse {
     pub ids: Vec<String>,
     pub count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 
@@ -127,6 +131,8 @@ pub struct HitResponse {
 #[derive(Serialize)]
 pub struct SearchResponse {
     pub results: Vec<HitResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 // =============================================================================
@@ -136,6 +142,8 @@ pub struct SearchResponse {
 #[derive(Serialize)]
 pub struct DeleteResponse {
     pub deleted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -155,6 +163,8 @@ pub struct BatchDeleteRequest {
 #[derive(Serialize)]
 pub struct BatchDeleteResponse {
     pub deleted_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 // =============================================================================
@@ -221,6 +231,8 @@ pub struct UpsertRequest {
 pub struct UpsertResponse {
     pub id: String,
     pub created: bool,  // true if inserted, false if updated
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 // =============================================================================
@@ -239,6 +251,8 @@ pub struct BatchSearchRequest {
 #[derive(Serialize)]
 pub struct BatchSearchResponse {
     pub results: Vec<Vec<HitResponse>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<f32>,
 }
 
 // =============================================================================
@@ -257,6 +271,9 @@ pub struct CollectionMetrics {
     pub name: String,
     pub vector_count: usize,
     pub index_type: String,
+    pub memory_usage_bytes: usize,
+    pub insert_latency_ms: Option<f32>,
+    pub search_latency_ms: Option<f32>,
 }
 
 // =============================================================================

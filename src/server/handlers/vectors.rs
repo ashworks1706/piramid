@@ -1,10 +1,11 @@
 use axum::{extract::{Path, Query, State}, response::Json};
 use uuid::Uuid;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use crate::validation;
+use crate::metrics::LatencyTracker;
 use super::super::{
     state::SharedState,
     types::*,
@@ -53,9 +54,20 @@ pub async fn insert_vector(
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
     
+    // Time the operation
+    let start = Instant::now();
     let id = storage.insert(entry)?;
+    let duration = start.elapsed();
     
-    Ok(Json(InsertResponse { id: id.to_string() }))
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_insert(duration);
+    }
+    
+    Ok(Json(InsertResponse { 
+        id: id.to_string(),
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }
 
 // POST /api/collections/:collection/vectors/batch - store multiple vectors at once
@@ -64,6 +76,8 @@ pub async fn insert_vectors_batch(
     Path(collection): Path<String>,
     Json(mut req): Json<BatchInsertRequest>,
 ) -> Result<Json<BatchInsertResponse>> {
+    // track latency ms 
+    let start_time = std::time::Instant::now();
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
@@ -115,12 +129,23 @@ pub async fn insert_vectors_batch(
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
 
+    let start = Instant::now();
     let ids: Vec<Uuid> = storage.insert_batch(entries)?;
+    let duration = start.elapsed();
+    
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_insert(duration);
+    }
 
     let count = ids.len();
     let ids_str: Vec<String> = ids.into_iter().map(|id: Uuid| id.to_string()).collect();
 
-    Ok(Json(BatchInsertResponse { ids: ids_str, count }))
+    Ok(Json(BatchInsertResponse { 
+        ids: ids_str,
+        count,
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }
 
 // GET /api/collections/:collection/vectors/:id - get one vector
@@ -201,9 +226,19 @@ pub async fn delete_vector(
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
     
+    let start = Instant::now();
     let deleted = storage.delete(&uuid)?;
+    let duration = start.elapsed();
     
-    Ok(Json(DeleteResponse { deleted }))
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_delete(duration);
+    }
+    
+    Ok(Json(DeleteResponse { 
+        deleted,
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }
 
 // DELETE /api/collections/:collection/vectors/batch - delete multiple vectors at once
@@ -234,9 +269,19 @@ pub async fn delete_vectors_batch(
         uuids.push(uuid);
     }
 
+    let start = Instant::now();
     let deleted_count = storage.delete_batch(&uuids)?;
+    let duration = start.elapsed();
+    
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_delete(duration);
+    }
 
-    Ok(Json(BatchDeleteResponse { deleted_count }))
+    Ok(Json(BatchDeleteResponse { 
+        deleted_count,
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }
 
 // POST /api/collections/:collection/search - search for similar vectors
@@ -260,7 +305,15 @@ pub async fn search_vectors(
     let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
     
     let metric = parse_metric(req.metric);
+    
+    let start = Instant::now();
     let results = storage.search(&req.vector, req.k, metric);
+    let duration = start.elapsed();
+    
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_search(duration);
+    }
     
     let search_results: Vec<HitResponse> = results
         .into_iter()
@@ -272,7 +325,10 @@ pub async fn search_vectors(
         })
         .collect();
     
-    Ok(Json(SearchResponse { results: search_results }))
+    Ok(Json(SearchResponse { 
+        results: search_results,
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }
 
 // POST /api/collections/:collection/upsert - insert or update a vector
@@ -315,11 +371,23 @@ pub async fn upsert_vector(
     let mut entry = Document::with_metadata(req.vector, req.text, metadata);
     entry.id = id;
     
+    let start = Instant::now();
     storage.upsert(entry)?;
+    let duration = start.elapsed();
+    
+    // Record latency (treat as insert or update)
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        if exists {
+            tracker.record_update(duration);
+        } else {
+            tracker.record_insert(duration);
+        }
+    }
     
     Ok(Json(UpsertResponse { 
         id: id.to_string(),
-        created: !exists
+        created: !exists,
+        latency_ms: Some(duration.as_millis() as f32),
     }))
 }
 
@@ -345,7 +413,15 @@ pub async fn batch_search_vectors(
     let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
     
     let metric = parse_metric(req.metric);
+    
+    let start = Instant::now();
     let batch_results = storage.search_batch(&req.vectors, req.k, metric);
+    let duration = start.elapsed();
+    
+    // Record latency
+    if let Some(tracker) = state.latency_tracker.get(&collection) {
+        tracker.record_search(duration);
+    }
     
     let response_results: Vec<Vec<HitResponse>> = batch_results
         .into_iter()
@@ -362,6 +438,9 @@ pub async fn batch_search_vectors(
         })
         .collect();
     
-    Ok(Json(BatchSearchResponse { results: response_results }))
+    Ok(Json(BatchSearchResponse { 
+        results: response_results,
+        latency_ms: Some(duration.as_millis() as f32),
+    }))
 }
 
