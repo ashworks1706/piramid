@@ -68,13 +68,13 @@
 - [x] Collection metadata (created_at, updated_at, dimensions)
 - [x] List collections with stats
 - [ ] Per-collection config override
-- [ ] Storage usage per collection
+- [x] Storage usage per collection
 
 **Vector Operations**
 - [x] Upsert (insert or update)
 - [x] Update vector only (keep metadata)
 - [x] Update metadata only (keep vector)
-- [ ] Atomic update (vector + metadata together)
+- [x] Atomic update (vector + metadata together)
 - [x] Check vector existence by ID (via get)
 - [x] List vector IDs only (without full data) (via list_vectors)
 - [ ] Duplicate detection (find similar vectors in collection)
