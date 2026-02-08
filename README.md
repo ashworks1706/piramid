@@ -5,6 +5,12 @@
 </p>
 
 <p align="center">
+    <a href="https://crates.io/crates/piramid"><img src="https://img.shields.io/crates/v/piramid.svg" alt="crates.io"></a>
+    <a href="https://www.npmjs.com/package/piramid"><img src="https://img.shields.io/npm/v/piramid.svg" alt="npm"></a>
+    <a href="https://pypi.org/project/piramid/"><img src="https://img.shields.io/pypi/v/piramid.svg" alt="PyPI"></a>
+</p>
+
+<p align="center">
     <a href="#quick-start">Quick Start</a> •
     <a href="#usage">Usage</a> •
     <a href="#contributing">Contributing</a>
