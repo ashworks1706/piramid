@@ -16,7 +16,7 @@
 
 ### Performance & Indexing
 - [x] HNSW indexing (production-grade approximate k-NN)
-- [x] HNSW index persistence to disk
+- [ ] HNSW index persistence to disk
 - [x] Benchmark suite
 - [x] SIMD acceleration (dot product, cosine, euclidean)
 - [x] Memory-mapped files (mmap)
@@ -57,13 +57,13 @@
 
 **Batch Operations**
 - [x] Batch insert API (10k inserts in <1s)
-- [x] Batch search (multiple queries in one request)
+- [ ] Batch search (multiple queries in one request)
 - [x] Batch get vectors by IDs (via list_vectors with pagination)
 - [ ] Bulk delete
 
 **Collection Management**
 - [x] Delete collection (cascade remove all data)
-- [x] Collection metadata (created_at, updated_at, dimensions)
+- [ ] Collection metadata (created_at, updated_at, dimensions)
 - [x] List collections with stats
 - [ ] Per-collection config override
 - [ ] Storage usage per collection
@@ -73,7 +73,7 @@
 - [x] Update vector only (keep metadata)
 - [x] Update metadata only (keep vector)
 - [ ] Atomic update (vector + metadata together)
-- [ ] Check vector existence by ID
+- [x] Check vector existence by ID (via get)
 - [x] List vector IDs only (without full data) (via list_vectors)
 - [ ] Duplicate detection (find similar vectors in collection)
 
@@ -83,13 +83,13 @@
 - [ ] Vector format validation (NaN, infinity checks)
 - [x] Request size limits
 - [ ] Input validation & sanitization
-- [ ] Request timeout configuration
+- [x] Request timeout configuration (5s lock timeout)
 - [ ] Runtime config validation
 
 **Embeddings Optimization**
 - [x] Native batch API support (OpenAI/Ollama - 2x-10x speedup)
 - [ ] Request metrics (count, latency, tokens, cost)
-- [ ] Type-safe config (enum-based instead of strings)
+- [x] Type-safe config (enum-based instead of strings)
 - [ ] Retry with exponential backoff
 - [ ] Provider timeout configuration
 - [x] Benchmark to verify 3-5x SIMD speedup target
@@ -114,7 +114,7 @@
 - [ ] Structured logging with tracing crate
 - [ ] Request ID for tracing
 - [ ] Enhanced health checks (storage status, index health, disk space)
-- [ ] Ready endpoint (vs alive endpoint)
+- [x] Ready endpoint (vs alive endpoint) - /api/health
 - [ ] Server version endpoint
 - [ ] Basic `/metrics` endpoint
 - [ ] Slow query logging
@@ -137,7 +137,7 @@
 - [ ] HTTP/2 support
 - [ ] Compression (gzip/brotli) for responses
 - [ ] Keep-alive connection management
-- [ ] Configurable max request body size
+- [x] Configurable max request body size
 
 **Security Basics**
 - [ ] API key authentication
