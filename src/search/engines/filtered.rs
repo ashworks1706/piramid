@@ -65,35 +65,45 @@ mod tests {
 
     #[test]
     fn test_filtered_search() {
-        let _ = std::fs::remove_file("piramid_data/tests/test_filtered_search.db");
-        let _ = std::fs::remove_file("piramid_data/tests/test_filtered_search.index.db");
+        let test_db = "piramid_data/tests/test_filtered_search.db";
+        let test_index = "piramid_data/tests/test_filtered_search.index.db";
+        let test_wal = "piramid_data/tests/test_filtered_search.wal";
         
-        let mut storage = VectorStorage::open("piramid_data/tests/test_filtered_search.db").unwrap();
-
-        // Insert vectors with metadata
-        let e1 = VectorEntry::with_metadata(
-            vec![1.0, 0.0, 0.0],
-            "rust doc".to_string(),
-            metadata::metadata([("lang", "rust".into())])
-        );
-        let e2 = VectorEntry::with_metadata(
-            vec![0.9, 0.1, 0.0],
-            "python doc".to_string(),
-            metadata::metadata([("lang", "python".into())])
-        );
+        // Clean up any existing files
+        let _ = std::fs::remove_file(test_db);
+        let _ = std::fs::remove_file(test_index);
+        let _ = std::fs::remove_file(test_wal);
         
-        storage.store(e1).unwrap();
-        storage.store(e2).unwrap();
+        {
+            let mut storage = VectorStorage::open(test_db).unwrap();
 
-        // Search with filter
-        let filter = Filter::new().eq("lang", "rust");
-        let query = vec![1.0, 0.0, 0.0];
-        let results = filtered_search(&storage, &query, 5, Metric::Cosine, &filter);
+            // Insert vectors with metadata
+            let e1 = VectorEntry::with_metadata(
+                vec![1.0, 0.0, 0.0],
+                "rust doc".to_string(),
+                metadata::metadata([("lang", "rust".into())])
+            );
+            let e2 = VectorEntry::with_metadata(
+                vec![0.9, 0.1, 0.0],
+                "python doc".to_string(),
+                metadata::metadata([("lang", "python".into())])
+            );
+            
+            storage.store(e1).unwrap();
+            storage.store(e2).unwrap();
 
-        assert_eq!(results.len(), 1, "Expected 1 result, got {}: {:?}", results.len(), results.iter().map(|r| &r.text).collect::<Vec<_>>());
-        assert_eq!(results[0].text, "rust doc");
+            // Search with filter
+            let filter = Filter::new().eq("lang", "rust");
+            let query = vec![1.0, 0.0, 0.0];
+            let results = filtered_search(&storage, &query, 5, Metric::Cosine, &filter);
 
-        std::fs::remove_file("piramid_data/tests/test_filtered_search.db").unwrap();
-        std::fs::remove_file("piramid_data/tests/test_filtered_search.index.db").unwrap();
+            assert_eq!(results.len(), 1, "Expected 1 result, got {}: {:?}", results.len(), results.iter().map(|r| &r.text).collect::<Vec<_>>());
+            assert_eq!(results[0].text, "rust doc");
+        }
+
+        // Clean up after storage is dropped
+        std::fs::remove_file(test_db).unwrap();
+        std::fs::remove_file(test_index).unwrap();
+        let _ = std::fs::remove_file(test_wal);
     }
 }
