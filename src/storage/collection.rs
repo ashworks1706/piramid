@@ -1,4 +1,4 @@
-// Vector storage using memory-mapped files
+// Collection using memory-mapped files
 // Uses OS virtual memory to handle datasets efficiently
 // 
 // Architecture:
@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::error::Result;
 use crate::index::{HnswIndex, HnswConfig};
 use super::wal::{Wal, WalEntry};
-use super::utils::{VectorIndex, save_index, load_index, get_wal_path, ensure_file_size, create_mmap, grow_mmap_if_needed};
+use super::utils::{EntryPointer, save_index, load_index, get_wal_path, ensure_file_size, create_mmap, grow_mmap_if_needed};
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::Hit;
@@ -26,7 +26,7 @@ use super::entry::Document;
 pub struct Collection {
     data_file: File,
     mmap: Option<MmapMut>,
-    index: HashMap<Uuid, VectorIndex>,
+    index: HashMap<Uuid, EntryPointer>,
     hnsw_index: HnswIndex,
     path: String,
     wal: Wal,
@@ -160,7 +160,7 @@ impl Collection {
         mmap[offset as usize..(offset as usize + bytes.len())]
             .copy_from_slice(&bytes);
         
-        let index_entry = VectorIndex::new(offset, bytes.len() as u32);
+        let index_entry = EntryPointer::new(offset, bytes.len() as u32);
         self.index.insert(id, index_entry);
         
         let vec_f32 = entry.get_vector();
@@ -238,7 +238,7 @@ impl Collection {
             mmap[offset as usize..(offset as usize + bytes.len())]
                 .copy_from_slice(bytes);
             
-            let index_entry = VectorIndex {
+            let index_entry = EntryPointer {
                 offset,
                 length: bytes.len() as u32,
             };

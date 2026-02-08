@@ -6,20 +6,22 @@ use uuid::Uuid;
 
 use crate::error::Result;
 
-// Index entry: maps UUID to location in mmap file
+// Entry pointer: maps UUID to location in mmap file
+// This is NOT the VectorIndex trait (which is for search algorithms)
+// This is just file storage metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VectorIndex {
+pub struct EntryPointer {
     pub offset: u64,      // byte offset in file
     pub length: u32,      // size of serialized entry
 }
 
-impl VectorIndex {
+impl EntryPointer {
     pub fn new(offset: u64, length: u32) -> Self {
         Self { offset, length }
     }
 }
 
-pub fn save_index(path: &str, index: &HashMap<Uuid, VectorIndex>) -> Result<()> {
+pub fn save_index(path: &str, index: &HashMap<Uuid, EntryPointer>) -> Result<()> {
     let index_path = if path.ends_with(".db") {
         format!("{}.index.db", &path[..path.len()-3])
     } else {
@@ -30,7 +32,7 @@ pub fn save_index(path: &str, index: &HashMap<Uuid, VectorIndex>) -> Result<()> 
     Ok(())
 }
 
-pub fn load_index(path: &str) -> Result<HashMap<Uuid, VectorIndex>> {
+pub fn load_index(path: &str) -> Result<HashMap<Uuid, EntryPointer>> {
     let index_path = if path.ends_with(".db") {
         format!("{}.index.db", &path[..path.len()-3])
     } else {
