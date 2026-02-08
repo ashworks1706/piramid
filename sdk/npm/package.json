@@ -1,0 +1,7 @@
+{
+  "name": "piramid",
+  "version": "0.1.0",
+  "description": "Vector database for agentic applications.",
+  "main": "index.js",
+  "license": "Apache-2.0"
+}
