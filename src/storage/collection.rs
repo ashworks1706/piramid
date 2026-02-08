@@ -491,10 +491,17 @@ mod tests {
 
     #[test]
     fn test_basic_store_and_retrieve() {
-        let _ = std::fs::remove_file("test.db");
-        let _ = std::fs::remove_file("test.index.db");
+        let test_path = "piramid_data/tests/test_basic.db";
+        let test_index = "piramid_data/tests/test_basic.index.db";
+        let test_wal = "piramid_data/tests/test_basic.wal";
+        let test_hnsw = "piramid_data/tests/test_basic.db.hnswindex.bin";
         
-        let mut storage = Collection::open("test.db").unwrap();
+        let _ = std::fs::remove_file(test_path);
+        let _ = std::fs::remove_file(test_index);
+        let _ = std::fs::remove_file(test_wal);
+        let _ = std::fs::remove_file(test_hnsw);
+        
+        let mut storage = Collection::open(test_path).unwrap();
         let entry = Document::new(vec![1.0, 2.0, 3.0], "test".to_string());
         let id = storage.insert(entry).unwrap();
         
@@ -502,20 +509,30 @@ mod tests {
         assert_eq!(retrieved.text, "test");
         assert_eq!(retrieved.get_vector(), vec![1.0, 2.0, 3.0]);
         
-        std::fs::remove_file("test.db").unwrap();
-        std::fs::remove_file("test.index.db").unwrap();
+        drop(storage);
+        std::fs::remove_file(test_path).unwrap();
+        std::fs::remove_file(test_index).unwrap();
+        let _ = std::fs::remove_file(test_wal);
+        let _ = std::fs::remove_file(test_hnsw);
     }
 
     #[test]
     fn test_persistence() {
-        let _ = std::fs::remove_file("test_persist.db");
-        let _ = std::fs::remove_file("test_persist.index.db");
+        let test_path = "piramid_data/tests/test_persist.db";
+        let test_index = "piramid_data/tests/test_persist.index.db";
+        let test_wal = "piramid_data/tests/test_persist.wal";
+        let test_hnsw = "piramid_data/tests/test_persist.db.hnswindex.bin";
+        
+        let _ = std::fs::remove_file(test_path);
+        let _ = std::fs::remove_file(test_index);
+        let _ = std::fs::remove_file(test_wal);
+        let _ = std::fs::remove_file(test_hnsw);
         
         let id1;
         let id2;
         
         {
-            let mut storage = Collection::open("test_persist.db").unwrap();
+            let mut storage = Collection::open(test_path).unwrap();
             let e1 = Document::new(vec![1.0, 2.0], "first".to_string());
             let e2 = Document::new(vec![3.0, 4.0], "second".to_string());
             id1 = storage.insert(e1).unwrap();
@@ -523,14 +540,16 @@ mod tests {
         }
         
         {
-            let storage = Collection::open("test_persist.db").unwrap();
+            let storage = Collection::open(test_path).unwrap();
             assert_eq!(storage.count(), 2);
             assert_eq!(storage.get(&id1).unwrap().text, "first");
             assert_eq!(storage.get(&id2).unwrap().text, "second");
         }
         
-        std::fs::remove_file("test_persist.db").unwrap();
-        std::fs::remove_file("test_persist.index.db").unwrap();
+        std::fs::remove_file(test_path).unwrap();
+        std::fs::remove_file(test_index).unwrap();
+        let _ = std::fs::remove_file(test_wal);
+        let _ = std::fs::remove_file(test_hnsw);
     }
 
     #[test]
