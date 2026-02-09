@@ -48,6 +48,7 @@ dashmap= "6.0"
 
 # Parallel processing
 rayon = "1.10"
+num_cpus = "1.16"
 
 [dev-dependencies]
 # Logging

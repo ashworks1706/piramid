@@ -16,7 +16,7 @@ pub mod embeddings;
 pub mod index;
 pub mod quantization;
 
-pub use config::{ExecutionMode, StorageConfig, SearchConfig};
+pub use config::*;
 pub use metrics::Metric;
 pub use error::{PiramidError, Result, ErrorContext};
 pub use metadata::{Metadata, MetadataValue, metadata};

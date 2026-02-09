@@ -15,6 +15,7 @@
 - [x] Batch embedding endpoints
 
 ### Performance & Indexing
+- [x] Execution mode configuration (Auto, SIMD, Scalar)
 - [x] HNSW indexing (production-grade approximate k-NN)
 - [x] HNSW index persistence to disk
 - [x] IVF index persistence to disk

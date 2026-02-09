@@ -703,3 +703,9 @@ mod tests {
         let _ = std::fs::remove_file(".piramid/tests/test_batch_search.db.vecindex.db");
     }
 }
+
+    // Create a collection with full configuration control
+    pub fn with_full_config(path: &str, config: crate::config::CollectionConfig) -> Result<Self> {
+        Self::with_config(path, config.index)
+        // TODO: Apply other config options (quantization, memory, wal, parallelism)
+    }

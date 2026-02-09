@@ -3,14 +3,14 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Execution mode for vector operations
+// Execution mode for vector operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionMode {
-    /// Automatically detect and use SIMD if available (default)
+    // Automatically detect and use SIMD if available (default)
     Auto,
-    /// Force SIMD usage (will panic if not supported)
+    // Force SIMD usage (will panic if not supported)
     Simd,
-    /// Use scalar (non-SIMD) implementation
+    // Use scalar (non-SIMD) implementation
     Scalar,
 }
 
@@ -21,7 +21,7 @@ impl Default for ExecutionMode {
 }
 
 impl ExecutionMode {
-    /// Check if SIMD should be used
+    // Check if SIMD should be used
     pub fn should_use_simd(&self) -> bool {
         match self {
             ExecutionMode::Auto => {
