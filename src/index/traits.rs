@@ -3,6 +3,7 @@
 
 use uuid::Uuid;
 use std::collections::HashMap;
+use crate::config::SearchConfig;
 use serde::{Serialize, Deserialize};
 
 // Core trait that all vector indexes must implement
@@ -16,7 +17,7 @@ pub trait VectorIndex: Send + Sync {
     // * `vectors` - All vectors in the collection (for distance calculations)
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>);
     
-    // Search for k nearest neighbors
+    // Search for k nearest neighbors with default quality settings
     // 
     // # Arguments
     // * `query` - Query vector
@@ -25,7 +26,21 @@ pub trait VectorIndex: Send + Sync {
     // 
     // # Returns
     // Vector of IDs sorted by similarity (most similar first)
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid>;
+    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid> {
+        self.search_with_quality(query, k, vectors, SearchConfig::default())
+    }
+    
+    // Search for k nearest neighbors with custom quality settings
+    // 
+    // # Arguments
+    // * `query` - Query vector
+    // * `k` - Number of neighbors to return
+    // * `vectors` - All vectors in the collection
+    // * `quality` - Search quality parameters (controls recall/speed tradeoff)
+    // 
+    // # Returns
+    // Vector of IDs sorted by similarity (most similar first)
+    fn search_with_quality(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: SearchConfig) -> Vec<Uuid>;
     
     // Remove a vector from the index
     fn remove(&mut self, id: &Uuid);

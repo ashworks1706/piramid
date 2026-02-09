@@ -3,6 +3,8 @@
 
 mod execution;
 mod storage;
+mod search;
 
 pub use execution::ExecutionMode;
 pub use storage::StorageConfig;
+pub use search::SearchConfig;

@@ -14,9 +14,9 @@ impl VectorIndex for HnswIndex {
         self.insert(id, vector, vectors);
     }
     
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid> {
-        // Use configured ef_search for quality control
-        let ef = self.get_ef_search().max(k);
+    fn search_with_quality(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: crate::config::SearchConfig) -> Vec<Uuid> {
+        // Use quality.ef if provided, otherwise use configured ef_search
+        let ef = quality.ef.unwrap_or_else(|| self.get_ef_search()).max(k);
         self.search(query, k, ef, vectors)
     }
     

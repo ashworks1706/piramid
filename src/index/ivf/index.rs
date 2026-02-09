@@ -176,7 +176,7 @@ impl VectorIndex for IvfIndex {
         }
     }
     
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid> {
+    fn search_with_quality(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: crate::config::SearchConfig) -> Vec<Uuid> {
         if self.centroids.is_empty() {
             // No clusters yet - fallback to brute force
             let mut distances: Vec<(Uuid, f32)> = vectors.iter()
@@ -201,10 +201,13 @@ impl VectorIndex for IvfIndex {
         
         centroid_distances.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         
-        // Search top num_probes clusters
+        // Use quality.nprobe if provided, otherwise use configured num_probes
+        let nprobe = quality.nprobe.unwrap_or(self.config.num_probes);
+        
+        // Search top nprobe clusters
         let mut candidates: Vec<(Uuid, f32)> = Vec::new();
         
-        for (cluster_id, _) in centroid_distances.iter().take(self.config.num_probes) {
+        for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
             if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
                 for id in vector_ids {
                     if let Some(vec) = vectors.get(id) {
