@@ -1,16 +1,31 @@
 use wide::f32x8;
 use crate::config::ExecutionMode;
 
-pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
-    euclidean_distance_with_mode(a, b, ExecutionMode::default())
-}
 
-pub fn euclidean_distance_with_mode(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
-    if mode.should_use_simd() {
-        euclidean_distance_simd(a, b)
-    } else {
-        euclidean_distance_scalar(a, b)
+pub fn euclidean_distance(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
+   
+    match mode {
+        // Explicitly choose the SIMD implementation
+        ExecutionMode::Simd => euclidean_distance_simd(a, b),
+        
+        // Explicitly choose the Scalar implementation
+        ExecutionMode::Scalar => euclidean_distance_scalar(a, b),
+        
+        // Handle Auto: Use runtime detection or a sensible default
+        ExecutionMode::Auto => {
+            // For example, if using the 'wide' crate, it often manages its own dispatch,
+            // but you can manually check for features like AVX2 here.
+           
+        },
+
+        // Placeholder for other modes
+        ExecutionMode::Parallel => {
+                    },
+
+        // Exhaustive match ensures all variants are handled
+        _ => euclidean_distance_scalar(a, b),
     }
+
 }
 
 fn euclidean_distance_simd(a: &[f32], b: &[f32]) -> f32 {
@@ -62,16 +77,31 @@ fn euclidean_distance_scalar(a: &[f32], b: &[f32]) -> f32 {
 
 // Squared distance - skip the sqrt when you only need to compare
 // (if a² < b², then a < b, so sqrt is unnecessary for ranking)
-pub fn euclidean_distance_squared(a: &[f32], b: &[f32]) -> f32 {
-    euclidean_distance_squared_with_mode(a, b, ExecutionMode::default())
-}
+pub fn euclidean_distance_squared(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
+   
+      match mode {
+        // Explicitly choose the SIMD implementation
+        ExecutionMode::Simd => eeuclidean_distance_squared_simd(a, b),
+        
+        // Explicitly choose the Scalar implementation
+        ExecutionMode::Scalar => euclidean_distance_scalar(a, b),
+        
+        // Handle Auto: Use runtime detection or a sensible default
+        ExecutionMode::Auto => {
+            // For example, if using the 'wide' crate, it often manages its own dispatch,
+            // but you can manually check for features like AVX2 here.
+                   },
 
-pub fn euclidean_distance_squared_with_mode(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
-    if mode.should_use_simd() {
-        euclidean_distance_squared_simd(a, b)
-    } else {
-        euclidean_distance_squared_scalar(a, b)
+        // Placeholder for other modes
+        ExecutionMode::Parallel => {
+            // e.g., use rayon here
+        },
+
+        // Exhaustive match ensures all variants are handled
+        _ => euclidean_distance_scalar(a, b),
     }
+
+
 }
 
 fn euclidean_distance_squared_simd(a: &[f32], b: &[f32]) -> f32 {

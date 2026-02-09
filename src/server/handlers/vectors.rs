@@ -52,7 +52,7 @@ pub async fn insert_vector(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
     
     // Time the operation
     let start = Instant::now();
@@ -127,7 +127,7 @@ pub async fn insert_vectors_batch(
     // Store in batch
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
 
     let start = Instant::now();
     let ids: Vec<Uuid> = storage.insert_batch(entries)?;
@@ -164,7 +164,7 @@ pub async fn get_vector(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     
     let entry = storage.get(&uuid)
         .ok_or(ServerError::NotFound(super::super::helpers::VECTOR_NOT_FOUND.to_string()))?;
@@ -191,7 +191,7 @@ pub async fn list_vectors(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     
     let vectors: Vec<VectorResponse> = storage.get_all()
         .into_iter()
@@ -224,7 +224,7 @@ pub async fn delete_vector(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
     
     let start = Instant::now();
     let deleted = storage.delete(&uuid)?;
@@ -259,7 +259,7 @@ pub async fn delete_vectors_batch(
 
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
 
     // Parse UUIDs
     let mut uuids = Vec::with_capacity(req.ids.len());
@@ -302,7 +302,7 @@ pub async fn search_vectors(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     
     let metric = parse_metric(req.metric);
     
@@ -355,7 +355,7 @@ pub async fn upsert_vector(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
     
     // Check if entry exists
     let id = if let Some(id_str) = req.id {
@@ -410,7 +410,7 @@ pub async fn batch_search_vectors(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     
     let metric = parse_metric(req.metric);
     

@@ -47,7 +47,7 @@ pub async fn embed_text(
 
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
 
     let id = storage.insert(entry)?;
 
@@ -81,7 +81,7 @@ pub async fn embed_batch(
 
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let mut storage = storage_ref.write_with_timeout(LOCK_TIMEOUT)?;
+    let mut storage = storage_ref.write(LOCK_TIMEOUT)?;
 
     let mut ids = Vec::with_capacity(responses.len());
     let mut total_tokens = 0u32;
@@ -134,7 +134,7 @@ pub async fn search_by_text(
 
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
 
     let start = Instant::now();
     let results: Vec<HitResponse> = storage

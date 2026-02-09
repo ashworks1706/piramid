@@ -26,10 +26,6 @@ pub trait VectorIndex: Send + Sync {
     // 
     // # Returns
     // Vector of IDs sorted by similarity (most similar first)
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid> {
-        self.search_with_quality(query, k, vectors, SearchConfig::default())
-    }
-    
     // Search for k nearest neighbors with custom quality settings
     // 
     // # Arguments
@@ -40,7 +36,7 @@ pub trait VectorIndex: Send + Sync {
     // 
     // # Returns
     // Vector of IDs sorted by similarity (most similar first)
-    fn search_with_quality(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: SearchConfig) -> Vec<Uuid>;
+    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: SearchConfig) -> Vec<Uuid>;
     
     // Remove a vector from the index
     fn remove(&mut self, id: &Uuid);

@@ -29,7 +29,7 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
         let storage_ref = item.value();
         
         // Use a read lock with timeout
-        let storage = storage_ref.read_with_timeout(std::time::Duration::from_secs(5))?;
+        let storage = storage_ref.read(std::time::Duration::from_secs(5))?;
         let count = storage.count();
         let index_type = storage.vector_index().index_type().to_string();
         let memory_usage_bytes = storage.memory_usage_bytes();

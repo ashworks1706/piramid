@@ -19,7 +19,7 @@ pub async fn list_collections(State(state): State<SharedState>) -> Result<Json<C
 
     let mut infos = Vec::new();
     for entry in state.collections.iter() {
-        let storage = entry.value().read_with_timeout(LOCK_TIMEOUT)?;
+        let storage = entry.value().read(LOCK_TIMEOUT)?;
         let meta = storage.metadata();
         infos.push(CollectionInfo {
             name: entry.key().clone(),
@@ -49,7 +49,7 @@ pub async fn create_collection(
     
     let storage_ref = state.collections.get(&req.name)
         .ok_or_else(|| ServerError::Internal("Collection not found after creation".into()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     let meta = storage.metadata();
     
     Ok(Json(CollectionInfo { 
@@ -74,7 +74,7 @@ pub async fn get_collection(
     
     let storage_ref = state.collections.get(&name)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     let meta = storage.metadata();
     
     Ok(Json(CollectionInfo { 
@@ -121,7 +121,7 @@ pub async fn collection_count(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     let count = storage.count();
     
     Ok(Json(CountResponse { count }))
@@ -140,7 +140,7 @@ pub async fn index_stats(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
-    let storage = storage_ref.read_with_timeout(LOCK_TIMEOUT)?;
+    let storage = storage_ref.read(LOCK_TIMEOUT)?;
     
     let stats = storage.vector_index().stats();
     

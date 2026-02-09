@@ -1,16 +1,30 @@
 use wide::f32x8;
 use crate::config::ExecutionMode;
 
-pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
-    dot_product_with_mode(a, b, ExecutionMode::default())
+pub fn dot_product(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
+    match mode {
+    // Explicitly choose the SIMD implementation
+    ExecutionMode::Simd => dot_product_simd(a, b), 
+    
+    // Explicitly choose the Scalar implementation
+    ExecutionMode::Scalar => dot_product_scalar(a, b), 
+    
+    // Handle Auto: Use runtime detection or a sensible default
+    ExecutionMode::Auto => {
+        // For example, if using the 'wide' crate, it often manages its own dispatch,
+        // but you can manually check for features like AVX2 here.
+        
+    },
+
+    // Placeholder for other modes
+    ExecutionMode::Parallel => {
+                },
+
+    // Exhaustive match ensures all variants are handled
+    _ => euclidean_distance_scalar(a, b),
 }
 
-pub fn dot_product_with_mode(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
-    if mode.should_use_simd() {
-        dot_product_simd(a, b)
-    } else {
-        dot_product_scalar(a, b)
-    }
+
 }
 
 fn dot_product_simd(a: &[f32], b: &[f32]) -> f32 {

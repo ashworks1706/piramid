@@ -331,9 +331,9 @@ impl HnswIndex{
         // But our metrics return similarity scores (higher = better for Cosine/Dot)
         // So we need to invert for those metrics
         match self.config.metric {
-            Metric::Cosine => 1.0 - self.config.metric.calculate_with_mode(a, b, self.config.mode),
-            Metric::DotProduct => 1.0 - self.config.metric.calculate_with_mode(a, b, self.config.mode),
-            Metric::Euclidean => self.config.metric.calculate_with_mode(a, b, self.config.mode),
+            Metric::Cosine => 1.0 - self.config.metric.calculate(a, b, self.config.mode),
+            Metric::DotProduct => 1.0 - self.config.metric.calculate(a, b, self.config.mode),
+            Metric::Euclidean => self.config.metric.calculate(a, b, self.config.mode),
         }
     }
 

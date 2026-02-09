@@ -10,16 +10,31 @@
 use wide::f32x8;
 use crate::config::ExecutionMode;
 
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    cosine_similarity_with_mode(a, b, ExecutionMode::default())
-}
 
-pub fn cosine_similarity_with_mode(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
-    if mode.should_use_simd() {
-        cosine_similarity_simd(a, b)
-    } else {
-        cosine_similarity_scalar(a, b)
+pub fn cosine_similarity(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
+    match mode {
+        // Explicitly choose the SIMD implementation
+        ExecutionMode::Simd => cosine_similarity_simd(a, b),
+        
+        // Explicitly choose the Scalar implementation
+        ExecutionMode::Scalar => cosine_similarity_scalar(a, b),
+        
+        // Handle Auto: Use runtime detection or a sensible default
+        ExecutionMode::Auto => {
+            // For example, if using the 'wide' crate, it often manages its own dispatch,
+            // but you can manually check for features like AVX2 here.
+           
+        },
+
+        // Placeholder for other modes
+        ExecutionMode::Parallel => {
+                    },
+
+        // Exhaustive match ensures all variants are handled
+        _ => euclidean_distance_scalar(a, b),
     }
+
+
 }
 
 fn cosine_similarity_simd(a: &[f32], b: &[f32]) -> f32 {
