@@ -14,14 +14,14 @@ use uuid::Uuid;
 use crate::error::Result;
 use crate::index::{VectorIndex, IndexConfig};
 use super::wal::{Wal, WalEntry};
-use super::utils::{EntryPointer, save_index, load_index, get_wal_path, ensure_file_size, create_mmap, grow_mmap_if_needed, save_vector_index, load_vector_index, save_metadata, load_metadata};
+use super::persistence::{EntryPointer, save_index, load_index, get_wal_path, ensure_file_size, create_mmap, grow_mmap_if_needed, save_vector_index, load_vector_index, save_metadata, load_metadata};
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::Hit;
 use crate::quantization::QuantizedVector;
 
-use super::entry::Document;
-use super::collection_metadata::CollectionMetadata;
+use super::document::Document;
+use super::metadata::CollectionMetadata;
 
 // Vector storage engine with memory-mapped files and pluggable indexing
 pub struct Collection {

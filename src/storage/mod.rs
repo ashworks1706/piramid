@@ -1,11 +1,11 @@
 // Storage module - handles vector persistence with memory-mapped files
 
-mod entry;
+mod document;
 mod collection;
-mod collection_metadata;
-mod utils;
+mod metadata;
+mod persistence;
 pub mod wal;
 
-pub use entry::Document;
+pub use document::Document;
 pub use collection::Collection;
-pub use collection_metadata::CollectionMetadata;
+pub use metadata::CollectionMetadata;
