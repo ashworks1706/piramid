@@ -1,11 +1,16 @@
 use wide::f32x8;
-// we use simd operations for better parallel performance, so we will detect the cpu resource limit
-// in dot product public api and then call the helper simd function for that cpu specifically 
+use crate::config::ExecutionMode;
 
 pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
-    // TODO: detect cpu features and call appropriate simd function
-    dot_product_simd(a, b)
+    dot_product_with_mode(a, b, ExecutionMode::default())
+}
 
+pub fn dot_product_with_mode(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
+    if mode.should_use_simd() {
+        dot_product_simd(a, b)
+    } else {
+        dot_product_scalar(a, b)
+    }
 }
 
 fn dot_product_simd(a: &[f32], b: &[f32]) -> f32 {
@@ -47,6 +52,17 @@ fn dot_product_simd(a: &[f32], b: &[f32]) -> f32 {
         result += a[i] * b[i];
     }
 
+    result
+}
+
+fn dot_product_scalar(a: &[f32], b: &[f32]) -> f32 {
+    assert_eq!(a.len(), b.len(), "Vectors must have same length");
+    
+    let mut result = 0.0;
+    for i in 0..a.len() {
+        result += a[i] * b[i];
+    }
+    
     result
 }
 

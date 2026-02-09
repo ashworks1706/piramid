@@ -8,9 +8,18 @@
 // - -1.0 = opposite direction
 
 use wide::f32x8;
+use crate::config::ExecutionMode;
 
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    cosine_similarity_simd(a, b)
+    cosine_similarity_with_mode(a, b, ExecutionMode::default())
+}
+
+pub fn cosine_similarity_with_mode(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
+    if mode.should_use_simd() {
+        cosine_similarity_simd(a, b)
+    } else {
+        cosine_similarity_scalar(a, b)
+    }
 }
 
 fn cosine_similarity_simd(a: &[f32], b: &[f32]) -> f32 {
@@ -50,6 +59,28 @@ fn cosine_similarity_simd(a: &[f32], b: &[f32]) -> f32 {
     
     // Handle remainder
     for i in (len - remainder)..len {
+        dot += a[i] * b[i];
+        norm_a += a[i] * a[i];
+        norm_b += b[i] * b[i];
+    }
+    
+    let denominator = norm_a.sqrt() * norm_b.sqrt();
+    
+    if denominator == 0.0 {
+        0.0
+    } else {
+        dot / denominator
+    }
+}
+
+fn cosine_similarity_scalar(a: &[f32], b: &[f32]) -> f32 {
+    assert_eq!(a.len(), b.len(), "Vectors must have same length");
+    
+    let mut dot = 0.0;
+    let mut norm_a = 0.0;
+    let mut norm_b = 0.0;
+    
+    for i in 0..a.len() {
         dot += a[i] * b[i];
         norm_a += a[i] * a[i];
         norm_b += b[i] * b[i];

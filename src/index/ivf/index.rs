@@ -95,7 +95,7 @@ impl IvfIndex {
                 let new_centroid = self.compute_centroid(cluster);
                 
                 // Check convergence
-                let distance = self.config.metric.calculate(&self.centroids[i], &new_centroid);
+                let distance = self.config.metric.calculate_with_mode(&self.centroids[i], &new_centroid, self.config.mode);
                 if distance < 0.99 {  // If centroids moved significantly
                     converged = false;
                 }
@@ -123,7 +123,7 @@ impl IvfIndex {
         self.centroids.iter()
             .enumerate()
             .map(|(i, centroid)| {
-                let score = self.config.metric.calculate(vector, centroid);
+                let score = self.config.metric.calculate_with_mode(vector, centroid, self.config.mode);
                 (i, score)
             })
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
@@ -181,7 +181,7 @@ impl VectorIndex for IvfIndex {
             // No clusters yet - fallback to brute force
             let mut distances: Vec<(Uuid, f32)> = vectors.iter()
                 .map(|(id, vec)| {
-                    let score = self.config.metric.calculate(query, vec);
+                    let score = self.config.metric.calculate_with_mode(query, vec, self.config.mode);
                     (*id, score)
                 })
                 .collect();
@@ -194,7 +194,7 @@ impl VectorIndex for IvfIndex {
         let mut centroid_distances: Vec<(usize, f32)> = self.centroids.iter()
             .enumerate()
             .map(|(i, centroid)| {
-                let score = self.config.metric.calculate(query, centroid);
+                let score = self.config.metric.calculate_with_mode(query, centroid, self.config.mode);
                 (i, score)
             })
             .collect();
@@ -208,7 +208,7 @@ impl VectorIndex for IvfIndex {
             if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
                 for id in vector_ids {
                     if let Some(vec) = vectors.get(id) {
-                        let score = self.config.metric.calculate(query, vec);
+                        let score = self.config.metric.calculate_with_mode(query, vec, self.config.mode);
                         candidates.push((*id, score));
                     }
                 }

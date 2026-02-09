@@ -2,6 +2,7 @@
 
 use serde::{Serialize, Deserialize};
 use crate::metrics::Metric;
+use crate::config::ExecutionMode;
 
 // IVF index configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -10,6 +11,8 @@ pub struct IvfConfig {
     pub num_probes: usize,         // Clusters to search (1-10, higher = better recall)
     pub max_iterations: usize,     // K-means iterations
     pub metric: Metric,
+    #[serde(default)]
+    pub mode: ExecutionMode,
 }
 
 impl Default for IvfConfig {
@@ -19,6 +22,7 @@ impl Default for IvfConfig {
             num_probes: 5,
             max_iterations: 10,
             metric: Metric::Cosine,
+            mode: ExecutionMode::default(),
         }
     }
 }
@@ -34,6 +38,7 @@ impl IvfConfig {
             num_probes,
             max_iterations: 10,
             metric: Metric::Cosine,
+            mode: ExecutionMode::default(),
         }
     }
 }

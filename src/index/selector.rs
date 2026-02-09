@@ -3,6 +3,7 @@
 
 use serde::{Serialize, Deserialize};
 use crate::metrics::Metric;
+use crate::config::ExecutionMode;
 
 use super::traits::{VectorIndex, IndexType};
 use super::{FlatIndex, FlatConfig, HnswIndex, HnswConfig, IvfIndex, IvfConfig};
@@ -12,16 +13,28 @@ use super::{FlatIndex, FlatConfig, HnswIndex, HnswConfig, IvfIndex, IvfConfig};
 #[serde(tag = "type")]
 pub enum IndexConfig {
     // Auto-select based on size (default)
-    Auto { metric: Metric },
+    Auto { 
+        metric: Metric,
+        #[serde(default)]
+        mode: ExecutionMode,
+    },
     // Flat index (brute force)
-    Flat { metric: Metric },
+    Flat { 
+        metric: Metric,
+        #[serde(default)]
+        mode: ExecutionMode,
+    },
     // HNSW index
     Hnsw {
         m: usize,
         m_max: usize,
         ef_construction: usize,
+        #[serde(default)]
+        ef_search: usize,  // New: search-time quality parameter
         ml: f32,
         metric: Metric,
+        #[serde(default)]
+        mode: ExecutionMode,
     },
     // IVF index
     Ivf {
@@ -29,12 +42,17 @@ pub enum IndexConfig {
         num_probes: usize,
         max_iterations: usize,
         metric: Metric,
+        #[serde(default)]
+        mode: ExecutionMode,
     },
 }
 
 impl Default for IndexConfig {
     fn default() -> Self {
-        IndexConfig::Auto { metric: Metric::Cosine }
+        IndexConfig::Auto { 
+            metric: Metric::Cosine,
+            mode: ExecutionMode::default(),
+        }
     }
 }
 
@@ -63,28 +81,32 @@ impl IndexConfig {
         
         match index_type {
             IndexType::Flat => {
-                let metric = self.get_metric();
-                Box::new(FlatIndex::new(FlatConfig { metric }))
+                let (metric, mode) = self.get_metric_and_simd();
+                Box::new(FlatIndex::new(FlatConfig { metric, mode }))
             }
             IndexType::Hnsw => {
                 let config = match self {
-                    IndexConfig::Hnsw { m, m_max, ef_construction, ml, metric } => {
+                    IndexConfig::Hnsw { m, m_max, ef_construction, ef_search, ml, metric, mode } => {
                         HnswConfig {
                             m: *m,
                             m_max: *m_max,
                             ef_construction: *ef_construction,
+                            ef_search: if *ef_search == 0 { *ef_construction } else { *ef_search },
                             ml: *ml,
                             metric: *metric,
+                            mode: *mode,
                         }
                     }
                     _ => {
-                        let metric = self.get_metric();
+                        let (metric, mode) = self.get_metric_and_simd();
                         HnswConfig {
                             m: 16,
                             m_max: 32,
                             ef_construction: 200,
+                            ef_search: 200,
                             ml: 1.0 / (16.0_f32).ln(),
                             metric,
+                            mode,
                         }
                     }
                 };
@@ -92,18 +114,20 @@ impl IndexConfig {
             }
             IndexType::Ivf => {
                 let config = match self {
-                    IndexConfig::Ivf { num_clusters, num_probes, max_iterations, metric } => {
+                    IndexConfig::Ivf { num_clusters, num_probes, max_iterations, metric, mode } => {
                         IvfConfig {
                             num_clusters: *num_clusters,
                             num_probes: *num_probes,
                             max_iterations: *max_iterations,
                             metric: *metric,
+                            mode: *mode,
                         }
                     }
                     _ => {
-                        let metric = self.get_metric();
+                        let (metric, mode) = self.get_metric_and_simd();
                         let mut config = IvfConfig::auto(num_vectors);
                         config.metric = metric;
+                        config.mode = mode;
                         config
                     }
                 };
@@ -114,10 +138,19 @@ impl IndexConfig {
     
     fn get_metric(&self) -> Metric {
         match self {
-            IndexConfig::Auto { metric } => *metric,
-            IndexConfig::Flat { metric } => *metric,
+            IndexConfig::Auto { metric, .. } => *metric,
+            IndexConfig::Flat { metric, .. } => *metric,
             IndexConfig::Hnsw { metric, .. } => *metric,
             IndexConfig::Ivf { metric, .. } => *metric,
+        }
+    }
+    
+    fn get_metric_and_simd(&self) -> (Metric, ExecutionMode) {
+        match self {
+            IndexConfig::Auto { metric, mode } => (*metric, *mode),
+            IndexConfig::Flat { metric, mode } => (*metric, *mode),
+            IndexConfig::Hnsw { metric, mode, .. } => (*metric, *mode),
+            IndexConfig::Ivf { metric, mode, .. } => (*metric, *mode),
         }
     }
 }
@@ -137,15 +170,20 @@ mod tests {
     
     #[test]
     fn test_forced_index_type() {
-        let flat_config = IndexConfig::Flat { metric: Metric::Cosine };
+        let flat_config = IndexConfig::Flat { 
+            metric: Metric::Cosine,
+            mode: ExecutionMode::default(),
+        };
         assert_eq!(flat_config.select_type(1_000_000), IndexType::Flat);
         
         let hnsw_config = IndexConfig::Hnsw {
             m: 16,
             m_max: 32,
             ef_construction: 200,
+            ef_search: 200,
             ml: 1.0 / 16.0_f32.ln(),
             metric: Metric::Cosine,
+            mode: ExecutionMode::default(),
         };
         assert_eq!(hnsw_config.select_type(100), IndexType::Hnsw);
     }

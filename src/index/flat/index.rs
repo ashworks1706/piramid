@@ -40,7 +40,7 @@ impl VectorIndex for FlatIndex {
             .iter()
             .filter_map(|id| {
                 vectors.get(id).map(|vec| {
-                    let score = self.config.metric.calculate(query, vec);
+                    let score = self.config.metric.calculate_with_mode(query, vec, self.config.mode);
                     (*id, score)
                 })
             })

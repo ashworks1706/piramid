@@ -12,9 +12,9 @@ pub mod latency;
 
 // `pub use` re-exports: users can do `metrics::cosine_similarity`
 // instead of `metrics::cosine::cosine_similarity`
-pub use cosine::cosine_similarity;
-pub use euclidean::euclidean_distance;
-pub use dot::dot_product;
+pub use cosine::{cosine_similarity, cosine_similarity_with_mode};
+pub use euclidean::{euclidean_distance, euclidean_distance_with_mode, euclidean_distance_squared, euclidean_distance_squared_with_mode};
+pub use dot::{dot_product, dot_product_with_mode};
 pub use latency::{LatencyTracker, time_operation, time_operation_sync};
 
 // Distance/similarity metric for vector comparison.
@@ -32,15 +32,18 @@ pub enum Metric {
 
 impl Metric {
     pub fn calculate(&self, a: &[f32], b: &[f32]) -> f32 {
-        //  `match` must handle ALL variants (exhaustive)
-        // This is great - compiler catches if you add a new variant
+use crate::config::ExecutionMode;
+        self.calculate_with_mode(a, b, ExecutionMode::default())
+    }
+    
+    pub fn calculate_with_mode(&self, a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
         match self {
-            Metric::Cosine => cosine_similarity(a, b),
+            Metric::Cosine => cosine_similarity_with_mode(a, b, mode),
             Metric::Euclidean => {
-                let dist = euclidean_distance(a, b);
+                let dist = euclidean_distance_with_mode(a, b, mode);
                 1.0 / (1.0 + dist)  // flip: distance -> similarity
             }
-            Metric::DotProduct => dot_product(a, b),
+            Metric::DotProduct => dot_product_with_mode(a, b, mode),
         }
     }
 }

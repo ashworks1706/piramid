@@ -15,8 +15,8 @@ impl VectorIndex for HnswIndex {
     }
     
     fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid> {
-        // Use ef = k * 2 as a reasonable default for the search parameter
-        let ef = (k * 2).max(50);
+        // Use configured ef_search for quality control
+        let ef = self.get_ef_search().max(k);
         self.search(query, k, ef, vectors)
     }
     
