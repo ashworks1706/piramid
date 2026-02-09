@@ -149,14 +149,6 @@
 [ ] Provider timeout configuration
 [x] Benchmark to verify 3-5x SIMD speedup target
 
-**Index Algorithms**
-
-[x] HNSW (current default)
-[x] Flat/Brute Force (for small collections <10k vectors)
-[x] IVF (Inverted File Index)
-[ ] Product Quantization (PQ)
-[ ] **HNSW Tombstoning:** Soft-delete nodes without breaking graph connectivity.
-
 **Observability**
 
 [x] Basic `/metrics` endpoint
@@ -177,6 +169,13 @@
 [ ] Startup validation (check integrity on boot)
 [ ] Startup health check (validate all collections load)
 [ ] Duplicate detection (find similar vectors in collection)
+[x] HNSW (current default)
+[x] Flat/Brute Force (for small collections <10k vectors)
+[x] IVF (Inverted File Index)
+[ ] Product Quantization (PQ)
+[ ] **HNSW Tombstoning:** Soft-delete nodes without breaking graph connectivity.
+[ ] are we prefiltering or post filtering why and when 
+
 
 **Resource Management**
 
@@ -329,6 +328,8 @@
 [ ] Custom metrics export
 [ ] Grafana dashboard templates
 
+### Future Considerations
+
 **Additional Features**
 
 [ ] Corrupted file detection + auto-repair
@@ -343,8 +344,6 @@
 [ ] Development mode with auto-reload
 [ ] Verbose debug logging mode
 
-### Future Considerations
-
 **Semantic Cache**
 
 [ ] Semantic matching for LLM responses
@@ -357,6 +356,9 @@
 [ ] MCP server implementation
 [ ] Tools: search_similar, get_document, list_collections, add_document
 [ ] Agent-friendly responses (structured JSON-LD)
+
+
+### Zipy Kernel Integration
 
 **GPU Acceleration**
 
@@ -379,9 +381,3 @@
 [ ] Edge deployment (Cloudflare, Vercel)
 [ ] Offline-first apps
 
-**Other**
-
-[ ] Temporal Vectors (time-travel queries)
-[ ] Privacy Mode (GDPR/HIPAA, encryption)
-[ ] Auto-Pilot (self-tuning, auto-optimization)
-[ ] Contributing guidelines
