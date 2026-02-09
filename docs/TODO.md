@@ -313,75 +313,75 @@
 
 [ ] Email/webhook alerts for errors
 [ ] Disk space alerts
-* [ ] Memory usage alerts
+[ ] Memory usage alerts
 [ ] Index corruption alerts
 [ ] Slow query alerts
 
 **gRPC API**
 
-* [ ] Alternative to REST
-* [ ] Streaming inserts
-* [ ] Bi-directional streaming
+[ ] Alternative to REST
+[ ] Streaming inserts
+[ ] Bi-directional streaming
 
 **Prometheus Integration**
 
-* [ ] Full Prometheus endpoint
-* [ ] Custom metrics export
-* [ ] Grafana dashboard templates
+[ ] Full Prometheus endpoint
+[ ] Custom metrics export
+[ ] Grafana dashboard templates
 
 **Additional Features**
 
-* [ ] Corrupted file detection + auto-repair
-* [ ] Automatic index rebuild on corruption
-* [ ] Fallback to brute-force search if HNSW fails
-* [ ] Circuit breaker for embedding API failures
-* [ ] Soft delete with cleanup
-* [ ] Collection aliases
-* [ ] Per-collection HNSW configuration
-* [ ] Hot reload configuration
-* [ ] Move collection between directories
-* [ ] Development mode with auto-reload
-* [ ] Verbose debug logging mode
+[ ] Corrupted file detection + auto-repair
+[ ] Automatic index rebuild on corruption
+[ ] Fallback to brute-force search if HNSW fails
+[ ] Circuit breaker for embedding API failures
+[ ] Soft delete with cleanup
+[ ] Collection aliases
+[ ] Per-collection HNSW configuration
+[ ] Hot reload configuration
+[ ] Move collection between directories
+[ ] Development mode with auto-reload
+[ ] Verbose debug logging mode
 
 ### Future Considerations
 
 **Semantic Cache**
 
-* [ ] Semantic matching for LLM responses
-* [ ] TTL and LRU eviction
-* [ ] OpenAI/Anthropic integration
-* [ ] Cost savings dashboard
+[ ] Semantic matching for LLM responses
+[ ] TTL and LRU eviction
+[ ] OpenAI/Anthropic integration
+[ ] Cost savings dashboard
 
 **MCP Integration**
 
-* [ ] MCP server implementation
-* [ ] Tools: search_similar, get_document, list_collections, add_document
-* [ ] Agent-friendly responses (structured JSON-LD)
+[ ] MCP server implementation
+[ ] Tools: search_similar, get_document, list_collections, add_document
+[ ] Agent-friendly responses (structured JSON-LD)
 
 **GPU Acceleration**
 
-* [ ] wgpu backend (cross-platform GPU)
-* [ ] Optional CUDA for NVIDIA
-* [ ] Batch search on GPU (10-100x faster)
-* [ ] Local embedding models on GPU
+[ ] wgpu backend (cross-platform GPU)
+[ ] Optional CUDA for NVIDIA
+[ ] Batch search on GPU (10-100x faster)
+[ ] Local embedding models on GPU
 
 **Distributed System**
 
-* [ ] Replication (master-slave, multi-master)
-* [ ] Sharding (horizontal partitioning)
-* [ ] Distributed queries (scatter-gather)
-* [ ] Cluster management
+[ ] Replication (master-slave, multi-master)
+[ ] Sharding (horizontal partitioning)
+[ ] Distributed queries (scatter-gather)
+[ ] Cluster management
 
 **WASM Support**
 
-* [ ] Compile core to WASM
-* [ ] Client-side vector search
-* [ ] Edge deployment (Cloudflare, Vercel)
-* [ ] Offline-first apps
+[ ] Compile core to WASM
+[ ] Client-side vector search
+[ ] Edge deployment (Cloudflare, Vercel)
+[ ] Offline-first apps
 
 **Other**
 
-* [ ] Temporal Vectors (time-travel queries)
-* [ ] Privacy Mode (GDPR/HIPAA, encryption)
-* [ ] Auto-Pilot (self-tuning, auto-optimization)
-* [ ] Contributing guidelines
+[ ] Temporal Vectors (time-travel queries)
+[ ] Privacy Mode (GDPR/HIPAA, encryption)
+[ ] Auto-Pilot (self-tuning, auto-optimization)
+[ ] Contributing guidelines
