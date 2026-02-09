@@ -91,10 +91,21 @@
 - [x] Atomic update (vector + metadata together)
 - [x] Check vector existence by ID (via get)
 - [x] List vector IDs only (without full data) (via list_vectors)
-- [ ] Duplicate detection (find similar vectors in collection)
 - [ ] Implement SIMD/Parallel/Jit/Binary execution actual implementation with cpu detection 
 - [ ] fix query in search folder modularity import
 - [ ] implement actual memory detection for collection 
+
+Codebase Organization
+- [ ] Modularize code into clear layers if not already (API, Service, Storage, Indexing)
+- [ ] No redundant code 
+- [ ] maximize for longetivity naming conventions NOT short-term convenience like search_with_smd or search_width_qualtiy -> optimize for UX experience and clarity instead of short-term dev speed 
+- [ ] make sure folders are organized by domain (e.g. all search-related code in search/ folder) and not by technical layer (e.g. not api/search.rs, service/search.rs, etc.)
+- [ ] make sure utility files are seperate and categorized 
+
+**Configuration**
+- [ ] Config file support (YAML)
+- [ ] Config hot reload (limited subset)
+- [ ] Environment variable documentation
 
 **Validation & Safety**
 - [x] Dimension consistency checks per collection
@@ -107,20 +118,15 @@
 
 **Embeddings Optimization**
 - [x] Native batch API support (OpenAI/Ollama - 2x-10x speedup)
+- [ ] remove prebuilt embedding functionality for now
+- [ ] Local embedding model support (e.g. sentence-transformers)
+- [ ] native batch api support for hugginface as well (make sure )
 - [ ] Request metrics (count, latency, tokens, cost)
 - [x] Type-safe config (enum-based instead of strings)
 - [x] Retry with exponential backoff
 - [ ] Provider timeout configuration
 - [x] Benchmark to verify 3-5x SIMD speedup target
 - [ ] implement actual batch api for embedding providers
-
-**Index Management**
-- [ ] Rebuild index command
-- [ ] Index compaction (remove deleted vectors)
-- [x] Index statistics endpoint
-- [x] HNSW memory usage calculation
-- [ ] Startup validation (check integrity on boot)
-- [ ] Startup health check (validate all collections load)
 
 **Index Algorithms**
 - [x] HNSW (current default)
@@ -138,6 +144,21 @@
 - [ ] Server version endpoint
 - [ ] Slow query logging
 
+**HTTP & Networking**
+- [ ] HTTP/2 support
+- [ ] Compression (gzip/brotli) for responses
+- [ ] Keep-alive connection management
+- [x] Configurable max request body size
+
+ **Index Management**
+- [ ] Rebuild index function
+- [ ] Index compaction (remove deleted vectors)
+- [x] Index statistics endpoint
+- [x] HNSW memory usage calculation
+- [ ] Startup validation (check integrity on boot)
+- [ ] Startup health check (validate all collections load)
+- [ ] Duplicate detection (find similar vectors in collection)
+
 **Resource Management**
 - [ ] Max vectors per collection
 - [ ] Storage size limits per collection
@@ -147,23 +168,12 @@
 - [ ] Automatic cleanup of orphaned files
 - [ ] Data compaction (reclaim space from deletes)
 
-**Configuration**
-- [ ] Config file support (YAML/TOML)
-- [ ] Config hot reload (limited subset)
-- [ ] Environment variable documentation
-
-**HTTP & Networking**
-- [ ] HTTP/2 support
-- [ ] Compression (gzip/brotli) for responses
-- [ ] Keep-alive connection management
-- [x] Configurable max request body size
-
 **Security Basics**
 - [ ] API key authentication
 - [ ] Security headers (CORS, CSP, HSTS)
 - [ ] TLS/SSL support
 
- 
+
 
 ### Documentation & Testing
 
