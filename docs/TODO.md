@@ -541,60 +541,25 @@
 
 [ ] Agent-friendly responses (structured JSON-LD)
 
-### Zipy Kernel Integration (GPU Acceleration)
+### [Zipy](https://github.com/ashworks1706/zipy) development begins
 
-**Core Infrastructure**
+### Zipy Integration (GPU Acceleration)
 
-[ ] WGPU Initialization: Initialize wgpu instance, select best adapter (Vulkan/Metal/DX12), and request device/queue.
+[ ] Dependency Integration: Add zipy crate to Cargo.toml as an optional feature.
 
-[ ] Device Selection Strategy: Logic to prioritize Discrete GPU > Integrated GPU > CPU Fallback.
+[ ] Compute Backend Enum: Refactor ExecutionMode to support Zipy(Arc<ZipyEngine>) variant.
 
-[ ] **Headless Support:** Ensure engine runs on servers without displays (common CI/CD failure point).
+[ ] Startup Handshake: Implement logic to attempt Zipy initialization on boot and fallback to CPU if failed.
 
-[ ] **Async Runtime Integration:** Ensure GPU futures play nicely with Tokio/Axum (non-blocking).
+[ ] VRAM Hydration: Utility to load existing on-disk vectors into GPU VRAM on startup.
 
-**Memory Management**
+[ ] Dual-Write Architecture: Ensure `insert_vector` writes to both Disk (Persistence) and Zipy (VRAM).
 
-[ ] Staging Belt: Implement efficient CPU -> GPU data transfer (avoiding stalls).
+[ ] Search Router: Implement logic to route `POST /search` requests to Zipy when active.
 
-[ ] Unified Buffer Allocator: Custom allocator to manage VRAM blocks for vectors (reducing fragmentation).
+[ ] Fallback Circuit Breaker: Auto-switch to CPU search if Zipy returns OOM or timeout errors.
 
-[ ] Zero-Copy checks: Verify shared memory support on Apple Silicon (M1/M2/M3).
+[ ] Health Check Extension: Add GPU status (temperature, memory usage) to `/api/health`.
 
-[ ] VRAM Budgeting: Runtime tracker for GPU memory usage with eviction policies.
 
-**Compute Kernels (WGSL Shaders)**
 
-[ ] Dot Product: Optimized f32 dot product shader (workgroup shared memory).
-
-[ ] Cosine Similarity: Fused normalization + dot product shader.
-
-[ ] Euclidean Distance: L2 distance squared shader.
-
-[ ] FP16 Support: Half-precision shader variants for 2x throughput on supported cards.
-
-**Search Operations**
-
-[ ] Brute Force Search (Exact): "Flat" index implementation on GPU (Baseline benchmark).
-
-[ ] Batch Search: Dispatch command encoder for multiple query vectors in one pass.
-
-[ ] Parallel Reduction: GPU-side "Top-K" reduction (finding max values without copying full array to CPU).
-
-[ ] Bitonic Sort: Implement bitonic sort shader for sorting scores directly on VRAM.
-
-**Hybrid Indexing Support**
-
-[ ] GPU-Accelerated IVF: Offload "Find Nearest Centroid" step to GPU during index build.
-
-[ ] K-Means on GPU: Implement K-Means clustering shader for faster IVF training.
-
-### Zipy Agent Engine
-
-[ ] Model Loader: Load LLM weights into reserved VRAM.
-
-[ ] KV Cache Manager: Manage conversational memory blocks (PagedAttention).
-
-[ ] Fused Retrieval: Zero-Copy feed of search results into Model Context.
-
-[ ] Token Generation: Sampling loop and probability distribution logic.
