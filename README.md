@@ -26,8 +26,6 @@ Piramid is a vector database built in Rust, designed specifically for AI agent a
 - OpenAI, Ollama (local) support
 - Purpose-built with MCPs for LLM applications
 - Visual interface for management
-- GPU Acceleration for faster search
-- Semantic Caching on LLM API costs
 - WASM support for running in browser/edge/mobile
 
  
