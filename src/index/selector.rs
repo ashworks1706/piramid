@@ -158,10 +158,19 @@ impl IndexConfig {
     
     fn get_metric_and_simd(&self) -> (Metric, ExecutionMode) {
         match self {
-            IndexConfig::Auto { metric, mode } => (*metric, *mode),
-            IndexConfig::Flat { metric, mode } => (*metric, *mode),
+            IndexConfig::Auto { metric, mode, .. } => (*metric, *mode),
+            IndexConfig::Flat { metric, mode, .. } => (*metric, *mode),
             IndexConfig::Hnsw { metric, mode, .. } => (*metric, *mode),
             IndexConfig::Ivf { metric, mode, .. } => (*metric, *mode),
+        }
+    }
+
+    pub fn search_config(&self) -> SearchConfig {
+        match self {
+            IndexConfig::Auto { search, .. } => search.clone(),
+            IndexConfig::Flat { search, .. } => search.clone(),
+            IndexConfig::Hnsw { search, .. } => search.clone(),
+            IndexConfig::Ivf { search, .. } => search.clone(),
         }
     }
 }
