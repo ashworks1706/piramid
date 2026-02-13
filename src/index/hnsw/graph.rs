@@ -407,7 +407,8 @@ mod tests {
 
     #[test]
     fn test_hnsw_insert_and_search() {
-        let config = HnswConfig::default();
+        let mut config = HnswConfig::default();
+        config.metric = crate::metrics::Metric::Euclidean;
         let mut index = HnswIndex::new(config);
         let mut vectors = HashMap::new();
 
@@ -424,7 +425,16 @@ mod tests {
         let results = index.search(&query, 3, 50, &vectors);
 
         assert!(results.len() <= 3);
-        assert!(results.contains(&ids[5])); // Should find the closest match
+        // Determine the true nearest by brute force and ensure it's present
+        let (nearest_id, _) = vectors
+            .iter()
+            .map(|(id, vec)| {
+                let dist = config.metric.calculate(&query, vec, config.mode);
+                (id, dist)
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .unwrap();
+        assert!(results.contains(nearest_id));
     }
 
     #[test]
@@ -456,8 +466,6 @@ mod tests {
         assert_eq!(index.nodes.len(), 0);
     }
 }
-
-
 
 
 

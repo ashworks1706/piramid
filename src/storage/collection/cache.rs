@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use uuid::Uuid;
-
 use crate::storage::collection::operations;
 use crate::storage::collection::storage::Collection;
 
