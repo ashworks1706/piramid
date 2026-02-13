@@ -30,7 +30,7 @@ pub fn search_collection(
 ) -> Vec<Hit> {
     // Build vector map once for the index to use.
     let vectors = storage.get_vectors();
-    let expansion = storage.config.search.filter_expansion.max(1);
+    let expansion = storage.config.index.search_config().filter_expansion.max(1);
     let search_k = if params.filter.is_some() { k.saturating_mul(expansion) } else { k };
     let mode = params.mode;
 

@@ -63,4 +63,10 @@ impl ParallelismConfig {
             ParallelismMode::Fixed(n) => n,
         }
     }
+
+    pub fn with_num_threads(mut self, n: usize) -> Self {
+        self.mode = ParallelismMode::Fixed(n);
+        self.parallel_search = n > 1;
+        self
+    }
 }
