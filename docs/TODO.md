@@ -1,5 +1,6 @@
 ### Foundation
 
+
 [x] Vector storage (HashMap + bincode persistence)
 
 [x] UUID-based IDs, error handling
@@ -9,6 +10,7 @@
 [ ] **Schema Versioning:** Add version headers to storage files to allow future data migration.
 
 ### Search & Similarity
+
 
 [x] Similarity metrics (cosine, euclidean, dot product)
 
@@ -20,6 +22,7 @@
 
 ### HTTP Server & Embeddings
 
+
 [x] REST API (axum), Collections/Vectors CRUD
 
 [x] Dashboard (Next.js - placeholder)
@@ -29,6 +32,7 @@
 [x] Batch embedding endpoints
 
 ### Performance & Indexing
+
 
 [x] Execution mode configuration (Auto, SIMD, Scalar)
 
@@ -76,6 +80,7 @@
 
 **Error Handling**
 
+
 [x] Replace ALL `.unwrap()` with proper error handling
 
 [x] Graceful degradation for failures
@@ -91,6 +96,7 @@
 [x] HTTP error response mapping
 
 **Write-Ahead Log (WAL)**
+
 
 [x] Append-only log for all mutations (insert/update/delete)
 
@@ -108,6 +114,7 @@
 
 **Graceful Shutdown**
 
+
 [x] Handle SIGTERM/SIGINT signals
 
 [x] Flush all pending writes to disk
@@ -122,6 +129,7 @@
 
 **Concurrent Safety**
 
+
 [x] Lock-free or fine-grained locking for writes
 
 [x] Deadlock detection/prevention
@@ -132,6 +140,7 @@
 
 **Batch Operations**
 
+
 [x] Batch insert API (10k inserts in <1s)
 
 [x] Batch search (multiple queries in one request)
@@ -141,6 +150,7 @@
 [x] Bulk delete
 
 **Collection Management**
+
 
 [x] Delete collection (cascade remove all data)
 
@@ -155,6 +165,7 @@
 [x] Storage usage per collection
 
 **Vector Operations**
+
 
 [x] Upsert (insert or update)
 
@@ -176,6 +187,7 @@
 
 **Codebase Organization**
 
+
 [x] Modularize code into clear layers if not already (API, Service, Storage, Indexing)
 
 [x] No redundant code
@@ -190,15 +202,17 @@
 
 **Configuration**
 
+
 [ ] Config file support (YAML)
 
-[x] make sure config is universal and accessed from one point 
+[ ] make sure config is universal and accessed from one point 
 
 [ ] Config hot reload (limited subset)
 
 [ ] Environment variable documentation
 
 **Validation & Safety**
+
 
 [x] Dimension consistency checks per collection
 
@@ -216,15 +230,14 @@
 
 **Embeddings Optimization**
 
+
 [x] Native batch API support (OpenAI/Ollama - 2x-10x speedup)
 
 [ ] remove prebuilt embedding functionality for now
 
-[ ] Local embedding model support (e.g. sentence-transformers)
+[ ] CPU Local Embeddings support (e.g. sentence-transformers)
 
 [ ] native batch api support for hugginface (make sure )
-
-[ ] implement actual batch api for embedding providers
 
 [ ] Request metrics (count, latency, tokens, cost)
 
@@ -237,6 +250,7 @@
 [x] Benchmark to verify 3-5x SIMD speedup target
 
 **Observability**
+
 
 [x] Basic `/metrics` endpoint
 
@@ -255,6 +269,7 @@
 [ ] Slow query logging
 
 **Index Management**
+
 
 [ ] Rebuild index function
 
@@ -276,11 +291,11 @@
 
 [x] IVF (Inverted File Index)
 
-[ ] Product Quantization (PQ)
+[ ] Product Quantization (PQ) (CPU Compression)
 
-[ ] **HNSW Tombstoning:** Soft-delete nodes without breaking graph connectivity.
+[ ] HNSW Tombstoning: Soft-delete nodes without breaking graph connectivity.
 
-[ ] are we prefiltering or post filtering why and when 
+[ ] Implement HNSW Pre-filtering (Bitmap visitor) 
 
 
 **Resource Management**
@@ -301,6 +316,7 @@
 
 **HTTP & Networking**
 
+
 [ ] HTTP/2 support
 
 [ ] Compression (gzip/brotli) for responses
@@ -311,6 +327,7 @@
 
 **Security Basics**
 
+
 [ ] API key authentication
 
 [ ] Security headers (CORS, CSP, HSTS)
@@ -320,6 +337,7 @@
 ### Documentation & Testing
 
 **Documentation**
+
 
 [ ] `docs/API.md` - Interactive API docs (Swagger/OpenAPI)
 
@@ -337,9 +355,11 @@
 
 **Launch Prep**
 
+
 [ ] dashboard full update and revamp
 
 **CI/CD**
+
 
 [x] GitHub Actions CI pipeline
 
@@ -459,8 +479,6 @@
 
 [ ] Multi-tenant isolation
 
-[ ] Role-based access control (RBAC)
-
 [ ] Collection-level permissions
 
 [ ] Rate limiting & quotas
@@ -479,7 +497,8 @@
 
 **Monitoring & Alerting**
 
-[ ] Email/webhook alerts for errors
+
+[ ] Email alerts for errors
 
 [ ] Disk space alerts
 
@@ -488,22 +507,6 @@
 [ ] Index corruption alerts
 
 [ ] Slow query alerts
-
-**gRPC API**
-
-[ ] Alternative to REST
-
-[ ] Streaming inserts
-
-[ ] Bi-directional streaming
-
-**Prometheus Integration**
-
-[ ] Full Prometheus endpoint
-
-[ ] Custom metrics export
-
-[ ] Grafana dashboard templates
 
 ### Future Considerations
 
@@ -521,8 +524,6 @@
 
 [ ] Collection aliases
 
-[ ] Per-collection HNSW configuration
-
 [ ] Hot reload configuration
 
 [ ] Move collection between directories
@@ -531,15 +532,6 @@
 
 [ ] Verbose debug logging mode
 
-**Semantic Cache**
-
-[ ] Semantic matching for LLM responses
-
-[ ] TTL and LRU eviction
-
-[ ] OpenAI/Anthropic integration
-
-[ ] Cost savings dashboard
 
 **MCP Integration**
 
@@ -549,35 +541,25 @@
 
 [ ] Agent-friendly responses (structured JSON-LD)
 
+### [Zipy](https://github.com/ashworks1706/zipy) development begins
 
-### Zipy Kernel Integration
+**Zipy Integration (GPU Acceleration)**
 
-**GPU Acceleration**
+[ ] Dependency Integration: Add zipy crate to Cargo.toml as an optional feature.
 
-[ ] wgpu backend (cross-platform GPU)
+[ ] Compute Backend Enum: Refactor ExecutionMode to support Zipy(Arc<ZipyEngine>) variant.
 
-[ ] Optional CUDA for NVIDIA
+[ ] Startup Handshake: Implement logic to attempt Zipy initialization on boot and fallback to CPU if failed.
 
-[ ] Batch search on GPU (10-100x faster)
+[ ] VRAM Hydration: Utility to load existing on-disk vectors into GPU VRAM on startup.
 
-[ ] Local embedding models on GPU
+[ ] Dual-Write Architecture: Ensure `insert_vector` writes to both Disk (Persistence) and Zipy (VRAM).
 
-**Distributed System**
+[ ] Search Router: Implement logic to route `POST /search` requests to Zipy when active.
 
-[ ] Replication (master-slave, multi-master)
+[ ] Fallback Circuit Breaker: Auto-switch to CPU search if Zipy returns OOM or timeout errors.
 
-[ ] Sharding (horizontal partitioning)
+[ ] Health Check Extension: Add GPU status (temperature, memory usage) to `/api/health`.
 
-[ ] Distributed queries (scatter-gather)
 
-[ ] Cluster management
 
-**WASM Support**
-
-[ ] Compile core to WASM
-
-[ ] Client-side vector search
-
-[ ] Edge deployment (Cloudflare, Vercel)
-
-[ ] Offline-first apps
