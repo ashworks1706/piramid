@@ -26,7 +26,7 @@ impl Default for SearchParams<'_> {
 pub fn search_collection(
     storage: &Collection,
     query: &[f32],
-    k: usize,
+    k: usize, 
     metric: Metric,
     params: SearchParams<'_>,
 ) -> Vec<Hit> {
@@ -136,7 +136,7 @@ mod tests {
                 filter_overfetch_override: None,
             };
 
-            let results = search_collection(&storage, &[1.0, 0.0, 0.0], 5, Metric::Cosine, params);
+            let results = search_collection(&storage, &[1.0, 0.0, 0.0][..], 5, Metric::Cosine, params);
             assert_eq!(results.len(), 1);
             assert_eq!(results[0].text, "rust doc");
         }
