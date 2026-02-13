@@ -56,6 +56,7 @@ pub fn create_router(state: SharedState) -> Router {
         // Search (POST because we're sending a vector in body)
         .route("/api/collections/{collection}/search", post(handlers::search_vectors))
         .route("/api/collections/{collection}/search/batch", post(handlers::batch_search_vectors))
+        .route("/api/collections/{collection}/search/range", post(handlers::range_search_vectors))
         
         // Embedding endpoints
         .route("/api/collections/{collection}/embed", post(handlers::embed_text))

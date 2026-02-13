@@ -24,7 +24,7 @@
 
 **Configuration**
 
-[ ] Config file support (YAML)
+[x] Config file support (YAML/JSON)
 
 [ ] make sure config is universal and accessed from one point 
 
@@ -50,15 +50,15 @@
 
 **Observability**
 
-[ ] Structured logging with tracing crate
+[x] Structured logging with tracing crate
 
-[ ] Request ID for tracing
+[x] Request ID for tracing
 
 [ ] Enhanced health checks (storage status, index health, disk space)
 
 [ ] Server version endpoint
 
-[ ] Slow query logging
+[x] Slow query logging
 
 **Index Management**
 
@@ -335,6 +335,5 @@
 [ ] Fallback Circuit Breaker: Auto-switch to CPU search if Zipy returns OOM or timeout errors.
 
 [ ] Health Check Extension: Add GPU status (temperature, memory usage) to `/api/health`.
-
 
 

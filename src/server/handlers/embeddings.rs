@@ -1,4 +1,4 @@
-use axum::{extract::{Path, State}, response::Json};
+use axum::{extract::{Path, State, Extension}, response::Json};
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 use crate::{Metric, Document};
@@ -121,6 +121,7 @@ pub async fn embed_batch(
 pub async fn search_by_text(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
+    Extension(request_id): Extension<crate::server::request_id::RequestId>,
     Json(req): Json<TextSearchRequest>,
 ) -> Result<Json<SearchResponse>> {
     if state.shutting_down.load(Ordering::Relaxed) {
@@ -135,6 +136,15 @@ pub async fn search_by_text(
     let response = embedder.embed(&req.query).await?;
 
     let metric = parse_metric(req.metric);
+    let effective_search = crate::server::handlers::vectors::apply_search_overrides(
+        state.collections.get(&collection)
+            .map(|c| c.read().config().search)
+            .unwrap_or_default(),
+        req.ef,
+        req.nprobe,
+        req.overfetch,
+        req.preset.clone(),
+    );
 
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
@@ -148,7 +158,12 @@ pub async fn search_by_text(
             &response.embedding,
             req.k,
             metric,
-            crate::SearchParams::default(),
+            crate::SearchParams {
+                mode: storage.config().execution,
+                filter: None,
+                filter_overfetch_override: req.overfetch,
+                search_config_override: Some(effective_search),
+            },
         )
         .into_iter()
         .map(|r| HitResponse {
@@ -159,6 +174,14 @@ pub async fn search_by_text(
         })
         .collect();
     let duration = start.elapsed();
+    if duration.as_millis() > state.slow_query_ms {
+        tracing::warn!(
+            collection=%collection,
+            request_id = request_id.0.as_str(),
+            elapsed_ms = duration.as_millis(),
+            "slow_text_search"
+        );
+    }
     
     // Record latency
     if let Some(tracker) = state.latency_tracker.get(&collection) {

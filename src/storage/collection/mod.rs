@@ -86,6 +86,17 @@ impl Collection {
         crate::search::search_batch_collection(self, queries, k, metric, params)
     }
 
+    pub fn search_batch_with_params(&self, queries: &[Vec<f32>], k: usize, metric: Metric, params: crate::search::SearchParams) -> Vec<Vec<Hit>> {
+        let mut effective_params = params;
+        if matches!(effective_params.mode, crate::config::ExecutionMode::Auto) {
+            effective_params.mode = self.config().execution;
+        }
+        if effective_params.search_config_override.is_none() {
+            effective_params.search_config_override = Some(self.config.search);
+        }
+        crate::search::search_batch_collection(self, queries, k, metric, effective_params)
+    }
+
     pub fn get_vectors(&self) -> &HashMap<Uuid, Vec<f32>> {
         self.vectors_view()
     }
