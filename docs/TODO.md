@@ -222,7 +222,7 @@
 
 **Advanced Search**
 
-[ ] Range search (distance threshold instead of top-k)
+[x] Range search (distance threshold instead of top-k)
 
 [ ] Recommendation API (similar to these IDs, not those)
 
@@ -335,5 +335,4 @@
 [ ] Fallback Circuit Breaker: Auto-switch to CPU search if Zipy returns OOM or timeout errors.
 
 [ ] Health Check Extension: Add GPU status (temperature, memory usage) to `/api/health`.
-
 
