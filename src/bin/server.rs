@@ -17,12 +17,7 @@ async fn main() {
     // Optional embedding configuration
     let embedding_provider = std::env::var("EMBEDDING_PROVIDER").ok();
     let embedding_model = std::env::var("EMBEDDING_MODEL").ok();
-    let app_config = piramid::AppConfig::from_env();
-    if let Err(e) = app_config.validate() {
-        eprintln!("Invalid configuration: {}", e);
-        std::process::exit(1);
-    }
-    println!("Using configuration: {:?}", app_config);
+    let app_config = piramid::config::loader::load_app_config();
     
     // Create shared state with optional embedder
     let state = if let Some(provider) = embedding_provider {
