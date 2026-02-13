@@ -13,7 +13,7 @@ use crate::storage::document::Document;
 use crate::storage::metadata::CollectionMetadata;
 use crate::quantization::QuantizedVector;
 use super::{CollectionOpenOptions, storage::Collection};
-use super::persistence::PersistenceService;
+use super::persistence::{load_wal_meta, PersistenceService};
 
 pub struct CollectionBuilder;
 
@@ -63,44 +63,44 @@ impl CollectionBuilder {
             None => config.index.create_index(index.len())
         };
         
+        let min_seq = if config.wal.enabled {
+            load_wal_meta(path)?
+        } else {
+            0
+        };
+        let next_seq = min_seq + 1;
+
         let wal_path = get_wal_path(path);
         let wal = if config.wal.enabled {
-            Wal::new(wal_path.into())?
+            Wal::new(wal_path.into(), next_seq)?
         } else {
-            Wal::disabled(wal_path.into())?
+            Wal::disabled(wal_path.into(), next_seq)?
         };
         let persistence = PersistenceService::new(wal);
         
         let wal_entries = if config.wal.enabled {
-            persistence.wal.replay()?
+            persistence.wal.replay(min_seq)?
         } else {
             Vec::new()
         };
         
         if !wal_entries.is_empty() {
-        let mut temp_storage = Collection {
-            data_file: file,
-            mmap,
-            index,
-            vector_index,
-            vector_cache: HashMap::new(),
-            config: config.clone(),
-            metadata,
-            path: path.to_string(),
-            persistence,
-        };
+            let mut temp_storage = Collection {
+                data_file: file,
+                mmap,
+                index,
+                vector_index,
+                vector_cache: HashMap::new(),
+                config: config.clone(),
+                metadata,
+                path: path.to_string(),
+                persistence,
+            };
             
-        Self::replay_wal(&mut temp_storage, wal_entries)?;
-        temp_storage.rebuild_vector_cache();
+            Self::replay_wal(&mut temp_storage, wal_entries)?;
+            temp_storage.rebuild_vector_cache();
             
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            temp_storage.persistence.wal.checkpoint(timestamp)?;
-            super::persistence::save_index(&temp_storage)?;
-            super::persistence::save_vector_index(&temp_storage)?;
-            temp_storage.persistence.wal.truncate()?;
+            super::persistence::checkpoint(&mut temp_storage)?;
             
             return Ok(temp_storage);
         }
@@ -129,7 +129,7 @@ impl CollectionBuilder {
     fn replay_wal(storage: &mut Collection, entries: Vec<WalEntry>) -> Result<()> {
         for entry in entries {
             match entry {
-                WalEntry::Insert { id, vector, text, metadata } => {
+                WalEntry::Insert { id, vector, text, metadata, .. } => {
                     let vec_entry = Document {
                         id,
                         vector: QuantizedVector::from_f32(&vector),
@@ -138,7 +138,7 @@ impl CollectionBuilder {
                     };
                     let _ = super::operations::insert_internal(storage, vec_entry);
                 }
-                WalEntry::Update { id, vector, text, metadata } => {
+                WalEntry::Update { id, vector, text, metadata, .. } => {
                     super::operations::delete_internal(storage, &id);
                     let vec_entry = Document {
                         id,
@@ -148,7 +148,7 @@ impl CollectionBuilder {
                     };
                     let _ = super::operations::insert_internal(storage, vec_entry);
                 }
-                WalEntry::Delete { id } => {
+                WalEntry::Delete { id, .. } => {
                     super::operations::delete_internal(storage, &id);
                 }
                 WalEntry::Checkpoint { .. } => {}

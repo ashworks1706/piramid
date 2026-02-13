@@ -2,19 +2,18 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
-use dashmap::mapref::entry;
-
 use crate::error::Result;
 use super::entry::WalEntry;
 
 pub struct Wal {
     file: Option<BufWriter<File>>,
     path: PathBuf,
-    next_seq: u64,
+    pub next_seq: u64,
 }
 
 impl Wal {
-    pub fn new(path: PathBuf) -> Result<Self> {
+    /// Create a WAL writer starting at the provided sequence.
+    pub fn new(path: PathBuf, next_seq: u64) -> Result<Self> {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -22,22 +21,59 @@ impl Wal {
         Ok(Wal {
             file: Some(BufWriter::new(file)),
             path,
-            next_seq: 0,
+            next_seq,
         })
     }
-
-
     
-    pub fn disabled(path: PathBuf) -> Result<Self> {
+    /// Disabled WAL (noop) with a sequence counter for compatibility.
+    pub fn disabled(path: PathBuf, next_seq: u64) -> Result<Self> {
         Ok(Wal {
             file: None,
             path,
-            next_seq: 0,
+            next_seq,
         })
     }
 
+    /// Replay entries with seq greater than `min_seq`.
+    pub fn replay(&self, min_seq: u64) -> Result<Vec<WalEntry>> {
+        if self.file.is_none() {
+            return Ok(Vec::new());
+        }
+        
+        let file = File::open(&self.path)?;
+        let reader = BufReader::new(file);
+        let mut entries = Vec::new();
+        
+        for line in reader.lines() {
+            let line = line?;
+            if line.is_empty() {
+                continue;
+            }
+            let entry: WalEntry = serde_json::from_str(&line)?;
+            let entry_seq = match &entry {
+                WalEntry::Insert { seq, .. }
+                | WalEntry::Update { seq, .. }
+                | WalEntry::Delete { seq, .. }
+                | WalEntry::Checkpoint { seq, .. } => *seq,
+            };
+            if entry_seq <= min_seq {
+                continue;
+            }
+            entries.push(entry);
+        }
+        
+        Ok(entries)
+    }
+
     pub fn log(&mut self, entry: &mut WalEntry) -> Result<()> {
-        entry.seq = self.next_seq;
+        match entry {
+            WalEntry::Insert { seq, .. }
+            | WalEntry::Update { seq, .. }
+            | WalEntry::Delete { seq, .. }
+            | WalEntry::Checkpoint { seq, .. } => {
+                *seq = self.next_seq;
+            }
+        }
         if let Some(file) = &mut self.file {
             let json = serde_json::to_string(entry)?;
             writeln!(file, "{}", json)?;
@@ -47,31 +83,6 @@ impl Wal {
         Ok(())
     }
 
-    pub fn replay(&self, min_seq: u64) -> Result<Vec<WalEntry>> {
-        if self.file.is_none() {
-            return Ok(Vec::new());
-        }
-
-
-        
-        let file = File::open(&self.path)?;
-        let reader = BufReader::new(file);
-        let mut entries = Vec::new();
-        
-        for line in reader.lines() {
-            let line = line?;
-            if line.is_empty(){
-                continue;
-            }
-            let entry: WalEntry = serde_json::from_str(&line)?;
-            if entry.seq <= min_seq {
-                entries.push(entry);
-            }
-        }
-        
-        Ok(entries)
-    }
-
     pub fn checkpoint(&mut self, timestamp: u64) -> Result<()> {
         let mut entry = WalEntry::Checkpoint { timestamp, seq: 0 };
         self.log(&mut entry)?;
@@ -79,15 +90,18 @@ impl Wal {
     }
     
     pub fn rotate(&mut self) -> Result<()> {
-        // close current writer 
+        if self.file.is_none() {
+            return Ok(());
+        }
+        // Drop current writer to release handle
         drop(self.file.take());
-        // open fresh empty file 
+        // Open a fresh, truncated WAL file
         let file = OpenOptions::new()
-            .create(true)
             .write(true)
+            .create(true)
             .truncate(true)
             .open(&self.path)?;
-        file.sync_all()?; // ensure truncation hits disk 
+        file.sync_all()?;
         self.file = Some(BufWriter::new(file));
         Ok(())
     }

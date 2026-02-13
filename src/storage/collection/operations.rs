@@ -61,12 +61,14 @@ pub fn delete_internal(storage: &mut Collection, id: &Uuid) {
 
 pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     let vector = entry.get_vector();
-    storage.persistence.wal.log(&WalEntry::Insert { 
+    let mut wal_entry = WalEntry::Insert { 
         id: entry.id, 
         vector,
         text: entry.text.clone(),
-        metadata: entry.metadata.clone() 
-    })?;
+        metadata: entry.metadata.clone(),
+        seq: 0,
+    };
+    storage.persistence.wal.log(&mut wal_entry)?;
     
     super::persistence::save_index(storage)?;
     storage.track_operation()?;
@@ -78,12 +80,14 @@ pub fn upsert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     let id = entry.id;
     if storage.index.contains_key(&id) {
         let vector = entry.get_vector();
-        storage.persistence.wal.log(&WalEntry::Update {
+        let mut wal_entry = WalEntry::Update {
             id,
             vector,
             text: entry.text.clone(),
-            metadata: entry.metadata.clone()
-        })?;
+            metadata: entry.metadata.clone(),
+            seq: 0,
+        };
+        storage.persistence.wal.log(&mut wal_entry)?;
         
         delete_internal(storage, &id);
         insert_internal(storage, entry)?;
@@ -101,12 +105,14 @@ pub fn insert_batch(storage: &mut Collection, entries: Vec<Document>) -> Result<
     
     for entry in &entries {
         let vector = entry.get_vector();
-        storage.persistence.wal.log(&WalEntry::Insert {
+        let mut wal_entry = WalEntry::Insert {
             id: entry.id,
             vector,
             text: entry.text.clone(),
-            metadata: entry.metadata.clone()
-        })?;
+            metadata: entry.metadata.clone(),
+            seq: 0,
+        };
+        storage.persistence.wal.log(&mut wal_entry)?;
     }
     
     let mut serialized: Vec<(Uuid, Vec<u8>)> = Vec::with_capacity(entries.len());
@@ -156,7 +162,8 @@ pub fn insert_batch(storage: &mut Collection, entries: Vec<Document>) -> Result<
 
 pub fn delete(storage: &mut Collection, id: &Uuid) -> Result<bool> {
     if storage.index.contains_key(id) {
-        storage.persistence.wal.log(&WalEntry::Delete { id: *id })?;
+        let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
+        storage.persistence.wal.log(&mut wal_entry)?;
         
         delete_internal(storage, id);
         super::persistence::save_index(storage)?;
@@ -173,7 +180,8 @@ pub fn delete_batch(storage: &mut Collection, ids: &[Uuid]) -> Result<usize> {
     
     for id in ids {
         if storage.index.contains_key(id) {
-            storage.persistence.wal.log(&WalEntry::Delete { id: *id })?;
+            let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
+            storage.persistence.wal.log(&mut wal_entry)?;
         }
     }
     
@@ -197,12 +205,14 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
     if let Some(entry) = get(storage, id) {
         let vector = entry.get_vector();
         
-        storage.persistence.wal.log(&WalEntry::Update {
+        let mut wal_entry = WalEntry::Update {
             id: *id,
             vector,
             text: entry.text.clone(),
-            metadata: metadata.clone()
-        })?;
+            metadata: metadata.clone(),
+            seq: 0,
+        };
+        storage.persistence.wal.log(&mut wal_entry)?;
         
         let mut entry = entry;
         entry.metadata = metadata;
@@ -216,12 +226,14 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
 
 pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> Result<bool> {
     if let Some(entry) = get(storage, id) {
-        storage.persistence.wal.log(&WalEntry::Update {
+        let mut wal_entry = WalEntry::Update {
             id: *id,
             vector: vector.clone(),
             text: entry.text.clone(),
-            metadata: entry.metadata.clone()
-        })?;
+            metadata: entry.metadata.clone(),
+            seq: 0,
+        };
+        storage.persistence.wal.log(&mut wal_entry)?;
         
         let mut entry = entry;
         entry.vector = QuantizedVector::from_f32(&vector);
