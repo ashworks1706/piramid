@@ -96,7 +96,7 @@ impl IndexConfig {
             }
             IndexType::Hnsw => {
                 let config = match self {
-                    IndexConfig::Hnsw { m, m_max, ef_construction, ef_search, ml, metric, mode } => {
+                    IndexConfig::Hnsw { m, m_max, ef_construction, ef_search, ml, metric, mode, .. } => {
                         HnswConfig {
                             m: *m,
                             m_max: *m_max,
@@ -124,7 +124,7 @@ impl IndexConfig {
             }
             IndexType::Ivf => {
                 let config = match self {
-                    IndexConfig::Ivf { num_clusters, num_probes, max_iterations, metric, mode } => {
+                    IndexConfig::Ivf { num_clusters, num_probes, max_iterations, metric, mode, .. } => {
                         IvfConfig {
                             num_clusters: *num_clusters,
                             num_probes: *num_probes,
