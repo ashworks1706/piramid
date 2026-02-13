@@ -12,6 +12,7 @@ pub mod handlers;
 pub mod routes;
 pub mod helpers;
 pub mod metrics;
+pub mod request_id;
 
 pub use state::{AppState, SharedState};
 pub use routes::create_router;

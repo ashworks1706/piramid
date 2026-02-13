@@ -9,12 +9,14 @@ use axum::{
     extract::DefaultBodyLimit,
     routing::{delete, get, post},
     Router,
+    middleware,
 };
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
 use super::handlers;
 use super::state::SharedState;
+use super::request_id::assign_request_id;
 
 // This function wires everything together:
 // 1. Creates route definitions
@@ -63,6 +65,8 @@ pub fn create_router(state: SharedState) -> Router {
         // Middleware layers
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))  // 100MB for batch operations
         .layer(cors)
+        // Assign request IDs to all requests
+        .layer(middleware::from_fn(assign_request_id))
         // State available to all handlers
         .with_state(state)
         // Serve static dashboard files (Next.js export)

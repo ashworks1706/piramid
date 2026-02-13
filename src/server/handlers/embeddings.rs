@@ -10,6 +10,8 @@ use super::super::{
     helpers::{json_to_metadata, metadata_to_json},
 };
 
+// Embedding endpoints: embed text then reuse storage/search flows
+
 // Parse similarity metric from string
 fn parse_metric(s: Option<String>) -> Metric {
     match s.as_deref() {

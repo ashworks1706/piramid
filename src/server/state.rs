@@ -10,7 +10,8 @@ use crate::config::AppConfig;
 
 // Shared application state
 // Each collection is an independent Collection with its own file.
-// DashMap allows concurrent access to different collections without blocking
+// DashMap allows concurrent access to different collections without blocking.
+// Holds config + optional embedder so handlers can access without reloading.
 pub struct AppState {
     pub collections: DashMap<String, Arc<RwLock<Collection>>>,
     pub data_dir: String,
@@ -18,10 +19,11 @@ pub struct AppState {
     pub shutting_down: Arc<AtomicBool>,
     pub latency_tracker: Arc<DashMap<String, LatencyTracker>>,  // Per-collection latency tracking
     pub app_config: AppConfig,
+    pub slow_query_ms: u128,
 }
 
 impl AppState {
-    pub fn new(data_dir: &str, app_config: AppConfig) -> Self {
+    pub fn new(data_dir: &str, app_config: AppConfig, slow_query_ms: u128) -> Self {
         std::fs::create_dir_all(data_dir).ok();
         
         Self {
@@ -31,10 +33,11 @@ impl AppState {
             shutting_down: Arc::new(AtomicBool::new(false)),
             latency_tracker: Arc::new(DashMap::new()),
             app_config,
+            slow_query_ms,
         }
     }
 
-    pub fn with_embedder(data_dir: &str, app_config: AppConfig, embedder: Arc<dyn Embedder>) -> Self {
+    pub fn with_embedder(data_dir: &str, app_config: AppConfig, slow_query_ms: u128, embedder: Arc<dyn Embedder>) -> Self {
         std::fs::create_dir_all(data_dir).ok();
         
         Self {
@@ -44,6 +47,7 @@ impl AppState {
             shutting_down: Arc::new(AtomicBool::new(false)),
             latency_tracker: Arc::new(DashMap::new()),
             app_config,
+            slow_query_ms,
         }
     }
 

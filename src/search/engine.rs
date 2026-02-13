@@ -1,4 +1,5 @@
 // Unified search engine for collections.
+// Wraps vector index search + scoring and optional metadata filtering.
 
 use crate::config::ExecutionMode;
 use crate::metrics::Metric;

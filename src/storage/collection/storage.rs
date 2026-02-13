@@ -35,6 +35,7 @@ impl Collection {
         }
     }
 
+    // Track operations to trigger checkpoints based on WAL config
     pub(super) fn track_operation(&mut self) -> Result<()> {
         let interval_due = if let Some(last) = self.persistence.last_checkpoint() {
             if let Some(interval) = self.config.wal.checkpoint_interval_secs {

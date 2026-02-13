@@ -3,16 +3,30 @@
 use std::sync::Arc;
 use piramid::server::{AppState, create_router};
 use piramid::{EmbeddingConfig, embeddings};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
+    // Structured logging with env-based filter (e.g., RUST_LOG=info,piramid=debug)
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_target(false)
+        .init();
+
     println!(" Piramid Vector Database");
     println!("   Version: {}", env!("CARGO_PKG_VERSION"));
     println!();
     
-    // Config from environment (with sensible defaults)
+    // Load config from environment (validated and logged)
+    let _app_config = piramid::config::loader::load_app_config();
+
+    // Core runtime env vars
     let port = std::env::var("PORT").unwrap_or_else(|_| "6333".to_string());
     let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "./.piramid".to_string());
+    let slow_query_ms: u128 = std::env::var("SLOW_QUERY_MS")
+        .ok()
+        .and_then(|v| v.parse::<u128>().ok())
+        .unwrap_or(500);
     
     // Optional embedding configuration
     let embedding_provider = std::env::var("EMBEDDING_PROVIDER").ok();
@@ -48,21 +62,21 @@ async fn main() {
                 
                 // Wrap with retry logic (3 retries, exponential backoff)
                 let retry_embedder = Arc::new(embeddings::RetryEmbedder::new(embedder));
-                Arc::new(AppState::with_embedder(&data_dir, app_config.clone(), retry_embedder))
+                Arc::new(AppState::with_embedder(&data_dir, app_config.clone(), slow_query_ms, retry_embedder))
             }
             Err(e) => {
                 eprintln!("✗ Embeddings:  FAILED");
                 eprintln!("  Error:       {}", e);
                 eprintln!("  Status:      Running without embedding support");
                 eprintln!();
-                Arc::new(AppState::new(&data_dir, app_config.clone()))
+                Arc::new(AppState::new(&data_dir, app_config.clone(), slow_query_ms))
             }
         }
     } else {
         println!("○ Embeddings:  DISABLED");
         println!("  Configure EMBEDDING_PROVIDER to enable");
         println!();
-        Arc::new(AppState::new(&data_dir, app_config.clone()))
+        Arc::new(AppState::new(&data_dir, app_config.clone(), slow_query_ms))
     };
     
     // Build router with all our routes

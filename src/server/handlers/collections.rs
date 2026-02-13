@@ -16,7 +16,9 @@ pub async fn list_collections(State(state): State<SharedState>) -> Result<Json<C
 
     let mut infos = Vec::new();
     for entry in state.collections.iter() {
+        let lock_start = std::time::Instant::now();
         let storage = entry.value().read();
+        record_lock_read(state.latency_tracker.get(entry.key()).as_deref(), lock_start);
         let meta = storage.metadata();
         infos.push(CollectionInfo {
             name: entry.key().clone(),

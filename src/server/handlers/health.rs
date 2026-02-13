@@ -53,6 +53,13 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
             };
 
         total_vectors += count;
+        let (search_overfetch, hnsw_ef_search, ivf_nprobe) = match &storage.config.index {
+            crate::index::IndexConfig::Auto { search, .. } => (Some(search.filter_overfetch), None, None),
+            crate::index::IndexConfig::Flat { search, .. } => (Some(search.filter_overfetch), None, None),
+            crate::index::IndexConfig::Hnsw { ef_search, search, .. } => (Some(search.filter_overfetch), Some(*ef_search), None),
+            crate::index::IndexConfig::Ivf { num_probes, search, .. } => (Some(search.filter_overfetch), None, Some(*num_probes)),
+        };
+
         collection_metrics.push(CollectionMetrics {
             name: collection_name,
             vector_count: count,
@@ -62,6 +69,9 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
             search_latency_ms,
             lock_read_ms,
             lock_write_ms,
+            search_overfetch,
+            hnsw_ef_search,
+            ivf_nprobe,
         });
 
         let wal_size = std::fs::metadata(&format!("{}.wal.db", storage.path))

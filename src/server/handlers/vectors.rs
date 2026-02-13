@@ -6,6 +6,7 @@ use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use crate::validation;
 use crate::server::metrics::{record_lock_read, record_lock_write};
+use crate::server::types::range::RangeSearchRequest;
 use super::super::{
     state::SharedState,
     types::*,
@@ -21,6 +22,34 @@ fn parse_metric(s: Option<String>) -> Metric {
         Some("dot") | Some("dot_product") => Metric::DotProduct,
         _ => Metric::Cosine,
     }
+}
+
+fn apply_search_overrides(base: crate::config::SearchConfig, req_ef: Option<usize>, req_nprobe: Option<usize>, req_overfetch: Option<usize>, preset: Option<String>) -> crate::config::SearchConfig {
+    let mut cfg = base;
+    // Apply preset first
+    if let Some(p) = preset {
+        match p.to_lowercase().as_str() {
+            "fast" => {
+                cfg.ef = Some(50);
+                cfg.nprobe = Some(1);
+            }
+            "high" => {
+                cfg.ef = Some(400);
+                cfg.nprobe = Some(20);
+            }
+            _ => {} // balanced/default
+        }
+    }
+    if let Some(ef) = req_ef {
+        cfg.ef = Some(ef);
+    }
+    if let Some(nprobe) = req_nprobe {
+        cfg.nprobe = Some(nprobe);
+    }
+    if let Some(of) = req_overfetch {
+        cfg.filter_overfetch = of.max(1);
+    }
+    cfg
 }
 
 // POST /api/collections/:collection/vectors - store a new vector
@@ -427,9 +456,7 @@ pub async fn batch_search_vectors(
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    if let Some(tracker) = state.latency_tracker.get(&collection) {
-        tracker.record_lock_read(lock_start.elapsed());
-    }
+    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
     
     let metric = parse_metric(req.metric);
     

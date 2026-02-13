@@ -1,6 +1,7 @@
+// Maintains the in-memory, dequantized vector cache for a collection.
+// This avoids hitting mmap on every search and keeps search fast.
 use crate::storage::collection::operations;
 use crate::storage::collection::storage::Collection;
-
 pub fn rebuild(collection: &mut Collection) {
     collection.vector_cache.clear();
     for (id, _) in &collection.index {

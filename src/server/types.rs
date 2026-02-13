@@ -116,6 +116,14 @@ pub struct SearchRequest {
     pub k: usize,  // how many results to return
     #[serde(default)]
     pub metric: Option<String>,  // "cosine", "euclidean", "dot"
+    #[serde(default)]
+    pub ef: Option<usize>,
+    #[serde(default)]
+    pub nprobe: Option<usize>,
+    #[serde(default)]
+    pub overfetch: Option<usize>,
+    #[serde(default)]
+    pub preset: Option<String>, // "fast", "balanced", "high"
 }
 
 fn default_k() -> usize { 10 }
@@ -210,6 +218,14 @@ pub struct TextSearchRequest {
     pub k: usize,
     #[serde(default)]
     pub metric: Option<String>,
+    #[serde(default)]
+    pub ef: Option<usize>,
+    #[serde(default)]
+    pub nprobe: Option<usize>,
+    #[serde(default)]
+    pub overfetch: Option<usize>,
+    #[serde(default)]
+    pub preset: Option<String>,
 }
 
 // =============================================================================
@@ -246,6 +262,14 @@ pub struct BatchSearchRequest {
     pub k: usize,
     #[serde(default)]
     pub metric: Option<String>,
+    #[serde(default)]
+    pub ef: Option<usize>,
+    #[serde(default)]
+    pub nprobe: Option<usize>,
+    #[serde(default)]
+    pub overfetch: Option<usize>,
+    #[serde(default)]
+    pub preset: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -254,6 +278,8 @@ pub struct BatchSearchResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<f32>,
 }
+
+pub mod range;
 
 // =============================================================================
 // METRICS
@@ -278,6 +304,9 @@ pub struct CollectionMetrics {
     pub search_latency_ms: Option<f32>,
     pub lock_read_ms: Option<f32>,
     pub lock_write_ms: Option<f32>,
+    pub search_overfetch: Option<usize>,
+    pub hnsw_ef_search: Option<usize>,
+    pub ivf_nprobe: Option<usize>,
 }
 
 #[derive(Serialize)]

@@ -56,15 +56,14 @@ impl AppConfig {
         }
     }
 
-    pub fn from_env() -> Self {
-        let mut cfg = AppConfig::default();
-
+    /// Apply environment variable overrides to an existing config.
+    pub fn apply_env_overrides(&mut self) {
         if let Ok(val) = std::env::var("INDEX_TYPE") {
-            cfg.index = match val.to_lowercase().as_str() {
+            self.index = match val.to_lowercase().as_str() {
                 "flat" => IndexConfig::Flat {
                     metric: crate::metrics::Metric::Cosine,
                     mode: ExecutionMode::Auto,
-                    search: cfg.search.clone(),
+                    search: self.search.clone(),
                 },
                 "hnsw" => IndexConfig::Hnsw {
                     m: 16,
@@ -74,7 +73,7 @@ impl AppConfig {
                     ml: 1.0 / (16.0_f32).ln(),
                     metric: crate::metrics::Metric::Cosine,
                     mode: ExecutionMode::Auto,
-                    search: cfg.search.clone(),
+                    search: self.search.clone(),
                 },
                 "ivf" => IndexConfig::Ivf {
                     num_clusters: 256,
@@ -82,46 +81,46 @@ impl AppConfig {
                     max_iterations: 20,
                     metric: crate::metrics::Metric::Cosine,
                     mode: ExecutionMode::Auto,
-                    search: cfg.search.clone(),
+                    search: self.search.clone(),
                 },
-                _ => cfg.index.clone(),
+                _ => self.index.clone(),
             };
         }
 
         if let Ok(val) = std::env::var("WAL_ENABLED") {
-            cfg.wal.enabled = val == "1" || val.eq_ignore_ascii_case("true");
+            self.wal.enabled = val == "1" || val.eq_ignore_ascii_case("true");
         }
         if let Ok(val) = std::env::var("WAL_CHECKPOINT_FREQUENCY") {
             if let Ok(freq) = val.parse::<usize>() {
-                cfg.wal.checkpoint_frequency = freq.max(1);
+                self.wal.checkpoint_frequency = freq.max(1);
             }
         }
         if let Ok(val) = std::env::var("WAL_CHECKPOINT_INTERVAL_SECS") {
             if let Ok(secs) = val.parse::<u64>() {
-                cfg.wal.checkpoint_interval_secs = Some(secs.max(1));
+                self.wal.checkpoint_interval_secs = Some(secs.max(1));
             }
         }
 
         if let Ok(val) = std::env::var("MEMORY_USE_MMAP") {
-            cfg.memory.use_mmap = val == "1" || val.eq_ignore_ascii_case("true");
+            self.memory.use_mmap = val == "1" || val.eq_ignore_ascii_case("true");
         }
         if let Ok(val) = std::env::var("MEMORY_INITIAL_MMAP_MB") {
             if let Ok(mb) = val.parse::<usize>() {
-                cfg.memory.initial_mmap_size = mb * 1024 * 1024;
+                self.memory.initial_mmap_size = mb * 1024 * 1024;
             }
         }
 
         if let Ok(val) = std::env::var("PARALLEL_SEARCH") {
-            cfg.parallelism.parallel_search = val == "1" || val.eq_ignore_ascii_case("true");
+            self.parallelism.parallel_search = val == "1" || val.eq_ignore_ascii_case("true");
         }
         if let Ok(val) = std::env::var("NUM_THREADS") {
             if let Ok(n) = val.parse::<usize>() {
-                cfg.parallelism = cfg.parallelism.with_num_threads(n);
+                self.parallelism = self.parallelism.with_num_threads(n);
             }
         }
 
         if let Ok(val) = std::env::var("EXECUTION_MODE") {
-            cfg.execution = match val.to_lowercase().as_str() {
+            self.execution = match val.to_lowercase().as_str() {
                 "simd" => ExecutionMode::Simd,
                 "scalar" => ExecutionMode::Scalar,
                 "gpu" => ExecutionMode::Gpu,
@@ -132,15 +131,18 @@ impl AppConfig {
             };
         }
 
-        // Prefer new env name, fall back to legacy for compatibility
         if let Ok(val) = std::env::var("SEARCH_FILTER_OVERFETCH")
             .or_else(|_| std::env::var("SEARCH_FILTER_EXPANSION"))
         {
             if let Ok(factor) = val.parse::<usize>() {
-                cfg.search.filter_overfetch = factor.max(1);
+                self.search.filter_overfetch = factor.max(1);
             }
         }
+    }
 
+    pub fn from_env() -> Self {
+        let mut cfg = AppConfig::default();
+        cfg.apply_env_overrides();
         cfg
     }
 }
