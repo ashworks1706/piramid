@@ -8,7 +8,7 @@ use crate::error::Result;
 use crate::index::VectorIndex;
 use crate::storage::persistence::EntryPointer;
 use crate::storage::metadata::CollectionMetadata;
-use super::persistence_service::PersistenceService;
+use super::persistence::PersistenceService;
 use super::cache;
 
 // Vector storage engine with memory-mapped files and pluggable indexing

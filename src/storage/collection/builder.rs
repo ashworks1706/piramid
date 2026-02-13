@@ -13,7 +13,7 @@ use crate::storage::document::Document;
 use crate::storage::metadata::CollectionMetadata;
 use crate::quantization::QuantizedVector;
 use super::storage::Collection;
-use super::persistence_service::PersistenceService;
+use super::persistence::PersistenceService;
 
 pub struct CollectionBuilder;
 

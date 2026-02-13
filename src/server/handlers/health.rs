@@ -3,6 +3,7 @@ use super::super::{state::SharedState, types::{HealthResponse, MetricsResponse, 
 use axum::extract::State;
 use crate::error::Result;
 use crate::server::types::WalStats;
+use crate::server::metrics::record_lock_read;
 
 // GET /api/health - simple liveness check
 pub async fn health() -> Json<HealthResponse> {
@@ -31,7 +32,9 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
         let storage_ref = item.value();
         
         // Use a read lock with timeout
+        let lock_start = std::time::Instant::now();
         let storage = storage_ref.read();
+        record_lock_read(state.latency_tracker.get(&collection_name).as_deref(), lock_start);
         let count = storage.count();
         let index_type = storage.vector_index().index_type().to_string();
         let memory_usage_bytes = storage.memory_usage_bytes();

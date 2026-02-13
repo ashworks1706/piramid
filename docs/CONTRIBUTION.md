@@ -1,11 +1,11 @@
 • Beginner Priorities
 
-  - src/bin/server.rs – entrypoint: reads env vars, wires optional embedder, spins up Axum server with graceful shutdown and checkpoints.
+  - src/bin/server.rs – entrypoint: builds config via `config::loader::load_app_config`, wires optional embedder, spins up Axum server with graceful shutdown and checkpoints.
   - src/server/state.rs – shared AppState: collection map, embedder, shutdown flag, latency trackers. Learn how Arc/RwLock/DashMap are used.
-  - src/server/routes.rs + src/server/handlers/ – HTTP surface. Handlers show validation, locking, and how storage/search are called. Great place to see async/axum
-    patterns.
+  - src/server/routes.rs + src/server/handlers/ – HTTP surface. Handlers show validation, locking (via metrics helper), and how storage/search are called. Great place
+    to see async/axum patterns.
   - src/storage/collection/ – core database: mmap-backed file + in-memory index map + pluggable vector index + WAL. Files to skim: builder.rs (open/replay WAL),
-    operations.rs (insert/delete/upsert), search.rs (how it uses vector indexes).
+    operations.rs (insert/delete/upsert), cache.rs (vector cache), persistence/ (WAL + checkpoints).
   - src/index/ – vector index strategies. traits.rs defines the interface; selector.rs picks Flat/HNSW/IVF; implementations live in subfolders.
   - src/metrics – cosine/euclidean/dot and LatencyTracker; shows SIMD mode handling.
   - src/embeddings/ – embedding abstraction + providers (OpenAI/Ollama), retry/cache wrappers.
@@ -54,5 +54,4 @@
   - Collections CRUD: Create just ensures collection exists (touches disk/index metadata); list enumerates loaded collections with counts; delete removes files/entries.
   - Metrics/Health: Read-only endpoints summarize counts, index type, memory usage, latency stats, and embedder status.
   - Shutdown: Ctrl+C → set shutting_down flag (new requests rejected) → checkpoint all collections (flush mmap/index/vector-index/metadata) → graceful drain.
-
 

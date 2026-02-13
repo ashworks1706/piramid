@@ -192,7 +192,7 @@
 
 [ ] Config file support (YAML)
 
-[ ] make sure config is universal and accessed from one point 
+[x] make sure config is universal and accessed from one point 
 
 [ ] Config hot reload (limited subset)
 
@@ -581,4 +581,3 @@
 [ ] Edge deployment (Cloudflare, Vercel)
 
 [ ] Offline-first apps
-

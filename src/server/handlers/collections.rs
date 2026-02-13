@@ -2,6 +2,7 @@ use axum::{extract::{Path, State}, response::Json};
 use std::sync::atomic::Ordering;
 use crate::error::{Result, ServerError};
 use crate::validation;
+use crate::server::metrics::record_lock_read;
 use super::super::{
     state::SharedState,
     types::*,
@@ -45,7 +46,9 @@ pub async fn create_collection(
     
     let storage_ref = state.collections.get(&req.name)
         .ok_or_else(|| ServerError::Internal("Collection not found after creation".into()))?;
+    let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
+    record_lock_read(state.latency_tracker.get(&req.name).as_deref(), lock_start);
     let meta = storage.metadata();
     
     Ok(Json(CollectionInfo { 
@@ -70,7 +73,9 @@ pub async fn get_collection(
     
     let storage_ref = state.collections.get(&name)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
+    record_lock_read(state.latency_tracker.get(&name).as_deref(), lock_start);
     let meta = storage.metadata();
     
     Ok(Json(CollectionInfo { 
@@ -117,7 +122,9 @@ pub async fn collection_count(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
+    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
     let count = storage.count();
     
     Ok(Json(CountResponse { count }))
@@ -136,7 +143,9 @@ pub async fn index_stats(
     
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
+    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
     
     let stats = storage.vector_index().stats();
     

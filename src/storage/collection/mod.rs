@@ -8,10 +8,9 @@
 
 mod storage;
 mod operations;
-mod persistence;
 mod builder;
-mod persistence_service;
 mod cache;
+mod persistence;
 
 pub use storage::Collection;
 pub use builder::CollectionBuilder;
