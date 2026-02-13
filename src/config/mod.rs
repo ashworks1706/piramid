@@ -12,6 +12,7 @@ mod wal;
 mod collection;
 mod search_mode;
 mod app;
+pub mod loader;
 
 pub use execution::ExecutionMode;
 pub use storage::StorageConfig;
