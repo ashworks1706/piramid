@@ -9,6 +9,7 @@ use crate::index::VectorIndex;
 use crate::storage::persistence::EntryPointer;
 use crate::storage::metadata::CollectionMetadata;
 use super::persistence_service::PersistenceService;
+use super::cache;
 
 // Vector storage engine with memory-mapped files and pluggable indexing
 pub struct Collection {
@@ -95,25 +96,11 @@ impl Collection {
     }
 
     pub(super) fn rebuild_vector_cache(&mut self) {
-        self.vector_cache.clear();
-        for (id, _) in &self.index {
-            if let Some(entry) = super::operations::get(self, id) {
-                self.vector_cache.insert(*id, entry.get_vector());
-            }
-        }
+        cache::rebuild(self);
     }
 
     // If cache and index diverge (e.g., after crash), rebuild to ensure consistency.
     pub fn ensure_cache_consistency(&mut self) {
-        if self.vector_cache.len() != self.index.len() {
-            self.rebuild_vector_cache();
-            return;
-        }
-        for (id, _) in &self.index {
-            if !self.vector_cache.contains_key(id) {
-                self.rebuild_vector_cache();
-                break;
-            }
-        }
+        cache::ensure_consistent(self);
     }
 }
