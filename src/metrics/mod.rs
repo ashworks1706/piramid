@@ -8,11 +8,13 @@ pub mod cosine;
 pub mod euclidean;
 pub mod dot;
 pub mod latency;
+pub mod embed;
 
 pub use cosine::cosine_similarity;
 pub use euclidean::{euclidean_distance, euclidean_distance_squared};
 pub use dot::dot_product;
 pub use latency::{LatencyTracker, time_operation, time_operation_sync};
+pub use embed::{EmbedMetrics, EmbedMetricsSnapshot};
 
 use crate::config::ExecutionMode;
 
@@ -64,4 +66,3 @@ mod tests {
         assert!(Metric::Cosine.calculate(&v1, &v2, ExecutionMode::Auto).abs() < 1e-6);
     }
 }
-

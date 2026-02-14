@@ -6,7 +6,7 @@ use tokio::runtime::Handle;
 use crate::Collection;
 use crate::storage::collection::CollectionOpenOptions;
 use crate::embeddings::Embedder;
-use crate::metrics::LatencyTracker;
+use crate::metrics::{LatencyTracker, EmbedMetrics};
 use crate::error::{Result, ServerError};
 use crate::config::AppConfig;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
@@ -39,6 +39,7 @@ pub struct AppState {
     pub shutting_down: Arc<AtomicBool>, // Flag to indicate server is shutting down, used to reject new requests gracefully
     pub read_only: Arc<AtomicBool>, // Flag for disk-pressure read-only mode
     pub latency_tracker: Arc<DashMap<String, LatencyTracker>>,  // Per-collection latency tracking
+    pub embed_metrics: Arc<EmbedMetrics>,
     pub app_config: Arc<RwLock<AppConfig>>, // Global config accessible to handlers, protected by RwLock for dynamic updates
     pub slow_query_ms: u128, // Threshold for logging slow queries in ms
     pub rebuild_jobs: Arc<DashMap<String, RebuildJobStatus>>, // Track index rebuild jobs by collection name
@@ -66,6 +67,7 @@ impl AppState {
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
             latency_tracker: Arc::new(DashMap::new()),
+            embed_metrics: Arc::new(EmbedMetrics::default()),
             app_config: Arc::new(RwLock::new(app_config)),
             slow_query_ms,
             rebuild_jobs: Arc::new(DashMap::new()),
@@ -100,6 +102,7 @@ impl AppState {
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
             latency_tracker: Arc::new(DashMap::new()),
+            embed_metrics: Arc::new(EmbedMetrics::default()),
             app_config: Arc::new(RwLock::new(app_config)),
             slow_query_ms,
             rebuild_jobs: Arc::new(DashMap::new()),

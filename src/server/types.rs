@@ -287,6 +287,7 @@ pub struct MetricsResponse {
     pub collections: Vec<CollectionMetrics>,
     pub app_config: crate::config::AppConfig,
     pub wal_stats: Vec<WalStats>,
+    pub embedding: EmbeddingMetricsResponse,
 }
 
 #[derive(Serialize)]
@@ -310,6 +311,15 @@ pub struct WalStats {
     pub last_checkpoint: Option<u64>,
     pub checkpoint_age_secs: Option<u64>, // Age of the last checkpoint in seconds
     pub wal_size_bytes: Option<u64>, // Total size of the WAL file for this collection in bytes
+}
+
+#[derive(Serialize)]
+pub struct EmbeddingMetricsResponse {
+    pub requests: u64,
+    pub texts: u64,
+    pub total_tokens: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_latency_ms: Option<f32>,
 }
 
 // =============================================================================

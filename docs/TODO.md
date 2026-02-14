@@ -1,10 +1,6 @@
 
 ### Production 
 
-**Embeddings Optimization**
-
-[ ] Request metrics (count, latency, tokens, cost)
-
 **Observability & Health**
 
 [ ] Add logs for server console like Next.js

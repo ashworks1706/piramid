@@ -1,5 +1,5 @@
 use axum::{http::StatusCode, response::Json};
-use super::super::{state::SharedState, types::{HealthResponse, MetricsResponse, CollectionMetrics}};
+use super::super::{state::SharedState, types::{HealthResponse, MetricsResponse, CollectionMetrics, EmbeddingMetricsResponse}};
 use axum::extract::State;
 use crate::error::Result;
 use crate::server::types::WalStats;
@@ -92,6 +92,14 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
             wal_size_bytes: wal_size,
         });
     } 
+
+    let embed_metrics = state.embed_metrics.snapshot();
+    let embed_metrics_response = EmbeddingMetricsResponse {
+        requests: embed_metrics.requests,
+        texts: embed_metrics.texts,
+        total_tokens: embed_metrics.total_tokens,
+        avg_latency_ms: embed_metrics.avg_latency_ms,
+    };
     
     Ok(Json(MetricsResponse {
         total_collections: state.collections.len(),
@@ -99,5 +107,6 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
         collections: collection_metrics,
         app_config: state.current_config(),
         wal_stats,
+        embedding: embed_metrics_response,
     }))
 }

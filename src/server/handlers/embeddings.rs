@@ -40,7 +40,9 @@ pub async fn embed_text(
 
     let response = match (req.text.clone(), req.texts.clone()) {
         (Some(text), None) => {
+            let start = Instant::now();
             let response = embedder.embed(&text).await?;
+            let embed_duration = start.elapsed();
 
             let storage_ref = state.collections.get(&collection)
                 .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
@@ -57,6 +59,7 @@ pub async fn embed_text(
 
             let id = storage.insert(entry)?;
             state.enforce_cache_budget();
+            state.embed_metrics.record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
 
             EmbedResultsResponse::Single(EmbedResponse {
                 id: id.to_string(),
@@ -73,7 +76,7 @@ pub async fn embed_text(
             let mut embeddings = Vec::with_capacity(texts.len());
             let mut total_tokens: u32 = 0;
             let mut entries = Vec::with_capacity(texts.len());
-
+            let start = Instant::now();
             for (idx, t) in texts.iter().enumerate() {
                 let resp = embedder.embed(t).await?;
                 embeddings.push(resp.embedding.clone());
@@ -97,6 +100,7 @@ pub async fn embed_text(
             let insert_ids = storage.insert_batch(entries)?;
             ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
             state.enforce_cache_budget();
+            state.embed_metrics.record(1, ids.len() as u64, total_tokens as u64, start.elapsed());
 
             EmbedResultsResponse::Multi(MultiEmbedResponse {
                 ids,
@@ -127,7 +131,10 @@ pub async fn search_by_text(
     let embedder = state.embedder.as_ref()
         .ok_or(ServerError::ServiceUnavailable(super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string()))?;
 
+    let start = Instant::now();
     let response = embedder.embed(&req.query).await?;
+    let embed_duration = start.elapsed();
+    state.embed_metrics.record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
 
     let metric = parse_metric(req.metric);
     let effective_search = crate::server::handlers::vectors::apply_search_overrides(
