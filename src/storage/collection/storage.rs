@@ -1,4 +1,5 @@
 // Core Collection storage structure
+// Manages the memory-mapped file, in-memory index, vector index, and caches for vectors and metadata.
 use memmap2::MmapMut;
 use std::collections::HashMap;
 use std::fs::File;
@@ -11,7 +12,6 @@ use crate::storage::metadata::CollectionMetadata;
 use super::persistence::PersistenceService;
 use super::cache;
 
-// Vector storage engine with memory-mapped files and pluggable indexing
 pub struct Collection {
     pub(super) data_file: File,
     pub(super) mmap: Option<MmapMut>,

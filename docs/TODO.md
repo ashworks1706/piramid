@@ -89,7 +89,9 @@
 
 **Documentation**
 
-[ ] Interactive API docs for SDKs (Rust/Python via Mintlify)
+[ ] Easy low effort API docs for SDKs (Rust/Python via MkDocs)
+
+[ ] Entire Technical architecture breakdown (MkDocs)
 
 [ ] docs/CONTRIBUTION.md - 5-minute tutorial and updates
 

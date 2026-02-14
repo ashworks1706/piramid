@@ -103,6 +103,7 @@ impl CollectionBuilder {
         };
 
         // If there are WAL entries to replay, we need to apply them to a temporary collection before checkpointing
+        // why? Because we need to ensure that the collection state is consistent with the WAL entries before we can checkpoint and clear the WAL. By applying the WAL entries to a temporary collection, we can bring it up to date with all the changes recorded in the WAL, and then checkpoint that state to persist it. This way, we ensure that no changes are lost and that the collection is in sync with the WAL before we clear it.
         
         if !wal_entries.is_empty() {
             let mut temp_storage = Collection {

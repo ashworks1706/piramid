@@ -1,3 +1,5 @@
+//  This module provides a simple JSON-based WAL that supports appending entries, replaying entries from a certain sequence number, and checkpointing. The WAL is designed to be durable and efficient, with support for rotation to prevent unbounded growth.
+
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
@@ -41,7 +43,7 @@ impl Wal {
             path,
             next_seq,
         })
-    }
+    }  
 
     /// Replay entries with seq greater than `min_seq`.
     pub fn replay(&self, min_seq: u64) -> Result<Vec<WalEntry>> {

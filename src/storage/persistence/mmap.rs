@@ -13,6 +13,7 @@ pub fn ensure_file_size(file: &File, min_size: u64) -> Result<()> {
     Ok(())
 }
 
+// Create a mutable memory map for the given file. The file must already be of sufficient size to accommodate the memory map. What is mmap? Memory-mapped files allow applications to access files on disk as if they were part of the process's memory. This can provide performance benefits for large files, as it allows the operating system to manage the loading and unloading of file data into memory as needed, rather than requiring the application to read and write data explicitly. In this context, we use memory-mapped files to store the collection's data, allowing for efficient access and updates without needing to read and write the entire file for each operation.
 pub fn create_mmap(file: &File) -> Result<MmapMut> {
     unsafe { Ok(MmapOptions::new().map_mut(file)?) }
 }
