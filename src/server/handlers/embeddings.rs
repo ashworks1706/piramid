@@ -1,5 +1,4 @@
 use axum::{extract::{Path, State, Extension}, Json};
-use axum_macros::debug_handler;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -71,7 +70,6 @@ async fn embed_batch(
 }
 
 // POST /api/collections/:collection/embed - embed text and store
-#[debug_handler]
 pub async fn embed_text(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
@@ -94,7 +92,7 @@ pub async fn embed_text(
             let mut storage = storage_ref.write();
             record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
 
-            let (mut entry, mut embed_resp) = embed_single(embedder.as_ref(), text, req.metadata.clone()).await?;
+            let (entry, mut embed_resp) = embed_single(embedder.as_ref(), text, req.metadata.clone()).await?;
             let id = storage.insert(entry)?;
             embed_resp.id = id.to_string();
 
