@@ -18,6 +18,7 @@ pub struct Collection {
     pub(super) index: HashMap<Uuid, EntryPointer>,
     pub(super) vector_index: Box<dyn VectorIndex>,
     pub(super) vector_cache: HashMap<Uuid, Vec<f32>>,
+    pub(super) metadata_cache: HashMap<Uuid, crate::metadata::Metadata>,
     pub config: crate::config::CollectionConfig,
     pub metadata: CollectionMetadata,
     pub path: String,
