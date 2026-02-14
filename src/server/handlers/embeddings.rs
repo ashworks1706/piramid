@@ -1,6 +1,7 @@
-use axum::{extract::{Path, State, Extension, Json}};
+use axum::{extract::{Path, State, Extension}, Json};
 use std::sync::atomic::Ordering;
 use std::time::Instant;
+use std::collections::HashMap;
 use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use crate::server::metrics::{record_lock_read, record_lock_write};
@@ -26,7 +27,7 @@ pub async fn embed_text(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
     Json(req): Json<EmbedRequest>,
-) -> Result<Json<EmbedResponse>> {
+) -> Result<Json<EmbedResultsResponse>> {
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
@@ -36,28 +37,68 @@ pub async fn embed_text(
     let embedder = state.embedder.as_ref()
         .ok_or(ServerError::ServiceUnavailable(super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string()))?;
 
-    let response = embedder.embed(&req.text).await?;
-
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
     record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
 
-    let metadata = json_to_metadata(req.metadata);
-    let entry = Document::with_metadata(
-        response.embedding.clone(),
-        req.text,
-        metadata,
-    );
+    let response = match (req.text.clone(), req.texts.clone()) {
+        (Some(text), None) => {
+            let response = embedder.embed(&text).await?;
 
-    let id = storage.insert(entry)?;
+            let metadata = json_to_metadata(req.metadata);
+            let entry = Document::with_metadata(
+                response.embedding.clone(),
+                text,
+                metadata,
+            );
 
-    Ok(Json(EmbedResponse {
-        id: id.to_string(),
-        embedding: response.embedding,
-        tokens: response.tokens,
-    }))
+            let id = storage.insert(entry)?;
+
+            EmbedResultsResponse::Single(EmbedResponse {
+                id: id.to_string(),
+                embedding: response.embedding,
+                tokens: response.tokens,
+            })
+        }
+        (None, Some(texts)) => {
+            if texts.is_empty() {
+                return Err(ServerError::InvalidRequest("texts cannot be empty".to_string()).into());
+            }
+            let mut ids = Vec::with_capacity(texts.len());
+            let mut embeddings = Vec::with_capacity(texts.len());
+            let mut total_tokens: u32 = 0;
+            let mut entries = Vec::with_capacity(texts.len());
+
+            for (idx, t) in texts.iter().enumerate() {
+                let resp = embedder.embed(t).await?;
+                embeddings.push(resp.embedding.clone());
+                if let Some(tokens) = resp.tokens {
+                    total_tokens = total_tokens.saturating_add(tokens);
+                }
+                let md = if idx < req.metadata_list.len() {
+                    json_to_metadata(req.metadata_list[idx].clone())
+                } else {
+                    json_to_metadata(HashMap::new())
+                };
+                entries.push(Document::with_metadata(resp.embedding, t.clone(), md));
+            }
+
+            let insert_ids = storage.insert_batch(entries)?;
+            ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
+
+            EmbedResultsResponse::Multi(MultiEmbedResponse {
+                ids,
+                embeddings,
+                total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+            })
+        }
+        (Some(_), Some(_)) => return Err(ServerError::InvalidRequest("Provide either text or texts, not both".to_string()).into()),
+        (None, None) => return Err(ServerError::InvalidRequest("No text provided".to_string()).into()),
+    };
+
+    Ok(Json(response))
 }
 
 // POST /api/collections/:collection/search/text - search by text query

@@ -84,7 +84,7 @@ impl Embedder for OpenAIEmbedderInner {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
         let request = OpenAIEmbeddingRequest {
             model: self.model.clone(),
-            input: EmbeddingInput::Single(text.to_string()),
+            input: text.to_string(),
             encoding_format: Some("float".to_string()),
         };
 
@@ -167,16 +167,9 @@ impl Embedder for OpenAIEmbedder {
 #[derive(Debug, Serialize)]
 struct OpenAIEmbeddingRequest {
     model: String,
-    input: EmbeddingInput,
+    input: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     encoding_format: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
-enum EmbeddingInput {
-    Single(String),
-    Batch(Vec<String>),
 }
 
 #[derive(Debug, Deserialize)]
