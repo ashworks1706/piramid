@@ -5,6 +5,13 @@ use std::path::PathBuf;
 use crate::error::Result;
 use super::entry::WalEntry;
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+struct WalHeader {
+    version: u32,
+}
+
+const WAL_VERSION: u32 = 1;
+
 pub struct Wal {
     file: Option<BufWriter<File>>,
     path: PathBuf,
@@ -18,11 +25,13 @@ impl Wal {
             .create(true)
             .append(true)
             .open(&path)?;
-        Ok(Wal {
+        let mut wal = Wal {
             file: Some(BufWriter::new(file)),
             path,
             next_seq,
-        })
+        };
+        wal.ensure_header()?;
+        Ok(wal)
     }
     
     /// Disabled WAL (noop) with a sequence counter for compatibility.
@@ -47,6 +56,16 @@ impl Wal {
         for line in reader.lines() {
             let line = line?;
             if line.is_empty() {
+                continue;
+            }
+            // Skip header if present (and validate version)
+            if let Ok(header) = serde_json::from_str::<WalHeader>(&line) {
+                if header.version != WAL_VERSION {
+                    return Err(crate::error::PiramidError::other(format!(
+                        "Unsupported WAL version {}, expected {}",
+                        header.version, WAL_VERSION
+                    )));
+                }
                 continue;
             }
             let entry: WalEntry = serde_json::from_str(&line)?;
@@ -103,12 +122,29 @@ impl Wal {
             .open(&self.path)?;
         file.sync_all()?;
         self.file = Some(BufWriter::new(file));
+        self.ensure_header()?;
         Ok(())
     }
     
     pub fn flush(&mut self) -> Result<()> {
         if let Some(file) = &mut self.file {
             file.flush()?;
+        }
+        Ok(())
+    }
+
+    fn ensure_header(&mut self) -> Result<()> {
+        if self.file.is_none() {
+            return Ok(());
+        }
+        let metadata = std::fs::metadata(&self.path)?;
+        if metadata.len() == 0 {
+            if let Some(writer) = &mut self.file {
+                let header = WalHeader { version: WAL_VERSION };
+                let json = serde_json::to_string(&header)?;
+                writeln!(writer, "{}", json)?;
+                writer.flush()?;
+            }
         }
         Ok(())
     }

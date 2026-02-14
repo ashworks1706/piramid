@@ -2,15 +2,9 @@
 
 **Configuration**
 
-[ ] make sure config is universal and accessed from one point 
-
 [ ] Config hot reload (limited subset)
 
 [ ] Environment variable documentation
-
-**Validation & Safety**
-
-[ ] Runtime config validation
 
 **Embeddings Optimization**
 

@@ -13,7 +13,6 @@ debug/
 /*.index.db
 /*.meta
 /*.log
-/*.meta
 
 # ide
 .idea/

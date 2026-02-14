@@ -41,6 +41,9 @@ impl AppConfig {
         if self.search.filter_overfetch == 0 {
             return Err("SEARCH filter_overfetch must be >= 1".into());
         }
+        if self.memory.use_mmap && self.memory.initial_mmap_size == 0 {
+            return Err("MEMORY initial_mmap_size must be > 0 when mmap is enabled".into());
+        }
         Ok(())
     }
 

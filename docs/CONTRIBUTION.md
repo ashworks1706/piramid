@@ -1,6 +1,6 @@
 • Beginner Priorities (read in this order)
 
-  1) `src/bin/server.rs` – entrypoint. Loads config via `config::loader::load_app_config`, optionally wires an embedder, builds the Axum router, and starts the server with graceful shutdown.
+  1) `src/bin/server.rs` – entrypoint. Loads config via `config::loader::load_runtime_config` (app + env-driven runtime settings like PORT/DATA_DIR/SLOW_QUERY_MS/embedding), optionally wires an embedder, builds the Axum router, and starts the server with graceful shutdown.
   2) `src/server/state.rs` – shared `AppState`: holds collections (DashMap of `Arc<RwLock<Collection>>`), embedder, shutdown flag, latency trackers, and config.
   3) `src/server/routes.rs` + `src/server/handlers/` – HTTP surface. Handlers show validation, lock timing (via metrics helper), and how storage/search are called. Unified endpoints: vectors/search/embed each accept single or batch payloads (see DTOs in `src/server/types.rs`).
   4) `src/storage/collection/` – core data path. Start with:
