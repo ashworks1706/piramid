@@ -34,7 +34,15 @@ impl VectorIndex for FlatIndex {
         }
     }
     
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, _quality: crate::config::SearchConfig) -> Vec<Uuid> {
+    fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        vectors: &HashMap<Uuid, Vec<f32>>,
+        _quality: crate::config::SearchConfig,
+        _filter: Option<&crate::search::query::Filter>,
+        _metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
+    ) -> Vec<Uuid> {
         // Flat index is always exhaustive - quality parameter is ignored
         // Brute force: calculate distance to every vector
         let mut distances: Vec<(Uuid, f32)> = self.vector_ids

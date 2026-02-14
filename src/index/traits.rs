@@ -36,7 +36,15 @@ pub trait VectorIndex: Send + Sync {
     // 
     // # Returns
     // Vector of IDs sorted by similarity (most similar first)
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: SearchConfig) -> Vec<Uuid>;
+    fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        vectors: &HashMap<Uuid, Vec<f32>>,
+        quality: SearchConfig,
+        filter: Option<&crate::search::query::Filter>,
+        metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
+    ) -> Vec<Uuid>;
     
     // Remove a vector from the index
     fn remove(&mut self, id: &Uuid);

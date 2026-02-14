@@ -176,7 +176,15 @@ impl VectorIndex for IvfIndex {
         }
     }
     
-    fn search(&self, query: &[f32], k: usize, vectors: &HashMap<Uuid, Vec<f32>>, quality: crate::config::SearchConfig) -> Vec<Uuid> {
+    fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        vectors: &HashMap<Uuid, Vec<f32>>,
+        quality: crate::config::SearchConfig,
+        _filter: Option<&crate::search::query::Filter>,
+        _metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
+    ) -> Vec<Uuid> {
         if self.centroids.is_empty() {
             // No clusters yet - fallback to brute force
             let mut distances: Vec<(Uuid, f32)> = vectors.iter()
