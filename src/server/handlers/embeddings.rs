@@ -1,4 +1,5 @@
 use axum::{extract::{Path, State, Extension}, Json};
+use axum_macros::debug_handler;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -22,7 +23,55 @@ fn parse_metric(s: Option<String>) -> Metric {
     }
 }
 
+async fn embed_single(
+    embedder: &dyn crate::embeddings::Embedder,
+    text: String,
+    metadata: HashMap<String, serde_json::Value>,
+) -> Result<(Document, EmbedResponse)> {
+    let response = embedder.embed(&text).await?;
+    let entry = Document::with_metadata(
+        response.embedding.clone(),
+        text,
+        json_to_metadata(metadata),
+    );
+    Ok((
+        entry,
+        EmbedResponse {
+            id: String::new(), // placeholder, set later
+            embedding: response.embedding,
+            tokens: response.tokens,
+        },
+    ))
+}
+
+async fn embed_batch(
+    embedder: &dyn crate::embeddings::Embedder,
+    texts: &[String],
+    metadata_list: &[HashMap<String, serde_json::Value>],
+) -> Result<(Vec<Document>, Vec<Vec<f32>>, Option<u32>)> {
+    let mut entries = Vec::with_capacity(texts.len());
+    let mut embeddings = Vec::with_capacity(texts.len());
+    let mut total_tokens: u32 = 0;
+
+    for (idx, t) in texts.iter().enumerate() {
+        let resp = embedder.embed(t).await?;
+        embeddings.push(resp.embedding.clone());
+        if let Some(tokens) = resp.tokens {
+            total_tokens = total_tokens.saturating_add(tokens);
+        }
+        let md = if idx < metadata_list.len() {
+            json_to_metadata(metadata_list[idx].clone())
+        } else {
+            json_to_metadata(HashMap::new())
+        };
+        entries.push(Document::with_metadata(resp.embedding, t.clone(), md));
+    }
+
+    Ok((entries, embeddings, if total_tokens > 0 { Some(total_tokens) } else { None }))
+}
+
 // POST /api/collections/:collection/embed - embed text and store
+#[debug_handler]
 pub async fn embed_text(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
@@ -39,52 +88,24 @@ pub async fn embed_text(
 
     let response = match (req.text.clone(), req.texts.clone()) {
         (Some(text), None) => {
-            let response = embedder.embed(&text).await?;
-
             let storage_ref = state.collections.get(&collection)
                 .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
             let lock_start = Instant::now();
             let mut storage = storage_ref.write();
             record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
 
-            let metadata = json_to_metadata(req.metadata);
-            let entry = Document::with_metadata(
-                response.embedding.clone(),
-                text,
-                metadata,
-            );
-
+            let (mut entry, mut embed_resp) = embed_single(embedder.as_ref(), text, req.metadata.clone()).await?;
             let id = storage.insert(entry)?;
+            embed_resp.id = id.to_string();
 
-            EmbedResultsResponse::Single(EmbedResponse {
-                id: id.to_string(),
-                embedding: response.embedding,
-                tokens: response.tokens,
-            })
+            EmbedResultsResponse::Single(embed_resp)
         }
         (None, Some(texts)) => {
             if texts.is_empty() {
                 return Err(ServerError::InvalidRequest("texts cannot be empty".to_string()).into());
             }
 
-            let mut ids = Vec::with_capacity(texts.len());
-            let mut embeddings = Vec::with_capacity(texts.len());
-            let mut total_tokens: u32 = 0;
-            let mut entries = Vec::with_capacity(texts.len());
-
-            for (idx, t) in texts.iter().enumerate() {
-                let resp = embedder.embed(t).await?;
-                embeddings.push(resp.embedding.clone());
-                if let Some(tokens) = resp.tokens {
-                    total_tokens = total_tokens.saturating_add(tokens);
-                }
-                let md = if idx < req.metadata_list.len() {
-                    json_to_metadata(req.metadata_list[idx].clone())
-                } else {
-                    json_to_metadata(HashMap::new())
-                };
-                entries.push(Document::with_metadata(resp.embedding, t.clone(), md));
-            }
+            let (entries, embeddings, total_tokens) = embed_batch(embedder.as_ref(), &texts, &req.metadata_list).await?;
 
             let storage_ref = state.collections.get(&collection)
                 .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
@@ -93,12 +114,11 @@ pub async fn embed_text(
             record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
 
             let insert_ids = storage.insert_batch(entries)?;
-            ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
 
             EmbedResultsResponse::Multi(MultiEmbedResponse {
-                ids,
+                ids: insert_ids.into_iter().map(|id| id.to_string()).collect(),
                 embeddings,
-                total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+                total_tokens,
             })
         }
         (Some(_), Some(_)) => return Err(ServerError::InvalidRequest("Provide either text or texts, not both".to_string()).into()),

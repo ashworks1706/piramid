@@ -16,6 +16,53 @@ use super::super::{
 
 const MAX_BATCH_SIZE: usize = 10_000;
 
+fn build_single_entry(mut req: InsertRequest) -> Result<Document> {
+    let text = req.text.clone().ok_or_else(|| ServerError::InvalidRequest("text is required for single insert".to_string()))?;
+    validation::validate_text(&text)?;
+    let vector = req.vector.take().ok_or_else(|| ServerError::InvalidRequest("vector is required for single insert".to_string()))?;
+    validation::validate_vector(&vector)?;
+    let mut vec_to_store = vector;
+    if req.normalize {
+        vec_to_store = validation::normalize_vector(&vec_to_store);
+    }
+    let metadata = json_to_metadata(req.metadata);
+    Ok(Document::with_metadata(vec_to_store, text, metadata))
+}
+
+fn build_batch_entries(mut req: InsertRequest) -> Result<Vec<Document>> {
+    let vectors = req.vectors.take().ok_or_else(|| ServerError::InvalidRequest("vectors are required for batch insert".to_string()))?;
+    let texts = req.texts.clone().ok_or_else(|| ServerError::InvalidRequest("texts are required for batch insert".to_string()))?;
+    validation::validate_batch_size(vectors.len(), MAX_BATCH_SIZE, "Insert")?;
+    if vectors.len() != texts.len() {
+        return Err(ServerError::InvalidRequest("vectors and texts length mismatch".to_string()).into());
+    }
+    validation::validate_vectors(&vectors)?;
+    for t in &texts {
+        validation::validate_text(t)?;
+    }
+    let vectors = if req.normalize {
+        vectors.iter().map(|v| validation::normalize_vector(v)).collect()
+    } else {
+        vectors
+    };
+
+    let mut entries = Vec::with_capacity(vectors.len());
+    for (idx, vector) in vectors.into_iter().enumerate() {
+        let md = if idx < req.metadata_list.len() {
+            json_to_metadata(req.metadata_list[idx].clone())
+        } else {
+            json_to_metadata(HashMap::new())
+        };
+        let entry = Document::with_metadata(
+            vector,
+            texts[idx].clone(),
+            md,
+        );
+        entries.push(entry);
+    }
+    Ok(entries)
+}
+
 // Parse similarity metric from string
 fn parse_metric(s: Option<String>) -> Metric {
     match s.as_deref() {
@@ -76,16 +123,8 @@ pub async fn insert_vector(
     
     let response = match (req.vector.take(), req.vectors.take()) {
         (Some(vector), None) => {
-            let text = req.text.clone().ok_or_else(|| ServerError::InvalidRequest("text is required for single insert".to_string()))?;
-            validation::validate_text(&text)?;
-            validation::validate_vector(&vector)?;
-            let mut vec_to_store = vector;
-            if req.normalize {
-                vec_to_store = validation::normalize_vector(&vec_to_store);
-            }
-
-            let metadata = json_to_metadata(req.metadata);
-            let entry = Document::with_metadata(vec_to_store, text, metadata);
+            req.vector = Some(vector);
+            let entry = build_single_entry(req)?;
             
             let start = Instant::now();
             let id = storage.insert(entry)?;
@@ -101,35 +140,9 @@ pub async fn insert_vector(
             })
         }
         (None, Some(vectors)) => {
-            let texts = req.texts.clone().ok_or_else(|| ServerError::InvalidRequest("texts are required for batch insert".to_string()))?;
-            validation::validate_batch_size(vectors.len(), MAX_BATCH_SIZE, "Insert")?;
-            if vectors.len() != texts.len() {
-                return Err(ServerError::InvalidRequest("vectors and texts length mismatch".to_string()).into());
-            }
-            validation::validate_vectors(&vectors)?;
-            for t in &texts {
-                validation::validate_text(t)?;
-            }
-            let vectors = if req.normalize {
-                vectors.iter().map(|v| validation::normalize_vector(v)).collect()
-            } else {
-                vectors
-            };
-
-            let mut entries = Vec::with_capacity(vectors.len());
-            for (idx, vector) in vectors.into_iter().enumerate() {
-                let md = if idx < req.metadata_list.len() {
-                    json_to_metadata(req.metadata_list[idx].clone())
-                } else {
-                    json_to_metadata(HashMap::new())
-                };
-                let entry = Document::with_metadata(
-                    vector,
-                    texts[idx].clone(),
-                    md,
-                );
-                entries.push(entry);
-            }
+            req.vectors = Some(vectors);
+            let texts_len = req.texts.as_ref().map(|t| t.len()).unwrap_or(0);
+            let entries = build_batch_entries(req)?;
 
             let start = Instant::now();
             let ids: Vec<Uuid> = storage.insert_batch(entries)?;
@@ -141,7 +154,7 @@ pub async fn insert_vector(
 
             InsertResultsResponse::Multi(MultiInsertResponse { 
                 ids: ids.into_iter().map(|id| id.to_string()).collect(),
-                count: texts.len(),
+                count: texts_len,
                 latency_ms: Some(duration.as_millis() as f32),
             })
         }
