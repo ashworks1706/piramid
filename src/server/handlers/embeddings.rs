@@ -1,7 +1,7 @@
 use axum::{extract::{Path, State, Extension}, Json};
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use std::collections::HashMap;
 use crate::{Metric, Document};
 use crate::error::{Result, ServerError};
 use crate::server::metrics::{record_lock_read, record_lock_write};
@@ -37,15 +37,15 @@ pub async fn embed_text(
     let embedder = state.embedder.as_ref()
         .ok_or(ServerError::ServiceUnavailable(super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string()))?;
 
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
-    let lock_start = Instant::now();
-    let mut storage = storage_ref.write();
-    record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
-
     let response = match (req.text.clone(), req.texts.clone()) {
         (Some(text), None) => {
             let response = embedder.embed(&text).await?;
+
+            let storage_ref = state.collections.get(&collection)
+                .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+            let lock_start = Instant::now();
+            let mut storage = storage_ref.write();
+            record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
 
             let metadata = json_to_metadata(req.metadata);
             let entry = Document::with_metadata(
@@ -66,6 +66,7 @@ pub async fn embed_text(
             if texts.is_empty() {
                 return Err(ServerError::InvalidRequest("texts cannot be empty".to_string()).into());
             }
+
             let mut ids = Vec::with_capacity(texts.len());
             let mut embeddings = Vec::with_capacity(texts.len());
             let mut total_tokens: u32 = 0;
@@ -85,6 +86,12 @@ pub async fn embed_text(
                 entries.push(Document::with_metadata(resp.embedding, t.clone(), md));
             }
 
+            let storage_ref = state.collections.get(&collection)
+                .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+            let lock_start = Instant::now();
+            let mut storage = storage_ref.write();
+            record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
+
             let insert_ids = storage.insert_batch(entries)?;
             ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
 
@@ -100,6 +107,7 @@ pub async fn embed_text(
 
     Ok(Json(response))
 }
+
 
 // POST /api/collections/:collection/search/text - search by text query
 pub async fn search_by_text(

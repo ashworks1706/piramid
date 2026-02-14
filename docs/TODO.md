@@ -42,7 +42,7 @@
 
 [ ] CPU Local Embeddings support (e.g. sentence-transformers)
 
-[ ] native batch api support for hugginface (make sure )
+[x] native batch api support for embeddings (single endpoint handling single/batch)
 
 [ ] Request metrics (count, latency, tokens, cost)
 
@@ -335,4 +335,3 @@
 [ ] Fallback Circuit Breaker: Auto-switch to CPU search if Zipy returns OOM or timeout errors.
 
 [ ] Health Check Extension: Add GPU status (temperature, memory usage) to `/api/health`.
-

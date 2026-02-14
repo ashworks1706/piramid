@@ -490,7 +490,6 @@ pub async fn upsert_vector(
     }))
 }
 
-// POST /api/collections/:collection/search/batch - search multiple queries at once
 // POST /api/collections/:collection/search/range - search with a min_score threshold
 pub async fn range_search_vectors(
     State(state): State<SharedState>,
