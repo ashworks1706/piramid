@@ -249,6 +249,9 @@
 
 [ ] CLI 
 
+[ ] Client side distributed Systems
+
+
 
 **MCP Integration**
 

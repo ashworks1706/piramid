@@ -1,5 +1,5 @@
 // Search result type - what you get back from a search query
-
+// This file defines the Hit struct, which represents a single search result containing the vector entry and its similarity score.
 use uuid::Uuid;
 use crate::metadata::Metadata;
 
@@ -12,7 +12,7 @@ pub struct Hit {
     pub vector: Vec<f32>,
     pub metadata: Metadata,
 }
-
+// Implement a constructor for Hit
 impl Hit {
     pub fn new(id: Uuid, score: f32, text: String, vector: Vec<f32>, metadata: Metadata) -> Self {
         Self { id, score, text, vector, metadata }

@@ -131,21 +131,21 @@ mod tests {
 
     #[test]
     fn test_validate_vector_nan() {
-        let result = validate_vector(&[1.0, f32::NAN, 3.0]);
+        let result = validate_vector(&[1.0, f32::NAN, 3.0][..]);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("NaN"));
     }
 
     #[test]
     fn test_validate_vector_infinity() {
-        let result = validate_vector(&[1.0, f32::INFINITY, 3.0]);
+        let result = validate_vector(&[1.0, f32::INFINITY, 3.0][..]);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Infinity"));
     }
 
     #[test]
     fn test_validate_vector_empty() {
-        let result = validate_vector(&[]);
+        let result = validate_vector(&[][..]);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("empty"));
     }
