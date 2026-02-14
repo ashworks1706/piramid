@@ -311,21 +311,24 @@ pub async fn search_vectors(
     Extension(request_id): Extension<crate::server::request_id::RequestId>,
     Json(req): Json<SearchRequest>,
 ) -> Result<Json<SearchResultsResponse>> {
+
+    // 1. Check if server is shutting down and reject new search requests if so, to allow for graceful shutdown without accepting new work.
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    // Validate inputs
+    // 2. Validate the collection name and search vectors in the request to ensure they meet the required formats and constraints before proceeding with the search operation.
     validation::validate_collection_name(&collection)?;
 
     state.get_or_create_collection(&collection)?;
     
+    // 3. Acquire a read lock on the collection's storage to ensure thread-safe access while performing the search operation, and record the time taken to acquire the lock for latency tracking purposes.
     let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
     record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
-    
+    // 4. Parse the similarity metric and apply any search configuration overrides based on the request parameters, such as ef, nprobe, overfetch, or preset, to determine the effective search configuration that will be used for the search operation.
     let SearchRequest { vector, vectors, k, metric, ef, nprobe, overfetch, preset } = req;
     let metric = parse_metric(metric);
     let effective_search = apply_search_overrides(
@@ -335,11 +338,13 @@ pub async fn search_vectors(
         overfetch,
         preset.clone(),
     );
-    
+    // 5. Perform the search operation using the storage's search method, passing in the search vector(s), k, metric, and effective search configuration. After obtaining the search results, filter them by min_score if it's a range search, and record the time taken for the search operation to track latency. If the search takes longer than a configured threshold, log a warning for slow queries.
     let response = match (vector, vectors) {
         (Some(vec), None) => {
+            // 1. Validate the search vector to ensure it meets the required format and constraints before performing the search operation.
             validation::validate_vector(&vec)?;
             let start = Instant::now();
+            // 2. Start storage search with the provided search vector, k, metric, and effective search configuration. The search method will return a list of results that are similar to the search vector based on the specified metric and search configuration.
             let results = storage.search(
                 &vec,
                 k,
@@ -351,6 +356,7 @@ pub async fn search_vectors(
                     search_config_override: Some(effective_search),
                 },
             );
+            // 3. If the search is a range search (indicated by the presence of min_score), filter the search results to include only those that meet the minimum score threshold, ensuring that the final results returned to the client are relevant based on the specified criteria.
             let duration = start.elapsed();
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
@@ -361,9 +367,13 @@ pub async fn search_vectors(
                 );
             }
             
+            // 4. Record the latency of the search operation using the latency tracker associated with the collection, if available, to monitor and analyze search performance over time.
             if let Some(tracker) = state.latency_tracker.get(&collection) {
                 tracker.record_search(duration);
             }
+
+
+            // 5. Map the search results into the appropriate response format, including the ID, score, text, and metadata for each hit, and include the latency of the search operation in the response to provide insights into the performance of the search.
 
             let search_results: Vec<HitResponse> = results
                 .into_iter()
@@ -374,15 +384,19 @@ pub async fn search_vectors(
                     metadata: metadata_to_json(&r.metadata),
                 })
                 .collect();
-
+            
+            // 6. Return the search results in a structured response format, including the list of hits and the latency of the search operation, to provide the client with the relevant information about the search results and the performance of the search.
             SearchResultsResponse::Single(SearchResponse { 
                 results: search_results,
                 latency_ms: Some(duration.as_millis() as f32),
             })
         }
         (None, Some(queries)) => {
+            // 1. Validate the batch of search vectors to ensure they meet the required format and constraints before performing the batch search operation.
             validation::validate_batch_size(queries.len(), MAX_BATCH_SIZE, "Search")?;
             validation::validate_vectors(&queries)?;
+
+            // 2. Start batch search with the provided search vectors, k, metric, and effective search configuration. The batch search method will return a list of results for each search vector, where each result is a list of hits that are similar to the corresponding search vector based on the specified metric and search configuration.
 
             let start = Instant::now();
             let params = crate::SearchParams {
@@ -399,6 +413,7 @@ pub async fn search_vectors(
                 params,
             );
             let duration = start.elapsed();
+            // 3. If the batch search takes longer than a configured threshold, log a warning for slow batch queries, including the collection name, request ID, and elapsed time in milliseconds to help identify and analyze performance issues with batch searches.
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
                     collection=%collection,
@@ -412,6 +427,8 @@ pub async fn search_vectors(
                 tracker.record_search(duration);
             }
 
+
+            // 4. Map the batch search results into the appropriate response format, where each search vector's results are represented as a list of hits with their ID, score, text, and metadata. Include the latency of the batch search operation in the response to provide insights into the performance of the batch search.
             let response_results: Vec<Vec<HitResponse>> = batch_results
                 .into_iter()
                 .map(|results: Vec<crate::search::Hit>| {
@@ -426,6 +443,8 @@ pub async fn search_vectors(
                         .collect()
                 })
                 .collect();
+
+            // 5. Return the batch search results in a structured response format, where each entry corresponds to the results for a specific search vector, along with the latency of the batch search operation, to provide the client with comprehensive information about the batch search results and the performance of the batch search.
 
             SearchResultsResponse::Multi(MultiSearchResponse { 
                 results: response_results,
