@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::index::VectorIndex;
-use crate::storage::persistence::EntryPointer;
+use crate::storage::persistence::{EntryPointer, warm_mmap, warm_file, get_wal_path};
 use crate::storage::metadata::CollectionMetadata;
 use super::persistence::PersistenceService;
 use super::cache;
@@ -83,6 +83,17 @@ impl Collection {
 
     pub fn vector_index(&self) -> &dyn VectorIndex {
         self.vector_index.as_ref()
+    }
+
+    /// Fault frequently used files into the page cache to reduce cold-start latency.
+    pub fn warm_page_cache(&self) {
+        if let Some(mmap) = self.mmap.as_ref() {
+            warm_mmap(mmap);
+        }
+        let base = self.path.clone();
+        let _ = warm_file(&format!("{}.vecindex.db", base));
+        let _ = warm_file(&format!("{}.index.db", base));
+        let _ = warm_file(&get_wal_path(&base));
     }
 
     pub fn vectors_view(&self) -> &HashMap<Uuid, Vec<f32>> {

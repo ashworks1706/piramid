@@ -141,7 +141,6 @@ impl CollectionBuilder {
                 Self::rebuild_vector_index(&mut vector_index, &index, mmap_ref);
             }
         }
-        
 
         // Finally, create the collection instance with the loaded index, metadata, and vector index
         let mut collection = Collection {
@@ -156,6 +155,9 @@ impl CollectionBuilder {
             path: path.to_string(),
             persistence,
         };
+
+        
+        
         collection.rebuild_vector_cache();
         Ok(collection)
     }

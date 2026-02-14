@@ -1,6 +1,7 @@
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use parking_lot::RwLock;
 use dashmap::DashMap;
+use tokio::runtime::Handle;
 
 use crate::Collection;
 use crate::storage::collection::CollectionOpenOptions;
@@ -54,6 +55,9 @@ impl AppState {
 
     // Lazily load or create a collection
     pub fn get_or_create_collection(&self, name: &str) -> Result<()> {
+
+        
+
         if self.shutting_down.load(Ordering::Relaxed) {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
@@ -64,10 +68,20 @@ impl AppState {
                 &path,
                 CollectionOpenOptions::from(self.app_config.to_collection_config()),
             )?;
-            self.collections.insert(name.to_string(), Arc::new(RwLock::new(storage)));
+            let handle = Arc::new(RwLock::new(storage));
+            self.collections.insert(name.to_string(), handle.clone());
             
             // Create latency tracker for this collection
             self.latency_tracker.insert(name.to_string(), LatencyTracker::new());
+
+            // Warm caches in the background to avoid first-request latency.
+            let warm_handle = handle.clone();
+            if let Ok(rt) = Handle::try_current() {
+                rt.spawn_blocking(move || {
+                    let guard = warm_handle.read();
+                    guard.warm_page_cache();
+                });
+            }
         }
         
         Ok(())

@@ -17,6 +17,26 @@ pub fn create_mmap(file: &File) -> Result<MmapMut> {
     unsafe { Ok(MmapOptions::new().map_mut(file)?) }
 }
 
+/// Touch each page of the mmap to fault it into memory.
+pub fn warm_mmap(mmap: &MmapMut) {
+    let len = mmap.len();
+    if len == 0 {
+        return;
+    }
+    // Step by page-sized chunks to avoid touching every byte.
+    const PAGE: usize = 4096;
+    let mut offset: usize = 0;
+    while offset < len {
+        // SAFETY: offset is within bounds and we only read.
+        let byte = mmap[offset];
+        std::hint::black_box(byte);
+        offset = offset.saturating_add(PAGE);
+    }
+    // Ensure we touched the tail.
+    let last = mmap[len - 1];
+    std::hint::black_box(last);
+}
+
 pub fn grow_mmap_if_needed(
     mmap: &mut Option<MmapMut>,
     file: &File,

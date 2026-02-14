@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::io::{Read, BufReader};
 use crate::error::Result;
 use crate::index::{SerializableIndex, VectorIndex, HnswIndex, IvfIndex, FlatIndex};
 
@@ -44,6 +45,24 @@ pub fn save_vector_index(collection_path: &str, index: &dyn VectorIndex) -> Resu
     Ok(())
 }
 
+
+pub fn warm_file(path: &str) -> Result<()> {
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e.into()),
+    };
+    let mut reader = BufReader::new(file);
+    let mut buf = vec![0u8; 4 * 1024 * 1024]; // 4MB window to fault pages
+    loop {
+        let read = reader.read(&mut buf)?;
+        if read == 0 {
+            break;
+        }
+        std::hint::black_box(&buf[..read]);
+    }
+    Ok(())
+}
 // Load index from disk
 pub fn load_vector_index(collection_path: &str) -> Result<Option<Box<dyn VectorIndex>>> {
     // To load an index from disk, we first construct the expected file path for the index based on the collection path. We check if the file exists, and if it does, we read the bytes from the file and deserialize them into a SerializableIndex enum. Finally, we convert the SerializableIndex into a Box<dyn VectorIndex> trait object and return it wrapped in Some. If the file does not exist, we return Ok(None) to indicate that there is no existing index to load.
