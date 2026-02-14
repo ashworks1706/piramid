@@ -42,8 +42,6 @@
 
 [ ] CPU Local Embeddings support (e.g. sentence-transformers)
 
-[x] native batch api support for embeddings (single endpoint handling single/batch)
-
 [ ] Request metrics (count, latency, tokens, cost)
 
 [ ] Provider timeout configuration

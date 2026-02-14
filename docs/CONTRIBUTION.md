@@ -2,7 +2,7 @@
 
   1) `src/bin/server.rs` – entrypoint. Loads config via `config::loader::load_app_config`, optionally wires an embedder, builds the Axum router, and starts the server with graceful shutdown.
   2) `src/server/state.rs` – shared `AppState`: holds collections (DashMap of `Arc<RwLock<Collection>>`), embedder, shutdown flag, latency trackers, and config.
-  3) `src/server/routes.rs` + `src/server/handlers/` – HTTP surface. Handlers show validation, lock timing (via metrics helper), and how storage/search are called.
+  3) `src/server/routes.rs` + `src/server/handlers/` – HTTP surface. Handlers show validation, lock timing (via metrics helper), and how storage/search are called. Unified endpoints: vectors/search/embed each accept single or batch payloads (see DTOs in `src/server/types.rs`).
   4) `src/storage/collection/` – core data path. Start with:
       • `builder.rs` (open/replay WAL, build indexes),
       • `operations.rs` (insert/delete/upsert),
@@ -52,7 +52,7 @@
     deserialize doc, compute score via metric (cosine/euclidean/dot) → return hits (id/score/text/metadata) → record latency.
   - Batch Search: Same but over multiple queries (rayon if enabled), returns list-of-lists of hits.
   - Filtered Search (used when filter provided): Run wider search (k*10) → filter hits by metadata predicate → sort+truncate to k.
-  - Embed + Store: POST /embed → call embedder (OpenAI/Ollama via RetryEmbedder/cache) to get vector → then go through insert path → return id+embedding+tokens.
+  - Embed + Store: POST /embed → call embedder (OpenAI/Ollama via RetryEmbedder/cache) to get vector(s) → then go through insert path → return id(s)+embedding(s)+tokens.
   - Text Search: Embed query text via embedder → run normal vector search → return hits.
   - Collections CRUD: Create just ensures collection exists (touches disk/index metadata); list enumerates loaded collections with counts; delete removes files/entries.
   - Metrics/Health: Read-only endpoints summarize counts, index type, memory usage, latency stats, and embedder status.
