@@ -141,11 +141,13 @@ mod tests {
         let test_index = ".piramid/tests/test_basic.db.index.db";
         let test_wal = ".piramid/tests/test_basic.db.wal.db";
         let test_vecindex = ".piramid/tests/test_basic.db.vecindex.db";
+        let test_meta = ".piramid/tests/test_basic.db.metadata.db";
         
         let _ = std::fs::remove_file(test_path);
         let _ = std::fs::remove_file(test_index);
         let _ = std::fs::remove_file(test_wal);
         let _ = std::fs::remove_file(test_vecindex);
+        let _ = std::fs::remove_file(test_meta);
         
         let mut storage = Collection::open(test_path).unwrap();
         let entry = Document::new(vec![1.0, 2.0, 3.0], "test".to_string());
@@ -160,6 +162,7 @@ mod tests {
         std::fs::remove_file(test_index).unwrap();
         let _ = std::fs::remove_file(test_wal);
         let _ = std::fs::remove_file(test_vecindex);
+        let _ = std::fs::remove_file(test_meta);
     }
 
     #[test]
@@ -168,11 +171,13 @@ mod tests {
         let test_index = ".piramid/tests/test_persist.db.index.db";
         let test_wal = ".piramid/tests/test_persist.db.wal.db";
         let test_vecindex = ".piramid/tests/test_persist.db.vecindex.db";
+        let test_meta = ".piramid/tests/test_persist.db.metadata.db";
         
         let _ = std::fs::remove_file(test_path);
         let _ = std::fs::remove_file(test_index);
         let _ = std::fs::remove_file(test_wal);
         let _ = std::fs::remove_file(test_vecindex);
+        let _ = std::fs::remove_file(test_meta);
         
         let id1;
         let id2;
@@ -196,6 +201,7 @@ mod tests {
         std::fs::remove_file(test_index).unwrap();
         let _ = std::fs::remove_file(test_wal);
         let _ = std::fs::remove_file(test_vecindex);
+        let _ = std::fs::remove_file(test_meta);
     }
 
     #[test]

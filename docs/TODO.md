@@ -1,6 +1,6 @@
 ### Foundation
 
-[ ] **Schema Versioning:** Add version headers to storage files to allow future data migration.
+[x] **Schema Versioning:** Add version headers to storage files to allow future data migration.
 
 ### Search & Similarity
 

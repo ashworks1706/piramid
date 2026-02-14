@@ -5,11 +5,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionMetadata {
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
     pub name: String,
     pub created_at: u64,      // Unix timestamp (seconds)
     pub updated_at: u64,      // Unix timestamp (seconds)
     pub dimensions: Option<usize>,  // Expected vector dimensions (None = auto-detect)
     pub vector_count: usize,
+}
+
+pub const SCHEMA_VERSION: u32 = 1;
+
+fn default_schema_version() -> u32 {
+    SCHEMA_VERSION
 }
 
 impl CollectionMetadata {
@@ -20,6 +28,7 @@ impl CollectionMetadata {
             .as_secs();
         
         Self {
+            schema_version: SCHEMA_VERSION,
             name,
             created_at: now,
             updated_at: now,
