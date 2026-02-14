@@ -66,23 +66,23 @@ pub async fn create_collection(
 // GET /api/collections/:name - get info about one collection
 pub async fn get_collection(
     State(state): State<SharedState>,
-    Path(name): Path<String>,
+    Path(collection): Path<String>,
 ) -> Result<Json<CollectionInfo>> {
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&name)?;
+    state.get_or_create_collection(&collection)?;
     
-    let storage_ref = state.collections.get(&name)
+    let storage_ref = state.collections.get(&collection)
         .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
     let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&name).as_deref(), lock_start);
+    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
     let meta = storage.metadata();
     
     Ok(Json(CollectionInfo { 
-        name,
+        name: collection,
         count: storage.count(),
         created_at: Some(meta.created_at),
         updated_at: Some(meta.updated_at),
@@ -93,16 +93,16 @@ pub async fn get_collection(
 // DELETE /api/collections/:name - remove a collection
 pub async fn delete_collection(
     State(state): State<SharedState>,
-    Path(name): Path<String>,
+    Path(collection): Path<String>,
 ) -> Result<Json<DeleteResponse>> {
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    let existed = state.collections.remove(&name).is_some();
+    let existed = state.collections.remove(&collection).is_some();
     
     if existed {
-        let path = format!("{}/{}.db", state.data_dir, name);
+        let path = format!("{}/{}.db", state.data_dir, collection);
         std::fs::remove_file(&path).ok();
     }
     

@@ -109,6 +109,7 @@ pub async fn insert_vector(
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
+    state.ensure_write_allowed()?;
 
     // Validate inputs
     validation::validate_collection_name(&collection)?;
@@ -133,6 +134,7 @@ pub async fn insert_vector(
             if let Some(tracker) = state.latency_tracker.get(&collection) {
                 tracker.record_insert(duration);
             }
+            state.enforce_cache_budget();
             
             InsertResultsResponse::Single(InsertResponse { 
                 id: id.to_string(),
@@ -147,10 +149,11 @@ pub async fn insert_vector(
             let start = Instant::now();
             let ids: Vec<Uuid> = storage.insert_batch(entries)?;
             let duration = start.elapsed();
-            
+
             if let Some(tracker) = state.latency_tracker.get(&collection) {
                 tracker.record_insert(duration);
             }
+            state.enforce_cache_budget();
 
             InsertResultsResponse::Multi(MultiInsertResponse { 
                 ids: ids.into_iter().map(|id| id.to_string()).collect(),
@@ -237,6 +240,7 @@ pub async fn delete_vector(
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
+    state.ensure_write_allowed()?;
 
     state.get_or_create_collection(&collection)?;
     
@@ -271,6 +275,7 @@ pub async fn delete_vectors(
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
+    state.ensure_write_allowed()?;
 
     validation::validate_collection_name(&collection)?;
     validation::validate_batch_size(req.ids.len(), MAX_BATCH_SIZE, "Delete")?;
@@ -471,6 +476,7 @@ pub async fn upsert_vector(
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
+    state.ensure_write_allowed()?;
 
     // Validate inputs
     validation::validate_collection_name(&collection)?;
@@ -516,6 +522,7 @@ pub async fn upsert_vector(
             tracker.record_insert(duration);
         }
     }
+    state.enforce_cache_budget();
     
     Ok(Json(UpsertResponse { 
         id: id.to_string(),

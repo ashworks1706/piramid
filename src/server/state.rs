@@ -9,7 +9,8 @@ use crate::embeddings::Embedder;
 use crate::metrics::LatencyTracker;
 use crate::error::{Result, ServerError};
 use crate::config::AppConfig;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RebuildState {
@@ -36,15 +37,26 @@ pub struct AppState {
     pub data_dir: String, // Base directory for collection files, e.g. "./data"
     pub embedder: Option<Arc<dyn Embedder>>, // Optional embedder, if configured. Wrapped in Arc for shared ownership.
     pub shutting_down: Arc<AtomicBool>, // Flag to indicate server is shutting down, used to reject new requests gracefully
+    pub read_only: Arc<AtomicBool>, // Flag for disk-pressure read-only mode
     pub latency_tracker: Arc<DashMap<String, LatencyTracker>>,  // Per-collection latency tracking
     pub app_config: Arc<RwLock<AppConfig>>, // Global config accessible to handlers, protected by RwLock for dynamic updates
     pub slow_query_ms: u128, // Threshold for logging slow queries in ms
     pub rebuild_jobs: Arc<DashMap<String, RebuildJobStatus>>, // Track index rebuild jobs by collection name
     pub config_last_reload: Arc<AtomicU64>, // Timestamp of last config reload for cache invalidation
+    pub disk_min_free_bytes: Option<u64>,
+    pub disk_readonly_on_low_space: bool,
+    pub cache_max_bytes: Option<u64>,
 }
 
 impl AppState {
-    pub fn new(data_dir: &str, app_config: AppConfig, slow_query_ms: u128) -> Self {
+    pub fn new(
+        data_dir: &str,
+        app_config: AppConfig,
+        slow_query_ms: u128,
+        disk_min_free_bytes: Option<u64>,
+        disk_readonly_on_low_space: bool,
+        cache_max_bytes: Option<u64>,
+    ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
         
         Self {
@@ -52,21 +64,33 @@ impl AppState {
             data_dir: data_dir.to_string(),
             embedder: None,
             shutting_down: Arc::new(AtomicBool::new(false)),
+            read_only: Arc::new(AtomicBool::new(false)),
             latency_tracker: Arc::new(DashMap::new()),
             app_config: Arc::new(RwLock::new(app_config)),
             slow_query_ms,
             rebuild_jobs: Arc::new(DashMap::new()),
             // Initialize to current time; updated on each config reload
             config_last_reload: Arc::new(AtomicU64::new(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
             )),
+            disk_min_free_bytes,
+            disk_readonly_on_low_space,
+            cache_max_bytes,
         }
     }
 
-    pub fn with_embedder(data_dir: &str, app_config: AppConfig, slow_query_ms: u128, embedder: Arc<dyn Embedder>) -> Self {
+    pub fn with_embedder(
+        data_dir: &str,
+        app_config: AppConfig,
+        slow_query_ms: u128,
+        embedder: Arc<dyn Embedder>,
+        disk_min_free_bytes: Option<u64>,
+        disk_readonly_on_low_space: bool,
+        cache_max_bytes: Option<u64>,
+    ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
         
         Self {
@@ -74,16 +98,20 @@ impl AppState {
             data_dir: data_dir.to_string(),
             embedder: Some(embedder),
             shutting_down: Arc::new(AtomicBool::new(false)),
+            read_only: Arc::new(AtomicBool::new(false)),
             latency_tracker: Arc::new(DashMap::new()),
             app_config: Arc::new(RwLock::new(app_config)),
             slow_query_ms,
             rebuild_jobs: Arc::new(DashMap::new()),
             config_last_reload: Arc::new(AtomicU64::new(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
             )),
+            disk_min_free_bytes,
+            disk_readonly_on_low_space,
+            cache_max_bytes,
         }
     }
 
@@ -136,11 +164,11 @@ impl AppState {
             let mut guard = self.app_config.write();
             *guard = new_cfg.clone();
         }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        self.config_last_reload.store(now, Ordering::Relaxed);
+        self.config_last_reload.store(now, AtomicOrdering::Relaxed);
         Ok(new_cfg)
     }
 
@@ -150,6 +178,64 @@ impl AppState {
     
     pub fn initiate_shutdown(&self) {
         self.shutting_down.store(true, Ordering::Relaxed);
+    }
+
+    fn disk_free_bytes(&self) -> Option<u64> {
+        #[cfg(target_family = "unix")]
+        {
+            use std::ffi::CString;
+            let c_path = CString::new(self.data_dir.clone()).ok()?;
+            let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+            let rc = unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) };
+            if rc == 0 {
+                let avail = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
+                return Some(avail);
+            }
+        }
+        None
+    }
+
+    pub fn ensure_write_allowed(&self) -> Result<()> {
+        if self.shutting_down.load(Ordering::Relaxed) {
+            return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
+        }
+        if self.read_only.load(Ordering::Relaxed) {
+            return Err(ServerError::ServiceUnavailable("Server is in read-only mode due to low disk space".into()).into());
+        }
+        if let Some(min_free) = self.disk_min_free_bytes {
+            if let Some(free) = self.disk_free_bytes() {
+                if free < min_free {
+                    if self.disk_readonly_on_low_space {
+                        self.read_only.store(true, Ordering::Relaxed);
+                        return Err(ServerError::ServiceUnavailable("Low disk space; write operations disabled".into()).into());
+                    } else {
+                        tracing::warn!(free_bytes=free, min_free=min_free, "disk_space_low");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn enforce_cache_budget(&self) {
+        let max_bytes = match self.cache_max_bytes {
+            Some(v) => v,
+            None => return,
+        };
+        let mut total: u64 = 0;
+        for entry in self.collections.iter() {
+            let storage = entry.value();
+            let guard = storage.read();
+            total = total.saturating_add(guard.cache_usage_bytes() as u64);
+        }
+        if total > max_bytes {
+            tracing::warn!(total_cache_bytes=total, max_bytes=max_bytes, "cache_budget_exceeded_clearing");
+            for mut entry in self.collections.iter_mut() {
+                let storage = entry.value_mut();
+                let mut guard = storage.write();
+                guard.clear_caches();
+            }
+        }
     }
 }
 

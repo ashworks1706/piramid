@@ -85,6 +85,19 @@ impl Collection {
         self.vector_index.as_ref()
     }
 
+    pub fn cache_usage_bytes(&self) -> usize {
+        let vector_cache_size = self.vector_cache.iter()
+            .map(|(_, vec)| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
+            .sum::<usize>();
+        let metadata_cache_size = self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>();
+        vector_cache_size + metadata_cache_size
+    }
+
+    pub fn clear_caches(&mut self) {
+        self.vector_cache.clear();
+        self.metadata_cache.clear();
+    }
+
     /// Fault frequently used files into the page cache to reduce cold-start latency.
     pub fn warm_page_cache(&self) {
         if let Some(mmap) = self.mmap.as_ref() {

@@ -31,6 +31,7 @@ pub async fn embed_text(
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
+    state.ensure_write_allowed()?;
 
     state.get_or_create_collection(&collection)?;
 
@@ -55,6 +56,7 @@ pub async fn embed_text(
             );
 
             let id = storage.insert(entry)?;
+            state.enforce_cache_budget();
 
             EmbedResultsResponse::Single(EmbedResponse {
                 id: id.to_string(),
@@ -94,6 +96,7 @@ pub async fn embed_text(
 
             let insert_ids = storage.insert_batch(entries)?;
             ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
+            state.enforce_cache_budget();
 
             EmbedResultsResponse::Multi(MultiEmbedResponse {
                 ids,

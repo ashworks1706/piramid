@@ -7,8 +7,6 @@
 
 [ ] Request metrics (count, latency, tokens, cost)
 
-[ ] Provider timeout configuration
-
 **Observability & Health**
 
 [ ] Add logs for server console like Next.js
@@ -45,6 +43,7 @@
 [ ] Remove redundant functions
 [ ] Maintain proper logging
 [ ] Codebase final refactor
+[ ] seperate tests file, get rid of tests on the same file
 
 **Dashboard**
 
@@ -145,39 +144,6 @@
 
 [ ] Metadata schema validation
 
-**Advanced Security**
-
-[ ] JWT token support
-
-[ ] Multi-tenant isolation
-
-[ ] Collection-level permissions
-
-[ ] Rate limiting & quotas
-
-[ ] Audit logging
-
-**API Versioning**
-
-[ ] API version in URLs or headers
-
-[ ] Backward compatibility strategy
-
-[ ] Deprecation warnings for old endpoints
-
-[ ] API changelog tracking
-
-**Monitoring & Alerting**
-
-[ ] Email alerts for errors
-
-[ ] Disk space alerts
-
-[ ] Memory usage alerts
-
-[ ] Index corruption alerts
-
-[ ] Slow query alerts
 
 **Python Support**
 
@@ -197,7 +163,7 @@
 
 [ ] Metadata-only search (no vector similarity)
 
-[ ] Vector similarity between two stored vectors
+[ ] Vector similarity beti thinkween two stored vectors
 
 [ ] Vector count per metadata filter
 
@@ -262,3 +228,38 @@
 [ ] Fallback Circuit Breaker: Auto-switch to CPU search if Zipy returns OOM or timeout errors.
 
 [ ] Health Check Extension: Add GPU status (temperature, memory usage) to /api/health.
+
+
+**Advanced Security**
+
+[ ] JWT token support
+
+[ ] Multi-tenant isolation
+
+[ ] Collection-level permissions
+
+[ ] Rate limiting & quotas
+
+[ ] Audit logging
+
+**API Versioning**
+
+[ ] API version in URLs or headers
+
+[ ] Backward compatibility strategy
+
+[ ] Deprecation warnings for old endpoints
+
+[ ] API changelog tracking
+
+**Monitoring & Alerting**
+
+[ ] Email alerts for errors
+
+[ ] Disk space alerts
+
+[ ] Memory usage alerts
+
+[ ] Index corruption alerts
+
+[ ] Slow query alerts

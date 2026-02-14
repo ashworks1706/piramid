@@ -13,6 +13,7 @@ mod wal;
 mod collection;
 mod search_mode;
 mod app;
+pub use crate::embeddings::EmbeddingConfig;
 pub mod loader;
 
 pub use execution::ExecutionMode;

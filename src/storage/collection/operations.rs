@@ -73,8 +73,17 @@ pub fn get(storage: &Collection, id: &Uuid) -> Option<Document> {
     let index_entry = storage.index.get(id)?;
     let offset = index_entry.offset as usize;
     let length = index_entry.length as usize;
-    let bytes = &storage.mmap.as_ref().unwrap()[offset..offset + length];
-    bincode::deserialize(bytes).ok()
+    if let Some(mmap) = storage.mmap.as_ref() {
+        let bytes = &mmap[offset..offset + length];
+        bincode::deserialize(bytes).ok()
+    } else {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = storage.data_file.try_clone().ok()?;
+        let mut buf = vec![0u8; length];
+        file.seek(SeekFrom::Start(index_entry.offset)).ok()?;
+        file.read_exact(&mut buf).ok()?;
+        bincode::deserialize(&buf).ok()
+    }
 }
 
 pub fn insert_internal(storage: &mut Collection, entry: Document) -> Result<Uuid> {

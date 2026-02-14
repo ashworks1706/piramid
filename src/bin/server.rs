@@ -26,6 +26,9 @@ async fn main() {
         data_dir,
         slow_query_ms,
         embedding: embedding_config,
+        disk_min_free_bytes,
+        disk_readonly_on_low_space,
+        cache_max_bytes,
     } = piramid::config::loader::load_runtime_config();
     
     // Create shared state with optional embedder
@@ -46,21 +49,43 @@ async fn main() {
                 
                 // Wrap with retry logic (3 retries, exponential backoff)
                 let retry_embedder = Arc::new(embeddings::RetryEmbedder::new(embedder));
-                Arc::new(AppState::with_embedder(&data_dir, app_config.clone(), slow_query_ms, retry_embedder))
+                Arc::new(AppState::with_embedder(
+                    &data_dir,
+                    app_config.clone(),
+                    slow_query_ms,
+                    retry_embedder,
+                    disk_min_free_bytes,
+                    disk_readonly_on_low_space,
+                    cache_max_bytes,
+                ))
             }
             Err(e) => {
                 eprintln!("✗ Embeddings:  FAILED");
                 eprintln!("  Error:       {}", e);
                 eprintln!("  Status:      Running without embedding support");
                 eprintln!();
-                Arc::new(AppState::new(&data_dir, app_config.clone(), slow_query_ms))
+                Arc::new(AppState::new(
+                    &data_dir,
+                    app_config.clone(),
+                    slow_query_ms,
+                    disk_min_free_bytes,
+                    disk_readonly_on_low_space,
+                    cache_max_bytes,
+                ))
             }
         }
     } else {
         println!("○ Embeddings:  DISABLED");
         println!("  Configure EMBEDDING_PROVIDER to enable");
         println!();
-        Arc::new(AppState::new(&data_dir, app_config.clone(), slow_query_ms))
+        Arc::new(AppState::new(
+            &data_dir,
+            app_config.clone(),
+            slow_query_ms,
+            disk_min_free_bytes,
+            disk_readonly_on_low_space,
+            cache_max_bytes,
+        ))
     };
     
     // Build router with all our routes
@@ -120,7 +145,7 @@ async fn main() {
         println!("   ⏸Rejecting new requests");
         
         // Flush all collections
-        println!("   💾 Flushing collections...");
+        println!("   Flushing collections...");
         if let Err(e) = state_for_shutdown.checkpoint_all() {
             eprintln!("   Error saving data during shutdown: {}", e);
         } else {
