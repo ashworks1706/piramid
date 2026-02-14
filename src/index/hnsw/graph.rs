@@ -88,6 +88,7 @@ impl HnswIndex{
 
     // Insert a node with access to vector storage for distance calculations
     pub fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>){
+        let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
         // in hnsw, we add nodes one at a time, connecting them to existing nodes
         // first, we need to create the node and determine its level
         // determine the layer for the new node 
@@ -112,7 +113,7 @@ impl HnswIndex{
         
         // Search from top layer down to target layer (layer + 1)
         for lc in ((layer as isize + 1)..=self.max_level).rev() {
-            current_entry = self.search_layer(vector, &current_entry, 1, lc as usize, vectors);
+            current_entry = self.search_layer(vector, &current_entry, 1, lc as usize, vectors, None, &empty_meta);
         }
 
         // Insert and connect at each layer from target down to 0
@@ -124,7 +125,9 @@ impl HnswIndex{
                 &current_entry,
                 self.config.ef_construction,
                 lc,
-                vectors
+                vectors,
+                None,
+                &empty_meta,
             );
 
             // Select M best neighbors (or M_max for layer 0)
@@ -196,7 +199,15 @@ impl HnswIndex{
     // 1. Greedy search from top layer down to layer 1 to find entry point for layer 0
     // 2. Search layer 0 with ef parameter to find k nearest neighbors
     // ef is a parameter that controls the accuracy/speed tradeoff during search
-    pub fn search(&self, query: &[f32], k: usize, ef: usize, vectors: &HashMap<Uuid, Vec<f32>>) -> Vec<Uuid> {
+    pub fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        ef: usize,
+        vectors: &HashMap<Uuid, Vec<f32>>,
+        filter: Option<&crate::search::query::Filter>,
+        metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
+    ) -> Vec<Uuid> {
         if self.start_node.is_none() {
             return Vec::new();
         }
@@ -206,11 +217,11 @@ impl HnswIndex{
 
         // Search from top layer down to layer 1
         for lc in (1..=self.max_level as usize).rev() {
-            current_nearest = self.search_layer(query, &current_nearest, 1, lc, vectors);
+            current_nearest = self.search_layer(query, &current_nearest, 1, lc, vectors, filter, metadatas);
         }
 
         // Search layer 0 with ef
-        current_nearest = self.search_layer(query, &current_nearest, ef.max(k), 0, vectors);
+        current_nearest = self.search_layer(query, &current_nearest, ef.max(k), 0, vectors, filter, metadatas);
         
         // Return top k
         current_nearest.truncate(k);
@@ -225,6 +236,8 @@ impl HnswIndex{
         num_closest: usize,
         level: usize,
         vectors: &HashMap<Uuid, Vec<f32>>,
+        filter: Option<&crate::search::query::Filter>,
+        metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
     ) -> Vec<Uuid> {
         let mut visited = HashSet::new();
         let mut candidates = BinaryHeap::new();
@@ -233,6 +246,13 @@ impl HnswIndex{
         // Initialize with entry points
         for &ep in entry_points {
             if let Some(ep_vector) = vectors.get(&ep) {
+                if let Some(f) = filter {
+                    if let Some(md) = metadatas.get(&ep) {
+                        if !f.matches(md) {
+                            continue;
+                        }
+                    }
+                }
                 let dist = self.distance(query, ep_vector);
                 candidates.push(SearchCandidate { id: ep, distance: dist });
                 nearest.push(SearchCandidate { id: ep, distance: dist });
@@ -256,7 +276,16 @@ impl HnswIndex{
                 if level < node.connections.len() {
                     for &neighbor_id in &node.connections[level] {
                         if visited.insert(neighbor_id) { // only proceed if not visited
+                            // we need to calculate distance to this neighbor and decide if it should be added to candidates and nearest
                             if let Some(neighbor_vector) = vectors.get(&neighbor_id) { 
+                                // apply filter if provided
+                                if let Some(f) = filter {
+                                    if let Some(md) = metadatas.get(&neighbor_id) {
+                                        if !f.matches(md) {
+                                            continue;
+                                        }
+                                    }
+                                }
                                 let dist = self.distance(query, neighbor_vector);
                                 
                                 // If this neighbor is closer than the furthest in nearest, add it
@@ -422,7 +451,8 @@ mod tests {
 
         // Search for something close to vector 5
         let query = vec![5.0, 10.0, 15.0];
-        let results = index.search(&query, 3, 50, &vectors);
+        let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
+        let results = index.search(&query, 3, 50, &vectors, None, &empty_meta);
 
         assert!(results.len() <= 3);
         // Approximate search should return at least one neighbor
@@ -436,7 +466,8 @@ mod tests {
         let vectors = HashMap::new();
 
         let query = vec![1.0, 2.0, 3.0];
-        let results = index.search(&query, 5, 50, &vectors);
+        let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
+        let results = index.search(&query, 5, 50, &vectors, None, &empty_meta);
 
         assert_eq!(results.len(), 0);
     }
@@ -458,9 +489,6 @@ mod tests {
         assert_eq!(index.nodes.len(), 0);
     }
 }
-
-
-
 
 
 

@@ -113,7 +113,8 @@ mod tests {
         
         // Search for nearest to [1, 0, 0]
         let query = vec![1.0, 0.0, 0.0];
-        let results = index.search(&query, 2, &vectors, crate::config::SearchConfig::default());
+        let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
+        let results = index.search(&query, 2, &vectors, crate::config::SearchConfig::default(), None, &empty_meta);
         
         assert_eq!(results.len(), 2);
         assert_eq!(results[0], id1);

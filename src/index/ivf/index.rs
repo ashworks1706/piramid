@@ -317,7 +317,8 @@ mod tests {
         index.insert(id2, &v2, &vectors);
         
         let query = vec![1.0, 0.0, 0.0];
-        let results = index.search(&query, 1, &vectors, crate::config::SearchConfig::default());
+        let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
+        let results = index.search(&query, 1, &vectors, crate::config::SearchConfig::default(), None, &empty_meta);
         
         assert!(!results.is_empty());
     }

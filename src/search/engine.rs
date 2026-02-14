@@ -5,6 +5,8 @@ use crate::config::ExecutionMode;
 use crate::metrics::Metric;
 use crate::search::{Hit, query::Filter, utils::sort_and_truncate};
 use crate::storage::Collection;
+use uuid::Uuid;
+use std::collections::HashMap;
 
 // Parameters for a search request.
 #[derive(Debug, Clone, Copy)]
@@ -26,15 +28,15 @@ impl Default for SearchParams<'_> {
     }
 }
 
-pub fn search_collection(
+fn search_collection_with_maps(
     storage: &Collection,
     query: &[f32],
-    k: usize, 
+    k: usize,
     metric: Metric,
     params: SearchParams<'_>,
+    vectors: &HashMap<Uuid, Vec<f32>>,
+    metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
 ) -> Vec<Hit> {
-    // Build vector map once for the index to use.
-    let vectors = storage.get_vectors();
     let effective_search = params.search_config_override.unwrap_or(storage.config.search);
     let base_overfetch = effective_search.filter_overfetch.max(1);
     let expansion = params
@@ -49,6 +51,8 @@ pub fn search_collection(
         search_k,
         vectors,
         effective_search,
+        params.filter,
+        metadatas,
     );
 
     let mut results = Vec::new();
@@ -76,6 +80,22 @@ pub fn search_collection(
     }
 }
 
+pub fn search_collection(
+    storage: &Collection,
+    query: &[f32],
+    k: usize, 
+    metric: Metric,
+    params: SearchParams<'_>,
+) -> Vec<Hit> {
+    let vectors = storage.get_vectors();
+    let metadatas: HashMap<Uuid, crate::metadata::Metadata> = storage
+        .get_all()
+        .into_iter()
+        .map(|doc| (doc.id, doc.metadata.clone()))
+        .collect();
+    search_collection_with_maps(storage, query, k, metric, params, vectors, &metadatas)
+}
+
 pub fn search_batch_collection(
     storage: &Collection,
     queries: &[Vec<f32>],
@@ -83,16 +103,22 @@ pub fn search_batch_collection(
     metric: Metric,
     params: SearchParams<'_>,
 ) -> Vec<Vec<Hit>> {
+    let vectors = storage.get_vectors();
+    let metadatas: HashMap<Uuid, crate::metadata::Metadata> = storage
+        .get_all()
+        .into_iter()
+        .map(|doc| (doc.id, doc.metadata.clone()))
+        .collect();
     if storage.config().parallelism.parallel_search {
         use rayon::prelude::*;
         queries
             .par_iter()
-            .map(|query| search_collection(storage, query, k, metric, params))
+            .map(|query| search_collection_with_maps(storage, query, k, metric, params, vectors, &metadatas))
             .collect()
     } else {
         queries
             .iter()
-            .map(|query| search_collection(storage, query, k, metric, params))
+            .map(|query| search_collection_with_maps(storage, query, k, metric, params, vectors, &metadatas))
             .collect()
     }
 }
