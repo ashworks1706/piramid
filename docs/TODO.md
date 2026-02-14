@@ -27,8 +27,6 @@
 
 **Index Management**
 
-[ ] Rebuild index function
-
 [ ] Compaction and cleanup (remove deleted vectors; reclaim space)
 
 [ ] Duplicate detection (find similar vectors in collection)
