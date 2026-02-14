@@ -1,7 +1,3 @@
-### Foundation
-
-[x] **Schema Versioning:** Add version headers to storage files to allow future data migration.
-
 ### Search & Similarity
 
 [ ] **Filtered HNSW Traversal:** Integrate bitmap checks directly into the graph traversal loop.
@@ -23,8 +19,6 @@
 [ ] implement actual memory detection for collection 
 
 **Configuration**
-
-[x] Config file support (YAML/JSON)
 
 [ ] make sure config is universal and accessed from one point 
 
@@ -48,15 +42,9 @@
 
 **Observability**
 
-[x] Structured logging with tracing crate
-
-[x] Request ID for tracing
-
 [ ] Enhanced health checks (storage status, index health, disk space)
 
 [ ] Server version endpoint
-
-[x] Slow query logging
 
 **Index Management**
 
@@ -215,8 +203,6 @@
 [ ] Schema versioning
 
 **Advanced Search**
-
-[x] Range search (distance threshold instead of top-k)
 
 [ ] Recommendation API (similar to these IDs, not those)
 
