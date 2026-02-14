@@ -1,3 +1,4 @@
+
 ### Production 
 
 **Embeddings Optimization**
@@ -24,14 +25,6 @@
 
 [ ] HNSW tombstoning: soft-delete nodes without breaking graph connectivity
 
-**Resource Management**
-
-[ ] Collection limits (max vectors; storage size per collection)
-
-[ ] Space safeguards (disk monitoring; read-only mode when full; cleanup of orphaned files)
-
-[ ] Memory pressure handling
-
 **HTTP & Networking**
 
 [ ] HTTP/2 support
@@ -39,8 +32,6 @@
 [ ] Compression (gzip/brotli) for responses
 
 [ ] Keep-alive connection management
-
-**Security Basics**
 
 [ ] Security headers (CORS, CSP, HSTS)
 

@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use super::*;
 
+
 // Unified collection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionConfig {
@@ -32,6 +33,10 @@ pub struct CollectionConfig {
     // Execution mode for vector operations
     #[serde(default)]
     pub execution: ExecutionMode,
+
+    // Limits configuration
+    #[serde(default)]
+    pub limits: LimitsConfig,
 }
 
 impl Default for CollectionConfig {
@@ -44,6 +49,7 @@ impl Default for CollectionConfig {
             wal: WalConfig::default(),
             parallelism: ParallelismConfig::default(),
             execution: ExecutionMode::Auto,
+            limits: LimitsConfig::default(),
         }
     }
 }
@@ -84,6 +90,12 @@ impl CollectionConfig {
     // Set execution mode
     pub fn with_execution_mode(mut self, mode: ExecutionMode) -> Self {
         self.execution = mode;
+        self
+    }
+
+    // Set limits configuration
+    pub fn with_limits(mut self, limits: LimitsConfig) -> Self {
+        self.limits = limits;
         self
     }
 }

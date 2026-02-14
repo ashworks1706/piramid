@@ -2,13 +2,72 @@
 // This module implements the core CRUD operations for the collection, including get, insert, delete, and update. These operations interact with the underlying storage layer to read and write documents, update the index and vector index, and manage the in-memory caches. The insert and delete operations also log changes to the WAL for durability and recovery purposes. The update operations allow for modifying either the metadata or the vector of an existing document while ensuring that the changes are properly persisted and reflected in the index and caches.
 use uuid::Uuid;
 
-use crate::error::Result;
+use crate::error::{Result, ServerError};
 use crate::storage::document::Document;
 use crate::storage::wal::WalEntry;
 use crate::storage::persistence::{EntryPointer, grow_mmap_if_needed};
 use crate::quantization::QuantizedVector;
 use crate::metadata::Metadata;
 use super::storage::Collection;
+
+// Enforce collection limits for a single entry. This function checks the size of the entry being inserted against the configured limits for the collection, such as maximum number of vectors, maximum total bytes, and maximum bytes per vector. If any of the limits are exceeded, it returns an error to prevent inserting data that would violate the collection's constraints. This is important for maintaining the integrity of the collection and ensuring that it operates within defined resource limits, especially when inserting large entries that could potentially consume excessive resources.
+fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()> {
+    let limits = storage.config.limits;
+
+    if let Some(max_vecs) = limits.max_vectors {
+        if storage.count() >= max_vecs {
+            return Err(ServerError::InvalidRequest("Collection max vectors reached".into()).into());
+        }
+    }
+
+    if let Some(max_bytes) = limits.max_bytes {
+        let current_size = storage.data_file.metadata()?.len();
+        let required = current_size.saturating_add(entry_bytes as u64);
+        if required > max_bytes {
+            return Err(ServerError::InvalidRequest("Collection max size reached".into()).into());
+        }
+    }
+
+    if let Some(max_vec_bytes) = limits.max_vector_bytes {
+        if entry_bytes > max_vec_bytes {
+            return Err(ServerError::InvalidRequest("Vector exceeds max allowed size".into()).into());
+        }
+    }
+
+    Ok(())
+}
+
+// Enforce collection limits for batch operations. This function checks the total number of entries being inserted, the total size in bytes of those entries, and the maximum size of any single entry against the configured limits for the collection. If any of the limits are exceeded, it returns an error to prevent inserting data that would violate the collection's constraints. This is important for maintaining the integrity of the collection and ensuring that it operates within defined resource limits, especially during batch operations that can potentially add a large amount of data at once.
+fn enforce_limits_batch(storage: &Collection, total_entries: usize, total_bytes: u64, max_entry_bytes: Option<usize>) -> Result<()> {
+    let limits = storage.config.limits;
+
+    if let Some(max_vecs) = limits.max_vectors {
+        let current = storage.count();
+        if current.saturating_add(total_entries) > max_vecs {
+            return Err(ServerError::InvalidRequest("Collection max vectors reached".into()).into());
+        }
+    }
+
+    if let Some(max_bytes) = limits.max_bytes {
+        let current_size = storage.data_file.metadata()?.len();
+        let required = current_size.saturating_add(total_bytes);
+        if required > max_bytes {
+            return Err(ServerError::InvalidRequest("Collection max size reached".into()).into());
+        }
+    }
+
+    if let Some(max_vec_bytes) = max_entry_bytes {
+        if max_vec_bytes > 0 {
+            if let Some(cfg_limit) = limits.max_vector_bytes {
+                if max_vec_bytes > cfg_limit {
+                    return Err(ServerError::InvalidRequest("Vector exceeds max allowed size".into()).into());
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 pub fn get(storage: &Collection, id: &Uuid) -> Option<Document> {
     let index_entry = storage.index.get(id)?;
@@ -22,6 +81,9 @@ pub fn insert_internal(storage: &mut Collection, entry: Document) -> Result<Uuid
     // 1. Serialize the document entry into bytes using bincode. This will allow us to write the document data to the memory-mapped file in a compact binary format. The serialized bytes will include all the necessary information about the document, such as its ID, vector, text, and metadata.
     let id = entry.id;
     let bytes = bincode::serialize(&entry)?; 
+
+    // Enforce collection limits before proceeding with the insertion. We check the size of the serialized entry against the configured limits for the collection, such as maximum number of vectors, maximum total bytes, and maximum bytes per vector. If any of the limits are exceeded, we return an error to prevent inserting data that would violate the collection's constraints. This step is crucial for maintaining the integrity of the collection and ensuring that it operates within defined resource limits.
+    enforce_limits_single(storage, bytes.len())?;
 
     // 2. Calculate the offset for where to write the new document in the memory-mapped file. We find the maximum offset of existing entries in the index and add the length of those entries to determine where the new entry should be written. This ensures that we append new entries to the end of the file without overwriting existing data.
     let offset = storage.index.values()
@@ -116,6 +178,8 @@ pub fn insert_batch(storage: &mut Collection, entries: Vec<Document>) -> Result<
     
     //  Calculate the total size required to write all new entries and grow the memory-mapped file if necessary. We sum the lengths of all serialized entries and add that to the current offset to determine the required size of the memory-mapped file. If the required size exceeds the current size of the memory-mapped file, we call the grow_mmap_if_needed function to resize the underlying file and create a new memory map with the updated size. This ensures that we have enough space to write all new entries without running into out-of-bounds errors.
     let total_bytes: u64 = serialized.iter().map(|(_, b)| b.len() as u64).sum();
+    let max_entry_bytes = serialized.iter().map(|(_, b)| b.len()).max();
+    enforce_limits_batch(storage, serialized.len(), total_bytes, max_entry_bytes)?;
     let required_size = current_offset + total_bytes;
     
     // Grow the memory-mapped file if needed to accommodate all new entries. This involves unmapping the current memory map, resizing the underlying file, and creating a new memory map with the updated size. By ensuring that the memory-mapped file is large enough to hold all new entries, we can safely write the serialized data without risking out-of-bounds errors or data corruption.
@@ -155,7 +219,11 @@ pub fn upsert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     // For an upsert operation, if the document already exists, we treat it as an update. This involves deleting the existing entry and then inserting the new entry with the updated information. By doing this, we ensure that the index and vector index are properly updated to reflect the changes in the document, and that the WAL accurately captures the update operation for durability and recovery purposes.
 
     let id = entry.id;
-    if storage.index.contains_key(&id) {
+    let bytes = bincode::serialize(&entry)?;
+
+    let existing = storage.index.contains_key(&id);
+    if existing {
+        enforce_limits_single(storage, bytes.len())?;
         let vector = entry.get_vector();
         let mut wal_entry = WalEntry::Update {
             id,
@@ -168,12 +236,16 @@ pub fn upsert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
         
 
         delete_internal(storage, &id);
-        insert_internal(storage, entry)?;
+        // reuse serialized bytes by deserializing again for insert? easiest: use entry clone? entry moved
+        let doc = bincode::deserialize(&bytes)?;
+        insert_internal(storage, doc)?;
         super::persistence::save_index(storage)?;
         super::persistence::save_vector_index(storage)?;
         storage.track_operation()?;
         Ok(id)
     } else {
+        enforce_limits_single(storage, bytes.len())?;
+        // reconstruct doc from bytes to avoid double serialize? we already have entry; serialize used just for size check
         insert(storage, entry)
     }
 }

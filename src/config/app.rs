@@ -2,7 +2,7 @@ use serde::{Serialize, Deserialize};
 
 use super::{
     CollectionConfig, SearchConfig, QuantizationConfig, MemoryConfig, WalConfig,
-    ParallelismConfig, ExecutionMode,
+        ParallelismConfig, ExecutionMode, LimitsConfig,
 };
 use crate::index::IndexConfig;
 
@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub parallelism: ParallelismConfig,
     pub execution: ExecutionMode,
     pub search: SearchConfig,
+    pub limits: LimitsConfig,
 }
 
 impl Default for AppConfig {
@@ -28,6 +29,7 @@ impl Default for AppConfig {
             parallelism: ParallelismConfig::default(),
             execution: ExecutionMode::Auto,
             search: SearchConfig::default(),
+            limits: LimitsConfig::default(),
         }
     }
 }
@@ -57,6 +59,7 @@ impl AppConfig {
             wal: self.wal.clone(),
             parallelism: self.parallelism.clone(),
             execution: self.execution,
+            limits: self.limits.clone(),
         }
     }
 
@@ -141,6 +144,22 @@ impl AppConfig {
         {
             if let Ok(factor) = val.parse::<usize>() {
                 self.search.filter_overfetch = factor.max(1);
+            }
+        }
+
+        if let Ok(val) = std::env::var("LIMIT_MAX_VECTORS") {
+            if let Ok(v) = val.parse::<usize>() {
+                self.limits.max_vectors = Some(v);
+            }
+        }
+        if let Ok(val) = std::env::var("LIMIT_MAX_BYTES") {
+            if let Ok(v) = val.parse::<u64>() {
+                self.limits.max_bytes = Some(v);
+            }
+        }
+        if let Ok(val) = std::env::var("LIMIT_MAX_VECTOR_BYTES") {
+            if let Ok(v) = val.parse::<usize>() {
+                self.limits.max_vector_bytes = Some(v);
             }
         }
     }
