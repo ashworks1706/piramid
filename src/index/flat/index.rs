@@ -17,6 +17,7 @@ pub struct FlatIndex {
     vector_ids: Vec<Uuid>,  // Track which vectors we've seen
 }
 
+// Implement methods for FlatIndex
 impl FlatIndex {
     pub fn new(config: FlatConfig) -> Self {
         FlatIndex {
@@ -25,7 +26,7 @@ impl FlatIndex {
         }
     }
 }
-
+// Implement the VectorIndex trait for FlatIndex. This includes methods for inserting vectors, searching for nearest neighbors, removing vectors, and getting index statistics. The insert method simply tracks the IDs of the vectors without building any indexing structure. The search method performs a brute force search by calculating the distance from the query to every vector in the collection and returning the top k results based on the configured metric. The remove method removes a vector ID from the tracking list, and the stats method returns information about the index such as total vectors and memory usage.
 impl VectorIndex for FlatIndex {
     fn insert(&mut self, id: Uuid, _vector: &[f32], _vectors: &HashMap<Uuid, Vec<f32>>) {
         // Just track the ID - no indexing structure needed
@@ -34,6 +35,7 @@ impl VectorIndex for FlatIndex {
         }
     }
     
+    // Search for nearest neighbors to the query vector. This method calculates the distance from the query to every vector in the collection using the configured metric, sorts the results by similarity score, and returns the top k IDs. The quality parameter is ignored for flat index since it's always exhaustive. The filter and metadata parameters are also ignored in this simple implementation, but they could be used in a more advanced version to filter results based on metadata or other criteria.
     fn search(
         &self,
         query: &[f32],

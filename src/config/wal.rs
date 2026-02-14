@@ -1,5 +1,5 @@
 // Write-Ahead Log (WAL) configuration
-
+// This configuration struct defines the parameters for the write-ahead log, which is used to ensure durability and recoverability of the collection in case of crashes or unexpected shutdowns. The WAL allows us to log changes to the collection before they are applied, so that we can replay those changes during recovery to bring the collection back to a consistent state.
 use serde::{Deserialize, Serialize};
 
 // WAL configuration

@@ -6,6 +6,7 @@ use super::{
 };
 use crate::index::IndexConfig;
 
+// Main application configuration struct that encompasses all sub-configurations for the collection, index, search, quantization, memory management, WAL, parallelism, and execution mode. This struct can be easily serialized/deserialized from JSON or other formats for configuration files or environment variable overrides.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub index: IndexConfig,
@@ -61,6 +62,7 @@ impl AppConfig {
 
     /// Apply environment variable overrides to an existing config.
     pub fn apply_env_overrides(&mut self) {
+        // Check for environment variables that can override the default configuration values. This allows users to configure the application using environment variables without needing to modify configuration files. Each variable is checked and parsed, and if valid, it updates the corresponding configuration field.
         if let Ok(val) = std::env::var("INDEX_TYPE") {
             self.index = match val.to_lowercase().as_str() {
                 "flat" => IndexConfig::Flat {
@@ -144,6 +146,7 @@ impl AppConfig {
     }
 
     pub fn from_env() -> Self {
+        // Create a default configuration and then apply any overrides from environment variables. This allows for flexible configuration of the application through environment variables while still providing sensible defaults.
         let mut cfg = AppConfig::default();
         cfg.apply_env_overrides();
         cfg

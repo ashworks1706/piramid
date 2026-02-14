@@ -93,6 +93,7 @@ pub enum IndexType {
     Ivf,
 }
 
+// Implement Display for IndexType for better readability in logs and stats
 impl std::fmt::Display for IndexType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -110,7 +111,7 @@ pub enum SerializableIndex {
     Hnsw(crate::index::hnsw::HnswIndex),
     Ivf(crate::index::ivf::IvfIndex),
 }
-
+// Implement a method to convert the SerializableIndex back into a trait object for use in the system. This allows us to persist the index state and later restore it while still using the unified VectorIndex interface for operations.
 impl SerializableIndex {
     pub fn to_trait_object(self) -> Box<dyn VectorIndex> {
         match self {

@@ -10,6 +10,7 @@ pub fn dot_product_simd(a: &[f32], b: &[f32]) -> f32 {
     let chunks = len / 8;
     let remainder = len % 8;
 
+    // Process 8 elements at a time using SIMD. The loop iterates over the input vectors in chunks of 8 (the size of f32x8), loading each chunk into SIMD registers, performing element-wise multiplication, and accumulating the results in the sum register. After processing all full chunks, any remaining elements that don't fit into a full SIMD register are handled in a separate loop to ensure all elements contribute to the final dot product.
     for i in 0..chunks {
         let offset = i * 8;
         let va = f32x8::new([

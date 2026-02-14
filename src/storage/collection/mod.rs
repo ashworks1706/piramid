@@ -29,7 +29,7 @@ impl Default for CollectionOpenOptions {
         }
     }
 }
-
+// Implement conversion from CollectionConfig to CollectionOpenOptions for easier API usage. This allows users to directly pass a CollectionConfig when opening a collection, and it will be automatically converted into the appropriate open options. This simplifies the API and makes it more convenient for users who want to customize their collection configuration without needing to manually construct the open options.
 impl From<crate::config::CollectionConfig> for CollectionOpenOptions {
     fn from(config: crate::config::CollectionConfig) -> Self {
         Self { config }

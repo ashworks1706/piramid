@@ -15,6 +15,7 @@ pub fn cosine_similarity_simd(a: &[f32], b: &[f32]) -> f32 {
     let remainder = len % 8;
     
     // Process 8 elements at a time using SIMD
+    // it works by loading 8 consecutive elements from each vector into SIMD registers (f32x8), then performing element-wise multiplication to compute the dot product and norms in parallel. The results are accumulated in SIMD registers, which are then reduced to scalar values for the final cosine similarity calculation. Any remaining elements that don't fit into a full SIMD register are processed using a simple scalar loop to ensure all elements are included in the computation.
     for i in 0..chunks {
         let offset = i * 8;
         let va = f32x8::new([

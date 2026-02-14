@@ -9,9 +9,11 @@ pub fn search(
     metric: Metric,
     mut params: crate::search::SearchParams,
 ) -> Vec<Hit> {
+    // If the execution mode in the search parameters is set to Auto, we override it with the collection's configured execution mode. 
     if matches!(params.mode, crate::config::ExecutionMode::Auto) {
         params.mode = collection.config().execution;
     }
+    // If the filter overfetch override is not set in the search parameters, we set it to the collection's configured filter overfetch value.
     if params.filter_overfetch_override.is_none() {
         params.filter_overfetch_override = Some(collection.config.search.filter_overfetch);
     }

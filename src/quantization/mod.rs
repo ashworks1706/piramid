@@ -1,5 +1,5 @@
 // Scalar quantization for memory efficient storage of vectors. 
-
+// This module provides functionality to quantize floating-point vectors into a more compact representation using 8-bit integers, along with the necessary metadata to reconstruct the original vectors when needed. The quantization process involves determining the minimum and maximum values in the vector to create a mapping from the original floating-point range to the discrete integer range. This allows for significant memory savings while still retaining enough information to approximate the original vectors for similarity search and other operations.
 
 use serde::{Serialize, Deserialize};
 
@@ -21,12 +21,12 @@ impl QuantizedVector {
             };
         }
 
-        let min = vector.iter().fold(f32::INFINITY, |a, &b| a.min(b));
-        let max = vector.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let min = vector.iter().fold(f32::INFINITY, |a, &b| a.min(b)); // find min and max in one pass using fold
+        let max = vector.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)); // this is more efficient than separate min and max calls
 
         // Handle constant vectors (all same value)
         if (max - min).abs() < f32::EPSILON {
-            let values = vec![0i8; vector.len()];
+            let values = vec![0i8; vector.len()]; // all values are the same, so we can just store zeros and use min/max to reconstruct
             return QuantizedVector { values, min, max };
         }
 
@@ -55,8 +55,8 @@ impl QuantizedVector {
         }
 
         // Handle constant vectors
-        if (self.max - self.min).abs() < f32::EPSILON {
-            return vec![self.min; self.values.len()];
+        if (self.max - self.min).abs() < f32::EPSILON { // if all values are the same, just return a vector of the min value
+            return vec![self.min; self.values.len()]; 
         }
 
         let range = self.max - self.min;

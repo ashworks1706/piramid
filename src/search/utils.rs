@@ -6,9 +6,9 @@ use crate::search::Hit;
 pub(crate) fn sort_and_truncate(results: &mut Vec<Hit>, k: usize) {
     results.sort_by(|a, b| {
         b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+            .partial_cmp(&a.score) // Sort by score (descending)
+            .unwrap_or(std::cmp::Ordering::Equal) // Handle NaN cases by treating them as equal
+    }); // Sort by score (descending)
     results.truncate(k);
 }
 

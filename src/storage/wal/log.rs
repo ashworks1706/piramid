@@ -84,6 +84,7 @@ impl Wal {
         Ok(entries)
     }
 
+    // Log a new WAL entry. This method assigns the next sequence number to the entry, serializes it to JSON, and appends it to the WAL file. If the WAL is disabled (file is None), it simply increments the sequence number without writing anything.
     pub fn log(&mut self, entry: &mut WalEntry) -> Result<()> {
         match entry {
             WalEntry::Insert { seq, .. }
@@ -108,6 +109,7 @@ impl Wal {
         Ok(())
     }
     
+    // Rotate the WAL file by closing the current one and starting a new, empty file. This is typically done after a checkpoint to prevent the WAL from growing indefinitely and to allow old entries to be safely discarded.
     pub fn rotate(&mut self) -> Result<()> {
         if self.file.is_none() {
             return Ok(());
@@ -133,6 +135,7 @@ impl Wal {
         Ok(())
     }
 
+    // Ensure the WAL file has a header with the correct version. If the file is new (size 0), we write the header. If the file already exists, we assume it has a valid header and do not modify it.
     fn ensure_header(&mut self) -> Result<()> {
         if self.file.is_none() {
             return Ok(());

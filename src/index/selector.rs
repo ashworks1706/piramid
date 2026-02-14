@@ -1,6 +1,6 @@
 // Index selection and factory
 // Auto-selects the best index based on collection size and requirements
-
+// This module defines the IndexConfig enum, which provides a unified configuration interface for different types of vector indices (Flat, HNSW, IVF). The Auto variant allows the system to automatically select the most appropriate index type based on the number of vectors in the collection. Each index type has its own specific configuration parameters, but they all share common options such as the distance metric and execution mode. The create_index method is responsible for instantiating the correct index implementation based on the selected type and configuration.
 use serde::{Serialize, Deserialize};
 use crate::metrics::Metric;
 use crate::config::ExecutionMode;
@@ -66,6 +66,7 @@ impl Default for IndexConfig {
     }
 }
 
+// Enum to represent the selected index type after auto-selection
 impl IndexConfig {
     // Select the best index type based on number of vectors
     pub fn select_type(&self, num_vectors: usize) -> IndexType {
@@ -91,6 +92,7 @@ impl IndexConfig {
         
         match index_type {
             IndexType::Flat => {
+                // For auto-selection, we use the metric and mode from the config, but the rest of the parameters are not needed for a flat index. The search configuration is also passed through, although it may not be used in a simple flat index implementation.
                 let (metric, mode) = self.get_metric_and_simd();
                 Box::new(FlatIndex::new(FlatConfig { metric, mode }))
             }
@@ -108,6 +110,7 @@ impl IndexConfig {
                         }
                     }
                     _ => {
+                        // For auto-selection, we use default HNSW parameters but apply the metric and mode from the config. The ef_search parameter defaults to the same value as ef_construction if not explicitly set, allowing users to configure search quality separately if desired.
                         let (metric, mode) = self.get_metric_and_simd();
                         HnswConfig {
                             m: 16,
@@ -134,6 +137,7 @@ impl IndexConfig {
                         }
                     }
                     _ => {
+                        // For auto-selection, we use the auto-configure method to determine the number of clusters and probes based on the number of vectors, while applying the metric and mode from the config. This allows the IVF index to be configured dynamically based on the dataset size while still respecting user preferences for distance metric and execution mode.
                         let (metric, mode) = self.get_metric_and_simd();
                         let mut config = IvfConfig::auto(num_vectors);
                         config.metric = metric;

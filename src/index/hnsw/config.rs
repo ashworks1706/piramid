@@ -17,6 +17,7 @@ pub struct HnswConfig{
     pub mode: ExecutionMode,  // SIMD execution mode
 }
 
+// Implement default values for HnswConfig. The default configuration uses M=16, which is a common choice for the number of connections per node in HNSW. The ef_construction and ef_search parameters are both set to 200, which provides a good balance between search quality and speed. The layer multiplier is calculated as 1/ln(M), which is a common setting for HNSW. The default metric is cosine similarity, and the execution mode is set to automatic, allowing the system to choose the best execution strategy based on the environment and workload.
 impl Default for HnswConfig {
     fn default() -> Self {
         let m = 16;

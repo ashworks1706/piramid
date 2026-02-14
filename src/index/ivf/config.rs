@@ -15,6 +15,7 @@ pub struct IvfConfig {
     pub mode: ExecutionMode,
 }
 
+// Implement default values for IvfConfig. The default configuration uses 100 clusters, which is a common choice for the number of clusters in IVF. The number of probes is set to 5, which provides a good balance between search quality and speed. The maximum number of iterations for k-means clustering is set to 10, which is typically sufficient for convergence. The default metric is cosine similarity, and the execution mode is set to automatic, allowing the system to choose the best execution strategy based on the environment and workload.
 impl Default for IvfConfig {
     fn default() -> Self {
         IvfConfig {
@@ -26,6 +27,7 @@ impl Default for IvfConfig {
         }
     }
 }
+
 
 impl IvfConfig {
     // Auto-configure based on dataset size

@@ -71,9 +71,7 @@ impl OllamaEmbedderInner {
 impl Embedder for OllamaEmbedderInner {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
 
-        // check the LRU cache 
-        
-
+        // Construct the request payload for the Ollama API. The request includes the model name and the input text (prompt) that we want to embed. We will send this request to the /api/embeddings endpoint of the Ollama server, which will return the embedding vector for the input text.
         let request = OllamaEmbeddingRequest {
             model: self.model.clone(),
             prompt: text.to_string(),
@@ -81,6 +79,7 @@ impl Embedder for OllamaEmbedderInner {
 
         let url = format!("{}/api/embeddings", self.base_url);
 
+        // Send the request to the Ollama API and handle the response. We use the reqwest client to send a POST request with the JSON payload. If the request fails (e.g., network error), we return an EmbeddingError. If the response status is not successful, we read the error message from the response and return it as an API error. If the response is successful, we parse the JSON response into our OllamaEmbeddingResponse struct, which contains the embedding vector.
         let response = self
             .client
             .post(&url)
@@ -100,12 +99,11 @@ impl Embedder for OllamaEmbedderInner {
             return Err(EmbeddingError::ApiError(format!("{}: {}", status, error_text)));
         }
 
+        // Parse the successful response from the Ollama API. The response is expected to be a JSON object that contains the embedding vector. We deserialize this JSON into our OllamaEmbeddingResponse struct. If deserialization fails, we return an InvalidResponse error.
         let api_response: OllamaEmbeddingResponse = response
             .json()
             .await
             .map_err(|e| EmbeddingError::InvalidResponse(e.to_string()))?;
-
-        // put in LRU 
 
 
         Ok(EmbeddingResponse {

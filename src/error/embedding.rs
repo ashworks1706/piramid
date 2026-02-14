@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+// Define the error type for embedding operations. This enum represents various kinds of errors that can occur when working with embedding providers, such as HTTP request failures, API errors, invalid responses, configuration issues, rate limits, authentication failures, provider unavailability, timeouts, and invalid models. Each variant includes a message that provides more details about the error. The is_recoverable method allows us to determine if an error is something that we can retry or if it is a fatal error that should not be retried.
 #[derive(Error, Debug)]
 pub enum EmbeddingError {
     #[error("HTTP request failed: {0}")]

@@ -34,6 +34,7 @@ impl EmbeddingProvider {
 
 // Create an embedder from configuration
 pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embedder>> {
+    // Determine which embedding provider to use based on the configuration. The provider is specified as a string in the configuration, and we parse it into the EmbeddingProvider enum. If the provider is not recognized, we return a configuration error.
     let provider = EmbeddingProvider::from_str(&config.provider).ok_or_else(|| {
         EmbeddingError::ConfigError(format!("Unknown provider: {}", config.provider))
     })?;

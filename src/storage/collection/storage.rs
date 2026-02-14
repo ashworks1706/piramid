@@ -68,13 +68,14 @@ impl Collection {
     }
     
     pub fn memory_usage_bytes(&self) -> usize {
-        let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0);
-        let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>();
+        // Calculate memory usage by summing the sizes of the memory-mapped file, index, vector cache, metadata cache, and vector index.
+        let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0); // Size of the memory-mapped file
+        let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>(); // Approximate size of the index based on its capacity
 
         let vector_cache_size = self.vector_cache.iter()
             .map(|(_, vec)| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
-            .sum::<usize>();
-        let metadata_cache_size = self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>();
+            .sum::<usize>(); // Size of the vector cache based on the number of entries and their lengths
+        let metadata_cache_size = self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>(); // Approximate size of the metadata cache based on its capacity
         
         
         mmap_size + index_size + vector_cache_size + metadata_cache_size + self.vector_index.stats().memory_usage_bytes
