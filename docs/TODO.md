@@ -3,15 +3,13 @@
 
 **Embeddings Optimization**
 
-[ ] CPU local embeddings support (e.g. sentence-transformers)
-
 [ ] Request metrics (count, latency, tokens, cost)
 
 **Observability & Health**
 
 [ ] Add logs for server console like Next.js
 
-[ ] Server version endpoint
+[ ] Verbose debug logging mode
 
 **Index Management**
 
@@ -54,19 +52,16 @@
 
 [ ] Fix broken CI pipeline GitHub workflow for cargo 
 
-[ ] Fix broken CI pipeline GitHub workflow for pip  
-
-[ ] Fix broken CI pipeline GitHub workflow for npm 
+[ ] Remove npm sdk CI pipeline github workflow for now, we will add it later 
 
 [ ] Fix broken CI pipeline GitHub workflow for docker image  
 
 [ ] Cargo fuzz to test parser robustness.
 
-[ ] Add proptest for state consistency verification.
 
 **Documentation**
 
-[ ] Easy low effort API docs for SDKs (Rust/Python via MkDocs)
+[ ] Easy low effort API docs for SDKs (Rust via MkDocs)
 
 [ ] Entire Technical architecture breakdown (MkDocs)
 
@@ -149,6 +144,16 @@
 
 [ ] Python client SDK
 
+[ ] Add docs 
+
+[ ] Easy low effort API docs for SDKs (Rust via MkDocs)
+
+**CLI**
+
+[ ] add cli for piramid setup
+
+[ ] use piramid cli animations
+
 ---
 
 ### Future Considerations
@@ -169,18 +174,6 @@
 
 [ ] SQL integration
 
-**Data Import/Export**
-
-[ ] Import from JSON/CSV/Parquet
-
-[ ] Export to JSON/CSV/Parquet
-
-[ ] Streaming import for large datasets
-
-[ ] Import progress tracking
-
-[ ] Format validation on import
-
 **Additional Features**
 
 [ ] Corrupted file detection + auto-repair
@@ -189,15 +182,9 @@
 
 [ ] Circuit breaker for embedding API failures
 
-[ ] Soft delete with cleanup
-
 [ ] Collection aliases
 
 [ ] Move collection between directories
-
-[ ] Verbose debug logging mode
-
-[ ] CLI 
 
 [ ] Client side distributed Systems
 
@@ -263,3 +250,16 @@
 [ ] Index corruption alerts
 
 [ ] Slow query alerts
+
+
+**Data Import/Export**
+
+[ ] Import from JSON/CSV/Parquet
+
+[ ] Export to JSON/CSV/Parquet
+
+[ ] Streaming import for large datasets
+
+[ ] Import progress tracking
+
+[ ] Format validation on import

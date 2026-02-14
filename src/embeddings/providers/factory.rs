@@ -5,12 +5,14 @@ use std::sync::Arc;
 use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResult};
 use super::openai::OpenAIEmbedder;
 use super::ollama::OllamaEmbedder;
+use super::local::LocalEmbedder;
 
 // Enum of supported embedding providers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmbeddingProvider {
     OpenAI,
     Ollama,
+    Local,
 }
 
 impl EmbeddingProvider {
@@ -19,6 +21,7 @@ impl EmbeddingProvider {
         match s.to_lowercase().as_str() {
             "openai" => Some(Self::OpenAI),
             "ollama" => Some(Self::Ollama),
+            "local" => Some(Self::Local),
             _ => None,
         }
     }
@@ -28,6 +31,7 @@ impl EmbeddingProvider {
         match self {
             Self::OpenAI => "openai",
             Self::Ollama => "ollama",
+            Self::Local => "local",
         }
     }
 }
@@ -46,6 +50,10 @@ pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embe
         }
         EmbeddingProvider::Ollama => {
             let embedder = OllamaEmbedder::new(config)?;
+            Ok(Arc::new(embedder))
+        }
+        EmbeddingProvider::Local => {
+            let embedder = LocalEmbedder::new(config)?;
             Ok(Arc::new(embedder))
         }
     }
