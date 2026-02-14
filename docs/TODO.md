@@ -70,6 +70,18 @@
 
 ### Documentation & Testing
 
+**Launch Prep**
+
+[ ] add /// doc based comments in codebase
+[ ] get rid of redundant functions 
+[ ] maintain proper logging
+[ ] Codebase final refactor and 
+
+**Dashboard**
+
+[ ] dashboard full update with functionality
+[ ] final docker image push
+
 **CI/CD**
 
 [ ] fix broken ci pipleine gh workflow for cargo 
@@ -84,16 +96,9 @@
 
 [ ] Add`proptest for state consistency verification.
 
-**Launch Prep**
-
-[ ] Python client sdk
-[ ] dashboard full update and revamp
-
 **Documentation**
 
 [ ] Interactive API docs for rust sdk (Mintlify)
-
-[ ] Interactive API docs for python sdk (Mintlify)
 
 [ ] `docs/CONTRIBUTION.md` - 5-minute tutorial and updates
 
@@ -207,6 +212,14 @@
 [ ] Index corruption alerts
 
 [ ] Slow query alerts
+
+**Python Support**
+
+[ ] Python client sdk
+
+[ ] Interactive API docs for python sdk (Mintlify)
+
+---
 
 ### Future Considerations
 
