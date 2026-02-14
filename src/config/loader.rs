@@ -50,6 +50,9 @@ pub fn load_runtime_config() -> RuntimeConfig {
     let embedding_model = std::env::var("EMBEDDING_MODEL").ok();
     let embedding_base_url = std::env::var("EMBEDDING_BASE_URL").ok();
     let embedding_api_key = std::env::var("OPENAI_API_KEY").ok();
+    let embedding_timeout = std::env::var("EMBEDDING_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok());
 
     let embedding = embedding_provider.map(|provider| {
         let model = embedding_model.unwrap_or_else(|| {
@@ -68,6 +71,7 @@ pub fn load_runtime_config() -> RuntimeConfig {
             api_key: embedding_api_key,
             base_url: embedding_base_url,
             options: serde_json::json!({}),
+             timeout: embedding_timeout,
         }
     });
 

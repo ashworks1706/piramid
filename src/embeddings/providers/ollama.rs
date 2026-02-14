@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use reqwest::Client;
+use std::time::Duration;
 
 use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult};
 use crate::embeddings::cache::CachedEmbedder;
@@ -49,8 +50,17 @@ impl OllamaEmbedderInner {
             .clone()
             .unwrap_or_else(|| DEFAULT_OLLAMA_URL.to_string());
 
+        let client = if let Some(timeout_secs) = config.timeout {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(timeout_secs))
+                .build()
+                .map_err(|e| EmbeddingError::RequestFailed(e.to_string()))?
+        } else {
+            Client::new()
+        };
+
         Ok(Self {
-            client: Client::new(),
+            client,
             model: config.model.clone(),
             base_url,
         })

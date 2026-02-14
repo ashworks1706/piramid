@@ -25,6 +25,10 @@ pub struct EmbeddingConfig {
     // Additional provider-specific options
     #[serde(default)]
     pub options: serde_json::Value,
+
+    // timeout for embedding requests (in seconds)
+    #[serde(default)]
+    pub timeout: Option<u64>,
 }
 
 impl Default for EmbeddingConfig {
@@ -35,6 +39,7 @@ impl Default for EmbeddingConfig {
             api_key: None,
             base_url: None,
             options: serde_json::json!({}),
+            timeout: None,
         }
     }
 }

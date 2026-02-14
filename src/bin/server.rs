@@ -30,6 +30,13 @@ async fn main() {
     
     // Create shared state with optional embedder
     let state = if let Some(config) = embedding_config.clone() {
+        let timeout = std::env::var("EMBEDDING_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok());
+        let mut config = config;
+        if config.timeout.is_none() {
+            config.timeout = timeout;
+        }
         match embeddings::providers::create_embedder(&config) {
             Ok(embedder) => {
                 println!("✓ Embeddings:  ENABLED");
