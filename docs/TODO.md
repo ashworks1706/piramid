@@ -9,10 +9,6 @@
 
 **Index Management**
 
-[ ] Compaction and cleanup (remove deleted vectors; reclaim space)
-
-[ ] Duplicate detection (find similar vectors in collection)
-
 [ ] Product Quantization (PQ) (CPU compression)
 
 [ ] HNSW tombstoning: soft-delete nodes without breaking graph connectivity

@@ -4,6 +4,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::error::{Result, ServerError};
 use crate::validation;
 use crate::server::metrics::record_lock_read;
+use crate::metrics::Metric;
 use super::super::{
     state::{SharedState, RebuildState, RebuildJobStatus},
     types::*,
@@ -222,6 +223,80 @@ pub async fn rebuild_index(
     Ok(Json(RebuildIndexResponse { 
         success: true,
         latency_ms: None,
+    }))
+}
+
+// POST /api/collections/:collection/duplicates - find near-duplicate vectors
+pub async fn find_duplicates(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+    Json(req): Json<DuplicateRequest>,
+) -> Result<Json<DuplicateResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
+    state.get_or_create_collection(&collection)?;
+
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let lock_start = std::time::Instant::now();
+    let storage = storage_ref.read();
+    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
+
+    let metric = match req.metric.as_deref() {
+        Some("euclidean") => Metric::Euclidean,
+        Some("dot") | Some("dot_product") => Metric::DotProduct,
+        _ => Metric::Cosine,
+    };
+    let hits = crate::storage::collection::find_duplicates(
+        &storage,
+        metric,
+        req.threshold,
+        req.limit,
+        req.k,
+        req.ef,
+        req.nprobe,
+    )?;
+
+    let pairs = hits.into_iter().map(|h| DuplicatePair {
+        id_a: h.id_a.to_string(),
+        id_b: h.id_b.to_string(),
+        score: h.score,
+    }).collect();
+
+    Ok(Json(DuplicateResponse { pairs }))
+}
+
+// POST /api/collections/:collection/compact - compact and reclaim space
+pub async fn compact_collection(
+    State(state): State<SharedState>,
+    Path(collection): Path<String>,
+) -> Result<Json<RebuildIndexResponse>> {
+    if state.shutting_down.load(Ordering::Relaxed) {
+        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
+    }
+
+    state.get_or_create_collection(&collection)?;
+    
+    let storage_ref = state.collections.get(&collection)
+        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    
+    let mut storage = storage_ref.write();
+    let start = Instant::now();
+    let stats = crate::storage::collection::compact(&mut storage)?;
+    let duration = start.elapsed();
+    tracing::info!(
+        collection=%collection,
+        original=stats.original_entries,
+        compacted=stats.compacted_entries,
+        elapsed_ms=duration.as_millis(),
+        "collection_compacted"
+    );
+
+    Ok(Json(RebuildIndexResponse {
+        success: true,
+        latency_ms: Some(duration.as_millis() as f32),
     }))
 }
 

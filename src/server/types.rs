@@ -323,6 +323,40 @@ pub struct EmbeddingMetricsResponse {
 }
 
 // =============================================================================
+// DUPLICATE DETECTION
+// =============================================================================
+
+#[derive(Deserialize)]
+pub struct DuplicateRequest {
+    #[serde(default)]
+    pub metric: Option<String>,
+    #[serde(default = "default_dup_threshold")]
+    pub threshold: f32,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub k: Option<usize>,
+    #[serde(default)]
+    pub ef: Option<usize>,
+    #[serde(default)]
+    pub nprobe: Option<usize>,
+}
+
+fn default_dup_threshold() -> f32 { 0.95 }
+
+#[derive(Serialize)]
+pub struct DuplicatePair {
+    pub id_a: String,
+    pub id_b: String,
+    pub score: f32,
+}
+
+#[derive(Serialize)]
+pub struct DuplicateResponse {
+    pub pairs: Vec<DuplicatePair>,
+}
+
+// =============================================================================
 // INDEX STATISTICS
 // =============================================================================
 

@@ -38,6 +38,8 @@ fn api_router(state: SharedState) -> Router<SharedState> {
         .route("/collections/{collection}/index/stats", get(handlers::index_stats))
         .route("/collections/{collection}/index/rebuild", post(handlers::rebuild_index))
         .route("/collections/{collection}/index/rebuild/status", get(handlers::rebuild_index_status))
+        .route("/collections/{collection}/compact", post(handlers::compact_collection))
+        .route("/collections/{collection}/duplicates", post(handlers::find_duplicates))
         
         // Config hot reload/status
         .route("/config", get(handlers::config_status))

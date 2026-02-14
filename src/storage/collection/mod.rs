@@ -13,9 +13,13 @@ mod builder;
 mod cache;
 mod persistence;
 mod search;
+mod dup;
+mod compact;
 
 pub use storage::Collection;
 pub use builder::CollectionBuilder;
+pub use compact::{compact, CompactStats};
+pub use dup::{find_duplicates, DuplicateHit};
 
 #[derive(Clone)]
 pub struct CollectionOpenOptions {
