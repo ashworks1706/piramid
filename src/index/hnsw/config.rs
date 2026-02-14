@@ -38,6 +38,7 @@ pub struct HnswStats {
     pub total_nodes: usize,
     pub max_layer: isize,
     pub layer_sizes: Vec<usize>,
+    pub tombstones: usize,
     pub avg_connections: f32,
     pub memory_usage_bytes: usize,
 }

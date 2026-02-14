@@ -9,6 +9,8 @@ pub enum QuantizationLevel {
     None,
     // 8-bit integer quantization (4x memory reduction)
     Int8,
+    // Product quantization (block-wise min/max compression)
+    Pq { subquantizers: usize },
     // 4-bit integer quantization (8x memory reduction) - Future
     Int4,
     // 16-bit float quantization (2x memory reduction) - Future
@@ -54,6 +56,14 @@ impl QuantizationConfig {
         QuantizationConfig {
             level: QuantizationLevel::Int8,
             disk_only: true,
+        }
+    }
+
+    // Enable CPU product quantization with the given number of subquantizers.
+    pub fn pq(subquantizers: usize) -> Self {
+        QuantizationConfig {
+            level: QuantizationLevel::Pq { subquantizers },
+            disk_only: false,
         }
     }
 }

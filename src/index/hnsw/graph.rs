@@ -11,6 +11,7 @@ struct HnswNode{
     // connections[layer] = Vec of neighbor IDs at that layer
     // Layer 0 is at index 0
     connections: Vec<Vec<Uuid>>,
+    tombstone: bool,
 }
 
 // Helper struct for priority queue during search
@@ -75,6 +76,16 @@ impl HnswIndex{
             start_node: None,
         }
     }
+
+    fn is_tombstone(&self, id: &Uuid) -> bool {
+        self.nodes.get(id).map(|n| n.tombstone).unwrap_or(false)
+    }
+
+    fn mark_tombstone(&mut self, id: &Uuid) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.tombstone = true;
+        }
+    }
     // Generate a random layer for a new node based on exponential decay why? because 
     // in HNSW, higher layers have exponentially fewer nodes, so we want to assign layers
     // to new nodes in a way that reflects this distribution
@@ -101,6 +112,7 @@ impl HnswIndex{
             let node = HnswNode{ 
                 connections: vec![Vec::new(); layer + 1], // this creates empty connections for
                                                           // each layer
+                tombstone: false,
             }; // create the node
             self.nodes.insert(id, node); // insert into the index
             return;
@@ -117,6 +129,7 @@ impl HnswIndex{
         }
 
         // Insert and connect at each layer from target down to 0
+        let mut pending_connections = vec![Vec::new(); layer + 1];
         for lc in (0..=layer).rev() { // 0..=layer means we go from layer down to 0 since we are
                                       // doing rev()
             // Search for ef_construction nearest neighbors at this layer
@@ -140,10 +153,8 @@ impl HnswIndex{
             // is connected to node B, then node B is also connected to node A
             for &neighbor_id in &neighbors {
                 // Add edge from new node to neighbor
-                if let Some(node) = self.nodes.get_mut(&id) {
-                    if lc < node.connections.len() {
-                        node.connections[lc].push(neighbor_id);
-                    }
+                if lc < pending_connections.len() {
+                    pending_connections[lc].push(neighbor_id);
                 }
 
                 // Add edge from neighbor to new node
@@ -179,7 +190,8 @@ impl HnswIndex{
 
         // Create and insert the new node
         let new_node = HnswNode{
-            connections: vec![Vec::new(); layer + 1],
+            connections: pending_connections,
+            tombstone: false,
         };
         self.nodes.insert(id, new_node);
 
@@ -224,8 +236,12 @@ impl HnswIndex{
         current_nearest = self.search_layer(query, &current_nearest, ef.max(k), 0, vectors, filter, metadatas);
         
         // Return top k
-        current_nearest.truncate(k);
-        current_nearest
+        let mut filtered: Vec<Uuid> = current_nearest
+            .into_iter()
+            .filter(|id| !self.is_tombstone(id))
+            .collect();
+        filtered.truncate(k);
+        filtered
     }
 
     // Search within a specific layer - returns nearest neighbor IDs sorted by distance
@@ -255,7 +271,9 @@ impl HnswIndex{
                 }
                 let dist = self.distance(query, ep_vector);
                 candidates.push(SearchCandidate { id: ep, distance: dist });
-                nearest.push(SearchCandidate { id: ep, distance: dist });
+                if !self.is_tombstone(&ep) {
+                    nearest.push(SearchCandidate { id: ep, distance: dist });
+                }
                 visited.insert(ep);
             }
         }
@@ -287,18 +305,21 @@ impl HnswIndex{
                                     }
                                 }
                                 let dist = self.distance(query, neighbor_vector);
+                                let neighbor_dead = self.is_tombstone(&neighbor_id);
                                 
                                 // If this neighbor is closer than the furthest in nearest, add it
                                 if dist < furthest_distance || nearest.len() < num_closest {
                                     candidates.push(SearchCandidate { id: neighbor_id, distance: dist });
-                                    nearest.push(SearchCandidate { id: neighbor_id, distance: dist });
-                                    
-                                    if nearest.len() > num_closest {
-                                        nearest.pop(); // remove furthest
+                                    if !neighbor_dead {
+                                        nearest.push(SearchCandidate { id: neighbor_id, distance: dist });
+                                        
+                                        if nearest.len() > num_closest {
+                                            nearest.pop(); // remove furthest
+                                        }
+                                        
+                                        // Update furthest distance
+                                        furthest_distance = nearest.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
                                     }
-                                    
-                                    // Update furthest distance
-                                    furthest_distance = nearest.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
                                 }
                             }
                         }
@@ -332,6 +353,9 @@ impl HnswIndex{
         let mut distances: Vec<_> = candidates
             .iter()
             .filter_map(|&id| {
+                if self.is_tombstone(&id) {
+                    return None;
+                }
                 vectors.get(&id).map(|vec| {
                     let dist = self.distance(query, vec);
                     (id, dist)
@@ -369,29 +393,23 @@ impl HnswIndex{
 
     // Remove a node from the index
     pub fn remove(&mut self, id: &Uuid) {
-        if let Some(node) = self.nodes.remove(id) {
-            // Remove all connections to this node from other nodes
-            // we do this by iterating through all layers and removing any references
-            // to the node being removed and updating the connections of neighboring nodes
-            // accordingly
-            for layer in 0..node.connections.len() {
-                for &neighbor_id in &node.connections[layer] {
-                    if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) {
-                        if layer < neighbor.connections.len() {
-                            neighbor.connections[layer].retain(|&nid| nid != *id);
-                        }
-                    }
-                }
-            }
+        if !self.nodes.contains_key(id) {
+            return;
+        }
+        self.mark_tombstone(id);
 
-            // Update entry point if needed
-            if self.start_node == Some(*id) {
-                self.start_node = self.nodes.keys().next().copied();
-                self.max_level = self.nodes.values()
-                    .map(|n| n.connections.len() as isize - 1)
-                    .max()
-                    .unwrap_or(-1);
-            }
+        // Update entry point if needed
+        if self.start_node == Some(*id) {
+            self.start_node = self.nodes
+                .iter()
+                .find(|(_, n)| !n.tombstone)
+                .map(|(k, _)| *k);
+            self.max_level = self.nodes
+                .values()
+                .filter(|n| !n.tombstone)
+                .map(|n| n.connections.len() as isize - 1)
+                .max()
+                .unwrap_or(-1);
         }
     }
 
@@ -399,18 +417,24 @@ impl HnswIndex{
     // we do this by iterating through all nodes and collecting data such as
     // total number of nodes, max layer, size of each layer, average connections per node
     pub fn stats(&self) -> HnswStats {
-        let total_nodes = self.nodes.len();
+        let mut total_nodes = 0;
+        let mut tombstones = 0;
         let mut layer_sizes = vec![0; (self.max_level + 1) as usize];
         let mut total_connections = 0;
 
 
 
         for node in self.nodes.values() {
-            for (layer, connections) in node.connections.iter().enumerate() {
-                if layer < layer_sizes.len() {
-                    layer_sizes[layer] += 1;
+            if node.tombstone {
+                tombstones += 1;
+            } else {
+                total_nodes += 1;
+                for (layer, connections) in node.connections.iter().enumerate() {
+                    if layer < layer_sizes.len() {
+                        layer_sizes[layer] += 1;
+                    }
+                    total_connections += connections.len();
                 }
-                total_connections += connections.len();
             }
         }
 
@@ -423,6 +447,7 @@ impl HnswIndex{
             max_layer: self.max_level,
             layer_sizes,
             memory_usage_bytes,
+            tombstones,
             avg_connections: if total_nodes > 0 {
                 total_connections as f32 / total_nodes as f32
             } else {
@@ -493,19 +518,11 @@ mod tests {
         assert_eq!(index.nodes.len(), 1);
 
         index.remove(&id);
-        assert_eq!(index.nodes.len(), 0);
+        let stats = index.stats();
+        assert_eq!(stats.total_nodes, 0);
+        assert_eq!(stats.tombstones, 1);
     }
 }
-
-
-
-
-
-
-
-
-
-
 
 
 

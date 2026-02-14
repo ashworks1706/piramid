@@ -142,7 +142,8 @@ mod tests {
         let mut storage = Collection::open(test_path).unwrap();
         let entry = Document::new(vec![1.0, 2.0, 3.0], "test".to_string());
         let id = storage.insert(entry).unwrap();
-        
+        assert_eq!(storage.count(), 1);
+        assert!(storage.index.contains_key(&id));
         let retrieved = storage.get(&id).unwrap();
         assert_eq!(retrieved.text, "test");
         assert_eq!(retrieved.get_vector(), vec![1.0, 2.0, 3.0]);

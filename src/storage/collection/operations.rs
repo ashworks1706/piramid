@@ -87,9 +87,11 @@ pub fn get(storage: &Collection, id: &Uuid) -> Option<Document> {
     }
 }
 
-pub fn insert_internal(storage: &mut Collection, entry: Document) -> Result<Uuid> {
+pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
     // 1. Serialize the document entry into bytes using bincode. This will allow us to write the document data to the memory-mapped file in a compact binary format. The serialized bytes will include all the necessary information about the document, such as its ID, vector, text, and metadata.
     let id = entry.id;
+    let raw_vec = entry.get_vector();
+    entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
     let bytes = bincode::serialize(&entry)?; 
 
     // Enforce collection limits before proceeding with the insertion. We check the size of the serialized entry against the configured limits for the collection, such as maximum number of vectors, maximum total bytes, and maximum bytes per vector. If any of the limits are exceeded, we return an error to prevent inserting data that would violate the collection's constraints. This step is crucial for maintaining the integrity of the collection and ensuring that it operates within defined resource limits.
@@ -115,19 +117,17 @@ pub fn insert_internal(storage: &mut Collection, entry: Document) -> Result<Uuid
     let index_entry = EntryPointer::new(offset, bytes.len() as u32);
     storage.index.insert(id, index_entry.clone());
     
-    let vec_f32 = entry.get_vector();
-    
     // Update the collection metadata with the dimensions of the new vector. This is important for ensuring that all vectors in the collection have consistent dimensions, which is a requirement for similarity search. If the collection already has a defined dimension, we validate that the new vector matches that dimension. If the collection does not have a defined dimension yet, we set it based on the first inserted vector.
-    storage.metadata.set_dimensions(vec_f32.len());
+    storage.metadata.set_dimensions(raw_vec.len());
     
     // Validate that the dimensions of the new vector match the expected dimensions of the collection. If the collection has a defined dimension, we check that the length of the new vector matches that dimension. If there is a mismatch, we return an error to prevent inserting inconsistent data into the collection. This validation step helps maintain the integrity of the collection and ensures that all vectors are compatible for similarity search operations.
     if let Some(expected_dim) = storage.metadata.dimensions {
-        crate::validation::validate_dimensions(&vec_f32, expected_dim)?;
+        crate::validation::validate_dimensions(&raw_vec, expected_dim)?;
     }
     
     // Insert the new vector into the in-memory cache and the vector index. This allows for fast access to the vector during search operations without needing to read from the memory-mapped file. By keeping the vector cache and index updated with new entries, we can ensure that search operations remain efficient and that the collection is ready to handle queries immediately after insertion.
-    storage.vector_cache.insert(id, vec_f32.clone());
-    storage.vector_index.insert(id, &vec_f32, &storage.vector_cache);
+    storage.vector_cache.insert(id, raw_vec.clone());
+    storage.vector_index.insert(id, &raw_vec, &storage.vector_cache);
     
     storage.metadata.update_vector_count(storage.index.len());
     debug!(collection=%storage.path, id=%id, offset=index_entry.offset, len=bytes.len(), "inserted_document");
@@ -138,7 +138,10 @@ pub fn insert_internal(storage: &mut Collection, entry: Document) -> Result<Uuid
 pub fn delete_internal(storage: &mut Collection, id: &Uuid) {
     storage.index.remove(id);
     storage.vector_index.remove(id);
-    storage.vector_cache.remove(id);
+    if storage.vector_index.index_type() != crate::index::IndexType::Hnsw {
+        storage.vector_cache.remove(id);
+        storage.metadata_cache.remove(id);
+    }
     storage.metadata.update_vector_count(storage.index.len());
 }
 
@@ -159,7 +162,7 @@ pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     insert_internal(storage, entry)
 }
 
-pub fn insert_batch(storage: &mut Collection, entries: Vec<Document>) -> Result<Vec<Uuid>> {
+pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Result<Vec<Uuid>> {
     // Log all the entries to the WAL before inserting them into the collection. This ensures that we have a record of all the operations in the WAL for durability and recovery purposes. By logging the entries first, we can guarantee that even if there is a failure during the insertion process, we can recover the intended state of the collection by replaying the WAL entries.
     let mut ids = Vec::with_capacity(entries.len());
     
@@ -177,9 +180,13 @@ pub fn insert_batch(storage: &mut Collection, entries: Vec<Document>) -> Result<
     }
     // After logging all entries to the WAL, we proceed to insert them into the collection. This involves serializing each entry, writing it to the memory-mapped file, updating the index and vector index, and updating the in-memory caches. By separating the logging and insertion steps, we can ensure that we have a clear record of all operations in the WAL while also maintaining the integrity and consistency of the collection's data structures.
     let mut serialized: Vec<(Uuid, Vec<u8>)> = Vec::with_capacity(entries.len());
-    for entry in &entries {
+    let mut raw_vectors: Vec<(Uuid, Vec<f32>)> = Vec::with_capacity(entries.len());
+    for entry in &mut entries {
+        let raw_vec = entry.get_vector();
+        entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
         let bytes = bincode::serialize(entry)?;
         serialized.push((entry.id, bytes));
+        raw_vectors.push((entry.id, raw_vec));
     }
     // Calculate the total size required to write all new entries and grow the memory-mapped file if necessary. We sum the lengths of all serialized entries and add that to the current offset to determine the required size of the memory-mapped file. If the required size exceeds the current size of the memory-mapped file, we call the grow_mmap_if_needed function to resize the underlying file and create a new memory map with the updated size. This ensures that we have enough space to write all new entries without running into out-of-bounds errors.
     let current_offset = storage.index.values()
@@ -217,19 +224,25 @@ pub fn insert_batch(storage: &mut Collection, entries: Vec<Document>) -> Result<
     super::persistence::save_index(storage)?;
     storage.track_operation()?;
     // Update the collection metadata with the new vector count. After inserting the new entries, we need to update the metadata to reflect the new total number of vectors in the collection. This is important for maintaining accurate metadata information, which can be used for various purposes such as validating operations, providing insights about the collection, and ensuring that the collection's state is consistent with its contents.
-    for entry in entries {
-        let vec_f32 = entry.get_vector();
-        storage.vector_cache.insert(entry.id, vec_f32.clone());
-        storage.vector_index.insert(entry.id, &vec_f32, &storage.vector_cache);
+    for (id, vec_f32) in raw_vectors {
+        storage.metadata.set_dimensions(vec_f32.len());
+        if let Some(expected_dim) = storage.metadata.dimensions {
+            crate::validation::validate_dimensions(&vec_f32, expected_dim)?;
+        }
+        storage.vector_cache.insert(id, vec_f32.clone());
+        storage.vector_index.insert(id, &vec_f32, &storage.vector_cache);
     }
+    storage.metadata.update_vector_count(storage.index.len());
     
     Ok(ids)
 }
 
-pub fn upsert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
+pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
     // For an upsert operation, if the document already exists, we treat it as an update. This involves deleting the existing entry and then inserting the new entry with the updated information. By doing this, we ensure that the index and vector index are properly updated to reflect the changes in the document, and that the WAL accurately captures the update operation for durability and recovery purposes.
 
     let id = entry.id;
+    let raw_vec = entry.get_vector();
+    entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
     let bytes = bincode::serialize(&entry)?;
 
     let existing = storage.index.contains_key(&id);
@@ -341,7 +354,7 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
         storage.persistence.wal.log(&mut wal_entry)?;
         
         let mut entry = entry;
-        entry.vector = QuantizedVector::from_f32(&vector);
+        entry.vector = QuantizedVector::from_f32_with_config(&vector, &storage.config.quantization);
         delete(storage, id)?;
         
         insert(storage, entry)?;

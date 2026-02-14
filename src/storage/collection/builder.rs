@@ -172,7 +172,7 @@ impl CollectionBuilder {
                 WalEntry::Insert { id, vector, text, metadata, .. } => {
                     let vec_entry = Document {
                         id,
-                        vector: QuantizedVector::from_f32(&vector),
+                        vector: QuantizedVector::from_f32_with_config(&vector, &storage.config.quantization),
                         text,
                         metadata,
                     };
@@ -183,7 +183,7 @@ impl CollectionBuilder {
                     super::operations::delete_internal(storage, &id);
                     let vec_entry = Document {
                         id,
-                        vector: QuantizedVector::from_f32(&vector),
+                        vector: QuantizedVector::from_f32_with_config(&vector, &storage.config.quantization),
                         text,
                         metadata,
                     };

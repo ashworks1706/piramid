@@ -3,21 +3,9 @@
 
 **Index Management**
 
-[ ] Product Quantization (PQ) (CPU compression)
+[x] Product Quantization (PQ) (CPU compression)
 
-[ ] HNSW tombstoning: soft-delete nodes without breaking graph connectivity
-
-**HTTP & Networking**
-
-[ ] HTTP/2 support
-
-[ ] Compression (gzip/brotli) for responses
-
-[ ] Keep-alive connection management
-
-[ ] Security headers (CORS, CSP, HSTS)
-
-[ ] TLS/SSL support
+[x] HNSW tombstoning: soft-delete nodes without breaking graph connectivity
 
 ### Documentation & Testing
 
@@ -28,7 +16,7 @@
 [ ] Codebase final refactor
 [ ] seperate tests file, get rid of tests on the same file
 
-**Dashboard**
+**Dashboard**rog
 
 [ ] Dashboard full update with functionality
 [ ] Final docker image push
