@@ -21,11 +21,11 @@
 
 [ ] Health endpoints with startup validation (storage status, index health, disk space, collections load, integrity on boot)
 
+[ ] Add logs for server console like Next.js
+
 [ ] Server version endpoint
 
 **Index Management**
-
-[ ] Index warmup: fault-in mmap pages on startup
 
 [ ] Rebuild index function
 
@@ -250,8 +250,6 @@
 [ ] CLI 
 
 [ ] Client side distributed Systems
-
-
 
 **MCP Integration**
 

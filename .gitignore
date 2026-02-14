@@ -32,7 +32,7 @@ Thumbs.db
 
 # data
 /data/
-**/.piramid/
+.piramid/
 
 # node
 node_modules/

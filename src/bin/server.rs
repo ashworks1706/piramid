@@ -60,7 +60,7 @@ async fn main() {
     
     // Start listening
     let addr = format!("0.0.0.0:{}", port);
-    println!("⚡ Server:      READY");
+    println!("  Server:      READY");
     println!("  HTTP:        http://{}", addr);
     println!("  Data:        {}", data_dir);
     println!("  Dashboard:   http://localhost:{}/", port);
@@ -74,21 +74,21 @@ async fn main() {
     // Graceful shutdown signal
     let shutdown_signal = async move {
         tokio::signal::ctrl_c().await.expect("Failed to listen for Ctrl+C");
-        println!("\n⚡ Received shutdown signal...");
+        println!("\nReceived shutdown signal...");
         
         // Set shutdown flag to reject new requests
         state_for_shutdown.initiate_shutdown();
-        println!("   ⏸️  Rejecting new requests");
+        println!("   ⏸Rejecting new requests");
         
         // Flush all collections
         println!("   💾 Flushing collections...");
         if let Err(e) = state_for_shutdown.checkpoint_all() {
-            eprintln!("   ❌ Error saving data during shutdown: {}", e);
+            eprintln!("   Error saving data during shutdown: {}", e);
         } else {
-            println!("   ✅ All data saved");
+            println!("   All data saved");
         }
         
-        println!("   🔌 Draining connections (10s timeout)...");
+        println!("   Draining connections (10s timeout)...");
     };
     
     let server = axum::serve(listener, app)
@@ -99,5 +99,5 @@ async fn main() {
         eprintln!("Server error: {}", e);
     }
     
-    println!("👋 Goodbye!");
+    println!("Goodbye!");
 }
