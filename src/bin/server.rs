@@ -23,9 +23,7 @@ async fn main() {
         .with_target(false)
         .init();
 
-    println!(" Piramid Vector Database");
-    println!("   Version: {}", env!("CARGO_PKG_VERSION"));
-    println!();
+    tracing::info!("Piramid Vector Database - v{}", env!("CARGO_PKG_VERSION"));
     
     // Load config once (validated and logged)
     let RuntimeConfig {
@@ -50,10 +48,11 @@ async fn main() {
         }
         match embeddings::providers::create_embedder(&config) {
             Ok(embedder) => {
-                println!("✓ Embeddings:  ENABLED");
-                println!("  Provider:    {}", config.provider);
-                println!("  Model:       {}", embedder.model_name());
-                println!();
+                tracing::info!(
+                    provider = %config.provider,
+                    model = %embedder.model_name(),
+                    "embeddings_enabled"
+                );
                 
                 // Wrap with retry logic (3 retries, exponential backoff)
                 let retry_embedder = Arc::new(embeddings::RetryEmbedder::new(embedder));
@@ -68,10 +67,7 @@ async fn main() {
                 ))
             }
             Err(e) => {
-                eprintln!("✗ Embeddings:  FAILED");
-                eprintln!("  Error:       {}", e);
-                eprintln!("  Status:      Running without embedding support");
-                eprintln!();
+                tracing::warn!(error = %e, "embeddings_disabled");
                 Arc::new(AppState::new(
                     &data_dir,
                     app_config.clone(),
@@ -83,9 +79,7 @@ async fn main() {
             }
         }
     } else {
-        println!("○ Embeddings:  DISABLED");
-        println!("  Configure EMBEDDING_PROVIDER to enable");
-        println!();
+        tracing::info!("Embeddings disabled (set EMBEDDING_PROVIDER to enable)");
         Arc::new(AppState::new(
             &data_dir,
             app_config.clone(),

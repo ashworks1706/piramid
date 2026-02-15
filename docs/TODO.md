@@ -1,11 +1,5 @@
 ### Documentation & Testing
 
-**Launch Prep**
-
-[ ] Remove redundant functions
-[ ] Maintain proper logging
-[ ] Codebase final refactor
-
 **Dashboard**
 
 [ ] Dashboard full update with functionality

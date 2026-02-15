@@ -68,9 +68,12 @@ impl Embedder for RetryEmbedder {
                         return Err(e);
                     }
                     
-                    eprintln!(
-                        "Embedding request failed (attempt {}/{}): {}. Retrying in {}ms...",
-                        attempts, self.max_retries + 1, e, delay_ms
+                    tracing::warn!(
+                        attempt = attempts,
+                        max_retries = self.max_retries,
+                        delay_ms,
+                        error = %e,
+                        "embedding_request_retrying"
                     );
                     
                     sleep(Duration::from_millis(delay_ms)).await;
