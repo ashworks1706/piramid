@@ -13,8 +13,6 @@
 
 [ ] docs/CONTRIBUTION.md - 5-minute tutorial and updates
 
-[ ] CHANGELOG.md - Version tracking
-
 [ ] README.md - update readme
 
 [ ] License headers in source files

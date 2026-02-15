@@ -14,6 +14,7 @@ pub mod storage;
 pub mod embeddings;
 pub mod index;
 pub mod quantization;
+pub mod cli;
 
 pub use config::*;
 pub use metrics::Metric;
