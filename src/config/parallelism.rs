@@ -3,20 +3,15 @@
 use serde::{Deserialize, Serialize};
 
 // Parallelism mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ParallelismMode {
     // Single-threaded execution
     SingleThreaded,
     // Use all available CPU cores
+    #[default]
     Auto,
     // Use a specific number of threads
     Fixed(usize),
-}
-
-impl Default for ParallelismMode {
-    fn default() -> Self {
-        ParallelismMode::Auto
-    }
 }
 
 // Parallelism configuration

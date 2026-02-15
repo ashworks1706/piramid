@@ -3,9 +3,10 @@
 use serde::{Deserialize, Serialize};
 
 // Quantization level for vector compression
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum QuantizationLevel {
     // No quantization - full precision float32
+    #[default]
     None,
     // 8-bit integer quantization (4x memory reduction)
     Int8,
@@ -15,12 +16,6 @@ pub enum QuantizationLevel {
     Int4,
     // 16-bit float quantization (2x memory reduction) - Future
     Float16,
-}
-
-impl Default for QuantizationLevel {
-    fn default() -> Self {
-        QuantizationLevel::None
-    }
 }
 
 // Quantization configuration

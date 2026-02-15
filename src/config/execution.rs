@@ -4,8 +4,9 @@
 use serde::{Deserialize, Serialize};
 
 // Execution mode for vector operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ExecutionMode {
+    #[default]
     Auto,
     Simd,
     Scalar,
@@ -17,11 +18,6 @@ pub enum ExecutionMode {
     Binary,
     // Use Just-In-Time compiled kernels for specific vector dimensions
     Jit,
-}
-impl Default for ExecutionMode {
-    fn default() -> Self {
-        ExecutionMode::Auto
-    }
 }
 
 impl ExecutionMode {
