@@ -135,7 +135,7 @@ export default function Home() {
 
               <div className="relative space-y-4 fade-in delay-1 max-w-xl mx-auto w-full">
                 <div className="rounded-2xl border border-white/10 bg-black/50 shadow-2xl shadow-indigo-600/20 p-6 backdrop-blur">
-                  <pre className="code-block overflow-auto text-sm leading-relaxed">
+                  <pre className="code-block overflow-auto text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
                     <code>{quickstart}</code>
                   </pre>
 
