@@ -7,7 +7,7 @@
 <p align="center">
     <a href="https://crates.io/crates/piramid"><img src="https://img.shields.io/crates/v/piramid.svg" alt="crates.io"></a>
     &nbsp;·&nbsp;
-    <a href="https://piramid.vercel.app">Website</a>
+    <a href="https://piramiddb.com">Website</a>
 </p>
 
 <p align="center">
