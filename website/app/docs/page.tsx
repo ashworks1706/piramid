@@ -5,13 +5,15 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../mdx-components";
-import { bannerPath, DOCS_DIR, findDoc } from "../../lib/docs";
+import { bannerPath, findDoc, extractHeadings } from "../../lib/docs";
+import { DocsToc } from "../../components/DocsToc";
 
 export default async function DocsIndex() {
   const doc = findDoc(["index"]);
   if (!doc) return null;
 
   const source = await fs.promises.readFile(doc.filePath, "utf8");
+  const headings = extractHeadings(doc.filePath);
   const { content, frontmatter } = await compileMDX<{ title?: string }>({
     source,
     components: mdxComponents,
@@ -49,10 +51,13 @@ export default async function DocsIndex() {
           {banner}
         </div>
       ) : null}
-      <article className="space-y-4 animate-fade-in">
-        {frontmatter?.title ? <h1>{frontmatter.title}</h1> : <h1>Documentation</h1>}
-        {content}
-      </article>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <article className="space-y-4 animate-fade-in rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-indigo-500/5 p-6 shadow-2xl shadow-slate-900/30 backdrop-blur">
+          {frontmatter?.title ? <h1>{frontmatter.title}</h1> : <h1>Documentation</h1>}
+          {content}
+        </article>
+        <DocsToc headings={headings} />
+      </div>
     </div>
   );
 }

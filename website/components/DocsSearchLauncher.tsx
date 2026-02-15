@@ -93,7 +93,7 @@ export function DocsSearchLauncher({ entries, className }: Props) {
                     >
                       <div className="font-semibold text-white">{res.title}</div>
                       <div className="mt-1 line-clamp-2 text-xs text-slate-400">{res.text}</div>
-                      <div className="mt-1 text-[11px] text-indigo-200">{href.replace(/^\\/docs/, \"\") || \"/\"}</div>
+                      <div className="mt-1 text-[11px] text-indigo-200">{href.replace(/^\/docs/, "") || "/"}</div>
                     </Link>
                   );
                 })

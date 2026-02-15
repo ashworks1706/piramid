@@ -22,22 +22,16 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
             </Link>
           </div>
           <div className="flex items-center gap-3 text-sm text-slate-300">
-            <Link href="/docs" className="hover:text-white transition">docs</Link>
-            <a href="https://github.com/ashworks1706/piramid" className="hover:text-white transition">github</a>
             <DocsSearchLauncher entries={searchEntries} />
           </div>
         </div>
       </header>
       <main className="mx-auto flex max-w-6xl gap-8 px-6 py-10">
         <aside className="hidden lg:block w-64">
-          <DocsSidebar sections={sidebar} entries={searchEntries} />
+          <DocsSidebar sections={sidebar} />
         </aside>
         <article className="flex-1">
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-indigo-500/5 p-6 shadow-2xl shadow-slate-900/30 backdrop-blur">
-            <div className="prose prose-invert prose-slate prose-headings:text-white prose-a:text-indigo-200 max-w-none">
-              {children}
-            </div>
-          </div>
+          {children}
         </article>
       </main>
     </div>
