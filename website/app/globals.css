@@ -22,6 +22,7 @@ body {
   color: #e2e8f0;
   overflow-x: auto;
   box-shadow: 0 20px 60px rgba(8, 47, 73, 0.25);
+  max-width: 100%;
 }
 
 code {
@@ -40,6 +41,14 @@ code {
 .delay-1 { animation-delay: 0.12s; }
 .delay-2 { animation-delay: 0.2s; }
 .delay-3 { animation-delay: 0.28s; }
+
+@media (max-width: 640px) {
+  .code-block {
+    padding: 12px;
+    font-size: 12px;
+    border-radius: 12px;
+  }
+}
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(12px); }
