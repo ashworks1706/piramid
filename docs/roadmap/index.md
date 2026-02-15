@@ -3,13 +3,13 @@
 
 **Documentation**
 
+[ ] seperate API docs to docs.piramiddb.com (mintlify)
 [ ] Entire Technical architecture breakdown in docs
 
 **Dashboard**
 
-[ ] Dashboard full update with functionality
-[ ] Final docker image push
-
+[ ] remove dashboard and just keep everything in TUI
+[ ] get rid of docker image
 
 ---
 

@@ -133,9 +133,9 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="relative space-y-4 fade-in delay-1 max-w-xl mx-auto w-full">
-                <div className="rounded-2xl border border-white/10 bg-black/50 shadow-2xl shadow-indigo-600/20 p-6 backdrop-blur">
-                  <pre className="code-block w-full overflow-auto text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">
+              <div className="relative space-y-4 fade-in delay-1 max-w-sm sm:max-w-md md:max-w-xl mx-auto w-full">
+                <div className="rounded-2xl border border-white/10 bg-black/50 shadow-2xl shadow-indigo-600/20 p-4 sm:p-6 backdrop-blur">
+                  <pre className="code-block w-full overflow-auto text-[11px] sm:text-xs md:text-sm leading-relaxed whitespace-pre-wrap break-words">
                     <code>{quickstart}</code>
                   </pre>
 
