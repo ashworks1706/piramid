@@ -13,8 +13,9 @@ export async function generateStaticParams() {
   return docs.map((d) => ({ slug: d.slug }));
 }
 
-export default async function DocPage({ params }: { params: { slug: string[] } }) {
-  const slugArray = Array.isArray(params.slug) ? params.slug : [params.slug];
+export default async function DocPage({ params }: { params: Promise<{ slug: string[] }> }) {
+  const { slug } = await params;
+  const slugArray = Array.isArray(slug) ? slug : [slug];
   const doc = findDoc(slugArray);
   if (!doc) return notFound();
 

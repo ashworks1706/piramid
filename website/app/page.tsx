@@ -78,7 +78,6 @@ export default function Home() {
                 <Image src="/logo_light.png" alt="Piramid" width={40} height={40} />
                 <div className="flex flex-col leading-tight">
                   <span className="text-lg font-semibold tracking-wide">piramid</span>
-                  <span className="text-xs text-slate-400">Vector Database for agentic systems</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -89,16 +88,10 @@ export default function Home() {
                   docs
                 </a>
                 <a
-                  href="https://crates.io/crates/piramid"
+                  href="https://github.com/ashworks1706/piramid"
                   className="text-sm text-slate-300 hover:text-white transition"
                 >
-                  crates.io
-                </a>
-                <a
-                  href="https://github.com/ashworks1706/piramid"
-                  className="rounded-full bg-white text-black px-4 py-2 text-sm font-semibold shadow-lg shadow-indigo-500/20 hover:bg-slate-100 transition"
-                >
-                  GitHub
+                  github
                 </a>
               </div>
             </div>
