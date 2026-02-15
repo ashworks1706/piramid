@@ -1,4 +1,4 @@
-use piramid::embeddings::{CachedEmbedder, Embedder, EmbeddingError, EmbeddingResponse, EmbeddingResult};
+use piramid::embeddings::{CachedEmbedder, Embedder, EmbeddingResponse, EmbeddingResult};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
