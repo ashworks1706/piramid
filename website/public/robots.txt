@@ -3,4 +3,4 @@ User-agent: *
 Allow: /
 
 # Sitemap location
-Sitemap: https://piramid.dev/sitemap.xml
+Sitemap: https://piramiddb.com/sitemap.xml

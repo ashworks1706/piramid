@@ -22,13 +22,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://piramid.dev",
+    url: "https://piramiddb.com",
     title: "Piramid - Hybrid Vector Database",
     description: "Open-source hybrid vector database combining graph-based and traditional vector search capabilities.",
     siteName: "Piramid",
     images: [
       {
-        url: "/logo_dark.png",
+        url: "../public/logo_dark.png",
         width: 1200,
         height: 630,
         alt: "Piramid Vector Database",
@@ -39,10 +39,10 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Piramid - Hybrid Vector Database",
     description: "Open-source hybrid vector database combining graph-based and traditional vector search capabilities.",
-    images: ["/logo_dark.png"],
+    images: ["../public/logo_dark.png"],
     creator: "@piramiddb",
   },
-  metadataBase: new URL("https://piramid.dev"),
+  metadataBase: new URL("https://piramiddb.com"),
   alternates: {
     canonical: "/",
   },
