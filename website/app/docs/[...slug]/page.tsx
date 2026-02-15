@@ -1,15 +1,22 @@
 import fs from "fs";
 import path from "path";
+import { notFound } from "next/navigation";
 import { compileMDX } from "next-mdx-remote/rsc";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
-import { mdxComponents } from "../../mdx-components";
-import { bannerPath, DOCS_DIR, findDoc } from "../../lib/docs";
+import { mdxComponents } from "../../../mdx-components";
+import { DOCS_DIR, findDoc, bannerPath, listDocs } from "../../../lib/docs";
 
-export default async function DocsIndex() {
-  const doc = findDoc(["index"]);
-  if (!doc) return null;
+export async function generateStaticParams() {
+  const docs = listDocs().filter((d) => d.slug.join("/") !== "index");
+  return docs.map((d) => ({ slug: d.slug }));
+}
+
+export default async function DocPage({ params }: { params: { slug: string[] } }) {
+  const slugArray = Array.isArray(params.slug) ? params.slug : [params.slug];
+  const doc = findDoc(slugArray);
+  if (!doc) return notFound();
 
   const source = await fs.promises.readFile(doc.filePath, "utf8");
   const { content, frontmatter } = await compileMDX<{ title?: string }>({
@@ -43,14 +50,14 @@ export default async function DocsIndex() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {banner ? (
         <div className="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 p-4 shadow-lg shadow-indigo-900/30 animate-fade-in">
           {banner}
         </div>
       ) : null}
-      <article className="space-y-4 animate-fade-in">
-        {frontmatter?.title ? <h1>{frontmatter.title}</h1> : <h1>Documentation</h1>}
+      <article className="space-y-4">
+        {frontmatter?.title ? <h1>{frontmatter.title}</h1> : null}
         {content}
       </article>
     </div>

@@ -83,7 +83,7 @@ export default function Home() {
               </div>
               <div className="flex items-center gap-3">
                 <a
-                  href="/docs/"
+                  href="/docs"
                   className="text-sm text-slate-300 hover:text-white transition"
                 >
                   docs
@@ -199,7 +199,7 @@ export default function Home() {
             {/* Footer */}
             <footer className="flex flex-col gap-3 pb-10 text-sm text-slate-400">
               <div className="flex gap-4">
-                <a href="/docs/" className="hover:text-white transition">Docs</a>
+                <a href="/docs" className="hover:text-white transition">Docs</a>
                 <a href="https://github.com/ashworks1706/piramid" className="hover:text-white transition">GitHub</a>
                 <a href="https://crates.io/crates/piramid" className="hover:text-white transition">crates.io</a>
                 <a href="https://github.com/ashworks1706/piramid/blob/main/docs/TODO.md" className="hover:text-white transition">Roadmap</a>

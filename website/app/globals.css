@@ -24,6 +24,10 @@ code {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+.animate-fade-in {
+  animation: fadeInDocs 0.6s ease forwards;
+}
+
 .fade-in {
   opacity: 0;
   animation: fadeUp 0.9s ease forwards;
@@ -35,5 +39,10 @@ code {
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInDocs {
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
