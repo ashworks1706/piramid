@@ -99,11 +99,11 @@ export default function Home() {
 
           {/* Hero */}
           <main className="relative mx-auto flex max-w-6xl flex-col gap-16 px-4 sm:px-6 py-12 sm:py-14">
-            <div className="absolute inset-x-0 -top-10 md:-top-16 lg:-top-20 h-[340px] sm:h-[420px] md:h-[500px] lg:h-[540px] -z-10">
+            <div className="absolute inset-x-0 -top-10 md:-top-16 lg:-top-20 h-[320px] sm:h-[420px] md:h-[500px] lg:h-[540px] -z-10">
               <div className="rounded-[32px] w-full h-full bg-[radial-gradient(circle_at_50%_20%,rgba(99,102,241,0.18),rgba(14,165,233,0.08)),linear-gradient(160deg,rgba(24,27,42,0.8),rgba(10,12,24,0.85))] border border-white/10 shadow-2xl shadow-indigo-900/30 blur-[0px]" />
             </div>
-            <section className="grid gap-10 md:grid-cols-[1.1fr_0.9fr] items-center">
-              <div className="space-y-6 fade-in text-center md:text-left">
+            <section className="grid w-full gap-10 items-center md:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-6 fade-in text-center md:text-left max-w-xl mx-auto md:mx-0 w-full">
                 <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
                   GPU Powered
                 </p>
@@ -133,9 +133,9 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="relative space-y-4 fade-in delay-1">
+              <div className="relative space-y-4 fade-in delay-1 max-w-xl mx-auto w-full">
                 <div className="rounded-2xl border border-white/10 bg-black/50 shadow-2xl shadow-indigo-600/20 p-6 backdrop-blur">
-                  <pre className="code-block">
+                  <pre className="code-block overflow-auto text-sm leading-relaxed">
                     <code>{quickstart}</code>
                   </pre>
 
