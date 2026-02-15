@@ -135,10 +135,6 @@ export default function Home() {
 
               <div className="relative space-y-4 fade-in delay-1">
                 <div className="rounded-2xl border border-white/10 bg-black/50 shadow-2xl shadow-indigo-600/20 p-6 backdrop-blur">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
-                    <span>Run in 30 seconds</span>
-                    <span className="text-emerald-300 font-semibold">live</span>
-                  </div>
                   <pre className="code-block">
                     <code>{quickstart}</code>
                   </pre>
