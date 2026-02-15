@@ -115,7 +115,7 @@ fn load_from_file() -> Option<AppConfig> {
     }
 }
 
-fn default_data_dir() -> String {
+pub fn default_data_dir() -> String {
     let home = env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());

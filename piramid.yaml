@@ -1,0 +1,33 @@
+index:
+  type: Auto
+  metric: Cosine
+  mode: Auto
+  search:
+    ef: null
+    nprobe: null
+    filter_overfetch: 10
+quantization:
+  level: None
+  disk_only: false
+memory:
+  max_memory_per_collection: null
+  initial_mmap_size: 1048576
+  use_mmap: true
+wal:
+  enabled: true
+  checkpoint_frequency: 1000
+  checkpoint_interval_secs: null
+  max_log_size: 104857600
+  sync_on_write: false
+parallelism:
+  mode: Auto
+  parallel_search: true
+execution: Auto
+search:
+  ef: null
+  nprobe: null
+  filter_overfetch: 10
+limits:
+  max_vectors: null
+  max_bytes: null
+  max_vector_bytes: null
