@@ -5,17 +5,6 @@
 [ ] Dashboard full update with functionality
 [ ] Final docker image push
 
-**CI/CD**
-
-[ ] Fix broken CI pipeline GitHub workflow for cargo 
-
-[ ] Remove npm sdk CI pipeline github workflow for now, we will add it later 
-
-[ ] Fix broken CI pipeline GitHub workflow for docker image  
-
-[ ] Cargo fuzz to test parser robustness.
-
-
 **Documentation**
 
 [ ] Easy low effort API docs for SDKs (Rust via MkDocs)
@@ -35,6 +24,9 @@
 ---
 
 ### Post-Launch 
+
+**Benchmarks**
+[ ] setup benchmarks for latency, index strategies, memory usage, etc
 
 **ACID Transactions**
 
@@ -104,12 +96,6 @@
 [ ] Add docs 
 
 [ ] Easy low effort API docs for SDKs (Rust via MkDocs)
-
-**CLI**
-
-[ ] add cli for piramid setup
-
-[ ] use piramid cli animations
 
 ---
 

@@ -1,0 +1,20 @@
+name: Cargo Fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"
+
+jobs:
+  fuzz:
+    if: ${{ hashFiles('fuzz/Cargo.toml') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+      - name: Fuzz list
+        run: cargo fuzz list
+      - name: Fuzz dry-run (short)
+        run: cargo fuzz run default -- -runs=10
