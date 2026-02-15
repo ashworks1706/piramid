@@ -5,10 +5,32 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../mdx-components";
-import { findDoc, extractHeadings } from "../../lib/docs";
+import { findDoc, extractHeadings, docSeo } from "../../lib/docs";
 import { DocsToc } from "../../components/DocsToc";
+import type { Metadata } from "next";
 
 export const runtime = "nodejs";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const seo = docSeo(["index"]);
+  const title = seo?.title ?? "Piramid docs";
+  const description = seo?.description ?? "Piramid documentation.";
+  const url = "/docs";
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url,
+    },
+    twitter: {
+      title,
+      description,
+      card: "summary",
+    },
+  };
+}
 
 export default async function DocsIndex() {
   const doc = findDoc(["index"]);

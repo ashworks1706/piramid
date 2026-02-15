@@ -51,6 +51,20 @@ function readTitle(filePath: string): string {
   return path.basename(filePath).replace(/\.md$/, "");
 }
 
+function parseFrontmatter(raw: string): Record<string, string> {
+  if (!raw.startsWith("---")) return {};
+  const end = raw.indexOf("---", 3);
+  if (end === -1) return {};
+  const block = raw.slice(3, end).trim();
+  const out: Record<string, string> = {};
+  for (const line of block.split("\n")) {
+    const [k, ...rest] = line.split(":");
+    if (!k || rest.length === 0) continue;
+    out[k.trim()] = rest.join(":").trim();
+  }
+  return out;
+}
+
 function slugFromPath(filePath: string): string[] {
   const rel = path.relative(DOCS_DIR, filePath);
   const parts = rel.split(path.sep);
@@ -90,6 +104,11 @@ export function listDocs(): DocMeta[] {
   }
 
   walk(DOCS_DIR);
+  results.forEach((meta) => {
+    if (meta.slug.join("/") === "index") {
+      meta.title = "Overview";
+    }
+  });
   cachedDocs = results.sort((a, b) => a.slug.join("/").localeCompare(b.slug.join("/")));
   return cachedDocs;
 }
@@ -193,4 +212,23 @@ export function extractHeadings(filePath: string): Heading[] {
     }
   }
   return headings;
+}
+
+function summarize(raw: string): string {
+  const text = stripFrontmatterAndMarkdown(raw);
+  if (!text) return "";
+  const snippet = text.slice(0, 220).trim();
+  return snippet.length < text.length ? `${snippet}…` : snippet;
+}
+
+export function docSeo(slug: string[]): { title: string; description: string } | null {
+  const doc = findDoc(slug);
+  if (!doc) return null;
+  const raw = fs.readFileSync(doc.filePath, "utf8");
+  const frontmatter = parseFrontmatter(raw);
+  const title =
+    frontmatter.title ??
+    (doc.slug.join("/") === "index" ? "Overview" : doc.title);
+  const description = frontmatter.description ?? summarize(raw);
+  return { title, description };
 }
