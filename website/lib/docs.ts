@@ -6,7 +6,6 @@ import GithubSlugger from "github-slugger";
 // Docs are read directly from the repo root ../docs
 const DOCS_DIR = path.join(process.cwd(), "..", "docs");
 const SIDEBAR_CONFIG = path.join(DOCS_DIR, "_sidebar.json");
-const BANNER_PATH = path.join(DOCS_DIR, "_banner.md");
 
 export type DocMeta = {
   slug: string[];
@@ -80,7 +79,7 @@ export function listDocs(): DocMeta[] {
         continue;
       }
       if (!isMarkdown(entry.name)) continue;
-      if (entry.name.startsWith("_")) continue; // skip meta files like _sidebar/_banner
+      if (entry.name.startsWith("_")) continue; // skip meta files like _sidebar
       const filePath = path.join(current, entry.name);
       results.push({
         slug: slugFromPath(filePath),
@@ -169,10 +168,6 @@ export function buildSearchIndex(): DocSearchEntry[] {
     };
   });
   return cachedSearch;
-}
-
-export function bannerPath(): string | null {
-  return fs.existsSync(BANNER_PATH) ? BANNER_PATH : null;
 }
 
 export { DOCS_DIR };
