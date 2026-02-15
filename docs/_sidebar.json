@@ -1,0 +1,10 @@
+{
+  "sections": [
+    { "label": "Overview", "items": ["overview"] },
+    { "label": "Architecture", "items": ["architecture"] },
+    { "label": "API", "items": ["api", "configuration"] },
+    { "label": "Operations", "items": ["operations"] },
+    { "label": "Contributing", "items": ["contributing"] },
+    { "label": "Roadmap", "items": ["roadmap"] }
+  ]
+}

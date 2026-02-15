@@ -6,7 +6,7 @@
   - Root cause and fix summary
   - Screenshots/log snippets for user-visible or routing changes
   - Tests you ran
-- **Issues:** please open an issue before significant work so we can align on approach. Start by scanning `docs/TODO.md` and open issues tied to those items or adjacent bugs you find.
+- **Issues:** please open an issue before significant work so we can align on approach. Start by scanning `docs/roadmap/index.md` and open issues tied to those items or adjacent bugs you find.
 
 ## Development expectations
 
@@ -21,7 +21,7 @@
   - Add brief comments only where the intent isn’t obvious (index/search internals, persistence).
   - Split large modules into focused submodules (e.g., storage/persistence, index/…).
   - Avoid `unsafe` unless there’s a measurable need and it’s well-justified.
-- **API/behavior changes:** update README and docs/TODO when applicable. Call out breaking changes in the PR description.
+- **API/behavior changes:** update README and docs/roadmap when applicable. Call out breaking changes in the PR description.
 
 ## Repository map (quick orientation)
 

@@ -1,7 +1,7 @@
 import "../globals.css";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { buildSidebar, buildSearchIndex } from "../../lib/docs";
+import { buildSidebar, buildSearchIndex } from "@/lib/docs";
 import { DocsSidebar } from "../../components/DocsSidebar";
 import { DocsSearchLauncher } from "../../components/DocsSearchLauncher";
 

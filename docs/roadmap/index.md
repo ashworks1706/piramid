@@ -3,9 +3,7 @@
 
 **Documentation**
 
-[ ] Easy low effort API docs for SDKs (Rust via MkDocs)
-
-[ ] Entire Technical architecture breakdown (MkDocs)
+[ ] Entire Technical architecture breakdown in docs
 
 **Dashboard**
 
@@ -137,7 +135,7 @@
 
 [ ] Dependency Integration: Add zipy crate to Cargo.toml as an optional feature.
 
-[ ] Compute Backend Enum: Refactor ExecutionMode to support Zipy(Arc<ZipyEngine>) variant.
+[ ] Compute Backend Enum: Refactor ExecutionMode to support `Zipy(Arc<ZipyEngine>)` variant.
 
 [ ] Startup Handshake: Implement logic to attempt Zipy initialization on boot and fallback to CPU if failed.
 

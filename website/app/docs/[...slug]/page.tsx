@@ -6,7 +6,7 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../../mdx-components";
-import { findDoc, bannerPath, listDocs, extractHeadings } from "../../../lib/docs";
+import { findDoc, bannerPath, listDocs, extractHeadings } from "@/lib/docs";
 import { DocsToc } from "../../../components/DocsToc";
 
 export async function generateStaticParams() {
