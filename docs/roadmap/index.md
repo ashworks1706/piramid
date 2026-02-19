@@ -101,7 +101,7 @@
 
 [ ] Metadata-only search (no vector similarity)
 
-[ ] Vector similarity beti thinkween two stored vectors
+[ ] Vector similarity between two stored vectors
 
 [ ] Vector count per metadata filter
 
