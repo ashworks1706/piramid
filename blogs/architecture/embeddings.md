@@ -2,6 +2,8 @@
 
 In the [previous section](/blogs/architecture/database) we established that a vector database doesn't search for exact matches — it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
+![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
+
 
 ### What an embedding actually is
 

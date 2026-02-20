@@ -2,7 +2,6 @@
 
 Coming from [embeddings](/blogs/architecture/embeddings), you have a vector. Now the question is how Piramid actually keeps it alive — on disk, across restarts, through crashes — while still being fast enough to read back at query time. Before getting into what Piramid specifically does, it's worth understanding the landscape of how databases generally solve the storage problem, because Piramid's choices only make sense in that context.
 
-
 ### How databases store data
 
 At the most fundamental level, a database is just a program that reads and writes bytes to storage devices. The way those bytes are organized — the storage engine — determines almost everything about the system's performance characteristics: read throughput, write throughput, space amplification, recovery time after a crash, and how the system degrades as data grows.
