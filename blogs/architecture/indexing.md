@@ -95,21 +95,33 @@ Piramid's auto-selector threshold of 10,000 is deliberately conservative: it lea
 
 ### HNSW — navigating a small world
 
-HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018) is the algorithm behind most high-performance vector databases. The intuition comes from graph theory's small-world phenomenon: in a random graph where each node has a few "long-range" connections, the average shortest path between any two nodes grows only as $O(\log N)$. HNSW exploits this by building a layered navigable small-world graph and traversing it greedily during search.
+HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018) is the algorithm behind most high-performance vector databases — Pinecone, Weaviate, Milvus, Qdrant, and Piramid all use it at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
 
 #### The small-world graph idea
 
-A plain NSW (non-hierarchical) graph already has useful properties. Each vector is a node. During construction, new nodes are connected to their nearest neighbours, creating both short-range edges (local clusters) and, occasionally, long-range edges to distant parts of the space (the "highway links" that make fast traversal possible). Search simply starts from an arbitrary node and greedily hops to whichever neighbour is closest to the query, stopping when no neighbour is closer than the current node.
+The NSW (non-hierarchical) paper by Malkov et al. (2014) showed that if you build a graph where each vector-node is connected to its approximate nearest neighbours — plus a few "long-range" links to far-away nodes that act like highways — then greedy search on that graph finds nearest neighbours in $O(\log N)$ hops with good probability.
 
-The problem with NSW is that the entry point matters a lot. If you start search from a node in completely the wrong region you waste many hops just getting to the right neighbourhood. HNSW solves this by layering the graph: higher layers contain fewer nodes and act as a coarse "highway" network; lower layers are dense and handle fine-grained lookups.
+Each node starts with short-range connections to similar vectors, forming local clusters. The long-range edges emerge naturally from the construction order: vectors inserted early (when the graph was sparse) connect to whatever was available at the time, spanning large distances. Late insertions find dense local neighbourhoods. The mix produces the small-world property.
 
-#### Building the hierarchy
+Greedy search simply starts from an arbitrary entry node and repeatedly moves to whichever current node's neighbour is closest to the query. It terminates when no neighbour is closer than the current node — a local minimum that, empirically, is almost always the global minimum for typical embedding distributions.
 
-Every new vector is assigned a layer $\ell$ drawn from a probability distribution with exponential decay:
+The raw NSW problem is that the entry point matters. Starting in the wrong region wastes many hops just navigating to the relevant part of the space. HNSW solves this with a hierarchy of layers: layer 0 is the dense local graph, and each higher layer is a progressively sparser "skip list in graph form" that lets you coarsely navigate to the right region before descending into the dense layer.
 
-$$\ell = \lfloor -\ln(u) \cdot m_L \rfloor, \quad u \sim \text{Uniform}(0,1)$$
+#### Layer probability and occupancy
 
-where $m_L = 1/\ln(M)$ is the layer multiplier and $M$ is the maximum connections per node. With $M = 16$ (Piramid's default), the probability of a node reaching layer $\ell$ is approximately $e^{-\ell / m_L}$, which means layer 1 gets roughly $1/16$th of the vectors, layer 2 gets $1/256$th, and so on. The result is a tree-like structure of decreasing granularity.
+Every newly inserted vector is assigned a maximum layer $\ell_{\max}$ drawn from a geometric distribution:
+
+$$\ell_{\max} = \lfloor -\ln(u) \cdot m_L \rfloor, \quad u \sim \text{Uniform}(0,1), \quad m_L = \frac{1}{\ln M}$$
+
+This gives $P(\ell_{\max} \geq \ell) = e^{-\ell / m_L} = e^{-\ell \ln M} = M^{-\ell}$. In other words, about $1/M$ of all vectors reach layer 1, $1/M^2$ reach layer 2, and so forth. The expected number of nodes at layer $\ell$ or above is:
+
+$$\mathbb{E}[\text{nodes at layer} \geq \ell] = \frac{N}{M^\ell}$$
+
+With $M = 16$ and $N = 1,000,000$: layer 0 has all 1M nodes, layer 1 has ~62,500, layer 2 has ~3,906, layer 3 has ~244. The total across all layers is:
+
+$$\sum_{\ell=0}^{\infty} \frac{N}{M^\ell} = N \cdot \frac{1}{1 - 1/M} = N \cdot \frac{M}{M-1} \approx 1.067 N$$
+
+So the multi-layer structure adds only about 6.7% overhead over storing the base layer alone. The hierarchy is nearly free in terms of node count.
 
 ```rust
 fn random_layer(&self) -> usize {
@@ -118,34 +130,82 @@ fn random_layer(&self) -> usize {
 }
 ```
 
-The default Piramid config is `m = 16`, `m_max = 32` (layer 0 allows more connections since it needs to be denser), `ef_construction = 200`.
+The default Piramid config is `m = 16`, `m_max = 32` (layer 0 gets $2 \times M$ connections because it needs to be denser to handle the full $N$ nodes), `ef_construction = 200`.
 
-#### Inserting a vector
+#### Inserting a vector — the two-phase algorithm
 
-Insert is a top-down greedy + bottom-up connection process. Starting from the global entry point at the top layer, the algorithm greedily descends to layer $\ell + 1$ — finding a good region of the space before it even starts building the new node's neighbourhood. From layer $\ell$ down to layer 0, it uses a priority queue to maintain a set of `ef_construction` candidate neighbours, then selects the best $M$ (or $M_\text{max}$ at layer 0) and adds bidirectional edges.
+Insert is a top-down descent followed by a bottom-up connection phase.
 
-The bidirectional part is important. If $A$ gets connected to $B$, then $B$ also gets a connection back to $A$. This is what makes the graph navigable — you can always traverse in both directions. After adding the back-edge, if $B$'s connection list now exceeds $M$, it is pruned back down by selecting the $M$ closest out of the enlarged set.
+**Phase 1 — find the entry region.** Starting from the global entry point (the node with the highest $\ell_{\max}$, which governs the top layer), the algorithm greedily descends from the top layer to $\ell_{\max}(\text{new node}) + 1$. At each layer in this descent, it performs a greedy 1-nearest-neighbour search, just to find which part of the space to descend into. At the end of phase 1 you have a candidate entry point at the new node's target layer that is already in the right neighbourhood.
 
-Time complexity per insert is roughly $O(M \cdot \log N)$ amortised — logarithmic because the number of layers grows as $\log N$ and each layer search terminates quickly.
-
-#### Searching
-
-Search descends the same hierarchy. From the top layer down to layer 1, the algorithm performs a greedy single-neighbour hop — the goal is just to find a good entry point for layer 0, not to explore the full neighbourhood. At layer 0, it runs the proper beam search with candidate set size `ef`:
+**Phase 2 — connect at each layer.** From layer $\ell_{\max}$ down to layer 0, the algorithm runs a richer `ef_construction`-nearest-neighbour search, maintaining a candidate priority queue of the best `ef_construction` results seen so far. From those candidates it selects the best $M$ (or $M_{\max}$ at layer 0) and adds bidirectional edges:
 
 ```rust
-pub fn search(&self, query: &[f32], k: usize, ef: usize, ...) -> Vec<Uuid> {
-    let mut current_nearest = vec![ep];
-    // greedy descent to layer 1
-    for lc in (1..=self.max_level as usize).rev() {
-        current_nearest = self.search_layer(query, &current_nearest, 1, lc, ...);
+for lc in (0..=layer).rev() {
+    current_entry = self.search_layer(vector, &current_entry,
+                                      self.config.ef_construction, lc, ...);
+    let m = if lc == 0 { self.config.m_max } else { self.config.m };
+    let neighbors = self.select_neighbors(&current_entry, m, vectors, vector);
+    for &neighbor_id in &neighbors {
+        // add new_node → neighbor edge
+        pending_connections[lc].push(neighbor_id);
+        // add neighbor → new_node edge (bidirectional)
+        neighbor.connections[lc].push(id);
+        // prune neighbor's list back to m if it exceeded
+        if neighbor.connections[lc].len() > m {
+            neighbor.connections[lc] = self.select_neighbors(..., m, ...);
+        }
     }
-    // beam search at layer 0
-    current_nearest = self.search_layer(query, &current_nearest, ef.max(k), 0, ...);
-    ...
 }
 ```
 
-`ef` is the key quality dial. At `ef = k`, the algorithm returns more-or-less the first $k$ candidates it finds — very fast, reasonably good. At `ef = 400`, it explores a much larger neighbourhood before committing, which dramatically improves recall at the cost of more distance computations. In Piramid, `ef_search` defaults to `ef_construction = 200`. You can override it per query via the `SearchConfig`:
+The bidirectionality is critical. A unidirectional graph would have large "dead end" regions — nodes that many other nodes point to but that point back to nothing useful. Bidirectional edges guarantee that traversal can always go in both directions, which is what makes the small-world property hold under greedy descent.
+
+After adding the back-edge, if the neighbour's connection list exceeds $M$, it gets pruned back. Piramid uses simple distance-based selection: keep the $M$ closest. The original HNSW paper proposes a diversity-aware heuristic that prefers candidates spread across different directions, which improves recall slightly but adds implementation complexity. Piramid's simple greedy selection works well in practice.
+
+Time complexity per insert is $O(M \cdot ef_{\text{const}} \cdot \log N)$ — the $\log N$ comes from the number of layers, $M$ from the connections per layer, and $ef_{\text{const}}$ from the width of each layer's search.
+
+#### The beam search — formal invariant
+
+The core of both insert and query is `search_layer`, which runs on a single layer. Understanding it precisely is important because `ef` is the main tuning knob exposed to users.
+
+The algorithm maintains two data structures simultaneously:
+
+- A **candidates** max-heap ordered by *negative* distance (so the top element is the closest candidate yet explored)
+- A **nearest** max-heap ordered by distance (so the top element is the *furthest* among the current best results)
+
+The invariant at each step: `nearest` holds the `ef` best nodes seen so far; `candidates` holds nodes whose neighbours haven't been explored yet that might still improve the result. The loop runs while there exist unexplored candidates closer to the query than the current furthest result:
+
+```rust
+while let Some(candidate) = candidates.pop() {
+    if candidate.distance > furthest_distance { break; }
+    for &neighbor_id in &node.connections[level] {
+        if visited.insert(neighbor_id) {
+            let dist = self.distance(query, neighbor_vector);
+            if dist < furthest_distance || nearest.len() < num_closest {
+                candidates.push(neighbor);
+                nearest.push(neighbor);
+                if nearest.len() > num_closest { nearest.pop(); }
+                furthest_distance = nearest.peek().map(|c| c.distance)...;
+            }
+        }
+    }
+}
+```
+
+The termination condition `candidate.distance > furthest_distance` is key: once the closest unexplored candidate is already farther than our worst current result, expanding it can only add worse results, so we stop. This makes the algorithm output-sensitive: dense clusters terminate quickly (they fill `nearest` fast and tighten `furthest_distance` fast), while sparse regions iterate longer.
+
+#### ef_construction vs ef_search
+
+These two parameters are often confused because they're both called `ef` internally but serve entirely different purposes.
+
+`ef_construction` controls graph quality at build time. It is the beam width used during `search_layer` while inserting — higher values mean each new node finds better neighbours, resulting in a denser and more accurate graph. The cost is $O(ef_{\text{const}})$ per layer per insert. Setting `ef_construction = 200` means each insertion explores up to 200 candidates to find the best $M = 16$ neighbours to connect to.
+
+`ef_search` controls query recall at query time. It is the beam width for the final layer-0 search. It does not affect the graph structure at all — only how thoroughly the already-built graph is explored during a query. You can set `ef_search = 50` at query time on a graph built with `ef_construction = 400` without any degradation to the graph itself.
+
+> **The practical implication:** you should build with high `ef_construction` (200–400) and then tune `ef_search` per use case. A graph built with `ef_construction = 64` and queried with `ef_search = 400` will never reach the recall of a graph built with `ef_construction = 400` and queried with `ef_search = 200`, because the underlying graph simply doesn't have the connections needed. Build quality is permanent; search quality is adjustable.
+
+In Piramid, both default to 200. Override `ef_search` per query via `SearchConfig`:
 
 ```yaml
 collection:
@@ -153,14 +213,28 @@ collection:
     type: Hnsw
     m: 16
     ef_construction: 200
-    ef_search: 200
+    ef_search: 200  # tune this at query time
 ```
 
-The theoretical recall of HNSW at typical settings is 95–99% for well-distributed data, which is more than sufficient for RAG retrieval.
+At these settings, empirical Recall@10 on typical text embedding distributions is 97–99%.
+
+#### Memory footprint of the graph
+
+Each node in the HNSW graph stores:
+- One `Vec<Vec<Uuid>>` of connections across all its layers. A node at layer 0 only has $M_{\max} = 32$ connections; a node at layer 1 has $M = 16$ more; and so on.
+- A `tombstone: bool` flag (1 byte).
+
+The expected total storage for connections is:
+
+$$\text{graph memory} = N \cdot M_{\max} \cdot \frac{M}{M-1} \cdot 16\text{ bytes per UUID}$$
+
+With $N = 10^6$, $M = 16$, $M_{\max} = 32$: roughly $10^6 \times 32 \times (16/15) \times 16 \approx 546\text{ MB}$. That is on top of the raw vector storage ($10^6 \times 1536 \times 4 \approx 6.14\text{ GB}$). The graph overhead is about 9% of vector memory — a modest tax for the search speedup.
 
 #### Tombstoning and graph connectivity
 
-Deletion in graph-based indexes is notoriously awkward. If you physically remove a node and its edges, you may disconnect parts of the graph — future traversals could fail to reach regions of the space that were only accessible through that node. HNSW in Piramid uses **tombstoning**: a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
+Deletion in graph-based indexes is notoriously awkward. Physically removing a node and its edges can disconnect parts of the graph — future traversals may fail to reach regions that were only accessible through the removed node. This is not a theoretical concern: if a hub node (one that happens to be the entry path to an entire cluster) is deleted and its edges removed, searches into that cluster will silently produce incorrect results.
+
+HNSW in Piramid uses **tombstoning**: a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
 
 ```rust
 fn mark_tombstone(&mut self, id: &Uuid) {
@@ -170,9 +244,9 @@ fn mark_tombstone(&mut self, id: &Uuid) {
 }
 ```
 
-During search, tombstoned nodes are used as traversal intermediaries (their edges are still followed) but they are filtered out of the result set before returning to the caller. This keeps the graph fully connected at the cost of some dead weight in memory.
+During search, tombstoned nodes are used as traversal intermediaries — their edges are still followed when exploring the graph — but they are filtered out before the result set is returned. This guarantees graph connectivity at the cost of retaining dead nodes in memory.
 
-The tradeoff is fine for workloads with modest delete rates, but if a dataset has high churn — say, an embeddings cache that evicts constantly — tombstones accumulate and the graph's effective density decays. The right fix is periodic index rebuilding, which discards all tombstones and rebuilds a clean graph from the live vectors. Piramid's compaction flow handles this at the storage layer; the index is reconstructed from scratch during a compaction run.
+> **Tombstone accumulation risk:** if a workload has high delete rates, tombstones pile up. The graph's "live density" — the number of non-tombstoned nodes per layer — gradually decreases, and eventually traversal is slow because a large fraction of the explored nodes are dead weight. The fix is a full index rebuild from the live vectors, which Piramid triggers through its compaction mechanism. After compaction, the loaded index is a clean graph with no tombstones.
 
 ### IVF — Voronoi cells and k-means
 
