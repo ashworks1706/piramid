@@ -1,4 +1,3 @@
-
 # Overview
 
 ## How to contribute
@@ -25,18 +24,6 @@
   - Split large modules into focused submodules (e.g., storage/persistence, index/…).
   - Avoid `unsafe` unless there’s a measurable need and it’s well-justified.
 - **API/behavior changes:** update README and blogs/roadmap when applicable. Call out breaking changes in the PR description.
-
-## Repository map (quick orientation)
-
-- `src/bin/piramid.rs` – CLI entry (init/show-config/serve).
-- `src/server/` – Axum router, handlers, DTOs, state (`AppState`).
-- `src/storage/` – collection lifecycle, WAL/checkpoints, mmap, caches.
-- `src/index/` – index traits + Flat/HNSW/IVF implementations.
-- `src/search/` – search engine + filters.
-- `src/embeddings/` – providers (OpenAI/local HTTP), retry/cache layers.
-- `src/metrics/` – distance metrics and latency tracking.
-- `src/config/` – config types + loader.
-- `blogs/` – TODOs and contributor docs.
 
 ## Security / reporting
 

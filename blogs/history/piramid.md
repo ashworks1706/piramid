@@ -1,20 +1,22 @@
 # The Evolution
 
-I called it piramid. made specifically for rag applications and fast latency large scale environments where demand is dynamic. 
+I called it Piramid. I wanted to build it for RAG applications where latency matters, especially in environments where demand changes fast.
 
 > Piramid is a latency-first vector database written in Rust. The goal is to keep the database and your LLM on the same device, minimize round-trips, and expose a simple HTTP API.
 
-It started as a simple idea in my head, but i knew it is very complex and difficult, but i had this excitement and a good feeling about it, that i'm working on something that's outisde my skillset and i will become a better version of myself after this. 
+It started as a simple idea, but I knew from day one it would be difficult. Still, I had that feeling that this was exactly the kind of project that would force me to level up. It was clearly outside my comfort zone, and that was the whole point.
 
-I got to excalidraw, jotted down the architecture, the components, the flow, the data management, the storage management, the indexing strategies, the search algorithms, the API design, the CLI design, the caching strategies, the collection management, the sharding strategies, the replication strategies, the consistency models, the durability models, the backup and restore strategies, the monitoring and logging strategies, the security strategies, the deployment strategies, the scaling strategies, and everything in between. 
+I opened Excalidraw and started sketching everything I could think of: architecture, data flow, storage layout, indexing strategies, search paths, API shape, CLI flow, caching, and collection lifecycle. Then I went even broader into things like consistency, durability, backup/restore, observability, deployment, and scaling.
 
-I just noticed at every point how deep these things were and how cohesively they run together. 
+At every step I noticed the same thing: every decision connects to five others. Nothing in database systems is isolated. It’s deep, and everything needs to work together.
 
-> Even though piramid, is super early stage and single node based, i actually want to put the things i read from [that book]() into practice.
+> Even though Piramid is still very early and single-node, I wanted to apply what I learned from [that book]().
 
 #### The Journey
 
-Further in the blogs i will talk about these exact components and how they work. I do not want them to be just technical explanations, i want to talk about the why and how i came up with these ideas, the challenges i faced, the tradeoffs i had to make, the alternatives i considered and the future possibilities. Keep in mind this is just an education project i've built, i dont want them to be judged or questioned as if this was a startup. this is a project that i built for learning and sharing my knowledge, so i will not talk about the market side of things, the competition side of things, the funding side of things,  and everything in between.
+In the next posts I’ll go through these components in detail. I don’t want this to be just technical explanation after technical explanation. I want to include the why behind decisions, the dead ends, the tradeoffs, and the alternatives I considered before choosing a path.
+
+Also, this is a learning project first. I’m building it to understand systems deeply and share that process. So I’m not focusing on startup topics like market analysis, competition, or funding. This section is about engineering decisions, curiosity, and the process of building.
 
 
 
