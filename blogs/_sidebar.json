@@ -11,8 +11,8 @@
         "architecture",
         "architecture/database",
         "architecture/embeddings",
-        "architecture/indexing",
         "architecture/storage",
+        "architecture/indexing",
         "architecture/query",
         "architecture/limitations"
       ]
