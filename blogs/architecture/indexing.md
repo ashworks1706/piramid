@@ -250,21 +250,42 @@ During search, tombstoned nodes are used as traversal intermediaries — their e
 
 ### IVF — Voronoi cells and k-means
 
-IVF (Inverted File Index) is a completely different philosophy. Rather than building a navigable graph, it partitions the vector space into $K$ clusters and builds an inverted list: a mapping from cluster ID to the set of vector IDs assigned to that cluster. At query time, instead of scanning all $N$ vectors, it only scans the `nprobe` closest clusters. If `nprobe = 1` and the clusters are well-balanced, the expected scan is $N / K$ vectors per query rather than $N$ — a $K$-fold speedup.
+IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using k-means, and for each cluster maintains an **inverted list** — a list of vector IDs assigned to that cluster. At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
 
-The geometry here is equivalent to **Voronoi diagrams**. Each centroid $\mathbf{c}_i$ defines a Voronoi cell $V_i = \{ \mathbf{x} : \|x - c_i\|_2 \leq \|x - c_j\|_2 \;\forall j \neq i \}$. A query vector $\mathbf{q}$ falls into the cell whose centroid is nearest, and searching `nprobe` clusters means searching that cell plus its $(\text{nprobe} - 1)$ nearest neighbours. Results near a cell boundary may still be missed — that's the fundamental recall limitation of IVF.
+The geometric picture is a **Voronoi diagram**. Each centroid $\mathbf{c}_i$ defines a cell:
 
-#### Building the clusters
+$$V_i = \bigl\{ \mathbf{x} \in \mathbb{R}^d : \|\mathbf{x} - \mathbf{c}_i\| \leq \|\mathbf{x} - \mathbf{c}_j\| \;\forall j \neq i \bigr\}$$
 
-Cluster centroids are computed offline using Lloyd's k-means algorithm. Starting from $K$ randomly selected vectors as initial centroids:
+A query vector $\mathbf{q}$ falls into the cell whose centroid is nearest. Probing `nprobe` clusters means searching the query's own Voronoi cell plus the $(\text{nprobe} - 1)$ adjacent cells — the ones whose centroids are next-closest to $\mathbf{q}$. Any true nearest neighbour that lies near a cell boundary may exist in an adjacent cell, which is the fundamental recall limitation of IVF with small `nprobe`.
 
-1. Assign each vector to its nearest centroid: $c(x) = \arg\min_i \|\mathbf{x} - \mathbf{c}_i\|$
-2. Recompute centroid $i$ as the mean of its assigned vectors: $\mathbf{c}_i \leftarrow \frac{1}{|V_i|} \sum_{x \in V_i} \mathbf{x}$
-3. Repeat until convergence or `max_iterations` is hit.
+#### Building the clusters — Lloyd's algorithm
 
-Piramid defaults to `max_iterations = 10`, which is light but fast. For most distributions, k-means converges in a handful of passes — the later iterations produce diminishing improvements.
+Centroid computation uses Lloyd's k-means algorithm:
 
-The right value of $K$ depends on $N$. The standard heuristic is $K \approx \sqrt{N}$, which balances cluster granularity against inverted list scan cost. Piramid's auto-config implements this directly:
+1. **Initialise:** pick $K$ vectors at random as initial centroids $\mathbf{c}_1, \ldots, \mathbf{c}_K$.
+2. **Assign:** for each vector $\mathbf{x}_i$, find its nearest centroid: $c(\mathbf{x}_i) = \arg\min_j \|\mathbf{x}_i - \mathbf{c}_j\|$.
+3. **Update:** recompute each centroid as the mean of its assigned vectors: $\mathbf{c}_j \leftarrow \frac{1}{|V_j|} \sum_{\mathbf{x} \in V_j} \mathbf{x}$.
+4. Repeat steps 2–3 until convergence or `max_iterations`.
+
+Piramid runs 10 iterations by default. Lloyd's algorithm minimises the within-cluster sum of squared distances (inertia):
+
+$$\mathcal{J} = \sum_{j=1}^{K} \sum_{\mathbf{x} \in V_j} \|\mathbf{x} - \mathbf{c}_j\|^2$$
+
+Each iteration monotonically decreases $\mathcal{J}$, so convergence is guaranteed. In practice the large gains come in the first 3–5 iterations; later iterations move centroids by tiny amounts. Ten iterations is a reasonable engineering tradeoff between cluster quality and startup cost.
+
+> **k-means++ vs random initialisation:** Piramid uses random initialisation (just takes the first $K$ vectors). k-means++ initialises centroids by sampling proportionally to $\|\mathbf{x} - \text{nearest existing centroid}\|^2$, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions.
+
+#### Why K ≈ √N is optimal
+
+The total cost of an IVF query is:
+
+$$\text{cost} = \underbrace{\alpha \cdot K}_{\text{centroid scan}} + \underbrace{\beta \cdot \frac{N \cdot \text{nprobe}}{K}}_{\text{inverted list scan}}$$
+
+where $\alpha$ is the cost per centroid distance computation and $\beta$ is the cost per vector distance computation inside the inverted list. To minimise over $K$ (treating nprobe as fixed at 1), take the derivative and set to zero:
+
+$$\frac{\partial \text{cost}}{\partial K} = \alpha - \beta \cdot \frac{N}{K^2} = 0 \implies K^* = \sqrt{\frac{\beta N}{\alpha}}$$
+
+Since $\beta \approx \alpha$ (both are dot products of similar-dimensional vectors with the same SIMD path), we get $K^* \approx \sqrt{N}$. This is where Piramid's auto-config comes from:
 
 ```rust
 pub fn auto(num_vectors: usize) -> Self {
@@ -274,15 +295,39 @@ pub fn auto(num_vectors: usize) -> Self {
 }
 ```
 
-So at $N = 100,000$, you get $K = 316$ clusters and `num_probes = 10`. Each cluster holds roughly 316 vectors on average, and a query scans $10 \times 316 = 3,160$ vectors instead of 100,000. That's a 32x speedup with decent recall because probing 10/316 ≈ 3% of the space gives good coverage of the local neighbourhood.
+At $N = 100,000$: $K = 316$, `num_probes = 10`. Average cluster size is $N/K = 316$ vectors. A query scans $10 \times 316 = 3,160$ vectors — a 32× reduction over the full scan, with recall typically around 95%.
 
-#### Online insertion and the cluster drift problem
+At this optimal $K$, the total query cost is $2\alpha \sqrt{N}$ (verify: $\alpha K + \alpha N / K = \alpha \sqrt{N} + \alpha \sqrt{N}$). Compare to flat scan at $\alpha N$: IVF is $\sqrt{N} / (2\alpha) \cdot \alpha = 1/(2\sqrt{N})$ times the flat cost, so the speedup factor scales as $\sqrt{N}/2$. At $N = 10^6$, that's a theoretical 500× speedup over flat — in practice you get 50–100× because of cache effects and overhead.
 
-When new vectors arrive after the clusters are built, IVF assigns them to whichever existing centroid is nearest and appends them to that inverted list — no re-clustering. This is fast and correct as long as the new data looks like the training data. If the distribution shifts (say, you start indexing a completely different topic), some clusters become overloaded and others become sparse, degrading both recall and the $\sqrt{N}$ search complexity. The fix is periodic re-clustering, which is triggered by Piramid's compaction / rebuild flow.
+#### The cluster boundary problem
+
+The recall degradation with small `nprobe` comes from vectors that land near cell boundaries. If your nearest neighbour and your query are separated by a Voronoi boundary, the true nearest neighbour is in a different cluster than the one containing the query. With `nprobe = 1`, it is missed.
+
+How common is this? For uniformly distributed points, the expected fraction of a dataset that lies near any boundary scales roughly as $1/K^{1/d}$ — essentially 100% at high dimensions, because every vector is near some boundary (again, concentration of measure). For real embedding distributions which are manifold-like rather than uniform, the fraction is much smaller because the data has strong cluster structure.
+
+This is why IVF works poorly for synthetic uniform distributions in benchmarks but works well on real embedding datasets: semantic structure means vectors genuinely separate into clusters, and boundaries are relatively sparse in the data-dense regions.
+
+#### Online insertion and cluster drift
+
+After the clusters are built, new vectors are assigned to the nearest existing centroid and appended to that inverted list. No re-clustering happens. This is correct for stationary data distributions, but if the distribution shifts over time — new document topics, new languages, new embedding model — some clusters become overloaded (recall degrades because the list is too long) and others become nearly empty (throughput degrades because you're scanning small irrelevant lists). The `nprobe` budget buys you decreasing recall per probe when clusters are imbalanced.
+
+The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. Piramid triggers this through the compaction mechanism exactly as HNSW triggers a graph rebuild.
 
 #### Searching with nprobe
 
-At query time, IVF first identifies the `nprobe` closest centroids by scanning all $K$ of them (fast, since $K \ll N$). Then it scans the inverted lists for those clusters, scores every vector in them, and returns the top $k$. The `nprobe` parameter lets you trade off recall for speed:
+At query time, IVF scans all $K$ centroids to find the `nprobe` nearest (this is a flat scan over centroids — fast, since $K \ll N$). Then it scores every vector in those `nprobe` inverted lists and returns the top $k$. The IVF code falls back to a brute-force scan if clusters haven't been built yet:
+
+```rust
+// Find nearest centroids
+centroid_distances.sort_by(|a, b| b.1.partial_cmp(&a.1)...);
+let nprobe = quality.nprobe.unwrap_or(self.config.num_probes);
+for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
+    for id in &self.inverted_lists[*cluster_id] {
+        let score = self.config.metric.calculate(query, vec, self.config.mode);
+        candidates.push((*id, score));
+    }
+}
+```
 
 | nprobe | recall (approx) | vectors scanned |
 |--------|----------------|-----------------|
@@ -291,7 +336,7 @@ At query time, IVF first identifies the `nprobe` closest centroids by scanning a
 | 10 | ~95% | $10N/K$ |
 | $K$ | 100% | $N$ (flat scan) |
 
-Setting `nprobe = K` degrades IVF exactly to the Flat index, which is a useful debugging check.
+Setting `nprobe = K` degrades IVF exactly to the Flat index — a useful debugging check when something seems wrong with recall.
 
 ### Auto-selection
 
@@ -309,23 +354,63 @@ These thresholds are tunable if you specify the index type explicitly in your co
 
 ### Search parameters
 
-Three parameters shape the quality / speed tradeoff at query time, and they surface in the `SearchConfig` struct.
+Three parameters shape the quality / speed tradeoff at query time, all surfaced through `SearchConfig`.
 
-**`ef`** is the beam width for HNSW layer-0 search. It is the number of candidates the algorithm maintains in its priority queue before committing to the final top $k$. Setting `ef < k` is illegal (Piramid clamps it to `max(ef, k)`), and setting `ef = k` gives the minimum possible work — essentially just keep the first $k$ candidates found. Higher values explore more of the graph neighbourhood. `ef = 200` is a solid general-purpose setting; `ef = 400` is high-recall; `ef = 50` is for bulk ingestion latency tests where recall doesn't matter.
+**`ef`** is the beam width for HNSW layer-0 search. It controls how many candidate nodes the algorithm holds in its result heap before committing to the top $k$. Setting `ef < k` is illegal (Piramid clamps to `max(ef, k)`). Setting `ef = k` gives minimum search work. The empirical recall curve is roughly:
 
-**`nprobe`** is the equivalent knob for IVF. Higher values probe more clusters, increasing recall and scan work proportionally.
+| ef | Recall@10 (approximate) | latency multiplier |
+|----|------------------------|--------------------|
+| 10 | ~85% | 1× |
+| 50 | ~93% | 1.8× |
+| 100 | ~96% | 2.5× |
+| 200 | ~98% | 4× |
+| 400 | ~99.5% | 7× |
 
-**`filter_overfetch`** is a multiplier applied when a metadata filter is present. Because HNSW and IVF can only apply filters during neighbour iteration — not before — at query time Piramid fetches $k \times \text{filter\_overfetch}$ candidates from the index, applies the filter to that expanded set, and then truncates to $k$. The default is 10. If your filter is highly selective (say, matching only 2% of vectors), you'd want to raise this significantly, otherwise you'll consistently get fewer than $k$ results after the filter pass.
+These numbers vary with dataset distribution and $M$, but the general shape is consistent: recall gains become logarithmically more expensive as you push toward 100%.
+
+**`nprobe`** is the equivalent knob for IVF — the number of clusters to search.
+
+**`filter_overfetch`** deserves a careful explanation because filtered vector search is one of the harder practical problems in the space.
+
+#### Pre-filter, post-filter, and in-traversal filter
+
+There are three strategies for combining metadata filters with ANN search:
+
+**Pre-filter:** build a separate inverted index over your metadata, run the filter first to get a candidate set, then run ANN search restricted to that set. This gives exact-filter recall but requires either a separate index structure or re-querying the ANN index with a custom candidate set — complex to implement and expensive if the filter matches many documents.
+
+**Post-filter (naïve):** run ANN search for $k$ results, then apply the filter. If the filter rejects most results, you get fewer than $k$ results back, possibly zero. This is the simplest approach and works fine when the filter is loose.
+
+**In-traversal filter (Piramid's approach):** pass the filter into the HNSW `search_layer` loop, so that filtered-out nodes contribute to graph traversal (they're still used as stepping stones) but are excluded from the result heap. This is better than post-filter because the traversal continues until `ef` *qualifying* candidates are found rather than stopping at `ef` total candidates. The implementation in `search_layer` checks each neighbour against the filter before adding it to `nearest`:
+
+```rust
+if let Some(f) = filter {
+    if let Some(md) = metadatas.get(&neighbor_id) {
+        if !f.matches(md) { continue; }  // skip result, but still traverse edges
+    }
+}
+// ... add to nearest and candidates
+```
+
+The problem with in-traversal filtering is that it doesn't help with **sparse filters** — filters that match only 1–5% of the dataset. If only 1 in 100 vectors is eligible, an `ef = 200` beam search may exhaust its entire candidate budget before finding 10 qualifying results. You always get at most `ef / selectivity` useful results from a single pass.
+
+The `filter_overfetch` parameter addresses this by inflating the request to the index:
+
+$$k_\text{search} = k \times \text{filter\_overfetch}$$
 
 ```rust
 let search_k = if params.filter.is_some() {
     k.saturating_mul(expansion)
-} else {
-    k
-};
+} else { k };
 ```
 
-The three presets in `SearchConfig` are `fast()` (`ef = 50`, `nprobe = 1`), `balanced()` (defaults), and `high()` (`ef = 400`, `nprobe = 20`), which cover most use cases without manual tuning.
+With the default `filter_overfetch = 10` and `k = 5`, the index fetches 50 candidates before filtering. If the filter has 10% selectivity, you expect 5 qualifying results on average. For 2% selectivity you'd want `filter_overfetch = 50`. The tradeoff is straightforward: overfetch linearly increases both the number of distance computations and the chance of finding enough qualified results.
+
+> **When overfetch isn't enough:** for very selective filters (< 1% of vectors), even large overfetch values fail because the ANN graph simply can't surface enough candidates from a small eligible set in a single traversal. The right solution for highly selective filters is a purpose-built filtered index (sometimes called "filtered HNSW" or "attribute-aware HNSW") that maintains separate entry points per filter category. This is on Piramid's roadmap.
+
+The three `SearchConfig` presets are:
+- `fast()` — `ef = 50`, `nprobe = 1` — for batch pipelines where high throughput matters more than last-mile recall
+- `balanced()` — defaults (ef = config value, nprobe = config value) — appropriate for most interactive RAG
+- `high()` — `ef = 400`, `nprobe = 20` — for compliance retrieval or precision-critical tasks
 
 ### Insert, update, and remove paths
 
@@ -351,6 +436,50 @@ The vector index is always kept in memory and is the source of truth for fast qu
 
 ### Product quantisation and future compression
 
-Product quantisation (PQ) is the standard technique for reducing vector memory by a factor of 8–32× with minimal recall degradation. The idea is to split a $d$-dimensional vector into $m$ subvectors of $d/m$ dimensions each, train a small codebook of 256 centroids for each subspace, and replace each subvector with its 8-bit centroid ID. A 1536-dimensional float32 vector (6KB) becomes 192 bytes. Distance approximations use precomputed lookup tables rather than the full inner product, making SIMD-accelerated approximate distance cheap.
+As collections scale past a few million vectors, memory becomes the binding constraint. A 1536-dimensional `f32` embedding is 6,144 bytes. Ten million of them occupy ~58 GB — well beyond single-server RAM. Product quantisation (PQ) is the standard technique for compressing vectors by 8–64× with only modest recall degradation.
 
-Piramid's quantisation module (`src/quantisation/`) exists in scaffolded form and is on the roadmap. Once integrated, PQ codes would be stored alongside the graph structure, and the inner loop of `search_layer` would consult the lookup table instead of computing exact distances — dropping the per-hop cost from $O(d)$ to $O(m)$ multiply-accumulates. The reranking pass (computing exact distances on the final `ef` candidates) would still use full vectors, keeping recall high while dramatically reducing the search-phase compute.
+#### How PQ works
+
+PQ splits the $d$-dimensional vector into $m$ disjoint subvectors of $d/m$ dimensions each:
+
+$$\mathbf{x} = [\mathbf{x}^{(1)}, \mathbf{x}^{(2)}, \ldots, \mathbf{x}^{(m)}], \quad \mathbf{x}^{(j)} \in \mathbb{R}^{d/m}$$
+
+For each subspace $j$, it trains a separate k-means codebook with 256 centroids (fitting in one byte):
+
+$$C_j = \{\mathbf{c}_{j,0}, \mathbf{c}_{j,1}, \ldots, \mathbf{c}_{j,255}\} \subset \mathbb{R}^{d/m}$$
+
+Each vector is then encoded as a sequence of $m$ byte-sized centroid IDs:
+
+$$\text{code}(\mathbf{x}) = \bigl[\arg\min_{i} \|\mathbf{x}^{(1)} - \mathbf{c}_{1,i}\|, \;\ldots,\; \arg\min_{i} \|\mathbf{x}^{(m)} - \mathbf{c}_{m,i}\|\bigr] \in \{0,\ldots,255\}^m$$
+
+For $d = 1536$ and $m = 192$: each subvector has $1536/192 = 8$ dimensions, the code is 192 bytes. Compression ratio: $1536 \times 4 / 192 = 32\times$.
+
+#### Approximate distance via lookup tables
+
+The power of PQ is not just compression — it enables fast approximate distance computation. Given a query $\mathbf{q}$, precompute a distance table $T \in \mathbb{R}^{m \times 256}$:
+
+$$T[j][i] = \|\mathbf{q}^{(j)} - \mathbf{c}_{j,i}\|^2$$
+
+This table has $m \times 256$ entries and costs $O(m \cdot 256 \cdot d/m) = O(256d)$ to build — a one-time cost per query. Then the approximate squared distance between query $\mathbf{q}$ and any database vector $\mathbf{x}$ with code $c$ is:
+
+$$\hat{d}^2(\mathbf{q}, \mathbf{x}) \approx \sum_{j=1}^{m} T[j][c_j(\mathbf{x})]$$
+
+This is $m$ table lookups and additions — $O(m)$ rather than $O(d)$. At $m = 192$ vs $d = 1536$: **8× fewer operations per distance computation**, in addition to the 32× memory saving. The practical result on HNSW is that the inner loop of `search_layer` (which runs thousands of times per query) becomes massively cheaper.
+
+> **Asymmetric Distance Computation (ADC):** the scheme above keeps the query in full precision and quantises only the database vectors. This is called ADC and is standard in practice — the query is free since there's only one of them. Symmetric quantisation (also compressing the query) is 32× cheaper still but loses recall rapidly.
+
+#### Reranking preserves recall
+
+The PQ distances are approximate. To recover precision, the standard pipeline is:
+
+1. Run beam search / IVF with PQ distances — fast, low memory, moderate recall.
+2. Take the top $\gamma \cdot k$ candidates ($\gamma \approx 3$–$10$).
+3. Rerank by computing exact distances with the original float32 vectors for just those $\gamma k$ candidates.
+
+The exact reranking step costs $O(\gamma k \cdot d)$ — cheap because $\gamma k \ll \text{ef}$. The combined recall of this pipeline approaches exact-search recall at a fraction of the memory and compute.
+
+#### Piramid's roadmap
+
+Piramid's `src/quantization/` module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the `.vidx.db` file, and `search_layer`'s distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final `ef` candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
+
+For a $10^6$-vector collection at $d = 1536$: current memory is ~6.14 GB for vectors + ~546 MB for the graph = 6.7 GB. With PQ ($m = 192$): ~192 MB for codes + same ~546 MB graph = 738 MB. That is a 9× total reduction, bringing large collections well within single-server RAM without a GPU.

@@ -1,17 +1,16 @@
 # Databases
 
-
-
 ### But, What is a database?
+
 A database is a structured collection of data that allows for efficient storage, retrieval, and management. Traditional databases are designed to handle structured data (like tables with rows and columns) and support operations like querying, updating, and deleting data based on exact matches.
 
 There are many types of databases, and each one exists because of a specific set of tradeoffs its designers decided to prioritize. Understanding them is worth doing properly, because vector databases don't exist in isolation — they slot into a broader ecosystem, and knowing where other systems stop is how you understand where vector databases begin.
 
 ![Databases](https://media.geeksforgeeks.org/wp-content/uploads/20250703161012389874/Types-of-Databases.webp)
 
-
-
 #### In-memory databases
+
+![In Memory Database](https://hazelcast.com/wp-content/uploads/2021/12/In-Memory-Database-Diagram_v0.1.png)
 
 The premise is simple: instead of reading and writing data to disk, you keep everything in RAM. That sounds obvious until you look at the actual numbers. A RAM access is around 100ns. A random read on a fast NVMe SSD is somewhere between 100μs and 1ms — that's a factor of $10^3$ to $10^4$ difference — and for workloads doing millions of operations per second, that gap is the entire ballgame.
 
@@ -23,10 +22,11 @@ Persistence is where the tradeoffs get real. Redis offers two strategies: RDB (a
 
 The constraint that really shapes when you use in-memory storage is cost. At current cloud pricing, 1TB in RAM is roughly 10–20x more expensive than 1TB on NVMe. For hot data that gets read constantly, the latency savings more than justify it. For cold data you touch infrequently, it doesn't. Real systems almost always end up layering — hot working set in memory, warm and cold data on disk — and the design question becomes where those boundaries sit.
 
-
 #### Relational databases
 
-Relational databases are probably what most people picture when they hear "database." Postgres, MySQL, SQLite — data organized into tables with defined schemas, rows representing individual records, and SQL as the query language. The relational part is specifically about modeling *relationships* between entities in separate tables and querying across them with joins.
+![Relational database](https://insightsoftware.com/wp-content/uploads/2022/02/dog_relational_database-1.png)
+
+Relational databases are probably what most people picture when they hear "database." Postgres, MySQL, SQLite — data organized into tables with defined schemas, rows representing individual records, and SQL as the query language. The relational part is specifically about modeling _relationships_ between entities in separate tables and querying across them with joins.
 
 The core data structure that makes them fast is the B-tree. When you create an index on a column, the database builds a balanced tree where each internal node can hold up to $2t - 1$ keys and $2t$ child pointers, with $t$ being the minimum degree. Postgres uses 8KB pages, fitting hundreds of keys per node. The height of the tree is bounded by:
 
@@ -40,8 +40,9 @@ They're also worth understanding because almost every other database type is a r
 
 But to understand why the relational model became dominant in the first place, it helps to know what came before it.
 
-
 #### Hierarchical databases
+
+![Hierarchical Database](https://dataintegrationinfo.com/wp-content/uploads/2020/08/image1-2.png)
 
 The hierarchical model predates relational by about a decade. IBM's IMS (Information Management System), developed in 1966 for managing the Apollo program's parts inventory, was one of the first production database systems and it organized data as an inverted tree. Every record — called a segment — has exactly one parent and can have multiple children, and the only way to get to data is by navigating downward from the root. To find an employee's salary you'd traverse: Root → Division → Department → Employee → Salary. If the tree has depth $d$, that retrieval costs $O(d)$ steps, which is fine as long as you know your access path and the tree is shallow.
 
@@ -49,8 +50,9 @@ This maps naturally to domains that are genuinely tree-shaped: organizational hi
 
 The model is more alive today than people realize. LDAP (Lightweight Directory Access Protocol) is hierarchical by definition — every entry has a Distinguished Name that encodes its full path from root (`cn=alice,ou=engineering,dc=example,dc=com`). The Windows Registry is hierarchical. The HTML/XML DOM is hierarchical. For these specific use cases, the model is exactly right. But it breaks down hard whenever the data's natural structure isn't a tree, and that fragility is what motivated the next step.
 
-
 #### Network databases
+
+![Network Database](https://media.geeksforgeeks.org/wp-content/uploads/20200727113000/network.png)
 
 The network model was developed roughly contemporaneously with hierarchical, formalized through the CODASYL specifications in 1969, with Charles Bachman's IDS (Integrated Data Store) as the canonical early implementation. The single change from hierarchical is that the one-parent restriction is lifted: a record can participate in multiple named "sets" (owner-member relationships), so many-to-many relationships can be expressed directly without duplication.
 
@@ -60,8 +62,9 @@ This coupling was precisely what Edgar Codd attacked. In 1973, Codd and Bachman 
 
 The navigational concept itself didn't disappear. Every time an ORM lets you chain `user.posts.comments` to walk object relationships, you're doing navigational access through a relational backend. Graph databases took the core pointer-following idea and gave it a clean, explicit API for the cases where the relational model genuinely fights you.
 
-
 #### Non-relational databases
+
+![Network Database](https://www.pearsonitcertification.com/content/images/chap4_9780135853290/elementLinks/04fig04_alt.jpg)
 
 NoSQL is a wide umbrella. The systems grouped under it are actually quite different from each other — the only thing they reliably share is that they don't use the relational table model, and the CAP theorem tends to be the lens through which their design choices make sense. The theorem states that a distributed system can guarantee at most two of the following three properties simultaneously: consistency (every read receives the most recent write), availability (every request receives a response), and partition tolerance (the system continues operating despite network splits). Since partition tolerance is non-negotiable in any real distributed system, the practical choice is always between consistency and availability under partition.
 
@@ -75,7 +78,6 @@ Graph databases like Neo4j model data as nodes and edges stored as an adjacency 
 
 What connects all of these is the same underlying reality: each one traded the generality and correctness guarantees of the relational model for something specific — scale, flexibility, write throughput, or traversal performance. Most operate under BASE (Basically Available, Soft state, Eventually consistent) rather than ACID, and the CAP theorem governs the design space they're all navigating.
 
-
 #### Cloud-native databases
 
 Cloud-native databases are less about a data model and more about an architectural philosophy that emerged from operating at internet scale. The defining characteristic is the separation of compute from storage: the compute tier — query engines, warehouse nodes, connection handlers — is stateless and elastically scalable, while the storage tier is independently scalable, durable, and typically built on top of distributed object storage.
@@ -88,38 +90,33 @@ Snowflake approaches the problem from the analytics side. Data is stored in micr
 
 The tradeoffs in this category are consistent: more network hops between compute and storage add latency, variable billing makes cost harder to predict, and you give up low-level tuning control in exchange for operationally managed availability and failover. You're essentially handing infrastructure concern to the cloud provider and getting elastic scale back in return.
 
-
 ### What is a vector database?
 
 Vectors are mathematical representations of data points in a multi-dimensional space. Each vector consists of a list of numbers (called dimensions) that capture the characteristics of the data point. For example, in natural language processing, a vector might represent a word or a sentence, where each dimension captures some aspect of its meaning or context.
 
 ![Vectors illustration](https://www.nvidia.com/content/nvidiaGDC/us/en_US/glossary/vector-database/_jcr_content/root/responsivegrid/nv_container_1795650/nv_image_copy.coreimg.100.1070.jpeg/1710829331227/vector-database-embedding-1920x1080.jpeg)
 
-A vector database is a type of database that is designed to store and manage high-dimensional data, such as vectors. While traditional databases search for exact matches (like finding the exact word "apple" in a text column), vector databases search for semantic similarity. They allow you to find data that *means* the same thing, even if it doesn't look exactly the same. This is the underlying technology powering modern AI, including large language models, recommendation engines, and reverse image searches.
-
+A vector database is a type of database that is designed to store and manage high-dimensional data, such as vectors. While traditional databases search for exact matches (like finding the exact word "apple" in a text column), vector databases search for semantic similarity. They allow you to find data that _means_ the same thing, even if it doesn't look exactly the same. This is the underlying technology powering modern AI, including large language models, recommendation engines, and reverse image searches.
 
 ### Key Components of a Vector Database System
 
 A complete vector database involves several parts that have to work together: ingesting data, organizing it for fast retrieval, and answering queries in a way that's both fast and accurate. It's worth going through each one properly, because each has non-obvious depth.
 
-
 #### The Embedding Model
 
 The first step happens before the database even sees the data. Before anything is stored, an AI model processes your raw input — text, images, audio, whatever — and outputs a fixed-length vector. That vector is a dense array of floating point numbers like `[0.12, -0.45, 0.89, ...]`, and the key property is that the model has been trained such that semantically similar inputs produce geometrically nearby vectors in high-dimensional space. The word "dog" and the word "puppy" end up close together; "car" ends up far away. The implication for the database is that it never works directly with text or images — it only ever works with these vectors, and the semantic meaning is entirely a function of the model that produced them. Swap the model and you have to re-embed your entire dataset from scratch, because the geometry of the new space is fundamentally incompatible with the old one.
 
-It's also worth understanding what an embedding actually represents mathematically. A model like `text-embedding-3-large` maps an arbitrary string to a point in $\mathbb{R}^{3072}$. The training objective shapes that space so that the cosine similarity between two points corresponds to semantic similarity between the original inputs. Dimensions don't have human-interpretable meanings individually — it's the *relative geometry* across all dimensions together that carries the information. This is why naive dimensionality reduction tends to hurt recall: you can't just drop dimensions and expect the semantic structure to survive.
-
+It's also worth understanding what an embedding actually represents mathematically. A model like `text-embedding-3-large` maps an arbitrary string to a point in $\mathbb{R}^{3072}$. The training objective shapes that space so that the cosine similarity between two points corresponds to semantic similarity between the original inputs. Dimensions don't have human-interpretable meanings individually — it's the _relative geometry_ across all dimensions together that carries the information. This is why naive dimensionality reduction tends to hurt recall: you can't just drop dimensions and expect the semantic structure to survive.
 
 #### The Vector Index
 
 Once vectors are stored, the database needs to answer queries of the form: given a query vector $\mathbf{q} \in \mathbb{R}^d$, find the $k$ stored vectors most similar to it. The brute-force approach — computing a distance between $\mathbf{q}$ and every stored vector — costs $O(nd)$ per query, where $n$ is the number of vectors and $d$ is their dimension. For a million 1536-dimensional vectors, that's over $1.5 \times 10^9$ floating-point operations per query. Too slow for interactive use.
 
-Index structures solve this by organizing vectors so you can prune large portions of the search space before doing any distance computation. HNSW (Hierarchical Navigable Small World) builds a multi-layer proximity graph: the top layer is sparse with long-range edges, and each lower layer is progressively denser. Search starts at the top, greedily follows edges toward the query, drops to a lower layer when it can't improve, and terminates at layer zero with a candidate set. Expected traversal cost is $O(\log n)$. IVF (Inverted File Index) takes a different approach — it partitions the vector space into $k$ Voronoi cells using k-means, and at query time only probes the $nprobe$ nearest cells rather than all of them. If those $nprobe$ cells contain fraction $f$ of the data, the search cost drops from $O(nd)$ to roughly $O(f \cdot nd)$. Both are *approximate*: they trade a small, configurable amount of recall for a large reduction in compute, which is usually the right tradeoff.
+Index structures solve this by organizing vectors so you can prune large portions of the search space before doing any distance computation. HNSW (Hierarchical Navigable Small World) builds a multi-layer proximity graph: the top layer is sparse with long-range edges, and each lower layer is progressively denser. Search starts at the top, greedily follows edges toward the query, drops to a lower layer when it can't improve, and terminates at layer zero with a candidate set. Expected traversal cost is $O(\log n)$. IVF (Inverted File Index) takes a different approach — it partitions the vector space into $k$ Voronoi cells using k-means, and at query time only probes the $nprobe$ nearest cells rather than all of them. If those $nprobe$ cells contain fraction $f$ of the data, the search cost drops from $O(nd)$ to roughly $O(f \cdot nd)$. Both are _approximate_: they trade a small, configurable amount of recall for a large reduction in compute, which is usually the right tradeoff.
 
 Product Quantization (PQ) is a orthogonal technique that addresses memory rather than search time. It compresses each $d$-dimensional vector by splitting it into $M$ subspaces of dimension $d/M$, quantizing each subspace independently to one of $K$ centroids (typically $K = 256$, fitting in a single byte). A full float32 vector costs $4d$ bytes; after PQ it costs just $M$ bytes — a compression ratio of $4d/M$. For $d = 1536$ and $M = 64$, that's a 96× reduction. The tradeoff is distance approximation error introduced by the quantization, which degrades recall and has to be managed by over-fetching candidates and re-ranking with exact distances.
 
 > Piramid supports Flat (exact), IVF, and HNSW index types, with an Auto mode that picks based on collection size. More on how each is selected and tuned in the [indexing section](/blogs/architecture/indexing).
-
 
 #### Distance Metrics
 
@@ -139,13 +136,11 @@ Unlike cosine, this is sensitive to vector magnitude. If your embedding model pr
 
 Dot product computes $\mathbf{a} \cdot \mathbf{b} = \sum_{i=1}^{d} a_i b_i$, which is equivalent to cosine similarity when both vectors are unit-normalized (since $\|\mathbf{a}\| = \|\mathbf{b}\| = 1$ trivially cancels the denominator). Most modern embedding APIs return unit-normalized vectors by default, so in practice dot product and cosine are interchangeable — and dot product is preferred in high-throughput paths because it skips the norm computation entirely. The difference is small per query, but across millions of queries it adds up.
 
-
 #### Metadata and Hybrid Search
 
 A vector by itself is just a string of numbers. What makes retrieved results useful is the metadata stored alongside each vector: the original text, a document ID, an author, a timestamp, a category. Without metadata you'd get back a list of opaque vectors with no way to know what they refer to.
 
-Metadata is also what enables hybrid search — combining a vector similarity constraint with a structured filter like `year = 2025 AND category = "research"`. This sounds straightforward but the implementation is genuinely tricky. If you apply the metadata filter *before* the ANN index, the index only sees a subset of vectors, which breaks the graph connectivity assumptions HNSW was built around and can cause recall to collapse. If you apply it *after* — letting the ANN return $k$ candidates and then filtering — you may discard most candidates and return fewer than $k$ results to the caller, especially when the filter is selective. The right strategy depends on filter selectivity: post-filtering works well for loose filters, but tight filters need either a filter-aware index traversal or significant over-fetching with a high `filter_overfetch` multiplier. This is a real operational consideration and something you'll tune in production.
-
+Metadata is also what enables hybrid search — combining a vector similarity constraint with a structured filter like `year = 2025 AND category = "research"`. This sounds straightforward but the implementation is genuinely tricky. If you apply the metadata filter _before_ the ANN index, the index only sees a subset of vectors, which breaks the graph connectivity assumptions HNSW was built around and can cause recall to collapse. If you apply it _after_ — letting the ANN return $k$ candidates and then filtering — you may discard most candidates and return fewer than $k$ results to the caller, especially when the filter is selective. The right strategy depends on filter selectivity: post-filtering works well for loose filters, but tight filters need either a filter-aware index traversal or significant over-fetching with a high `filter_overfetch` multiplier. This is a real operational consideration and something you'll tune in production.
 
 #### The Query Engine
 
@@ -154,7 +149,6 @@ The query engine is what ties everything together. It receives the incoming requ
 How these pieces interact at the query layer has a bigger impact on real-world latency than most people expect. The index type, the distance metric, the filter strategy, whether vectors are memory-mapped or fully loaded, whether metadata lives inline or in a separate store — all of these are query-time decisions that compound. A well-tuned query engine on a good index will feel instant. A poorly configured one on the same hardware can be 10–100× slower with no obvious reason why.
 
 > More on these things in [later sections](/blogs/architecture)
-
 
 ### What does the flow look like in practice?
 
