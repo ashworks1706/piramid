@@ -13,7 +13,7 @@
         "architecture/storage",
         "architecture/indexing",
         "architecture/embeddings",
-        "architecture/searching",
+        "architecture/query",
         "architecture/limitations"
       ]
     },
