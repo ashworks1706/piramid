@@ -19,13 +19,13 @@ debug/
 .vscode/
 *.swp
 *.swo
-.copilot/
 *~
 
 # claude code
 .claude/
 .copilot/
 .agents/
+.github/instructions
 
 # os
 .DS_Store
