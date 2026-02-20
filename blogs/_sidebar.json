@@ -23,12 +23,17 @@
         "operations/health",
         "operations/maintenance",
         "operations/logging"
-
       ]
     },
     {
       "label": "Customers",
-      "items": ["customers", "customers/dashboard", "customers/cli", "customers/sdk", "customers/env"]
+      "items": [
+        "customers",
+        "customers/dashboard",
+        "customers/cli",
+        "customers/sdk",
+        "customers/env"
+      ]
     },
     { "label": "Contributions", "items": ["contributions", "roadmap"] }
   ]
