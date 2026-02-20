@@ -30,6 +30,8 @@ Code style-wise: prefer `tracing` over `println!`, keep names explicit, and add 
 
 If you change API behavior, update docs accordingly and call out breaking changes directly in the PR description.
 
+Also if you think the changes you made deserve to be in the blogs, please feel free to write a post about it! I’d love to share the spotlight and give credit to contributors who are doing great work.
+
 ## Scope notes
 
 Current focus is search/index quality and performance. Zipy/GPU co-location is tracked separately and is not default in this repo yet. SDK and dashboard changes are welcome only when discussed first.
