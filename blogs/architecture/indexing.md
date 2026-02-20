@@ -279,6 +279,14 @@ Each iteration monotonically decreases $\mathcal{J}$, so convergence is guarante
 
 The total cost of an IVF query is:
 
+Each iteration monotonically decreases $\mathcal{J}$, so convergence is guaranteed. In practice the large gains come in the first 3–5 iterations; later iterations move centroids by tiny amounts. Ten iterations is a reasonable engineering tradeoff between cluster quality and startup cost.
+
+> **k-means++ vs random initialisation:** Piramid uses random initialisation (just takes the first $K$ vectors). k-means++ initialises centroids by sampling proportionally to $\|\mathbf{x} - \text{nearest existing centroid}\|^2$, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions.
+
+#### Why K ≈ √N is optimal
+
+The total cost of an IVF query is:
+
 $$\text{cost} = \underbrace{\alpha \cdot K}_{\text{centroid scan}} + \underbrace{\beta \cdot \frac{N \cdot \text{nprobe}}{K}}_{\text{inverted list scan}}$$
 
 where $\alpha$ is the cost per centroid distance computation and $\beta$ is the cost per vector distance computation inside the inverted list. To minimise over $K$ (treating nprobe as fixed at 1), take the derivative and set to zero:

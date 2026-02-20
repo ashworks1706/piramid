@@ -20,7 +20,7 @@ I started with smaller projects: an ecommerce backend, CLI tools, and some memor
 
 > One thing I noticed: avoiding AI early in the learning phase helped me a lot. I did use AI later in parts of Piramid for docs and some syntax fixes, but while learning fundamentals, writing code by hand and debugging it yourself made a huge difference for me.
 
-Learning Rust felt like learning a different programming world. Ownership, borrowing, lifetimes, and memory models forced me to think differently. I also found [Rustfinity](), which helped a lot with hands-on learning. I’ve always liked practical platforms like [boot.dev](), and Rustfinity gave me that same “learn by doing” feeling.
+Learning Rust felt like learning a different programming world. Ownership, borrowing, lifetimes, and memory models forced me to think differently. I also found [Rustfinity](https://www.rustfinity.com/), which helped a lot with hands-on learning. I’ve always liked practical platforms like [boot.dev](https://boot.dev/), and Rustfinity gave me that same “learn by doing” feeling.
 
 Ownership and lifetimes were the hardest part for me. I spent a lot of time repeating tutorials and exercises until it finally clicked. Once it did, I started appreciating how clever Rust’s safety model is.
 
@@ -28,13 +28,13 @@ Compared to C++, Rust gave me similar low-level control but with much stronger s
 
 ### Databases
 
-I knew vector databases long before this project. I had used them a lot in Python projects (*fun fact: I once met ChromaDB’s CEO at an event*), especially for [RAG projects]().
+I knew vector databases long before this project. I had used them a lot in Python projects (*fun fact: I once met ChromaDB’s CEO at an event*), especially for [RAG projects](https://en.wikipedia.org/wiki/Retrieval-augmented_generation).
 
 Over time I worked on more than just basic retrieval. I dealt with ranking quality, hybrid search routing, pipeline integrations, and different retrieval strategies. But all of that was from the user side, not from the “build the engine” side.
 
 One thing I found beautiful about databases is how differently people use them. One person calls them through a Python client, another through npm, another through direct APIs in production systems. The same core engine has to serve very different needs, workloads, and expectations.
 
-I read a lot from [qdrant](), [chroma](), [milvus](), [weaviate](), [pgvector](), and [helix](). Each one has a different design focus and tradeoff profile. Helix in particular seemed very focused on LLM and MCP-heavy workflows, which makes total sense in the current AI wave.
+I read a lot from [qdrant](https://qdrant.tech/), [chroma](https://www.trychroma.com/), [milvus](https://milvus.io/), [weaviate](https://weaviate.io/), [pgvector](https://github.com/pgvector/pgvector), and [helix](https://helix-db.com/). Each one has a different design focus and tradeoff profile. Helix in particular seemed very focused on LLM and MCP-heavy workflows, which makes total sense in the current AI wave.
 
 Seeing how differently these systems approached similar problems was super useful. It made me realize there’s no single “perfect” design, only designs that are good for specific constraints.
 
@@ -53,7 +53,7 @@ Then I went deep into internals: memory management, storage layouts, index behav
 
 I also got confused by the word “kernel” because it means different things in different contexts. In deep learning classes it can mean convolution kernels, in OS it means the operating system kernel, and in GPU programming it means code executed on the GPU. Once I separated those meanings, things got clearer.
 
-I didn’t want to jump fully into CUDA while still getting comfortable with Rust, so I started exploring Rust-friendly GPU paths (like `wgpu`) just to build intuition first.
+I didn't want to jump fully into [CUDA](https://developer.nvidia.com/cuda-toolkit) while still getting comfortable with Rust, so I started exploring Rust-friendly GPU paths (like [`wgpu`](https://wgpu.rs/)) just to build intuition first.
 
 Right now, GPU kernels are still a future step for this project. But the direction is clear, and that clarity is enough to keep building.
 
