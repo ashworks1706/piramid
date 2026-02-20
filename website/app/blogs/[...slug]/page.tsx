@@ -2,8 +2,10 @@ import fs from "fs";
 import { notFound } from "next/navigation";
 import { compileMDX } from "next-mdx-remote/rsc";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
+import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { mdxComponents } from "../../../mdx-components";
 import { findBlog, listBlogs, extractHeadings, blogSeo, blogNeighbors } from "../../../lib/blogs";
 import { DocsToc } from "../../../components/DocsToc";
@@ -47,8 +49,8 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
     options: {
       parseFrontmatter: true,
       mdxOptions: {
-        remarkPlugins: [remarkGfm],
-        rehypePlugins: [rehypeSlug, rehypeAutolinkHeadings],
+        remarkPlugins: [remarkGfm, remarkMath],
+        rehypePlugins: [rehypeSlug, rehypeAutolinkHeadings, rehypeKatex],
       },
     },
   });
