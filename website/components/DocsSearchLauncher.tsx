@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DocSearchEntry } from "../lib/blogs";
+import type { BlogSearchEntry } from "../lib/blogs";
 
 type Props = {
-  entries: DocSearchEntry[];
+  entries: BlogSearchEntry[];
   className?: string;
 };
 

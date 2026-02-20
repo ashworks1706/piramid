@@ -1,0 +1,39 @@
+{
+  "sections": [
+    {
+      "label": "History",
+      "items": ["history", "history/student", "history/piramid"]
+    },
+
+    {
+      "label": "Architecture",
+      "items": [
+        "architecture",
+        "architecture/database",
+        "architecture/storage",
+        "architecture/indexing",
+        "architecture/embeddings",
+        "architecture/limitations"
+      ]
+    },
+    {
+      "label": "Operations",
+      "items": [
+        "operations",
+        "operations/health",
+        "operations/maintenance",
+        "operations/logging"
+
+      ]
+    },
+    {
+      "label": "Customers",
+      "items": ["customers", "customers/dashboard", "customers/cli", "customers/sdk"]
+    },
+    {
+      "label": "Configuration",
+      "items": ["configuration", "configuration/env"]
+    },
+    { "label": "Contributions", "items": ["contributions", "roadmap"] }
+  ]
+}

@@ -15,7 +15,7 @@
     <a href="#usage">Usage</a> •
     <a href="#configuration">Configuration</a> •
     <a href="#development">Development</a> •
-    <a href="docs/contributing/index.md">Contributing</a>
+    <a href="blogs/contributing/index.md">Contributing</a>
 </p>
 
 Piramid is a Rust vector database tuned for low-latency agentic workloads. The long-term goal is to colocate vector search and the LLM on the same GPU (future Zipy kernel) to avoid CPU round-trips. Today it is a lean CPU server with fast search, WAL durability, embedding providers, and guardrails for production use.

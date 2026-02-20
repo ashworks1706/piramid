@@ -3,17 +3,17 @@ import fs from "fs";
 import path from "path";
 import GithubSlugger from "github-slugger";
 
-// Blog posts are read directly from the repo root ../docs
-const BLOGS_DIR = path.join(process.cwd(), "..", "docs");
+// Blog posts are read directly from the repo root ../blogs
+const BLOGS_DIR = path.join(process.cwd(), "..", "blogs");
 const SIDEBAR_CONFIG = path.join(BLOGS_DIR, "_sidebar.json");
 
-export type DocMeta = {
+export type BlogMeta = {
   slug: string[];
   title: string;
   filePath: string;
 };
 
-export type DocSearchEntry = {
+export type BlogSearchEntry = {
   slug: string[];
   title: string;
   text: string;
@@ -21,7 +21,7 @@ export type DocSearchEntry = {
 
 export type SidebarSection = {
   label: string;
-  items: DocMeta[];
+  items: BlogMeta[];
 };
 
 export type Heading = {
@@ -30,9 +30,9 @@ export type Heading = {
   level: number;
 };
 
-export type DocNav = {
-  prev?: DocMeta;
-  next?: DocMeta;
+export type BlogNav = {
+  prev?: BlogMeta;
+  next?: BlogMeta;
 };
 
 function isMarkdown(file: string) {
@@ -75,19 +75,19 @@ function slugFromPath(filePath: string): string[] {
   const parts = rel.split(path.sep);
   const last = parts.pop()!;
   const base = last.replace(/\.md$/, "");
-  // Treat folder index.md as the folder slug (e.g., docs/foo/index.md -> /blogs/foo)
+  // Treat folder index.md as the folder slug (e.g., blogs/foo/index.md -> /blogs/foo)
   if (base === "index" && parts.length > 0) {
     return parts;
   }
   return [...parts, base];
 }
 
-let cachedDocs: DocMeta[] | null = null;
-let cachedSearch: DocSearchEntry[] | null = null;
+let cachedBlogs: BlogMeta[] | null = null;
+let cachedSearch: BlogSearchEntry[] | null = null;
 
-export function listDocs(): DocMeta[] {
-  if (cachedDocs) return cachedDocs;
-  const results: DocMeta[] = [];
+export function listBlogs(): BlogMeta[] {
+  if (cachedBlogs) return cachedBlogs;
+  const results: BlogMeta[] = [];
 
   function walk(current: string) {
     const entries = fs.readdirSync(current, { withFileTypes: true });
@@ -114,8 +114,8 @@ export function listDocs(): DocMeta[] {
       meta.title = "Overview";
     }
   });
-  cachedDocs = results.sort((a, b) => a.slug.join("/").localeCompare(b.slug.join("/")));
-  return cachedDocs;
+  cachedBlogs = results.sort((a, b) => a.slug.join("/").localeCompare(b.slug.join("/")));
+  return cachedBlogs;
 }
 
 type SidebarConfig = {
@@ -135,21 +135,21 @@ function loadSidebarConfig(): SidebarConfig | null {
 }
 
 export function buildSidebar(): SidebarSection[] {
-  const docs = listDocs();
+  const blogs = listBlogs();
   const config = loadSidebarConfig();
   if (!config) {
     return [
       {
         label: "Blog",
-        items: docs.filter((d) => d.slug.join("/") !== "index"),
+        items: blogs.filter((d) => d.slug.join("/") !== "index"),
       },
     ];
   }
 
-  const lookup = new Map(docs.map((d) => [d.slug.join("/"), d]));
+  const lookup = new Map(blogs.map((d) => [d.slug.join("/"), d]));
   const sections: SidebarSection[] = [];
   for (const section of config.sections) {
-    const items: DocMeta[] = [];
+    const items: BlogMeta[] = [];
     for (const itemSlug of section.items) {
       const match = lookup.get(itemSlug);
       if (match) items.push(match);
@@ -159,17 +159,17 @@ export function buildSidebar(): SidebarSection[] {
   return sections;
 }
 
-export function findDoc(slug: string[]): DocMeta | null {
+export function findBlog(slug: string[]): BlogMeta | null {
   const target = slug.join("/");
-  return listDocs().find((d) => d.slug.join("/") === target) ?? null;
+  return listBlogs().find((d) => d.slug.join("/") === target) ?? null;
 }
 
-export function docNeighbors(slug: string[]): DocNav {
+export function blogNeighbors(slug: string[]): BlogNav {
   const key = slug.join("/");
   const sections = buildSidebar();
   let ordered = sections.flatMap((s) => s.items);
   if (ordered.length === 0) {
-    ordered = listDocs();
+    ordered = listBlogs();
   }
   const idx = ordered.findIndex((d) => d.slug.join("/") === key);
   if (idx === -1) return { prev: undefined, next: undefined };
@@ -195,14 +195,14 @@ function stripFrontmatterAndMarkdown(raw: string): string {
   return text;
 }
 
-export function buildSearchIndex(): DocSearchEntry[] {
+export function buildSearchIndex(): BlogSearchEntry[] {
   if (cachedSearch) return cachedSearch;
-  cachedSearch = listDocs().map((doc) => {
-    const raw = fs.readFileSync(doc.filePath, "utf8");
+  cachedSearch = listBlogs().map((blog) => {
+    const raw = fs.readFileSync(blog.filePath, "utf8");
     const text = stripFrontmatterAndMarkdown(raw);
     return {
-      slug: doc.slug,
-      title: doc.title,
+      slug: blog.slug,
+      title: blog.title,
       text,
     };
   });
@@ -241,14 +241,14 @@ function summarize(raw: string): string {
   return snippet.length < text.length ? `${snippet}…` : snippet;
 }
 
-export function docSeo(slug: string[]): { title: string; description: string } | null {
-  const doc = findDoc(slug);
-  if (!doc) return null;
-  const raw = fs.readFileSync(doc.filePath, "utf8");
+export function blogSeo(slug: string[]): { title: string; description: string } | null {
+  const blog = findBlog(slug);
+  if (!blog) return null;
+  const raw = fs.readFileSync(blog.filePath, "utf8");
   const frontmatter = parseFrontmatter(raw);
   const title =
     frontmatter.title ??
-    (doc.slug.join("/") === "index" ? "Overview" : doc.title);
+    (blog.slug.join("/") === "index" ? "Overview" : blog.title);
   const description = frontmatter.description ?? summarize(raw);
   return { title, description };
 }

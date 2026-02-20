@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import type { DocMeta } from "../lib/blogs";
+import type { BlogMeta } from "../lib/blogs";
 
 type Props = {
-  prev?: DocMeta;
-  next?: DocMeta;
+  prev?: BlogMeta;
+  next?: BlogMeta;
   wide?: boolean;
 };
 

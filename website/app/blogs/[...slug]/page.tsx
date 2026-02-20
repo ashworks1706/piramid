@@ -5,14 +5,14 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../../mdx-components";
-import { findDoc, listDocs, extractHeadings, docSeo, docNeighbors } from "../../../lib/blogs";
+import { findBlog, listBlogs, extractHeadings, blogSeo, blogNeighbors } from "../../../lib/blogs";
 import { DocsToc } from "../../../components/DocsToc";
 import { DocsPager } from "../../../components/DocsPager";
 import type { Metadata } from "next";
 
 export async function generateStaticParams() {
-  const docs = listDocs().filter((d) => d.slug.join("/") !== "index");
-  return docs.map((d) => ({ slug: d.slug }));
+  const blogs = listBlogs().filter((b) => b.slug.join("/") !== "index");
+  return blogs.map((b) => ({ slug: b.slug }));
 }
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string[] }> }): Promise<Metadata> {
   const { slug } = await params;
   const slugArray = Array.isArray(slug) ? slug : [slug];
-  const seo = docSeo(slugArray);
+  const seo = blogSeo(slugArray);
   const title = seo?.title ?? `Blog: ${slugArray.join(" / ")}`;
   const description = seo?.description ?? "Piramid blog.";
   const url = `/blogs/${slugArray.join("/")}`;
@@ -35,12 +35,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function DocPage({ params }: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await params;
   const slugArray = Array.isArray(slug) ? slug : [slug];
-  const doc = findDoc(slugArray);
-  if (!doc) return notFound();
+  const blog = findBlog(slugArray);
+  if (!blog) return notFound();
 
-  const source = await fs.promises.readFile(doc.filePath, "utf8");
-  const headings = extractHeadings(doc.filePath);
-  const nav = docNeighbors(doc.slug);
+  const source = await fs.promises.readFile(blog.filePath, "utf8");
+  const headings = extractHeadings(blog.filePath);
+  const nav = blogNeighbors(blog.slug);
   const { content } = await compileMDX<{ title?: string }>({
     source,
     components: mdxComponents,

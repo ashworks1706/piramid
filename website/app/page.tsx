@@ -144,47 +144,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Features grid */}
-            <section className="space-y-6 fade-in delay-2">
-              <div>
-                <h2 className="text-3xl font-semibold text-white">Built for infra teams and latency-sensitive agents</h2>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                {features.map((f) => (
-                  <div
-                    key={f.title}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm shadow-lg shadow-slate-900/40 hover:border-indigo-400/40 transition"
-                  >
-                    <h3 className="text-lg font-semibold text-white">{f.title}</h3>
-                    <p className="mt-2 text-sm text-slate-300 leading-relaxed">{f.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Architecture / vision */}
-            <section className="grid gap-8 lg:grid-cols-2 items-start fade-in delay-3">
-              <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-indigo-500/10 p-6 shadow-xl shadow-indigo-900/30">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Architecture</p>
-                <h3 className="text-2xl font-semibold text-white mt-2">Current path</h3>
-                <ul className="mt-4 space-y-3 text-sm text-slate-200 leading-relaxed">
-                  <li>Axum server + Rust core; single binary CLI (`piramid`).</li>
-                  <li>Storage: mmap-backed data, WAL + checkpoints, sidecar indexes.</li>
-                  <li>Indexes: Flat/HNSW/IVF with cached vectors/metadata; filter-aware search.</li>
-                  <li>Embeddings: OpenAI/local HTTP with retry + cache; unified embed endpoint (single/batch).</li>
-                  <li>Guardrails: limits, disk low-space read-only mode, cache caps, tracing + metrics/health.</li>
-                </ul>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-cyan-500/10 p-6 shadow-xl shadow-cyan-900/30">
-                <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Roadmap</p>
-                <h3 className="text-2xl font-semibold text-white mt-2">GPU co-location (Zipy)</h3>
-                <ul className="mt-4 space-y-3 text-sm text-slate-200 leading-relaxed">
-                  <li>Co-locate vector search and the LLM on the same GPU kernel to remove CPU hops.</li>
-                  <li>GPU-aware index strategies and memory layout tuned for RAG/agent loops.</li>
-                  <li>Retain the same API/CLI surface; swap execution backend when GPU is available.</li>
-                </ul>
-              </div>
-            </section>
+           
 
             {/* Footer */}
             <footer className="flex flex-col gap-3 pb-10 text-sm text-slate-400">
@@ -192,7 +152,7 @@ export default function Home() {
                 <Link href="/blogs" className="hover:text-white transition">Blog</Link>
                 <a href="https://github.com/ashworks1706/piramid" className="hover:text-white transition">GitHub</a>
                 <a href="https://crates.io/crates/piramid" className="hover:text-white transition">crates.io</a>
-                <a href="https://github.com/ashworks1706/piramid/blob/main/docs/roadmap/index.md" className="hover:text-white transition">Roadmap</a>
+                <a href="https://github.com/ashworks1706/piramid/blob/main/blogs/roadmap/index.md" className="hover:text-white transition">Roadmap</a>
               </div>
               <p>piramid @ 2026</p>
             </footer>

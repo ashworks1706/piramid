@@ -4,12 +4,16 @@
 **Documentation**
 
 [ ] seperate API docs to docs.piramiddb.com (mintlify)
-[ ] Entire Technical architecture breakdown in docs
 
 **Dashboard**
 
-[ ] remove dashboard and just keep everything in TUI
-[ ] get rid of docker image
+[ ] fix dashboard UI
+
+[ ] add more metrics to dashboard (memory usage, disk usage, query latency, etc)
+
+[ ] add GPU metrics to dashboard (temperature, memory usage, etc)
+
+[ ] fix docker image
 
 ---
 
@@ -90,6 +94,18 @@
 ---
 
 ### Future Considerations
+
+**Distributed Systems**
+
+[ ] Sharding strategies (range, hash, etc)
+
+[ ] Replication strategies (master-slave, multi-master, etc)
+
+[ ] Consistency models (strong, eventual, etc)
+
+[ ] Distributed transactions
+
+[ ] Cluster management (node discovery, leader election, etc)
 
 **Advanced Search**
 

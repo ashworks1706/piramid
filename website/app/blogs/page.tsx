@@ -4,7 +4,7 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../mdx-components";
-import { findDoc, extractHeadings, docSeo, docNeighbors } from "../../lib/blogs";
+import { findBlog, extractHeadings, blogSeo, blogNeighbors } from "../../lib/blogs";
 import { DocsToc } from "../../components/DocsToc";
 import { DocsPager } from "../../components/DocsPager";
 import type { Metadata } from "next";
@@ -12,7 +12,7 @@ import type { Metadata } from "next";
 export const runtime = "nodejs";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const seo = docSeo(["index"]);
+  const seo = blogSeo(["index"]);
   const title = seo?.title ?? "Piramid blog";
   const description = seo?.description ?? "Piramid updates, notes, and deep dives.";
   const url = "/blogs";
@@ -33,13 +33,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function BlogsIndex() {
-  const doc = findDoc(["index"]);
-  if (!doc) return null;
+  const blog = findBlog(["index"]);
+  if (!blog) return null;
 
-  const source = await fs.promises.readFile(doc.filePath, "utf8");
-  const headings = extractHeadings(doc.filePath);
-  const nav = docNeighbors(doc.slug);
-  const docTitle = doc.title || "Overview";
+  const source = await fs.promises.readFile(blog.filePath, "utf8");
+  const headings = extractHeadings(blog.filePath);
+  const nav = blogNeighbors(blog.slug);
+  const docTitle = blog.title || "Overview";
   const { content, frontmatter } = await compileMDX<{ title?: string }>({
     source,
     components: mdxComponents,

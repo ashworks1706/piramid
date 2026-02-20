@@ -5,7 +5,7 @@ const config: Config = {
     "./app/**/*.{ts,tsx,mdx}",
     "./components/**/*.{ts,tsx}",
     "./mdx-components.tsx",
-    "../docs/**/*.{md,mdx}",
+    "../blogs/**/*.{md,mdx}",
   ],
 };
 
