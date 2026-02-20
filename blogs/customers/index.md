@@ -1,3 +1,3 @@
 # Customers
 
-In this blog section, I will explain client side interfaces such as dashboards, CLIs, APIs, and how they interact with the core components of piramid. I will also cover the design decisions and tradeoffs made in the development of these interfaces, and the future possibilities and directions for the client side interfaces of piramid.
+In this blog section, I will explain client side interfaces such as dashboards, CLIs, APIs, and how they interact with the core components of piramid. I will cover topics such as how to create and manage environments, how to use the dashboard to monitor and manage your environments, how to use the CLI for advanced management and automation, how to use the SDKs for integrating piramid with your applications, the design decisions and tradeoffs made in the development of these interfaces, and the future possibilities and directions for the client side interfaces of piramid.

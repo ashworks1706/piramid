@@ -1,3 +1,0 @@
-# Configuration 
-
-In this section of blogs, I will explain how environments work in vector dbs and how to set up your environment for piramid, including details about the dashboard, CLI, and SDKs. I will cover topics such as how to create and manage environments, how to use the dashboard to monitor and manage your environments, how to use the CLI for advanced management and automation, and how to use the SDKs for integrating piramid with your applications.

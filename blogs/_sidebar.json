@@ -28,11 +28,7 @@
     },
     {
       "label": "Customers",
-      "items": ["customers", "customers/dashboard", "customers/cli", "customers/sdk"]
-    },
-    {
-      "label": "Configuration",
-      "items": ["configuration", "configuration/env"]
+      "items": ["customers", "customers/dashboard", "customers/cli", "customers/sdk", "customers/env"]
     },
     { "label": "Contributions", "items": ["contributions", "roadmap"] }
   ]
