@@ -10,9 +10,9 @@
       "items": [
         "architecture",
         "architecture/database",
-        "architecture/storage",
-        "architecture/indexing",
         "architecture/embeddings",
+        "architecture/indexing",
+        "architecture/storage",
         "architecture/query",
         "architecture/limitations"
       ]
@@ -21,18 +21,18 @@
       "label": "Operations",
       "items": [
         "operations",
-        "operations/health",
         "operations/maintenance",
-        "operations/logging"
+        "operations/logging",
+        "operations/health"
       ]
     },
     {
       "label": "Customers",
       "items": [
         "customers",
+        "customers/sdk",
         "customers/dashboard",
         "customers/cli",
-        "customers/sdk",
         "customers/env"
       ]
     },
