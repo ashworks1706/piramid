@@ -19,6 +19,7 @@ debug/
 .vscode/
 *.swp
 *.swo
+.copilot/
 *~
 
 # claude code
