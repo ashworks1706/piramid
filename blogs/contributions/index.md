@@ -1,30 +1,39 @@
 # Overview
 
+If you want to contribute, thank you first — seriously. Piramid is still evolving fast, so the best contributions are the ones that are clear, scoped, and aligned with current roadmap work.
+
+Before writing code, read the [roadmap]("/blogs/contributions/roadmap") and pick something from there (or closely related to it). If your change is bigger than a small fix, open an issue first so we can align on approach before you spend time implementing.
+
 ## How to contribute
 
-- **Focus areas right now:** search/index improvements and performance work; GPU co-location/Zipy kernel is out-of-scope for this repo today. SDKs and dashboard changes are also out-of-scope unless discussed first.
-- **Workflow:** fork + PR. Use clear PR titles. Include:
-  - What changed (1–2 sentences)
-  - Root cause and fix summary
-  - Screenshots/log snippets for user-visible or routing changes
-  - Tests you ran
-- **Issues:** please open an issue before significant work so we can align on approach. Start by scanning `blogs/roadmap/index.md` and open issues tied to those items or adjacent bugs you find.
+Use the usual fork + PR flow, but please keep PRs high-signal:
+
+- Clear title and clear description.
+- Explain what changed and why it changed.
+- Link related issue(s).
+- Include tests you ran.
+- Add logs/screenshots when behavior is user-visible.
+
+I care a lot about quality of writing in PRs and docs. Please include citations/sources when you’re making technical claims or using external references. Also, no AI slop: low-effort, generic generated text is not acceptable.
 
 ## Development expectations
 
-- **Testing:** run at least:
-  - `cargo fmt`
-  - `cargo clippy --all-targets --all-features` (or `--locked` if you prefer)
-  - `cargo test --locked`
-  - For behavioral changes in storage/search, add/extend tests in `tests/` or the relevant module’s tests file.
-- **Style:**
-  - Prefer `tracing` over `println!`; keep logs structured and concise.
-  - Keep variable and function names clear; avoid acronyms unless obvious.
-  - Add brief comments only where the intent isn’t obvious (index/search internals, persistence).
-  - Split large modules into focused submodules (e.g., storage/persistence, index/…).
-  - Avoid `unsafe` unless there’s a measurable need and it’s well-justified.
-- **API/behavior changes:** update README and blogs/roadmap when applicable. Call out breaking changes in the PR description.
+At minimum, run:
+
+- `cargo fmt`
+- `cargo clippy --all-targets --all-features`
+- `cargo test --locked`
+
+For storage/search/index behavior changes, add or extend tests in `tests/` (or the nearest module test area). Prefer small, focused changes over broad rewrites.
+
+Code style-wise: prefer `tracing` over `println!`, keep names explicit, and add comments only where intent is non-obvious. Avoid `unsafe` unless there is a measured need and a clear justification.
+
+If you change API behavior, update docs accordingly and call out breaking changes directly in the PR description.
+
+## Scope notes
+
+Current focus is search/index quality and performance. Zipy/GPU co-location is tracked separately and is not default in this repo yet. SDK and dashboard changes are welcome only when discussed first.
 
 ## Security / reporting
 
-For security concerns, please email the maintainer (GitHub profile). Avoid filing public issues for potential vulnerabilities.
+For security concerns, please contact the maintainer directly via GitHub profile instead of opening a public vulnerability issue.
