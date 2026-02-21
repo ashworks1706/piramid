@@ -43,6 +43,8 @@ where $\sigma$ is the sigmoid function and $P_n$ is a noise distribution (typica
 
 The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic — $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ — falls out as an emergent property, not something explicitly built in: it reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space.
 
+![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://developers.google.com/machine-learning/crash-course/images/linear-relationships.svg)
+
 Word2Vec is a useful intuition builder but it has hard limits. Each word gets exactly one vector regardless of context, so "bank" (financial) and "bank" (river) share a single representation. And it operates at the word level — there's no way to represent a whole sentence.
 
 #### Transformers and contextual embeddings
@@ -62,6 +64,8 @@ $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_H
 With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates in $d_k = 64$ dimensions. Different heads learn to attend to different types of relationships — syntax, coreference, semantic roles — simultaneously.
 
 The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. The word "bank" in "river bank" ends up near "water" rather than "finance" because the attention weights pull the representation in the direction of the context.
+
+![Transformer architecture — queries, keys and values flow through multi-head self-attention and feed-forward layers, with residual connections and layer norm at each step (Vaswani et al. 2017)](https://machinelearningmastery.com/wp-content/uploads/2021/08/attention_research_1.png)
 
 > **Positional encoding:** transformers have no inherent notion of word order (unlike RNNs). Position is injected by adding a positional encoding $\mathbf{pe}_{pos}$ to each token embedding before the first attention layer. The original formulation uses sinusoidal functions: $\mathbf{pe}_{pos,2i} = \sin(pos / 10000^{2i/d})$, $\mathbf{pe}_{pos,2i+1} = \cos(pos / 10000^{2i/d})$. Modern models use [RoPE (Rotary Position Embedding)](https://arxiv.org/abs/2104.09864) which encodes relative rather than absolute positions and generalises better to sequences longer than those seen during training.
 
@@ -107,6 +111,7 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 
 > **Choosing dimensions with MRL:** a useful heuristic for selecting the truncation size $m$ is to plot Recall@10 vs $m$ on a sample of your actual query/document pairs and find the elbow point. For most English text retrieval tasks, the elbow is around 256–512 dimensions. Going below 128 usually degrades recall noticeably, while going from 1024 to 1536 often gives less than 1 point of improvement. Only you can decide what tradeoff is right given your latency budget and recall requirements.
 
+![Matryoshka Representation Learning — the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://miro.medium.com/v2/resize:fit:1400/1*UB7QZbJNvHtN8Zml-gAHSA.png)
 
 ### Providers in Piramid
 

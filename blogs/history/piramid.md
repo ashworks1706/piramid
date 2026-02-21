@@ -4,7 +4,7 @@ I called it Piramid. I wanted to build it for [RAG](https://en.wikipedia.org/wik
 
 > Piramid is a latency-first vector database written in Rust. The goal is to keep the database and your LLM on the same device, minimize round-trips, and expose a simple HTTP API.
 
-![RAG pipeline — retrieve, augment, generate: the user query gets embedded, the vector DB returns relevant chunks, and the LLM generates a grounded response](https://miro.medium.com/v2/resize:fit:1400/1*rCp0DG2ZfRl5DFHlGSc1WQ.png)
+![RAG pipeline — retrieve, augment, generate: the user query gets embedded, the vector DB returns relevant chunks, and the LLM generates a grounded response](https://docs.nvidia.com/nemo-framework/user-guide/24.07/_images/rag_pipeline.png)
 
 It started as a simple idea, but I knew from day one it would be difficult. Still, I had that feeling that this was exactly the kind of project that would force me to level up. It was clearly outside my comfort zone, and that was the whole point.
 

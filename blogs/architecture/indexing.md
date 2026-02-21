@@ -58,6 +58,8 @@ When all distances are nearly equal, there is no local structure for a spatial i
 
 > **What actually works at high dimensions:** graph-based indexes (HNSW) exploit the empirical cluster structure of the data directly rather than trying to partition abstract coordinates. Quantisation-based indexes (IVF + PQ) exploit the fact that even high-dimensional vectors often lie near a much lower-dimensional manifold. Neither tries to fight the geometry of $\mathbb{R}^d$ directly.
 
+![Curse of dimensionality — as dimensions grow, all pairwise distances concentrate around the same value and spatial indexes lose their ability to prune the search space](https://miro.medium.com/v2/resize:fit:1400/1*BkNPLIPV4Gzb6w0b6VxCsw.png)
+
 ### Why approximate is good enough
 
 Given that exact nearest neighbour is $O(Nd)$ and ANN indexes achieve ~97% recall at a fraction of the cost, the right question is whether that 3% miss rate matters for your application.
@@ -96,6 +98,8 @@ Piramid's auto-selector threshold of 10,000 is deliberately conservative: it lea
 ### HNSW — navigating a small world
 
 [HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm behind most high-performance vector databases — [Pinecone](https://www.pinecone.io/), Weaviate, Milvus, Qdrant, and Piramid all use it at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
+
+![HNSW layered graph — layer 2 is sparse for long-range navigation, layer 1 is denser, layer 0 holds all nodes with the full connection density; search descends from top to bottom](https://miro.medium.com/v2/resize:fit:1400/1*Ue5XFbMPJQo2g0_XYhqfxg.png)
 
 #### The small-world graph idea
 
