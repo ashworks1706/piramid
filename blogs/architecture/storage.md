@@ -116,14 +116,14 @@ Piramid uses a simpler *sharp checkpoint*: at checkpoint time, it serializes the
 
 The checkpoint is triggered by two independent conditions: every `checkpoint_frequency` operations (default: 1000), or every `checkpoint_interval_secs` seconds (disabled by default). The operation counter fires first in write-heavy workloads; the time interval is a safety net for collections that receive infrequent writes but still benefit from periodic durability snapshots.
 
-<!-- TODO: WAL rotation timeline — a horizontal timeline showing WAL entries accumulating, a checkpoint marker where all in-memory state flushes to .db files, then the log rotating to a fresh file with the sequence continuing -->
+![WAL rotation timeline — a horizontal timeline showing WAL entries accumulating, a checkpoint marker where all in-memory state flushes to .db files, then the log rotating to a fresh file with the sequence continuing](https://miro.medium.com/1*_BVw40vMZQNUZNdz-MwlRg.png)
 
 The cost is real: for large HNSW graphs, serializing the vector index is expensive in both time and I/O. This is why the default interval is 1000 operations rather than something lower. The fast preset raises it to 10000; high-durability mode drops it to 100 and also flips `sync_on_write: true`. These presets map roughly to the LSM-tree levels-of-durability philosophy, where you're explicitly trading write throughput against recovery latency and data loss window.
 
 
 ### Compaction
 
-<!-- TODO: Data file compaction diagram — before: the file with live entries (solid) interspersed with dead/orphaned bytes (hatched), labeled "fragmented"; after: a tightly packed file with only live entries and a much smaller file size -->
+![Data file compaction diagram — before: the file with live entries (solid) interspersed with dead/orphaned bytes (hatched), labeled "fragmented"; after: a tightly packed file with only live entries and a much smaller file size](https://lh3.googleusercontent.com/gg-dl/AOI_d_9KFJLWEzRz5sXhnyExrR6Bce4SsLlvKvw8WU9zqnHfs9RJHcvopZo_MCohoVwendeGhQrDdgSazTx6baFPZJH6U4YjSAa-7wcDMmRUPstKEu3AF-_PjGXN9tBjAJ7-lLa8G4qipy3sOpMbAVpDjdYInQFF46_E06ioLhP-1GerQANk=s1024-rj?authuser=1)
 
 In an LSM-tree, compaction is a continuous background process: SSTables at each level are periodically merged and rewritten to eliminate deleted keys, expired entries, and overwritten versions. The benefit is that read amplification stays bounded, so you never have to consult too many SSTables to answer a query, and reclaimed space is freed gradually rather than accumulating. The cost is ongoing write amplification; data is physically rewritten multiple times as it moves down the tree levels.
 
