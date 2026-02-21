@@ -5,6 +5,7 @@ import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../mdx-components";
 import { findBlog, extractHeadings, blogSeo, blogNeighbors } from "../../lib/blogs";
+import { remarkRewriteImages } from "../../lib/remark-rewrite-images";
 import { DocsToc } from "../../components/DocsToc";
 import { DocsPager } from "../../components/DocsPager";
 import type { Metadata } from "next";
@@ -46,7 +47,7 @@ export default async function BlogsIndex() {
     options: {
       parseFrontmatter: true,
       mdxOptions: {
-        remarkPlugins: [remarkGfm],
+        remarkPlugins: [remarkGfm, remarkRewriteImages(blog.filePath)],
         rehypePlugins: [rehypeSlug, rehypeAutolinkHeadings],
       },
     },

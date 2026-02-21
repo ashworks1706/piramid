@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { mdxComponents } from "../../../mdx-components";
 import { findBlog, listBlogs, extractHeadings, blogSeo, blogNeighbors } from "../../../lib/blogs";
+import { remarkRewriteImages } from "../../../lib/remark-rewrite-images";
 import { DocsToc } from "../../../components/DocsToc";
 import { DocsPager } from "../../../components/DocsPager";
 import type { Metadata } from "next";
@@ -49,7 +50,7 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
     options: {
       parseFrontmatter: true,
       mdxOptions: {
-        remarkPlugins: [remarkGfm, remarkMath],
+        remarkPlugins: [remarkGfm, remarkMath, remarkRewriteImages(blog.filePath)],
         rehypePlugins: [rehypeSlug, rehypeAutolinkHeadings, rehypeKatex],
       },
     },
