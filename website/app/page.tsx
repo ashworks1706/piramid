@@ -1,24 +1,12 @@
-import Image from "next/image";
 import Link from "next/link";
+import { Navbar } from "../components/Navbar";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-[#05070d] text-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_10%,rgba(99,102,241,0.12),transparent_40%),radial-gradient(ellipse_at_75%_80%,rgba(14,165,233,0.07),transparent_40%)] pointer-events-none" />
 
-      {/* Nav */}
-      <header className="sticky top-0 z-20 backdrop-blur border-b border-white/5 bg-black/30">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <Image src="/logo_light.png" alt="Piramid" width={32} height={32} />
-            <span className="text-base font-semibold tracking-wide">piramid</span>
-          </div>
-          <div className="flex items-center gap-5 text-sm text-slate-400">
-            <Link href="/blogs" className="hover:text-white transition-colors">blog</Link>
-            <a href="https://github.com/ashworks1706/piramid" className="hover:text-white transition-colors">github</a>
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       <main className="relative mx-auto max-w-3xl px-6 py-24 flex flex-col gap-20">
         {/* Hero */}
