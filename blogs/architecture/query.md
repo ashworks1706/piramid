@@ -38,7 +38,7 @@ $$\mathbf{a} \cdot \mathbf{b} = \sum_{i=1}^d a_i b_i$$
 
 Larger is more similar. Useful for recommendation systems where vector magnitude encodes something meaningful (item popularity, user engagement level). A more popular item having a higher-magnitude embedding will naturally rank higher under dot product search, which can be the desired behaviour. Under $\ell_2$ normalisation, dot product and cosine similarity are identical. Without normalisation, they diverge.
 
-Piramid's `Metric::calculate` does a small but important transform on Euclidean: it returns $1 / (1 + d_{\text{euc}})$ rather than the raw distance. This maps the unbounded $[0, \infty)$ range into $(0, 1]$ and makes it possible to sort and compare scores consistently across searches; a score of 0.95 means something similar whether the collection uses cosine or Euclidean. Dot product is returned raw since its scale depends entirely on the embedding model used.
+The implementation does a small but important transform on Euclidean distance: it returns $1 / (1 + d_{\text{euc}})$ rather than the raw distance. This maps the unbounded $[0, \infty)$ range into $(0, 1]$ and makes it possible to sort and compare scores consistently across searches; a score of 0.95 means something similar whether the collection uses cosine or Euclidean. Dot product is returned raw since its scale depends entirely on the embedding model used.
 
 ---
 
@@ -57,7 +57,6 @@ $$\mathbb{E}\left[\|\mathbf{x} - \mathbf{y}\|^2\right] = 2, \quad \text{Var}\lef
 This is the concentration of measure. When all pairwise distances concentrate around the same value, there's no meaningful structure for a tree to exploit, so you have to check nearly everything anyway. A KD-tree in $d = 100$ is already degraded to near-linear scan performance. At $d = 1536$ a tree structure adds overhead with essentially no benefit.
 
 ![Curse of dimensionality — as $d$ grows, the volume of a hypersphere shrinks relative to its enclosing cube and all points collapse to the same distance from any query, destroying the structure that spatial indexes rely on](https://cofactorgenomics.com/wp-content/uploads/2019/04/picture1.png)
-*In high dimensions, the ratio of a sphere's volume to its enclosing cube approaches zero, and all pairwise distances converge. There's no meaningful structure left for a tree to exploit.*
 
 ---
 
@@ -77,9 +76,9 @@ With $C = \sqrt{n}$ clusters and $n_{\text{probe}} = \sqrt{C}$, each query touch
 
 ---
 
-### HNSW: the algorithm behind Piramid's index
+### HNSW
 
-[Hierarchical Navigable Small World (HNSW)](https://arxiv.org/abs/1603.09320), proposed by Malkov and Yashunin in 2018, is currently the dominant algorithm for in-memory ANN search. It's what Piramid uses as its primary index type and deserves a proper explanation.
+[Hierarchical Navigable Small World (HNSW)](https://arxiv.org/abs/1603.09320), proposed by Malkov and Yashunin in 2018, is currently the dominant algorithm for in-memory ANN search. It's the primary index type and deserves a proper explanation.
 
 The core insight behind NSW (the non-hierarchical predecessor) is that if you build a graph by inserting nodes sequentially and connecting each new node to its nearest neighbors at the time of insertion, you get a *navigable small world* graph. Navigable means that greedy routing (always move to whichever neighbor is closest to the query) converges to the true nearest neighbor in $O(\log n)$ steps instead of $O(n)$.
 
@@ -110,7 +109,7 @@ The recall/speed tradeoff is entirely controlled by $ef$: larger $ef$ explores m
 
 ---
 
-### Piramid's search engine
+### The search engine
 
 The actual query pipeline in Piramid is implemented in `src/search/engine.rs`. It's a clean three-step flow: overfetch from the ANN index, score, filter.
 
@@ -172,4 +171,4 @@ The `ef` parameter is the most important knob. A useful empirical rule: at $ef =
 
 ---
 
-> Piramid also supports a flat brute-force index (no ANN approximation), which is useful for small collections where recall must be exact, or for testing and benchmarking. Flat search always touches every vector and computes the exact distance, so recall is 1.0 by construction. The tradeoff is linear query time, which is fine for $n < 10^4$ or so but impractical beyond that. The SearchConfig parameters (`ef`, `nprobe`) are ignored for the flat index since there's nothing to tune when it always scans everything.
+> There's also a flat brute-force index (no ANN approximation), which is useful for small collections where recall must be exact, or for testing and benchmarking. Flat search always touches every vector and computes the exact distance, so recall is 1.0 by construction. The tradeoff is linear query time, which is fine for $n < 10^4$ or so but impractical beyond that. The SearchConfig parameters (`ef`, `nprobe`) are ignored for the flat index since there's nothing to tune when it always scans everything.

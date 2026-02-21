@@ -3,7 +3,6 @@
 In the [previous section](/blogs/architecture/database) we established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
-*Embeddings turn raw text into fixed-length vectors where geometry encodes meaning — the closer two vectors are, the more semantically similar the inputs that produced them.*
 
 
 ### From words to numbers: why representation matters
@@ -119,9 +118,9 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 ![Matryoshka Representation Learning — the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://sthalles.github.io/assets/matryoshka-representation-learning/representation-learning.png)
 *MRL nests the learning objectives: each prefix of the vector is trained to work as a standalone embedding, so you can truncate at any supported size and still get competitive recall.*
 
-### Providers in Piramid
+### Providers
 
-Piramid treats embedding generation as a runtime concern: you configure a provider and model at startup, and the server handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
+Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and the server handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
 
 ```rust
 #[async_trait]
@@ -171,9 +170,9 @@ embeddings:
   timeout: 10
 ```
 
-This matters a lot for Piramid's core thesis: if you're already running a local LLM for generation, you almost certainly want embedding to be local too. Having both on the same machine eliminates the network round-trip and keeps your documents away from remote APIs entirely. A local TEI instance on a modern CPU can embed short texts in under 5ms, comparable to OpenAI API latency but without the variance of an external network call.
+If you're already running a local LLM for generation, you almost certainly want embedding to be local too. Having both on the same machine eliminates the network round-trip and keeps your documents away from remote APIs entirely. A local TEI instance on a modern CPU can embed short texts in under 5ms, comparable to OpenAI API latency but without the variance of an external network call.
 
-> **Model alignment:** be careful about mixing embedding models across insert and search operations. If you insert documents with one model and then reconfigure the server to use a different model (different architecture, even same dimensionality), searches will produce nonsense results; the query embedding and the stored embeddings come from different spaces. Piramid doesn't currently enforce model-version locking per collection. Worth noting in production ops.
+> **Model alignment:** be careful about mixing embedding models across insert and search operations. If you insert documents with one model and then reconfigure the server to use a different model (different architecture, even same dimensionality), searches will produce nonsense results; the query embedding and the stored embeddings come from different spaces. There's no model-version locking per collection, so this is easy to do accidentally. Worth noting in production ops.
 
 
 ### Configuration and resolution order
@@ -241,7 +240,7 @@ Cache effectiveness is entirely workload-dependent:
 
 **The eviction boundary matters:** if your hot corpus has 12,000 documents and the cache holds 10,000, the oldest 2,000 entries get continuously evicted and re-fetched. This is a surprising cliff effect; the 10K default works well for corpora that fit, and degrades suddenly for slightly larger ones. If you have a fixed corpus, set the cache size to `corpus_size + 20%` to avoid thrashing.
 
-One thing the cache doesn't do is persist across restarts. It is in-memory only. A server restart means re-embedding your entire corpus on the first pass. For large corpora on paid embedding APIs, this can be a non-trivial cost. A persistent embedding store (write the vectors to a separate key-value store keyed by content hash) is a common production pattern to address this, but it's outside Piramid's current scope.
+One thing the cache doesn't do is persist across restarts. It is in-memory only. A server restart means re-embedding your entire corpus on the first pass. For large corpora on paid embedding APIs, this can be a non-trivial cost. A persistent embedding store (write the vectors to a separate key-value store keyed by content hash) is a common production pattern to address this.
 
 
 ### Dimensions, memory, and the cost of scale
@@ -293,5 +292,5 @@ The approximate recall retention curve for `text-embedding-3-small`:
 
 Combining MRL truncation (e.g. to 512) with int8 quantisation gives a 12× memory reduction with recall typically staying above 95%, a practical configuration for memory-constrained deployments.
 
-Piramid currently applies quantisation at the storage layer rather than at embedding time. The full float32 vector is returned by the provider and stored, and quantisation is applied when writing to disk. This means the HNSW index always operates on full-precision vectors in memory while only the persistent storage benefits from compression. Full PQ integration (operating the ANN search on compressed codes) is on the roadmap and would reduce in-memory vector storage by 32× on top of the index savings; see the indexing section for the full memory math.
+Quantisation is applied at the storage layer rather than at embedding time. The full float32 vector is returned by the provider and stored, and quantisation is applied when writing to disk. This means the HNSW index always operates on full-precision vectors in memory while only the persistent storage benefits from compression. Full PQ integration (operating the ANN search on compressed codes) is on the roadmap and would reduce in-memory vector storage by 32× on top of the index savings; see the indexing section for the full memory math.
 

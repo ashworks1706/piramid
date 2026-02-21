@@ -13,7 +13,7 @@
         "architecture/embeddings",
         "architecture/storage",
         "architecture/indexing",
-        "architecture/query",
+        "architecture/query"
       ]
     },
     {
@@ -35,6 +35,6 @@
         "clients/env"
       ]
     },
-    { "label": "Contributions", "items": ["contributions", "roadmap"] }
+    { "label": "Contributions", "items": ["contributions", "contributions/roadmap"] }
   ]
 }

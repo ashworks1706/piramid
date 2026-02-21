@@ -19,7 +19,7 @@ These two architectures represent a fundamental tension:
 - B-trees offer stable read performance and in-place updates, at the cost of write amplification from page splits and the need to manage a buffer pool explicitly.
 - LSM-trees offer high write throughput via sequential I/O, at the cost of read overhead and ongoing compaction I/O in the background.
 
-Piramid doesn't fit cleanly into either model, and that's intentional. Its access patterns are different: vectors are written once (or rarely updated), read often during search, and occasionally deleted. The query critical path is ANN index traversal, not heap page lookups. Understanding where Piramid lands relative to these two models helps explain why its storage design looks the way it does.
+It doesn't fit cleanly into either model, and that's intentional. The access patterns are different: vectors are written once (or rarely updated), read often during search, and occasionally deleted. The query critical path is ANN index traversal, not heap page lookups. Understanding where a vector database lands relative to these two models helps explain why its storage design looks the way it does.
 
 
 ### On-disk layout

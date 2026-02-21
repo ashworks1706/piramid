@@ -12,9 +12,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] add more images for storage page, links for bigger terms, add summary at the end
 - [ ] add more images for indexing page and links for bigger terms, add summary at the end 
 - [ ] add more images for query page and links for bigger terms, add summary at the end 
-- [ ] fix UI on overview page, make the block card clickable, make responsive on mobile 
-- [ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
-- [ ] add limitations and future work section to the end of the blogs, add more images for the limitations and future work section, links for bigger terms, add summary at the end of the limitations and future work section
 
 **Documentation**
 
@@ -82,7 +79,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Quantization Refactor**
 
-- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. this is how FAISS, Qdrant, and Weaviate all do it. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
+- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
 - [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented — it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
 
 **Index Improvements**
@@ -164,7 +161,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
 
-*depends on the quantization refactor being complete — VRAM hydration and dual-write require raw f32 vectors in storage as the source of truth*
+*depends on the quan- [ ] fix UI on overview page, make the block card clickable on index md page, make responsive on mobile 
+- [ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
+tization refactor being complete — VRAM hydration and dual-write require raw f32 vectors in storage as the source of truth*
 
 - [ ] add `zipy` crate to `Cargo.toml` as an optional feature
 - [ ] wire the existing `ExecutionMode::Gpu` variant to dispatch through `ZipyEngine` — do not add a new variant, `Gpu` is already the intended hook and adding another leaves it as dead code

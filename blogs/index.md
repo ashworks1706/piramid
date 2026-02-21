@@ -2,6 +2,7 @@
 
 Welcome. Pick a section to dive in:
 
+<div className="blog-cards-grid">
 
 <div className="blog-card"> 
 <a href="/blogs/history/" className="text-xl">**Overview**</a>
@@ -19,13 +20,15 @@ Welcome. Pick a section to dive in:
 </div>
 
 <div className="blog-card"> 
-<a href="/blogs/customers/" className="text-xl">**Configuration**</a>
+<a href="/blogs/clients/" className="text-xl">**Configuration**</a>
 <p>Details about setting up your environment</p>
 </div>
 
 <div className="blog-card"> 
 <a href="/blogs/contributions/" className="text-xl">**Contributions**</a>
 <p>How to contribute to the development of piramid</p>
+</div>
+
 </div>
 
 

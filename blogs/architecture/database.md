@@ -127,7 +127,7 @@ Index structures solve this by organizing vectors so you can prune large portion
 
 Product Quantization (PQ) is a orthogonal technique that addresses memory rather than search time. It compresses each $d$-dimensional vector by splitting it into $M$ subspaces of dimension $d/M$, quantizing each subspace independently to one of $K$ centroids (typically $K = 256$, fitting in a single byte). A full float32 vector costs $4d$ bytes; after PQ it costs just $M$ bytes, a compression ratio of $4d/M$. For $d = 1536$ and $M = 64$, that's a 96× reduction. The tradeoff is distance approximation error introduced by the quantization, which degrades recall and has to be managed by over-fetching candidates and re-ranking with exact distances.
 
-> Piramid supports Flat (exact), IVF, and HNSW index types, with an Auto mode that picks based on collection size. More on how each is selected and tuned in the [indexing section](/blogs/architecture/indexing).
+More on how each index type is selected and tuned in the [indexing section](/blogs/architecture/indexing).
 
 #### Distance Metrics
 

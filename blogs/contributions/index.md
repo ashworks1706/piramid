@@ -1,8 +1,8 @@
-# Overview
+# Contributions
 
 If you want to contribute, thank you first — seriously. Piramid is still evolving fast, so the best contributions are the ones that are clear, scoped, and aligned with current roadmap work.
 
-Before writing code, read the [roadmap]("/blogs/contributions/roadmap") and pick something from there (or closely related to it). If your change is bigger than a small fix, open an issue first so we can align on approach before you spend time implementing.
+Before writing code, read the [roadmap](/blogs/contributions/roadmap) and pick something from there (or closely related to it). If your change is bigger than a small fix, open an issue first so we can align on approach before you spend time implementing.
 
 ## How to contribute
 

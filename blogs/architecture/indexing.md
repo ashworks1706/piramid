@@ -2,7 +2,7 @@
 
 A vector database without a good index is just a very sophisticated `for` loop. The core problem is this: given a query vector $\mathbf{q} \in \mathbb{R}^d$ and a collection of $N$ stored vectors, find the $k$ closest by some distance metric. The naïve approach scans every vector and computes the distance, $O(Nd)$ per query. At $N = 10^6$ with $d = 1536$ (OpenAI's `text-embedding-3-large`), that is 1.5 billion multiply-accumulate operations per query. Even with SIMD, you're looking at tens of milliseconds. That is fine for batch analysis; it is not fine for a latency-sensitive RAG pipeline that needs sub-millisecond retrieval.
 
-Piramid supports three index types (Flat, IVF, and HNSW) with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
+There are three index types (Flat, IVF, and HNSW) with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
 
 ### Measuring quality: Recall@k
 
@@ -213,7 +213,7 @@ These two parameters are often confused because they're both called `ef` interna
 
 > **The practical implication:** you should build with high `ef_construction` (200–400) and then tune `ef_search` per use case. A graph built with `ef_construction = 64` and queried with `ef_search = 400` will never reach the recall of a graph built with `ef_construction = 400` and queried with `ef_search = 200`, because the underlying graph simply doesn't have the connections needed. Build quality is permanent; search quality is adjustable.
 
-In Piramid, both default to 200. Override `ef_search` per query via `SearchConfig`:
+Both default to 200. Override `ef_search` per query via `SearchConfig`:
 
 ```yaml
 collection:
@@ -359,7 +359,7 @@ Setting `nprobe = K` degrades IVF exactly to the Flat index, a useful debugging 
 
 ### Auto-selection
 
-Piramid's `IndexConfig::Auto` selects the index type based on collection size at build time:
+Auto-selection picks the index type based on collection size:
 
 ```
 < 10,000 vectors  →  Flat
@@ -375,7 +375,7 @@ These thresholds are tunable if you specify the index type explicitly in your co
 
 Three parameters shape the quality / speed tradeoff at query time, all surfaced through `SearchConfig`.
 
-**`ef`** is the beam width for HNSW layer-0 search. It controls how many candidate nodes the algorithm holds in its result heap before committing to the top $k$. Setting `ef < k` is illegal (Piramid clamps to `max(ef, k)`). Setting `ef = k` gives minimum search work. The empirical recall curve is roughly:
+**`ef`** is the beam width for HNSW layer-0 search. It controls how many candidate nodes the algorithm holds in its result heap before committing to the top $k$. Setting `ef < k` is illegal (it clamps to `max(ef, k)`). Setting `ef = k` gives minimum search work. The empirical recall curve is roughly:
 
 | ef | Recall@10 (approximate) | latency multiplier |
 |----|------------------------|--------------------|
@@ -399,7 +399,7 @@ There are three strategies for combining metadata filters with ANN search:
 
 **Post-filter (naïve):** run ANN search for $k$ results, then apply the filter. If the filter rejects most results, you get fewer than $k$ results back, possibly zero. This is the simplest approach and works fine when the filter is loose.
 
-**In-traversal filter (Piramid's approach):** pass the filter into the HNSW `search_layer` loop, so that filtered-out nodes contribute to graph traversal (they're still used as stepping stones) but are excluded from the result heap. This is better than post-filter because the traversal continues until `ef` *qualifying* candidates are found rather than stopping at `ef` total candidates. The implementation in `search_layer` checks each neighbour against the filter before adding it to `nearest`:
+**In-traversal filtering:** pass the filter into the HNSW `search_layer` loop, so that filtered-out nodes contribute to graph traversal (they're still used as stepping stones) but are excluded from the result heap. This is better than post-filter because the traversal continues until `ef` *qualifying* candidates are found rather than stopping at `ef` total candidates. The implementation in `search_layer` checks each neighbour against the filter before adding it to `nearest`:
 
 ```rust
 if let Some(f) = filter {
@@ -424,7 +424,7 @@ let search_k = if params.filter.is_some() {
 
 With the default `filter_overfetch = 10` and `k = 5`, the index fetches 50 candidates before filtering. If the filter has 10% selectivity, you expect 5 qualifying results on average. For 2% selectivity you'd want `filter_overfetch = 50`. The tradeoff is straightforward: overfetch linearly increases both the number of distance computations and the chance of finding enough qualified results.
 
-> **When overfetch isn't enough:** for very selective filters (< 1% of vectors), even large overfetch values fail because the ANN graph simply can't surface enough candidates from a small eligible set in a single traversal. The right solution for highly selective filters is a purpose-built filtered index (sometimes called "filtered HNSW" or "attribute-aware HNSW") that maintains separate entry points per filter category. This is on Piramid's roadmap.
+> **When overfetch isn't enough:** for very selective filters (< 1% of vectors), even large overfetch values fail because the ANN graph simply can't surface enough candidates from a small eligible set in a single traversal. The right solution is a purpose-built filtered index (sometimes called "filtered HNSW" or "attribute-aware HNSW") that maintains separate entry points per filter category.
 
 The three `SearchConfig` presets are:
 - `fast()`: `ef = 50`, `nprobe = 1`: for batch pipelines where high throughput matters more than last-mile recall
@@ -501,8 +501,8 @@ The PQ distances are approximate. To recover precision, the standard pipeline is
 
 The exact reranking step costs $O(\gamma k \cdot d)$, which is cheap because $\gamma k \ll \text{ef}$. The combined recall of this pipeline approaches exact-search recall at a fraction of the memory and compute.
 
-#### Piramid's roadmap
+#### Future compression
 
-Piramid's `src/quantization/` module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the `.vidx.db` file, and `search_layer`'s distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final `ef` candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
+The `src/quantization/` module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the `.vidx.db` file, and `search_layer`'s distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final `ef` candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
 
 For a $10^6$-vector collection at $d = 1536$: current memory is ~6.14 GB for vectors + ~546 MB for the graph = 6.7 GB. With PQ ($m = 192$): ~192 MB for codes + same ~546 MB graph = 738 MB. That is a 9× total reduction, bringing large collections well within single-server RAM without a GPU.
