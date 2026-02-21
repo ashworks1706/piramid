@@ -232,7 +232,7 @@ The expected total storage for connections is:
 
 $$\text{graph memory} = N \cdot M_{\max} \cdot \frac{M}{M-1} \cdot 16\text{ bytes per UUID}$$
 
-With $N = 10^6$, $M = 16$, $M_{\max} = 32$: roughly $10^6 \times 32 \times (16/15) \times 16 \approx 546\text{ MB}$. That is on top of the raw vector storage ($10^6 \times 1536 \times 4 \approx 6.14\text{ GB}$). The graph overhead is about 9% of vector memory — a modest tax for the search speedup.
+With $N = 10^6$, $M = 16$, $M_{\max} = 32$: roughly $10^6 \times 32 \times (16/15) \times 16 \approx 546\text{ MB}$. That is on top of the raw vector storage ($10^6 \times 1536 \times 4 \approx 6.14\text{ GB}$). The graph overhead is about 9% of vector memory, a modest tax for the search speedup.
 
 #### Tombstoning and graph connectivity
 
@@ -250,7 +250,7 @@ fn mark_tombstone(&mut self, id: &Uuid) {
 
 During search, tombstoned nodes are used as traversal intermediaries; their edges are still followed when exploring the graph, but they are filtered out before the result set is returned. This guarantees graph connectivity at the cost of retaining dead nodes in memory.
 
-> **Tombstone accumulation risk:** if a workload has high delete rates, tombstones pile up. The graph's "live density" — the number of non-tombstoned nodes per layer — gradually decreases, and eventually traversal is slow because a large fraction of the explored nodes are dead weight. The fix is a full index rebuild from the live vectors, which Piramid triggers through its compaction mechanism. After compaction, the loaded index is a clean graph with no tombstones.
+> **Tombstone accumulation risk:** if a workload has high delete rates, tombstones pile up. The graph's "live density" (the number of non-tombstoned nodes per layer) gradually decreases, and eventually traversal is slow because a large fraction of the explored nodes are dead weight. The fix is a full index rebuild from the live vectors, which Piramid triggers through its compaction mechanism. After compaction, the loaded index is a clean graph with no tombstones.
 
 ### IVF: Voronoi cells and k-means
 
@@ -422,7 +422,7 @@ With the default `filter_overfetch = 10` and `k = 5`, the index fetches 50 candi
 > **When overfetch isn't enough:** for very selective filters (< 1% of vectors), even large overfetch values fail because the ANN graph simply can't surface enough candidates from a small eligible set in a single traversal. The right solution for highly selective filters is a purpose-built filtered index (sometimes called "filtered HNSW" or "attribute-aware HNSW") that maintains separate entry points per filter category. This is on Piramid's roadmap.
 
 The three `SearchConfig` presets are:
-- `fast()`: `ef = 50`, `nprobe = 1` — for batch pipelines where high throughput matters more than last-mile recall
+- `fast()`: `ef = 50`, `nprobe = 1`: for batch pipelines where high throughput matters more than last-mile recall
 - `balanced()`: defaults (ef = config value, nprobe = config value), appropriate for most interactive RAG
 - `high()`: `ef = 400`, `nprobe = 20`, for compliance retrieval or precision-critical tasks
 
@@ -486,11 +486,11 @@ This is $m$ table lookups and additions, $O(m)$ rather than $O(d)$. At $m = 192$
 
 The PQ distances are approximate. To recover precision, the standard pipeline is:
 
-1. Run beam search / IVF with PQ distances — fast, low memory, moderate recall.
+1. Run beam search / IVF with PQ distances: fast, low memory, moderate recall.
 2. Take the top $\gamma \cdot k$ candidates ($\gamma \approx 3$–$10$).
 3. Rerank by computing exact distances with the original float32 vectors for just those $\gamma k$ candidates.
 
-The exact reranking step costs $O(\gamma k \cdot d)$ — cheap because $\gamma k \ll \text{ef}$. The combined recall of this pipeline approaches exact-search recall at a fraction of the memory and compute.
+The exact reranking step costs $O(\gamma k \cdot d)$, which is cheap because $\gamma k \ll \text{ef}$. The combined recall of this pipeline approaches exact-search recall at a fraction of the memory and compute.
 
 #### Piramid's roadmap
 

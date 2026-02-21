@@ -85,9 +85,9 @@ $$\mathcal{L} = -\frac{1}{N} \sum_{i=1}^{N} \log \frac{e^{\text{sim}(\mathbf{z}_
 
 where $\mathbf{z}_i$ and $\mathbf{z}_i^+$ are the normalized embeddings of a positive pair, and $\mathbf{z}_j^-$ are all negatives in the batch. The temperature $\tau$ controls how sharply peaked the distribution is: small $\tau$ makes the model very sensitive to small distance differences (high contrast), while large $\tau$ allows more spread.
 
-The denominator sums over all non-matching samples in the batch — this is **in-batch negative sampling**, and it's why larger training batch sizes produce better embedding models. With $N = 4096$ samples per batch, each training example is contrasted against 4095 negatives simultaneously. The signal from 4095 negatives is much richer than from a handful, forcing the model to learn a much stricter notion of "similar."
+The denominator sums over all non-matching samples in the batch; this is **in-batch negative sampling**, and it's why larger training batch sizes produce better embedding models. With $N = 4096$ samples per batch, each training example is contrasted against 4095 negatives simultaneously. The signal from 4095 negatives is much richer than from a handful, forcing the model to learn a much stricter notion of "similar."
 
-> **Hard negatives:** the most effective training uses **hard negatives**, which are samples superficially similar to the query but subtly different (e.g., the same question paraphrased slightly, or a document from the same domain but a different topic). In-batch random negatives are mostly easy (a query about cooking vs a passage about finance is trivially distinguishable). Hard negatives force the model to develop fine-grained discriminative representations. Models like [E5](https://arxiv.org/abs/2212.03533), [GTE](https://arxiv.org/abs/2308.03281), and the OpenAI text-embedding-3 series are trained with hard negative mining pipelines — the measurable quality difference between them and earlier models is largely attributable to this.
+> **Hard negatives:** the most effective training uses **hard negatives**, which are samples superficially similar to the query but subtly different (e.g., the same question paraphrased slightly, or a document from the same domain but a different topic). In-batch random negatives are mostly easy (a query about cooking vs a passage about finance is trivially distinguishable). Hard negatives force the model to develop fine-grained discriminative representations. Models like [E5](https://arxiv.org/abs/2212.03533), [GTE](https://arxiv.org/abs/2308.03281), and the OpenAI text-embedding-3 series are trained with hard negative mining pipelines; the measurable quality difference between them and earlier models is largely attributable to this.
 
 **Temperature calibration** has a mathematically interesting role. The optimal $\tau$ isn't a fixed constant; it depends on the expected magnitude of similarity scores in your data. If your embeddings are $\ell_2$-normalized (as is standard), cosine similarity ranges from -1 to 1. The InfoNCE loss with $\tau = 0.07$ (a common value) turns this into an effective "temperature" for the distribution: $\text{sim}/0.07$ values range from about -14 to +14, giving a reasonably peaked softmax. Too-small $\tau$ produces a distribution so sharp that small numerical errors dominate; too-large $\tau$ makes the loss insensitive to the exact relative ordering of candidates. OpenAI's models use a learned `logit_scale` parameter that plays the role of $1/\tau$, optimising it jointly with the embedding weights during training.
 
@@ -99,15 +99,15 @@ A few geometric properties of embedding spaces are worth understanding because t
 
 $$\|\mathbf{z}_i - \mathbf{z}_j\|_2^2 = 2 - 2\cos\theta_{ij}$$
 
-So minimising L2 distance and maximising cosine similarity are equivalent for normalised vectors. The practical reason to normalise is that it makes similarity scores comparable across different inputs — unnormalised dot products are biased by vector magnitude, which correlates with input length and vocabulary frequency.
+So minimising L2 distance and maximising cosine similarity are equivalent for normalised vectors. The practical reason to normalise is that it makes similarity scores comparable across different inputs; unnormalised dot products are biased by vector magnitude, which correlates with input length and vocabulary frequency.
 
-**Anisotropy and dimensional collapse.** Language models trained only with next-token prediction tend to produce anisotropic embedding spaces — all vectors cluster in a narrow cone of the "occupied" subspace rather than spreading uniformly across $\mathbb{R}^d$. This was documented in the "BERT sentence embeddings" literature ([Ethayarajh 2019](https://arxiv.org/abs/1908.10084), [Li et al. 2020](https://arxiv.org/abs/2011.05864)) and is measurable as a high average cosine similarity across random sentence pairs ($\bar{\cos} \approx 0.9$ for vanilla BERT vs $\bar{\cos} \approx 0.02$ for a well-trained retrieval model). Contrastive fine-tuning pushes the embeddings toward **isotropy**, spreading them across the full surface of the unit sphere — which dramatically improves nearest-neighbour search quality.
+**Anisotropy and dimensional collapse.** Language models trained only with next-token prediction tend to produce anisotropic embedding spaces, where all vectors cluster in a narrow cone of the "occupied" subspace rather than spreading uniformly across $\mathbb{R}^d$. This was documented in the "BERT sentence embeddings" literature ([Ethayarajh 2019](https://arxiv.org/abs/1908.10084), [Li et al. 2020](https://arxiv.org/abs/2011.05864)) and is measurable as a high average cosine similarity across random sentence pairs ($\bar{\cos} \approx 0.9$ for vanilla BERT vs $\bar{\cos} \approx 0.02$ for a well-trained retrieval model). Contrastive fine-tuning pushes the embeddings toward **isotropy**, spreading them across the full surface of the unit sphere, which dramatically improves nearest-neighbour search quality.
 
 **Matryoshka Representation Learning (MRL).** OpenAI's `text-embedding-3` models use a training technique called [MRL (Kusupati et al. 2022)](https://arxiv.org/abs/2205.13147) that makes the embedding dimensions hierarchically meaningful. The full $d$-dimensional vector is trained, but the loss is summed over a set of nested truncation sizes $m_1 < m_2 < \ldots < m_L = d$:
 
 $$\mathcal{L}_\text{MRL} = \sum_{\ell=1}^{L} \lambda_\ell \cdot \mathcal{L}\bigl(\mathbf{z}_{[1:m_\ell]}\bigr)$$
 
-where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full embedding. This forces the model to pack the most discriminative information into the first few dimensions, with later dimensions adding progressively finer-grained signal. The practical benefit: you can truncate `text-embedding-3-small`'s 1536-dimensional output to 512, 256, or even 64 dimensions and still get strong retrieval performance — with Recall@10 at 256 dimensions being only a few points below the full 1536d. This is a significant memory and compute saving when you control the tradeoff consciously.
+where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full embedding. This forces the model to pack the most discriminative information into the first few dimensions, with later dimensions adding progressively finer-grained signal. The practical benefit: you can truncate `text-embedding-3-small`'s 1536-dimensional output to 512, 256, or even 64 dimensions and still get strong retrieval performance, with Recall@10 at 256 dimensions being only a few points below the full 1536d. This is a significant memory and compute saving when you control the tradeoff consciously.
 
 > **Choosing dimensions with MRL:** a useful heuristic for selecting the truncation size $m$ is to plot Recall@10 vs $m$ on a sample of your actual query/document pairs and find the elbow point. For most English text retrieval tasks, the elbow is around 256–512 dimensions. Going below 128 usually degrades recall noticeably, while going from 1024 to 1536 often gives less than 1 point of improvement. Only you can decide what tradeoff is right given your latency budget and recall requirements.
 
@@ -115,7 +115,7 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 
 ### Providers in Piramid
 
-Piramid treats embedding generation as a runtime concern — you configure a provider and model at startup, and the server handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
+Piramid treats embedding generation as a runtime concern: you configure a provider and model at startup, and the server handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
 
 ```rust
 #[async_trait]
@@ -139,7 +139,7 @@ The OpenAI provider supports three models:
 | `text-embedding-3-large` | 3072 | MRL-trained; 2× cost, ~5% better recall |
 | `text-embedding-ada-002` | 1536 | Legacy; no MRL; kept for backward compat |
 
-Requests hit `https://api.openai.com/v1/embeddings` with `Authorization: Bearer {api_key}` and `encoding_format: "float"` so you get raw float32 values directly. The API key is resolved from `config.api_key` first, then the `OPENAI_API_KEY` environment variable — the fallback to env var is intentional for containerised deployments where you don't want secrets in config files:
+Requests hit `https://api.openai.com/v1/embeddings` with `Authorization: Bearer {api_key}` and `encoding_format: "float"` so you get raw float32 values directly. The API key is resolved from `config.api_key` first, then the `OPENAI_API_KEY` environment variable; the fallback to env var is intentional for containerised deployments where you don't want secrets in config files:
 
 ```rust
 let api_key = config.api_key.clone()
@@ -153,7 +153,7 @@ One thing worth knowing about `text-embedding-3-small` vs `text-embedding-3-larg
 
 #### Local HTTP and TEI
 
-The local provider speaks to any OpenAI-compatible or TEI-style HTTP endpoint. [TEI (Text Embeddings Inference)](https://github.com/huggingface/text-embeddings-inference) is Hugging Face's high-throughput embedding server — it exposes the same `/embeddings` JSON contract as the OpenAI API, making it a drop-in replacement. [Ollama](https://ollama.com/), TEI, and other locally-hosted embedding runtimes all work as long as they implement that protocol.
+The local provider speaks to any OpenAI-compatible or TEI-style HTTP endpoint. [TEI (Text Embeddings Inference)](https://github.com/huggingface/text-embeddings-inference) is Hugging Face's high-throughput embedding server; it exposes the same `/embeddings` JSON contract as the OpenAI API, making it a drop-in replacement. [Ollama](https://ollama.com/), TEI, and other locally-hosted embedding runtimes all work as long as they implement that protocol.
 
 A typical local setup for TEI running a 768-dimensional model:
 
@@ -165,9 +165,9 @@ embeddings:
   timeout: 10
 ```
 
-This matters a lot for Piramid's core thesis: if you're already running a local LLM for generation, you almost certainly want embedding to be local too. Having both on the same machine eliminates the network round-trip and keeps your documents away from remote APIs entirely. A local TEI instance on a modern CPU can embed short texts in under 5ms — comparable to OpenAI API latency but without the variance of an external network call.
+This matters a lot for Piramid's core thesis: if you're already running a local LLM for generation, you almost certainly want embedding to be local too. Having both on the same machine eliminates the network round-trip and keeps your documents away from remote APIs entirely. A local TEI instance on a modern CPU can embed short texts in under 5ms, comparable to OpenAI API latency but without the variance of an external network call.
 
-> **Model alignment:** be careful about mixing embedding models across insert and search operations. If you insert documents with one model and then reconfigure the server to use a different model (different architecture, even same dimensionality), searches will produce nonsense results — the query embedding and the stored embeddings come from different spaces. Piramid doesn't currently enforce model-version locking per collection. Worth noting in production ops.
+> **Model alignment:** be careful about mixing embedding models across insert and search operations. If you insert documents with one model and then reconfigure the server to use a different model (different architecture, even same dimensionality), searches will produce nonsense results; the query embedding and the stored embeddings come from different spaces. Piramid doesn't currently enforce model-version locking per collection. Worth noting in production ops.
 
 
 ### Configuration and resolution order
@@ -181,14 +181,14 @@ embeddings:
   timeout: 30               # seconds; requests hang forever if absent
 ```
 
-The resolution order for `api_key` is `config file → OPENAI_API_KEY env var → error`. Everything else comes only from the config file — there are no other environment variable overrides for `model`, `base_url`, or `timeout`. There's no per-request override for provider or model — the server uses whatever it was configured with at startup, and all collections on that server share the same embedding configuration.
+The resolution order for `api_key` is `config file → OPENAI_API_KEY env var → error`. Everything else comes only from the config file; there are no other environment variable overrides for `model`, `base_url`, or `timeout`. There's no per-request override for provider or model; the server uses whatever it was configured with at startup, and all collections on that server share the same embedding configuration.
 
-The `timeout` field is important to set in production. If the embedding endpoint becomes unresponsive (OOM on the remote server, network partition, cold-start delay on a local model), Piramid's embed and search/text endpoints will block indefinitely without it. For OpenAI, 30 seconds is generous — normal latency is well under 500ms. For a local model running on CPU with a large context, you may need 60 seconds or more.
+The `timeout` field is important to set in production. If the embedding endpoint becomes unresponsive (OOM on the remote server, network partition, cold-start delay on a local model), Piramid's embed and search/text endpoints will block indefinitely without it. For OpenAI, 30 seconds is generous; normal latency is well under 500ms. For a local model running on CPU with a large context, you may need 60 seconds or more.
 
 
 ### Request flow: /embed and /search/text
 
-When you call `POST /api/collections/{collection}/embed`, Piramid takes your text, routes it through the configured embedder stack, and stores the resulting vector. `POST /api/collections/{collection}/search/text` does the same for the query text — it's embedded on the fly and then passed into the ANN search path.
+When you call `POST /api/collections/{collection}/embed`, Piramid takes your text, routes it through the configured embedder stack, and stores the resulting vector. `POST /api/collections/{collection}/search/text` does the same for the query text; it's embedded on the fly and then passed into the ANN search path.
 
 The embedder stack is layered:
 
@@ -199,9 +199,9 @@ Request
               └── Provider   (OpenAIEmbedder or LocalEmbedder)
 ```
 
-The ordering is deliberate. The cache sits *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller — all three implement the same `Embedder` trait.
+The ordering is deliberate. The cache sits *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
-The cache is keyed on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional — if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
+The cache is keyed on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
 
 #### Retry and error classification
 
