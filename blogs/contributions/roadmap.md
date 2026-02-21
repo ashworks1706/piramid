@@ -4,7 +4,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### Documentation & Testing
 
-
 **Blogs**
 
 [ ] add vector database components diagram on evolution page
@@ -12,13 +11,15 @@ This is the working roadmap for contributors. If you want to help, start here an
 [ ] add more images for the embeddings page, link my workshop content there, links for bigger terms, add summary at the end
 [ ] add more images for storage page, links for bigger terms, add summary at the end
 [ ] add more images for indexing page and links for bigger terms, add summary at the end 
+[ ] add more images for query page and links for bigger terms, add summary at the end 
 [ ] fix UI on overview page, make the block card clickable, make responsive on mobile 
 [ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
-[ ] 
+[ ] add limitations and future work section to the end of the blogs, add more images for the limitations and future work section, links for bigger terms, add summary at the end of the limitations and future work section
 
 **Documentation**
 
 - [ ] Separate API docs to `docs.piramiddb.com` (Mintlify)
+- [ ] document rust sdk with examples, link blogs from /blogs
 
 **Dashboard**
 
@@ -49,7 +50,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Prefetching for sequential reads
 - [ ] Background job queue for long operations
 
-** Regular codebase refreshment**
+**Regular codebase refreshment**
 - [ ] refactor codebase for better modularity and maintainability
 - [ ] add more unit tests and integration tests
 - [ ] make sure ci cd pipeline is robust and covers all critical paths
@@ -70,7 +71,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Incremental backups
 - [ ] Database migrations
 
-** Regular codebase refreshment**
+**Regular codebase refreshment**
 - [ ] refactor codebase for better modularity and maintainability
 - [ ] add more unit tests and integration tests
 - [ ] make sure ci cd pipeline is robust and covers all critical paths
@@ -86,7 +87,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Date range filters
 - [ ] Array membership checks
 
-** Regular codebase refreshment**
+**Regular codebase refreshment**
 - [ ] refactor codebase for better modularity and maintainability
 - [ ] add more unit tests and integration tests
 - [ ] make sure ci cd pipeline is robust and covers all critical paths
@@ -116,6 +117,53 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Distributed transactions
 - [ ] Cluster management (node discovery, leader election, etc.)
 
+**Index/Search Improvements**
+
+- [ ] Adaptive index tuning: auto-adjust ef/nprobe/filter_overfetch based on latency/error budgets and collection density
+- [ ] Filter-aware search across indexes: add IVF prefiltering with metadata posting lists to avoid full-scan overfetch
+- [ ] Hybrid retrieval: combine dense ANN with sparse/BM25 scoring and rerank
+- [ ] Background index maintenance: online HNSW/IVF compaction and tombstone cleanup without blocking reads
+- [ ] Range and preset search modes: expose range queries and "fast/balanced/high" presets mapped to tuned params
+- [ ] Search observability: per-collection recall/latency histograms and sampled miss diagnostics in `/api/metrics`
+
+**Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features 
+- [ ] update blogs to reflect any code changes and new features 
+
+
+**Reliability & Safety**
+
+- [ ] WAL/schema versioning across all files with checksums; recovery paths that handle partial corruption safely
+- [ ] Dimension/metric validation per collection; fail-fast on mismatched inserts/searches; add dry-run config validation
+- [ ] Snapshot + PITR plan; import/export for portability; corruption detection and safe rebuild prompts
+- [ ] Chaos tests for WAL replay (crash at checkpoints), index rebuild idempotence, mmap-off fallback
+
+**Caching & Filters**
+
+- [ ] Metadata cache alongside vector cache with rebuild/invalidation metrics; configurable cache caps/eviction
+- [ ] Filter acceleration: IVF prefiltering (posting lists), bitmap/roaring filters for post-filter paths, filter selectivity stats
+- [ ] Background cache warmup tasks and refresh scheduling
+
+**Limits & Guardrails**
+
+- [ ] Enforce collection/request-level resource limits (vectors, bytes, QPS) with clear errors and metrics
+- [ ] Backpressure and rate limits surfaced in health/metrics endpoints
+
+**Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features 
+- [ ] update blogs to reflect any code changes and new features 
+
+**Observability**
+
+- [ ] Structured tracing with request IDs end-to-end; slow-query logging with thresholds per collection
+- [ ] Per-collection latency/recall histograms; cache/index freshness surfaced in `/api/metrics`
+
 **Advanced Search**
 
 - [ ] Recommendation API (similar to these IDs, not those)
@@ -133,7 +181,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Circuit breaker for embedding API failures
 - [ ] Collection aliases
 - [ ] Move collection between directories
-- [ ] Client-side distributed systems support
 
 **MCP Integration**
 
