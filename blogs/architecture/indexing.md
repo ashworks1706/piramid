@@ -32,7 +32,7 @@ This goes to zero as $d \to \infty$. Practically, almost all the volume of a hig
 
 Ball trees, cover trees, and R-trees all suffer the same underlying problem. Any space-partitioning data structure that works by dividing $\mathbb{R}^d$ into regions will find that a query hypersphere at high $d$ intersects almost every region, destroying the logarithmic speedup.
 
-#### Locality Sensitive Hashing
+#### [Locality Sensitive Hashing](https://en.wikipedia.org/wiki/Locality-sensitive_hashing)
 
 LSH takes a different approach. Rather than partitioning space, it probabilistically maps similar vectors to the same hash bucket, then only computes exact distances within a bucket. For a good hash family, the collision probability is a decreasing function of distance:
 
@@ -95,7 +95,7 @@ Piramid's auto-selector threshold of 10,000 is deliberately conservative: it lea
 
 ### HNSW — navigating a small world
 
-HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018) is the algorithm behind most high-performance vector databases — Pinecone, Weaviate, Milvus, Qdrant, and Piramid all use it at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
+[HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm behind most high-performance vector databases — [Pinecone](https://www.pinecone.io/), Weaviate, Milvus, Qdrant, and Piramid all use it at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
 
 #### The small-world graph idea
 
@@ -250,15 +250,15 @@ During search, tombstoned nodes are used as traversal intermediaries — their e
 
 ### IVF — Voronoi cells and k-means
 
-IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using k-means, and for each cluster maintains an **inverted list** — a list of vector IDs assigned to that cluster. At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
+IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using [k-means](https://en.wikipedia.org/wiki/K-means_clustering), and for each cluster maintains an **inverted list** — a list of vector IDs assigned to that cluster. At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
 
-The geometric picture is a **Voronoi diagram**. Each centroid $\mathbf{c}_i$ defines a cell:
+The geometric picture is a **[Voronoi diagram](https://en.wikipedia.org/wiki/Voronoi_diagram)**. Each centroid $\mathbf{c}_i$ defines a cell:
 
 $$V_i = \bigl\{ \mathbf{x} \in \mathbb{R}^d : \|\mathbf{x} - \mathbf{c}_i\| \leq \|\mathbf{x} - \mathbf{c}_j\| \;\forall j \neq i \bigr\}$$
 
 A query vector $\mathbf{q}$ falls into the cell whose centroid is nearest. Probing `nprobe` clusters means searching the query's own Voronoi cell plus the $(\text{nprobe} - 1)$ adjacent cells — the ones whose centroids are next-closest to $\mathbf{q}$. Any true nearest neighbour that lies near a cell boundary may exist in an adjacent cell, which is the fundamental recall limitation of IVF with small `nprobe`.
 
-#### Building the clusters — Lloyd's algorithm
+#### Building the clusters — [Lloyd's algorithm](https://en.wikipedia.org/wiki/Lloyd%27s_algorithm)
 
 Centroid computation uses Lloyd's k-means algorithm:
 
@@ -273,7 +273,7 @@ $$\mathcal{J} = \sum_{j=1}^{K} \sum_{\mathbf{x} \in V_j} \|\mathbf{x} - \mathbf{
 
 Each iteration monotonically decreases $\mathcal{J}$, so convergence is guaranteed. In practice the large gains come in the first 3–5 iterations; later iterations move centroids by tiny amounts. Ten iterations is a reasonable engineering tradeoff between cluster quality and startup cost.
 
-> **k-means++ vs random initialisation:** Piramid uses random initialisation (just takes the first $K$ vectors). k-means++ initialises centroids by sampling proportionally to $\|\mathbf{x} - \text{nearest existing centroid}\|^2$, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions.
+> **k-means++ vs random initialisation:** Piramid uses random initialisation (just takes the first $K$ vectors). [k-means++](https://en.wikipedia.org/wiki/K-means%2B%2B) initialises centroids by sampling proportionally to $\|\mathbf{x} - \text{nearest existing centroid}\|^2$, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions.
 
 #### Why K ≈ √N is optimal
 
@@ -281,7 +281,7 @@ The total cost of an IVF query is:
 
 Each iteration monotonically decreases $\mathcal{J}$, so convergence is guaranteed. In practice the large gains come in the first 3–5 iterations; later iterations move centroids by tiny amounts. Ten iterations is a reasonable engineering tradeoff between cluster quality and startup cost.
 
-> **k-means++ vs random initialisation:** Piramid uses random initialisation (just takes the first $K$ vectors). k-means++ initialises centroids by sampling proportionally to $\|\mathbf{x} - \text{nearest existing centroid}\|^2$, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions.
+> **k-means++ vs random initialisation:** Piramid uses random initialisation (just takes the first $K$ vectors). [k-means++](https://en.wikipedia.org/wiki/K-means%2B%2B) initialises centroids by sampling proportionally to $\|\mathbf{x} - \text{nearest existing centroid}\|^2$, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions.
 
 #### Why K ≈ √N is optimal
 
