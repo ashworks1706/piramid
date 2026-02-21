@@ -43,7 +43,7 @@ where $\sigma$ is the sigmoid function and $P_n$ is a noise distribution (typica
 
 The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic — $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ — falls out as an emergent property, not something explicitly built in: it reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space.
 
-![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://developers.google.com/machine-learning/crash-course/images/linear-relationships.svg)
+![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://miro.medium.com/1*d0JWmF36SUey7aS8bvA-dw.jpeg)
 
 Word2Vec is a useful intuition builder but it has hard limits. Each word gets exactly one vector regardless of context, so "bank" (financial) and "bank" (river) share a single representation. And it operates at the word level — there's no way to represent a whole sentence.
 

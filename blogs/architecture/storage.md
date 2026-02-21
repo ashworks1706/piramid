@@ -12,6 +12,8 @@ The first is the **B-tree** (and its variants, primarily B+ trees). A B+ tree st
 
 The second is the **[LSM-tree (Log-Structured Merge-tree)](https://en.wikipedia.org/wiki/Log-structured_merge-tree)**, used by [RocksDB](https://rocksdb.org/), [Cassandra](https://cassandra.apache.org/), [LevelDB](https://github.com/google/leveldb), and many others. The core insight is to make all writes sequential by buffering them in an in-memory table (the *memtable*) and periodically flushing it to an immutable sorted file on disk (an SSTable). Over time you accumulate multiple SSTables at level 0. Background compaction jobs merge and sort these into larger SSTables at progressively deeper levels, discarding deleted and overwritten keys in the process. Reads are more expensive — you may need to check the memtable, bloom filters, and multiple SSTables at different levels — but writes are always sequential, which on spinning disks especially is a dramatic throughput advantage. The tradeoff is *write amplification*: data gets rewritten multiple times across compaction levels, which increases I/O and wears SSDs faster. The compaction process is also continuous, running in the background at all times.
 
+![B-tree vs LSM-tree — B-trees do in-place page updates with a buffer pool; LSM-trees buffer writes in a memtable and flush to immutable SSTables, merging them in background compaction passes](https://miro.medium.com/v2/resize:fit:1400/1*q0c_4lFmPkFGMHuIBVH2mA.png)
+
 These two architectures represent a fundamental tension:
 - B-trees offer stable read performance and in-place updates, at the cost of write amplification from page splits and the need to manage a buffer pool explicitly.
 - LSM-trees offer high write throughput via sequential I/O, at the cost of read overhead and ongoing compaction I/O in the background.
@@ -51,6 +53,8 @@ The advantage is simplicity: no buffer pool code to write, efficient random acce
 Piramid uses mmap for the data file by default. The write ordering requirements are handled by the WAL (discussed below) rather than by careful page flushing, so the loss of dirty page control is less critical. For a system whose primary bottleneck is ANN search (which happens entirely in the vector index, in memory) rather than page I/O, the simplicity of mmap is a reasonable tradeoff. The `use_mmap: false` path falls back to heap allocation backed by regular file I/O if you need more control.
 
 One additional detail on growth: when a collection's data file needs to expand, Piramid unmaps it, calls [`ftruncate`](https://man7.org/linux/man-pages/man2/ftruncate.2.html) to extend the file to twice the required size, and remaps. The doubling factor amortizes the remap cost across future inserts — the same geometric growth strategy a `Vec` uses to avoid $O(n^2)$ reallocations.
+
+![Memory-mapped I/O — mmap projects the file's byte range into the process's virtual address space; the OS page cache handles faulting pages in on first access and evicts them under memory pressure](https://miro.medium.com/v2/resize:fit:1400/1*k7i8F7CXC4Ry2bQLHVQxqA.png)
 
 
 ### Warming
@@ -95,6 +99,8 @@ WalEntry::Checkpoint { timestamp, seq }
 ```
 
 The durability knob is the `sync_on_write` config. `flush()` drains the userspace `BufWriter` to the kernel buffer — fast, but a power loss can still drop buffered kernel writes. [`fsync`](https://man7.org/linux/man-pages/man2/fsync.2.html) pushes all the way to the storage device — slow (1–10ms per call depending on the device), but truly durable. With `sync_on_write: false` (the default), writes are fast at the cost of a small data loss window on power failure. With `sync_on_write: true`, every write waits for the device to acknowledge the flush. The right choice depends on whether you're running on a server with a UPS, an NVMe with power-loss protection, or a laptop.
+
+![Write-ahead log — every mutation is appended to the WAL before touching the data files; on recovery the log is replayed forward from the last checkpoint to reconstruct any changes that didn't make it to disk](https://miro.medium.com/v2/resize:fit:1400/1*kR1z9pV7Iu7eSI9K1a0cWQ.png)
 
 
 ### Checkpoints and WAL rotation
