@@ -190,6 +190,7 @@ function stripFrontmatterAndMarkdown(raw: string): string {
   text = text.replace(/```[\s\S]*?```/g, " "); // fenced code
   text = text.replace(/`[^`]*`/g, " "); // inline code
   text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1"); // links
+  text = text.replace(/<[^>]+>/g, " "); // HTML / JSX tags
   text = text.replace(/[#>*_`~\-\+]/g, " "); // markdown tokens
   text = text.replace(/\s+/g, " ").trim();
   return text;

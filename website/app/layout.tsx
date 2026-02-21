@@ -3,7 +3,10 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 
 export const metadata: Metadata = {
-  title: "Piramid – Vector Database for Agentic Applications",
+  title: {
+    template: "%s | Piramid",
+    default: "Piramid – Vector Database for Agentic Applications",
+  },
   description: "Piramid is a Rust vector database built for agentic workloads: mmap + WAL, HNSW/IVF/Flat indexes, filter-aware search, embeddings (OpenAI/local), and a roadmap to GPU co-location with Zipy.",
   keywords: ["vector database", "rust", "low latency", "HNSW", "IVF", "flat index", "embeddings", "RAG", "agentic", "similarity search"],
   authors: [{ name: "ashworks1706" }],

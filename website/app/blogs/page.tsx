@@ -14,19 +14,20 @@ export const runtime = "nodejs";
 
 export async function generateMetadata(): Promise<Metadata> {
   const seo = blogSeo(["index"]);
-  const title = seo?.title ?? "Piramid blog";
+  const pageTitle = seo?.title ?? "Blogs";
+  const fullTitle = `${pageTitle} | Piramid`;
   const description = seo?.description ?? "Piramid updates, notes, and deep dives.";
   const url = "/blogs";
   return {
-    title,
+    title: pageTitle,
     description,
     openGraph: {
-      title,
+      title: fullTitle,
       description,
       url,
     },
     twitter: {
-      title,
+      title: fullTitle,
       description,
       card: "summary",
     },
