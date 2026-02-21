@@ -33,11 +33,8 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Storage**
 
-- [ ] dimension validation runs after the vector is already written to disk — if it fails, we're left with a ghost entry that wastes space forever. validate dimensions before touching the file.
-- [ ] when HNSW deletes a vector it only marks a tombstone in the graph but never removes it from the in-memory cache, so deleted vectors keep consuming memory until a manual compaction is run. IVF and Flat both clean up correctly — HNSW should too.
 - [ ] if mmap is disabled in the collection config, the storage layer panics on the first write that needs to grow the file. needs a proper guard instead of an unconditional unwrap.
 - [ ] updating a vector or its metadata writes three separate WAL log entries per operation (update + delete + insert) instead of one. this inflates the WAL unnecessarily and makes recovery replay more expensive than it needs to be.
-- [ ] on the upsert update path, vectors get quantized twice — once when originally stored and again on the way back in. the original float values should be passed through directly instead.
 - [ ] index serialization uses unsafe pointer casts to convert the index trait object to a concrete type — if the wrong type is ever stored this is undefined behaviour. should use a safe serialization method on the index trait instead.
 - [ ] the index pointer file (`.index.db`) is fully rewritten on every single insert, update, or delete, while the ANN graph file (`.vecindex.db`) is only written at checkpoints. this inconsistency means the two files can describe different states between checkpoints — if the WAL is disabled or corrupted during that window, the ANN graph silently misses entries with no error. both files should flush together at checkpoint time only, with the WAL as the only per-mutation write.
 - [ ] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
@@ -66,7 +63,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 **Crash Safety & Recovery**
 
 - [ ] WAL and all persistence file formats need version fields and checksums; recovery paths must handle partial writes and format mismatches safely
-- [ ] dimension/metric validation per collection at open time; fail-fast on mismatched inserts/searches; dry-run config validation
+- [ ] dry-run config validation on startup; fail-fast on mismatched config between what's stored and what's loaded
 - [ ] corrupted file detection on startup with safe rebuild prompt
 - [ ] automatic index rebuild from WAL on detected corruption
 - [ ] chaos tests: crash at WAL checkpoints, index rebuild idempotence, mmap-off fallback, partial-write recovery
@@ -85,7 +82,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Quantization Refactor**
 
-- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. this is how FAISS, Qdrant, and Weaviate all do it.
+- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. this is how FAISS, Qdrant, and Weaviate all do it. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
 - [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented — it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
 
 **Index Improvements**
@@ -98,17 +95,15 @@ This is the working roadmap for contributors. If you want to help, start here an
 **Filter & Cache Acceleration**
 
 - [ ] the collection map in AppState keeps every opened collection in memory forever with no eviction — a server that opens many collections will grow unbounded. `cache_max_bytes` config exists but nothing enforces it. needs an LRU eviction policy so idle collections can be closed and their memory (vector cache, metadata cache, mmap) released.
-- [ ] metadata cache alongside vector cache with configurable eviction and rebuild/invalidation metrics — note: once the quantization refactor is complete and PQ is integrated, the metadata cache becomes redundant (metadata lives in the same mmap Document as the vector, so re-ranking reads it for free) and should be removed at that point
 - [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
 - [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
-- [ ] background cache warmup and refresh scheduling
+- [ ] collection preloading on startup: optionally pre-open a configured list of collections rather than waiting for the first request
 
 **Query Features**
 
 - [ ] query result caching (LRU, TTL-based)
 - [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
 - [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
-- [ ] filter-aware search: expose range queries, AND/OR/NOT filter combinations
 - [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
 
 ---
@@ -117,7 +112,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Schema**
 
-- [ ] expected dimensions defined per collection at creation time
+- [ ] enforce dimension constraints end-to-end: set expected dimensions at collection creation time, re-validate at open time (fail-fast on mismatch), and validate before any mmap write so a failed insert never leaves a ghost entry on disk
 - [ ] metadata schema validation (typed fields, required/optional)
 
 **Metadata Filters**
