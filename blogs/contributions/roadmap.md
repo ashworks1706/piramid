@@ -29,7 +29,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
-### Post-Launch
+### Bug Fixes
 
 **Storage Correctness**
 
@@ -115,33 +115,17 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### Future Considerations
 
-**Distributed Systems**
-
-- [ ] Sharding strategies (range, hash, etc.)
-- [ ] Replication strategies (master-slave, multi-master, etc.)
-- [ ] Consistency models (strong, eventual, etc.)
-- [ ] Distributed transactions
-- [ ] Cluster management (node discovery, leader election, etc.)
-
 **Index/Search Improvements**
 
+- [ ] move quantization from Storage to Index layer: currently `storage/collection/operations.rs` applies `QuantizedVector::from_f32_with_config()` at insert time, permanently discarding the original f32. This causes two concrete problems: (1) no speed benefit — the index only stores UUIDs so HNSW/IVF graph traversal still fetches full f32s from `vector_cache` for every distance comparison, meaning the quantization compression never accelerates search at all; (2) accuracy loss with no upside — `search/engine.rs` does dequantize at score time, but it reconstructs from a lossy approximation, not the original, so final scores are degraded. The fix has three parts: store original f32 in mmap as the source of truth, move quantization inside the index layer so graph traversal uses compressed vectors for fast candidate selection, then re-rank the final `ef` candidates using the original f32s from storage for accurate scoring. As a result of this fix, the dequantization step currently in `search/engine.rs` should be removed entirely — once storage returns raw f32 there is nothing to decode, and the search engine scores directly against the original vector. This is the standard approach used by FAISS, Qdrant, and Weaviate.
+- [ ] src/quantization/ module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the .vidx.db file, and search_layer's distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final ef candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
 - [ ] Adaptive index tuning: auto-adjust ef/nprobe/filter_overfetch based on latency/error budgets and collection density
 - [ ] Filter-aware search across indexes: add IVF prefiltering with metadata posting lists to avoid full-scan overfetch
 - [ ] Hybrid retrieval: combine dense ANN with sparse/BM25 scoring and rerank
 - [ ] Background index maintenance: online HNSW/IVF compaction and tombstone cleanup without blocking reads
 - [ ] Range and preset search modes: expose range queries and "fast/balanced/high" presets mapped to tuned params
 - [ ] Search observability: per-collection recall/latency histograms and sampled miss diagnostics in `/api/metrics`
-- [ ] move quantization from Storage to Index layer: currently `storage/collection/operations.rs` applies `QuantizedVector::from_f32_with_config()` at insert time, permanently discarding the original f32. This causes two concrete problems: (1) no speed benefit — the index only stores UUIDs so HNSW/IVF graph traversal still fetches full f32s from `vector_cache` for every distance comparison, meaning the quantization compression never accelerates search at all; (2) accuracy loss with no upside — `search/engine.rs` does dequantize at score time, but it reconstructs from a lossy approximation, not the original, so final scores are degraded. The fix has three parts: store original f32 in mmap as the source of truth, move quantization inside the index layer so graph traversal uses compressed vectors for fast candidate selection, then re-rank the final `ef` candidates using the original f32s from storage for accurate scoring. As a result of this fix, the dequantization step currently in `search/engine.rs` should be removed entirely — once storage returns raw f32 there is nothing to decode, and the search engine scores directly against the original vector. This is the standard approach used by FAISS, Qdrant, and Weaviate.
-- [ ] src/quantization/ module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the .vidx.db file, and search_layer's distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final ef candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
 - [ ] Piramid uses random initialisation (just takes the first KK vectors). k-means++ initialises centroids by sampling proportionally to ∥x−nearest existing centroid∥2∥x−nearest existing centroid∥2, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions
-
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features 
-- [ ] update blogs to reflect any code changes and new features 
-
 
 **Reliability & Safety**
 
@@ -160,13 +144,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] Enforce collection/request-level resource limits (vectors, bytes, QPS) with clear errors and metrics
 - [ ] Backpressure and rate limits surfaced in health/metrics endpoints
-
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features 
-- [ ] update blogs to reflect any code changes and new features 
 
 **Observability**
 
@@ -197,46 +174,17 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Tools: `search_similar`, `get_document`, `list_collections`, `add_document`
 - [ ] Agent-friendly responses (structured JSON-LD)
 
-### [Zipy](https://github.com/ashworks1706/zipy) Development Begins
+**Distributed Systems**
 
-**Zipy Integration (GPU Acceleration)**
+- [ ] Sharding strategies (range, hash, etc.)
+- [ ] Replication strategies (master-slave, multi-master, etc.)
+- [ ] Consistency models (strong, eventual, etc.)
+- [ ] Distributed transactions
+- [ ] Cluster management (node discovery, leader election, etc.)
 
-- [ ] Dependency integration: add `zipy` crate to `Cargo.toml` as an optional feature
-- [ ] Compute backend enum: refactor `ExecutionMode` to support `Zipy(Arc<ZipyEngine>)`
-- [ ] Startup handshake: attempt Zipy initialization on boot, fallback to CPU on failure
-- [ ] VRAM hydration: load existing on-disk vectors into GPU VRAM on startup
-- [ ] Dual-write architecture: ensure inserts write to both disk (persistence) and Zipy (VRAM)
-- [ ] Search router: route `POST /search` requests to Zipy when active
-- [ ] Fallback circuit breaker: auto-switch to CPU search if Zipy returns OOM/timeout
-- [ ] Health check extension: add GPU status (temperature, memory usage) to `/api/health`
-
-**Advanced Security**
-
-- [ ] JWT token support
-- [ ] Multi-tenant isolation
-- [ ] Collection-level permissions
-- [ ] Rate limiting & quotas
-- [ ] Audit logging
-
-**API Versioning**
-
-- [ ] API version in URLs or headers
-- [ ] Backward compatibility strategy
-- [ ] Deprecation warnings for old endpoints
-- [ ] API changelog tracking
-
-**Monitoring & Alerting**
-
-- [ ] Email alerts for errors
-- [ ] Disk space alerts
-- [ ] Memory usage alerts
-- [ ] Index corruption alerts
-- [ ] Slow query alerts
-
-**Data Import/Export**
-
-- [ ] Import from JSON/CSV/Parquet
-- [ ] Export to JSON/CSV/Parquet
-- [ ] Streaming import for large datasets
-- [ ] Import progress tracking
-- [ ] Format validation on import
+**Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features
+- [ ] update blogs to reflect any code changes and new features
