@@ -8,10 +8,10 @@ This is the working roadmap for contributors. If you want to help, start here an
 **Blogs**
 
 [ ] add vector database components diagram on evolution page
-[ ] add more images for the database page methadologies,  links for bigger terms  
-[ ] add more images for the embeddings page, link my workshop content there, links for bigger terms
-[ ] add more images for storage page, links for bigger terms 
-[ ] add more images for indexing page and links for bigger terms 
+[ ] add more images for the database page methadologies,  links for bigger terms, add summary at the end  
+[ ] add more images for the embeddings page, link my workshop content there, links for bigger terms, add summary at the end
+[ ] add more images for storage page, links for bigger terms, add summary at the end
+[ ] add more images for indexing page and links for bigger terms, add summary at the end 
 [ ] fix UI on overview page, make the block card clickable, make responsive on mobile 
 [ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
 [ ] 
@@ -61,6 +61,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Query result caching
 - [ ] Query planning/optimization
 - [ ] Query budget enforcement (timeouts, complexity limits)
+- [ ] Implement quantization for HNSW configurable vector compression (e.g. 8-bit, 4-bit, etc.)
 
 **Backup & Restore**
 
