@@ -111,7 +111,7 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 
 > **Choosing dimensions with MRL:** a useful heuristic for selecting the truncation size $m$ is to plot Recall@10 vs $m$ on a sample of your actual query/document pairs and find the elbow point. For most English text retrieval tasks, the elbow is around 256–512 dimensions. Going below 128 usually degrades recall noticeably, while going from 1024 to 1536 often gives less than 1 point of improvement. Only you can decide what tradeoff is right given your latency budget and recall requirements.
 
-![Matryoshka Representation Learning — the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://miro.medium.com/v2/resize:fit:1400/1*UB7QZbJNvHtN8Zml-gAHSA.png)
+![Matryoshka Representation Learning — the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://sthalles.github.io/assets/matryoshka-representation-learning/representation-learning.png)
 
 ### Providers in Piramid
 
