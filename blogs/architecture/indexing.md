@@ -1,8 +1,8 @@
 # Indexing
 
-A vector database without a good index is just a very sophisticated `for` loop. The core problem is this: given a query vector $\mathbf{q} \in \mathbb{R}^d$ and a collection of $N$ stored vectors, find the $k$ closest by some distance metric. The naïve approach scans every vector and computes the distance — $O(Nd)$ per query. At $N = 10^6$ with $d = 1536$ (OpenAI's `text-embedding-3-large`), that is 1.5 billion multiply-accumulate operations per query. Even with SIMD, you're looking at tens of milliseconds. That is fine for batch analysis; it is not fine for a latency-sensitive RAG pipeline that needs sub-millisecond retrieval.
+A vector database without a good index is just a very sophisticated `for` loop. The core problem is this: given a query vector $\mathbf{q} \in \mathbb{R}^d$ and a collection of $N$ stored vectors, find the $k$ closest by some distance metric. The naïve approach scans every vector and computes the distance, $O(Nd)$ per query. At $N = 10^6$ with $d = 1536$ (OpenAI's `text-embedding-3-large`), that is 1.5 billion multiply-accumulate operations per query. Even with SIMD, you're looking at tens of milliseconds. That is fine for batch analysis; it is not fine for a latency-sensitive RAG pipeline that needs sub-millisecond retrieval.
 
-Piramid supports three index types — Flat, IVF, and HNSW — with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
+Piramid supports three index types (Flat, IVF, and HNSW) with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
 
 ### Measuring quality: Recall@k
 
@@ -10,13 +10,13 @@ Before talking about how indexes work, it helps to be precise about what "good" 
 
 $$\text{Recall@}k = \frac{|\text{ANN results} \cap \text{true } k\text{-NN}|}{k}$$
 
-A Recall@10 of 0.95 means 9.5 out of 10 returned results are genuinely in the top-10 by exact distance — you missed half a result on average. For RAG, an LLM consuming the top-5 retrieved chunks rarely produces a noticeably worse answer if one chunk is an 11th-nearest rather than a 9th-nearest neighbour. The semantic delta is tiny. This is why targeting Recall@10 ≥ 0.95 is reasonable for production and you should not sacrifice 2–3× query latency chasing 0.99.
+A Recall@10 of 0.95 means 9.5 out of 10 returned results are genuinely in the top-10 by exact distance, meaning you missed half a result on average. For RAG, an LLM consuming the top-5 retrieved chunks rarely produces a noticeably worse answer if one chunk is an 11th-nearest rather than a 9th-nearest neighbour. The semantic delta is tiny. This is why targeting Recall@10 ≥ 0.95 is reasonable for production and you should not sacrifice 2–3× query latency chasing 0.99.
 
-> **The recall-latency frontier** — every ANN algorithm traces a curve when you sweep its quality parameters. More recall always costs more latency. The goal of index design is to push that frontier as far to the upper-left (high recall, low latency) as possible. HNSW currently has the best-known frontier for general dense vectors at high dimensions.
+> **The recall-latency frontier**: every ANN algorithm traces a curve when you sweep its quality parameters. More recall always costs more latency. The goal of index design is to push that frontier as far to the upper-left (high recall, low latency) as possible. HNSW currently has the best-known frontier for general dense vectors at high dimensions.
 
 ### Why high-dimensional spaces break classical indexes
 
-The reason Piramid doesn't use a B-tree or even a kd-tree for vector search is not laziness — it's that those structures provably collapse at high dimensionality. Understanding why is important context before looking at HNSW and IVF.
+The reason Piramid doesn't use a B-tree or even a kd-tree for vector search is not laziness; it's that those structures provably collapse at high dimensionality. Understanding why is important context before looking at HNSW and IVF.
 
 #### The kd-tree and why it fails
 
@@ -26,9 +26,9 @@ The key quantity is the volume ratio of a hypersphere to its enclosing hypercube
 
 $$V_d = \frac{\pi^{d/2}}{\Gamma(d/2 + 1)}$$
 
-This goes to zero as $d \to \infty$. Practically, almost all the volume of a high-dimensional hypercube concentrates in its thin outer shell rather than its interior. An ANN query at radius $r$ around a point picks up essentially no volume — which means the kd-tree's bounding boxes contain almost no useful structure. The algorithm has to back up and explore essentially every branch, making the expected query complexity $O(2^d \cdot \log N)$ in the worst case, which at $d > 20$ is worse than brute force.
+This goes to zero as $d \to \infty$. Practically, almost all the volume of a high-dimensional hypercube concentrates in its thin outer shell rather than its interior. An ANN query at radius $r$ around a point picks up essentially no volume, which means the kd-tree's bounding boxes contain almost no useful structure. The algorithm has to back up and explore essentially every branch, making the expected query complexity $O(2^d \cdot \log N)$ in the worst case, which at $d > 20$ is worse than brute force.
 
-> **Intuition for the shell concentration:** In $d$ dimensions, the fraction of a unit ball's volume that lies within distance $\epsilon$ of the surface is $1 - (1-\epsilon)^d$. At $d = 1000$ and $\epsilon = 0.01$, this is $1 - 0.99^{1000} \approx 0.99996$ — essentially all of the ball is shell.
+> **Intuition for the shell concentration:** In $d$ dimensions, the fraction of a unit ball's volume that lies within distance $\epsilon$ of the surface is $1 - (1-\epsilon)^d$. At $d = 1000$ and $\epsilon = 0.01$, this is $1 - 0.99^{1000} \approx 0.99996$, essentially all of the ball is shell.
 
 Ball trees, cover trees, and R-trees all suffer the same underlying problem. Any space-partitioning data structure that works by dividing $\mathbb{R}^d$ into regions will find that a query hypersphere at high $d$ intersects almost every region, destroying the logarithmic speedup.
 
@@ -54,7 +54,7 @@ The core issue underlying both failures is the concentration of measure. For $N$
 
 $$\lim_{d \to \infty} \frac{\max_{x \in S} \|\mathbf{q} - \mathbf{x}\|_2 - \min_{x \in S} \|\mathbf{q} - \mathbf{x}\|_2}{\min_{x \in S} \|\mathbf{q} - \mathbf{x}\|_2} \to 0$$
 
-When all distances are nearly equal, there is no local structure for a spatial index to exploit — every point is equidistant from every other. In practice at $d = 1536$ real embeddings are far from uniformly distributed (they cluster by topic and semantics), which is why ANN indexes still work. But the observation explains why cosine similarity outperforms raw Euclidean distance for text: normalising away magnitude removes one whole axis of spurious distance variation, making the distribution better-behaved.
+When all distances are nearly equal, there is no local structure for a spatial index to exploit; every point is equidistant from every other. In practice at $d = 1536$ real embeddings are far from uniformly distributed (they cluster by topic and semantics), which is why ANN indexes still work. But the observation explains why cosine similarity outperforms raw Euclidean distance for text: normalising away magnitude removes one whole axis of spurious distance variation, making the distribution better-behaved.
 
 > **What actually works at high dimensions:** graph-based indexes (HNSW) exploit the empirical cluster structure of the data directly rather than trying to partition abstract coordinates. Quantisation-based indexes (IVF + PQ) exploit the fact that even high-dimensional vectors often lie near a much lower-dimensional manifold. Neither tries to fight the geometry of $\mathbb{R}^d$ directly.
 
@@ -64,11 +64,11 @@ When all distances are nearly equal, there is no local structure for a spatial i
 
 Given that exact nearest neighbour is $O(Nd)$ and ANN indexes achieve ~97% recall at a fraction of the cost, the right question is whether that 3% miss rate matters for your application.
 
-For RAG pipelines it almost never does. An LLM context window holds 5–20 retrieved chunks. If one of them is a 12th-nearest-neighbour rather than the 10th, the generated answer is unchanged with very high probability — the semantic gap between the 10th and 12th most similar vectors is imperceptible to a language model. The accuracy loss from a well-configured HNSW index is typically 1–5%, and the query latency improvement over exact search is 10–100×.
+For RAG pipelines it almost never does. An LLM context window holds 5–20 retrieved chunks. If one of them is a 12th-nearest-neighbour rather than the 10th, the generated answer is unchanged with very high probability; the semantic gap between the 10th and 12th most similar vectors is imperceptible to a language model. The accuracy loss from a well-configured HNSW index is typically 1–5%, and the query latency improvement over exact search is 10–100×.
 
 Where recall does matter: deduplication (you need exact matches, not approximate ones), compliance retrieval (must surface every relevant document), and similarity thresholding (returning "no match" for queries below a distance cutoff requires precise distances). For those workloads, Flat or a post-search exact reranker is appropriate.
 
-### Flat — the honest baseline
+### Flat: the honest baseline
 
 The Flat index does not pretend to be smart. For every query it iterates over every known vector ID, computes the configured similarity score, then returns the top $k$ in $O(Nd)$ time. There is no build phase, no build memory overhead, and recall is exactly 1.0 by definition.
 
@@ -87,27 +87,27 @@ Modern CPUs can execute SIMD dot products over `f32` arrays at roughly 16 multip
 
 $$t_{\text{dot}} \approx \frac{1536 \text{ ops}}{16 \text{ ops/cycle} \times 3.5 \times 10^9 \text{ Hz}} \approx 27\text{ ns}$$
 
-Ten thousand such products take about 270 µs — squarely in the budget for a 1 ms response time. The entire dataset at $N = 10,000$ and $d = 1536$ occupies $10,000 \times 1536 \times 4 = 61\text{ MB}$, which fits comfortably in L3 cache on modern server CPUs (typically 32–96 MB). Once the working set is cache-warm, the scan is purely compute-bound rather than memory-bound, and the theoretical throughput is close to SIMD-peak.
+Ten thousand such products take about 270 µs, squarely in the budget for a 1 ms response time. The entire dataset at $N = 10,000$ and $d = 1536$ occupies $10,000 \times 1536 \times 4 = 61\text{ MB}$, which fits comfortably in L3 cache on modern server CPUs (typically 32–96 MB). Once the working set is cache-warm, the scan is purely compute-bound rather than memory-bound, and the theoretical throughput is close to SIMD-peak.
 
 > **SIMD warm cache vs cold:** the first scan after startup is memory-bound, reading 61 MB from RAM (~40 GB/s) in roughly 1.5 ms. Subsequent scans of the same warmed cache hit at L3 bandwidth (~300 GB/s) and finish in ~200 µs. Piramid's warming phase at startup (described in the storage post) is partly motivated by this: you want the first real user query to hit warm memory, not cold RAM.
 
-The crossover point where flat becomes clearly slower than an ANN index depends on both $N$ and $d$. At $d = 128$, the flat scan stays competitive up to ~100K vectors because the vectors are smaller, the cache fits more of them, and the dot products are cheaper. At $d = 3072$ (some multimodal embeddings), the crossover arrives earlier — the 4× larger vectors mean 4× less fit in cache and 4× more compute per scan.
+The crossover point where flat becomes clearly slower than an ANN index depends on both $N$ and $d$. At $d = 128$, the flat scan stays competitive up to ~100K vectors because the vectors are smaller, the cache fits more of them, and the dot products are cheaper. At $d = 3072$ (some multimodal embeddings), the crossover arrives earlier since the 4× larger vectors mean 4× less fit in cache and 4× more compute per scan.
 
 Piramid's auto-selector threshold of 10,000 is deliberately conservative: it leaves headroom for the case where the server's L3 is shared with other workloads.
 
-### HNSW — navigating a small world
+### HNSW: navigating a small world
 
-[HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm behind most high-performance vector databases — [Pinecone](https://www.pinecone.io/), Weaviate, Milvus, Qdrant, and Piramid all use it at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
+[HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm behind most high-performance vector databases like [Pinecone](https://www.pinecone.io/), Weaviate, Milvus, and Qdrant. at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
 
 ![HNSW layered graph — layer 2 is sparse for long-range navigation, layer 1 is denser, layer 0 holds all nodes with the full connection density; search descends from top to bottom](https://miro.medium.com/1*hEu_9Z1Ra5ndhDS1n_Kjdg.png)
 
 #### The small-world graph idea
 
-The NSW (non-hierarchical) paper by Malkov et al. (2014) showed that if you build a graph where each vector-node is connected to its approximate nearest neighbours — plus a few "long-range" links to far-away nodes that act like highways — then greedy search on that graph finds nearest neighbours in $O(\log N)$ hops with good probability.
+The NSW (non-hierarchical) paper by Malkov et al. (2014) showed that if you build a graph where each vector-node is connected to its approximate nearest neighbours, plus a few "long-range" links to far-away nodes that act like highways, then greedy search on that graph finds nearest neighbours in $O(\log N)$ hops with good probability.
 
 Each node starts with short-range connections to similar vectors, forming local clusters. The long-range edges emerge naturally from the construction order: vectors inserted early (when the graph was sparse) connect to whatever was available at the time, spanning large distances. Late insertions find dense local neighbourhoods. The mix produces the small-world property.
 
-Greedy search simply starts from an arbitrary entry node and repeatedly moves to whichever current node's neighbour is closest to the query. It terminates when no neighbour is closer than the current node — a local minimum that, empirically, is almost always the global minimum for typical embedding distributions.
+Greedy search simply starts from an arbitrary entry node and repeatedly moves to whichever current node's neighbour is closest to the query. It terminates when no neighbour is closer than the current node, a local minimum that empirically is almost always the global minimum for typical embedding distributions.
 
 The raw NSW problem is that the entry point matters. Starting in the wrong region wastes many hops just navigating to the relevant part of the space. HNSW solves this with a hierarchy of layers: layer 0 is the dense local graph, and each higher layer is a progressively sparser "skip list in graph form" that lets you coarsely navigate to the right region before descending into the dense layer.
 
@@ -136,13 +136,13 @@ fn random_layer(&self) -> usize {
 
 The default Piramid config is `m = 16`, `m_max = 32` (layer 0 gets $2 \times M$ connections because it needs to be denser to handle the full $N$ nodes), `ef_construction = 200`.
 
-#### Inserting a vector — the two-phase algorithm
+#### Inserting a vector: the two-phase algorithm
 
 Insert is a top-down descent followed by a bottom-up connection phase.
 
-**Phase 1 — find the entry region.** Starting from the global entry point (the node with the highest $\ell_{\max}$, which governs the top layer), the algorithm greedily descends from the top layer to $\ell_{\max}(\text{new node}) + 1$. At each layer in this descent, it performs a greedy 1-nearest-neighbour search, just to find which part of the space to descend into. At the end of phase 1 you have a candidate entry point at the new node's target layer that is already in the right neighbourhood.
+**Phase 1: find the entry region.** Starting from the global entry point (the node with the highest $\ell_{\max}$, which governs the top layer), the algorithm greedily descends from the top layer to $\ell_{\max}(\text{new node}) + 1$. At each layer in this descent, it performs a greedy 1-nearest-neighbour search, just to find which part of the space to descend into. At the end of phase 1 you have a candidate entry point at the new node's target layer that is already in the right neighbourhood.
 
-**Phase 2 — connect at each layer.** From layer $\ell_{\max}$ down to layer 0, the algorithm runs a richer `ef_construction`-nearest-neighbour search, maintaining a candidate priority queue of the best `ef_construction` results seen so far. From those candidates it selects the best $M$ (or $M_{\max}$ at layer 0) and adds bidirectional edges:
+**Phase 2: connect at each layer.** From layer $\ell_{\max}$ down to layer 0, the algorithm runs a richer `ef_construction`-nearest-neighbour search, maintaining a candidate priority queue of the best `ef_construction` results seen so far. From those candidates it selects the best $M$ (or $M_{\max}$ at layer 0) and adds bidirectional edges:
 
 ```rust
 for lc in (0..=layer).rev() {
@@ -163,13 +163,13 @@ for lc in (0..=layer).rev() {
 }
 ```
 
-The bidirectionality is critical. A unidirectional graph would have large "dead end" regions — nodes that many other nodes point to but that point back to nothing useful. Bidirectional edges guarantee that traversal can always go in both directions, which is what makes the small-world property hold under greedy descent.
+The bidirectionality is critical. A unidirectional graph would have large "dead end" regions, where nodes that many others point to have no useful outgoing edges. Bidirectional edges guarantee that traversal can always go in both directions, which is what makes the small-world property hold under greedy descent.
 
 After adding the back-edge, if the neighbour's connection list exceeds $M$, it gets pruned back. Piramid uses simple distance-based selection: keep the $M$ closest. The original HNSW paper proposes a diversity-aware heuristic that prefers candidates spread across different directions, which improves recall slightly but adds implementation complexity. Piramid's simple greedy selection works well in practice.
 
-Time complexity per insert is $O(M \cdot ef_{\text{const}} \cdot \log N)$ — the $\log N$ comes from the number of layers, $M$ from the connections per layer, and $ef_{\text{const}}$ from the width of each layer's search.
+Time complexity per insert is $O(M \cdot ef_{\text{const}} \cdot \log N)$, where the $\log N$ comes from the number of layers, $M$ from the connections per layer, and $ef_{\text{const}}$ from the width of each layer's search.
 
-#### The beam search — formal invariant
+#### The beam search: formal invariant
 
 The core of both insert and query is `search_layer`, which runs on a single layer. Understanding it precisely is important because `ef` is the main tuning knob exposed to users.
 
@@ -203,9 +203,9 @@ The termination condition `candidate.distance > furthest_distance` is key: once 
 
 These two parameters are often confused because they're both called `ef` internally but serve entirely different purposes.
 
-`ef_construction` controls graph quality at build time. It is the beam width used during `search_layer` while inserting — higher values mean each new node finds better neighbours, resulting in a denser and more accurate graph. The cost is $O(ef_{\text{const}})$ per layer per insert. Setting `ef_construction = 200` means each insertion explores up to 200 candidates to find the best $M = 16$ neighbours to connect to.
+`ef_construction` controls graph quality at build time. It is the beam width used during `search_layer` while inserting; higher values mean each new node finds better neighbours, resulting in a denser and more accurate graph. The cost is $O(ef_{\text{const}})$ per layer per insert. Setting `ef_construction = 200` means each insertion explores up to 200 candidates to find the best $M = 16$ neighbours to connect to.
 
-`ef_search` controls query recall at query time. It is the beam width for the final layer-0 search. It does not affect the graph structure at all — only how thoroughly the already-built graph is explored during a query. You can set `ef_search = 50` at query time on a graph built with `ef_construction = 400` without any degradation to the graph itself.
+`ef_search` controls query recall at query time. It is the beam width for the final layer-0 search. It does not affect the graph structure at all, only how thoroughly the already-built graph is explored during a query. You can set `ef_search = 50` at query time on a graph built with `ef_construction = 400` without any degradation to the graph itself.
 
 > **The practical implication:** you should build with high `ef_construction` (200–400) and then tune `ef_search` per use case. A graph built with `ef_construction = 64` and queried with `ef_search = 400` will never reach the recall of a graph built with `ef_construction = 400` and queried with `ef_search = 200`, because the underlying graph simply doesn't have the connections needed. Build quality is permanent; search quality is adjustable.
 
@@ -236,7 +236,7 @@ With $N = 10^6$, $M = 16$, $M_{\max} = 32$: roughly $10^6 \times 32 \times (16/1
 
 #### Tombstoning and graph connectivity
 
-Deletion in graph-based indexes is notoriously awkward. Physically removing a node and its edges can disconnect parts of the graph — future traversals may fail to reach regions that were only accessible through the removed node. This is not a theoretical concern: if a hub node (one that happens to be the entry path to an entire cluster) is deleted and its edges removed, searches into that cluster will silently produce incorrect results.
+Deletion in graph-based indexes is notoriously awkward. Physically removing a node and its edges can disconnect parts of the graph; future traversals may fail to reach regions that were only accessible through the removed node. This is not a theoretical concern: if a hub node (one that happens to be the entry path to an entire cluster) is deleted and its edges removed, searches into that cluster will silently produce incorrect results.
 
 HNSW in Piramid uses **tombstoning**: a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
 
@@ -248,23 +248,23 @@ fn mark_tombstone(&mut self, id: &Uuid) {
 }
 ```
 
-During search, tombstoned nodes are used as traversal intermediaries — their edges are still followed when exploring the graph — but they are filtered out before the result set is returned. This guarantees graph connectivity at the cost of retaining dead nodes in memory.
+During search, tombstoned nodes are used as traversal intermediaries; their edges are still followed when exploring the graph, but they are filtered out before the result set is returned. This guarantees graph connectivity at the cost of retaining dead nodes in memory.
 
 > **Tombstone accumulation risk:** if a workload has high delete rates, tombstones pile up. The graph's "live density" — the number of non-tombstoned nodes per layer — gradually decreases, and eventually traversal is slow because a large fraction of the explored nodes are dead weight. The fix is a full index rebuild from the live vectors, which Piramid triggers through its compaction mechanism. After compaction, the loaded index is a clean graph with no tombstones.
 
-### IVF — Voronoi cells and k-means
+### IVF: Voronoi cells and k-means
 
 ![IVF vs HNSW](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm1J-FSFmhU3OB-AdeufzY3Msu5Bmk1iNbCQ&s)
 
-IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using [k-means](https://en.wikipedia.org/wiki/K-means_clustering), and for each cluster maintains an **inverted list** — a list of vector IDs assigned to that cluster. At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
+IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using [k-means](https://en.wikipedia.org/wiki/K-means_clustering), and for each cluster maintains an **inverted list** (a list of vector IDs assigned to that cluster). At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
 
 The geometric picture is a **[Voronoi diagram](https://en.wikipedia.org/wiki/Voronoi_diagram)**. Each centroid $\mathbf{c}_i$ defines a cell:
 
 $$V_i = \bigl\{ \mathbf{x} \in \mathbb{R}^d : \|\mathbf{x} - \mathbf{c}_i\| \leq \|\mathbf{x} - \mathbf{c}_j\| \;\forall j \neq i \bigr\}$$
 
-A query vector $\mathbf{q}$ falls into the cell whose centroid is nearest. Probing `nprobe` clusters means searching the query's own Voronoi cell plus the $(\text{nprobe} - 1)$ adjacent cells — the ones whose centroids are next-closest to $\mathbf{q}$. Any true nearest neighbour that lies near a cell boundary may exist in an adjacent cell, which is the fundamental recall limitation of IVF with small `nprobe`.
+A query vector $\mathbf{q}$ falls into the cell whose centroid is nearest. Probing `nprobe` clusters means searching the query's own Voronoi cell plus the $(\text{nprobe} - 1)$ adjacent cells, the ones whose centroids are next-closest to $\mathbf{q}$. Any true nearest neighbour that lies near a cell boundary may exist in an adjacent cell, which is the fundamental recall limitation of IVF with small `nprobe`.
 
-#### Building the clusters — [Lloyd's algorithm](https://en.wikipedia.org/wiki/Lloyd%27s_algorithm)
+#### Building the clusters: [Lloyd's algorithm](https://en.wikipedia.org/wiki/Lloyd%27s_algorithm)
 
 Centroid computation uses Lloyd's k-means algorithm:
 
@@ -309,27 +309,27 @@ pub fn auto(num_vectors: usize) -> Self {
 }
 ```
 
-At $N = 100,000$: $K = 316$, `num_probes = 10`. Average cluster size is $N/K = 316$ vectors. A query scans $10 \times 316 = 3,160$ vectors — a 32× reduction over the full scan, with recall typically around 95%.
+At $N = 100,000$: $K = 316$, `num_probes = 10`. Average cluster size is $N/K = 316$ vectors. A query scans $10 \times 316 = 3,160$ vectors, a 32× reduction over the full scan, with recall typically around 95%.
 
-At this optimal $K$, the total query cost is $2\alpha \sqrt{N}$ (verify: $\alpha K + \alpha N / K = \alpha \sqrt{N} + \alpha \sqrt{N}$). Compare to flat scan at $\alpha N$: IVF is $\sqrt{N} / (2\alpha) \cdot \alpha = 1/(2\sqrt{N})$ times the flat cost, so the speedup factor scales as $\sqrt{N}/2$. At $N = 10^6$, that's a theoretical 500× speedup over flat — in practice you get 50–100× because of cache effects and overhead.
+At this optimal $K$, the total query cost is $2\alpha \sqrt{N}$ (verify: $\alpha K + \alpha N / K = \alpha \sqrt{N} + \alpha \sqrt{N}$). Compare to flat scan at $\alpha N$: IVF is $\sqrt{N} / (2\alpha) \cdot \alpha = 1/(2\sqrt{N})$ times the flat cost, so the speedup factor scales as $\sqrt{N}/2$. At $N = 10^6$, that's a theoretical 500× speedup over flat; in practice you get 50–100× because of cache effects and overhead.
 
 #### The cluster boundary problem
 
 The recall degradation with small `nprobe` comes from vectors that land near cell boundaries. If your nearest neighbour and your query are separated by a Voronoi boundary, the true nearest neighbour is in a different cluster than the one containing the query. With `nprobe = 1`, it is missed.
 
-How common is this? For uniformly distributed points, the expected fraction of a dataset that lies near any boundary scales roughly as $1/K^{1/d}$ — essentially 100% at high dimensions, because every vector is near some boundary (again, concentration of measure). For real embedding distributions which are manifold-like rather than uniform, the fraction is much smaller because the data has strong cluster structure.
+How common is this? For uniformly distributed points, the expected fraction of a dataset that lies near any boundary scales roughly as $1/K^{1/d}$, essentially 100% at high dimensions, because every vector is near some boundary (again, concentration of measure). For real embedding distributions which are manifold-like rather than uniform, the fraction is much smaller because the data has strong cluster structure.
 
 This is why IVF works poorly for synthetic uniform distributions in benchmarks but works well on real embedding datasets: semantic structure means vectors genuinely separate into clusters, and boundaries are relatively sparse in the data-dense regions.
 
 #### Online insertion and cluster drift
 
-After the clusters are built, new vectors are assigned to the nearest existing centroid and appended to that inverted list. No re-clustering happens. This is correct for stationary data distributions, but if the distribution shifts over time — new document topics, new languages, new embedding model — some clusters become overloaded (recall degrades because the list is too long) and others become nearly empty (throughput degrades because you're scanning small irrelevant lists). The `nprobe` budget buys you decreasing recall per probe when clusters are imbalanced.
+After the clusters are built, new vectors are assigned to the nearest existing centroid and appended to that inverted list. No re-clustering happens. This is correct for stationary data distributions, but if the distribution shifts over time (new document topics, new languages, a different embedding model) some clusters become overloaded (recall degrades because the list is too long) and others become nearly empty (throughput degrades because you're scanning small irrelevant lists). The `nprobe` budget buys you decreasing recall per probe when clusters are imbalanced.
 
 The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. Piramid triggers this through the compaction mechanism exactly as HNSW triggers a graph rebuild.
 
 #### Searching with nprobe
 
-At query time, IVF scans all $K$ centroids to find the `nprobe` nearest (this is a flat scan over centroids — fast, since $K \ll N$). Then it scores every vector in those `nprobe` inverted lists and returns the top $k$. The IVF code falls back to a brute-force scan if clusters haven't been built yet:
+At query time, IVF scans all $K$ centroids to find the `nprobe` nearest (this is a flat scan over centroids, fast since $K \ll N$). Then it scores every vector in those `nprobe` inverted lists and returns the top $k$. The IVF code falls back to a brute-force scan if clusters haven't been built yet:
 
 ```rust
 // Find nearest centroids
@@ -350,7 +350,7 @@ for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
 | 10 | ~95% | $10N/K$ |
 | $K$ | 100% | $N$ (flat scan) |
 
-Setting `nprobe = K` degrades IVF exactly to the Flat index — a useful debugging check when something seems wrong with recall.
+Setting `nprobe = K` degrades IVF exactly to the Flat index, a useful debugging check when something seems wrong with recall.
 
 ### Auto-selection
 
@@ -382,7 +382,7 @@ Three parameters shape the quality / speed tradeoff at query time, all surfaced 
 
 These numbers vary with dataset distribution and $M$, but the general shape is consistent: recall gains become logarithmically more expensive as you push toward 100%.
 
-**`nprobe`** is the equivalent knob for IVF — the number of clusters to search.
+**`nprobe`** is the equivalent knob for IVF: the number of clusters to search.
 
 **`filter_overfetch`** deserves a careful explanation because filtered vector search is one of the harder practical problems in the space.
 
@@ -390,7 +390,7 @@ These numbers vary with dataset distribution and $M$, but the general shape is c
 
 There are three strategies for combining metadata filters with ANN search:
 
-**Pre-filter:** build a separate inverted index over your metadata, run the filter first to get a candidate set, then run ANN search restricted to that set. This gives exact-filter recall but requires either a separate index structure or re-querying the ANN index with a custom candidate set — complex to implement and expensive if the filter matches many documents.
+**Pre-filter:** build a separate inverted index over your metadata, run the filter first to get a candidate set, then run ANN search restricted to that set. This gives exact-filter recall but requires either a separate index structure or re-querying the ANN index with a custom candidate set, complex to implement and expensive if the filter matches many documents.
 
 **Post-filter (naïve):** run ANN search for $k$ results, then apply the filter. If the filter rejects most results, you get fewer than $k$ results back, possibly zero. This is the simplest approach and works fine when the filter is loose.
 
@@ -405,7 +405,7 @@ if let Some(f) = filter {
 // ... add to nearest and candidates
 ```
 
-The problem with in-traversal filtering is that it doesn't help with **sparse filters** — filters that match only 1–5% of the dataset. If only 1 in 100 vectors is eligible, an `ef = 200` beam search may exhaust its entire candidate budget before finding 10 qualifying results. You always get at most `ef / selectivity` useful results from a single pass.
+The problem with in-traversal filtering is that it doesn't help with **sparse filters**, those that match only 1–5% of the dataset. If only 1 in 100 vectors is eligible, an `ef = 200` beam search may exhaust its entire candidate budget before finding 10 qualifying results. You always get at most `ef / selectivity` useful results from a single pass.
 
 The `filter_overfetch` parameter addresses this by inflating the request to the index:
 
@@ -422,9 +422,9 @@ With the default `filter_overfetch = 10` and `k = 5`, the index fetches 50 candi
 > **When overfetch isn't enough:** for very selective filters (< 1% of vectors), even large overfetch values fail because the ANN graph simply can't surface enough candidates from a small eligible set in a single traversal. The right solution for highly selective filters is a purpose-built filtered index (sometimes called "filtered HNSW" or "attribute-aware HNSW") that maintains separate entry points per filter category. This is on Piramid's roadmap.
 
 The three `SearchConfig` presets are:
-- `fast()` — `ef = 50`, `nprobe = 1` — for batch pipelines where high throughput matters more than last-mile recall
-- `balanced()` — defaults (ef = config value, nprobe = config value) — appropriate for most interactive RAG
-- `high()` — `ef = 400`, `nprobe = 20` — for compliance retrieval or precision-critical tasks
+- `fast()`: `ef = 50`, `nprobe = 1` — for batch pipelines where high throughput matters more than last-mile recall
+- `balanced()`: defaults (ef = config value, nprobe = config value), appropriate for most interactive RAG
+- `high()`: `ef = 400`, `nprobe = 20`, for compliance retrieval or precision-critical tasks
 
 ### Insert, update, and remove paths
 
@@ -440,17 +440,17 @@ pub trait VectorIndex: Send + Sync {
 }
 ```
 
-The signature of `insert` passes the entire `vectors` map even though Flat and IVF don't need it. This is because HNSW needs to compute distances to existing nodes during graph construction — it can't just insert in isolation. The design keeps the trait simple at the cost of passing a reference to potentially large memory.
+The signature of `insert` passes the entire `vectors` map even though Flat and IVF don't need it. This is because HNSW needs to compute distances to existing nodes during graph construction, it can't just insert in isolation. The design keeps the trait simple at the cost of passing a reference to potentially large memory.
 
 Update is not a first-class operation. An update to an existing vector is handled at the storage layer as a remove followed by an insert. This is the correct semantic: the old vector occupies a position in the graph or cluster, and repositioning it requires removing and re-inserting with its new embedding.
 
 For HNSW, `remove` tombstones the node. For IVF, `remove` looks up the vector's cluster in the `vector_to_cluster` map (`O(1)`) and removes it from the inverted list (`O(cluster_size)` in the worst case). For Flat, `remove` is `O(N)` since it's a linear scan through the ID list.
 
-The vector index is always kept in memory and is the source of truth for fast queries. Disk persistence of the index happens as part of the compaction cycle through the storage layer's serialisation path — the index structs derive `serde::Serialize` and `serde::Deserialize`, so they can round-trip cleanly to the `.vidx.db` file.
+The vector index is always kept in memory and is the source of truth for fast queries. Disk persistence of the index happens as part of the compaction cycle through the storage layer's serialisation path; the index structs derive `serde::Serialize` and `serde::Deserialize`, so they can round-trip cleanly to the `.vidx.db` file.
 
 ### Product quantisation and future compression
 
-As collections scale past a few million vectors, memory becomes the binding constraint. A 1536-dimensional `f32` embedding is 6,144 bytes. Ten million of them occupy ~58 GB — well beyond single-server RAM. Product quantisation (PQ) is the standard technique for compressing vectors by 8–64× with only modest recall degradation.
+As collections scale past a few million vectors, memory becomes the binding constraint. A 1536-dimensional `f32` embedding is 6,144 bytes. Ten million of them occupy ~58 GB, well beyond single-server RAM. Product quantisation (PQ) is the standard technique for compressing vectors by 8–64× with only modest recall degradation.
 
 #### How PQ works
 
@@ -470,17 +470,17 @@ For $d = 1536$ and $m = 192$: each subvector has $1536/192 = 8$ dimensions, the 
 
 #### Approximate distance via lookup tables
 
-The power of PQ is not just compression — it enables fast approximate distance computation. Given a query $\mathbf{q}$, precompute a distance table $T \in \mathbb{R}^{m \times 256}$:
+The power of PQ is not just compression; it also enables fast approximate distance computation. Given a query $\mathbf{q}$, precompute a distance table $T \in \mathbb{R}^{m \times 256}$:
 
 $$T[j][i] = \|\mathbf{q}^{(j)} - \mathbf{c}_{j,i}\|^2$$
 
-This table has $m \times 256$ entries and costs $O(m \cdot 256 \cdot d/m) = O(256d)$ to build — a one-time cost per query. Then the approximate squared distance between query $\mathbf{q}$ and any database vector $\mathbf{x}$ with code $c$ is:
+This table has $m \times 256$ entries and costs $O(m \cdot 256 \cdot d/m) = O(256d)$ to build, a one-time cost per query. Then the approximate squared distance between query $\mathbf{q}$ and any database vector $\mathbf{x}$ with code $c$ is:
 
 $$\hat{d}^2(\mathbf{q}, \mathbf{x}) \approx \sum_{j=1}^{m} T[j][c_j(\mathbf{x})]$$
 
-This is $m$ table lookups and additions — $O(m)$ rather than $O(d)$. At $m = 192$ vs $d = 1536$: **8× fewer operations per distance computation**, in addition to the 32× memory saving. The practical result on HNSW is that the inner loop of `search_layer` (which runs thousands of times per query) becomes massively cheaper.
+This is $m$ table lookups and additions, $O(m)$ rather than $O(d)$. At $m = 192$ vs $d = 1536$: **8× fewer operations per distance computation**, in addition to the 32× memory saving. The practical result on HNSW is that the inner loop of `search_layer` (which runs thousands of times per query) becomes massively cheaper.
 
-> **Asymmetric Distance Computation (ADC):** the scheme above keeps the query in full precision and quantises only the database vectors. This is called ADC and is standard in practice — the query is free since there's only one of them. Symmetric quantisation (also compressing the query) is 32× cheaper still but loses recall rapidly.
+> **Asymmetric Distance Computation (ADC):** the scheme above keeps the query in full precision and quantises only the database vectors. This is called ADC and is standard in practice; the query stays in full precision since there's only one of them. Symmetric quantisation (also compressing the query) is 32× cheaper still but loses recall rapidly.
 
 #### Reranking preserves recall
 

@@ -1,11 +1,11 @@
 # Embeddings
 
-In the [previous section](/blogs/architecture/database) we established that a vector database doesn't search for exact matches — it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
+In the [previous section](/blogs/architecture/database) we established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
 
 
-### From words to numbers — why representation matters
+### From words to numbers: why representation matters
 
 Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf). A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
 
@@ -15,13 +15,13 @@ $$\text{tf-idf}(t, d, D) = \underbrace{\frac{f_{t,d}}{\sum_{t'} f_{t',d}}}_{\tex
 
 This is fast and interpretable. The problem is that it is purely lexical. The words "car" and "automobile" are orthogonal vectors even though they mean the same thing. "Not good" and "bad" are distant even though they express the same sentiment. Any query about "machine learning" misses documents about "deep learning" or "neural networks" unless those exact words appear. Synonymy, polysemy, and compositionality all break TF-IDF.
 
-Distributed representations (embeddings) solve this by learning a *dense* $d$-dimensional vector for each concept where the coordinates encode meaning — similar meanings land near each other. The key insight is the **distributional hypothesis**: words that appear in similar contexts tend to have similar meanings. If you train a model to predict context from word (or word from context), the internal representations it must learn to do this successfully will encode semantic similarity as geometric proximity.
+Distributed representations (embeddings) solve this by learning a *dense* $d$-dimensional vector for each concept where the coordinates encode meaning, so similar meanings land near each other. The key insight is the **distributional hypothesis**: words that appear in similar contexts tend to have similar meanings. If you train a model to predict context from word (or word from context), the internal representations it must learn to do this successfully will encode semantic similarity as geometric proximity.
 
-> **The manifold hypothesis:** real-world data like text, images, and audio doesn't fill $\mathbb{R}^d$ uniformly. It lies near a much lower-dimensional curved surface (a manifold) embedded in the high-dimensional space. A model that learns to embed sentences into $\mathbb{R}^{1536}$ is essentially learning a coordinate system on this manifold. Two sentences that are close on the manifold — semantically similar — map to nearby coordinates. This is why a $d = 1536$ vector can meaningfully represent the semantics of a sentence that might require thousands of words to fully describe: the manifold intrinsically has far fewer than 1536 degrees of freedom.
+> **The manifold hypothesis:** real-world data like text, images, and audio doesn't fill $\mathbb{R}^d$ uniformly. It lies near a much lower-dimensional curved surface (a manifold) embedded in the high-dimensional space. A model that learns to embed sentences into $\mathbb{R}^{1536}$ is essentially learning a coordinate system on this manifold. Two sentences that are close on the manifold (semantically similar) map to nearby coordinates. This is why a $d = 1536$ vector can meaningfully represent the semantics of a sentence that might require thousands of words to fully describe: the manifold intrinsically has far fewer than 1536 degrees of freedom.
 
 ### What an embedding actually is
 
-An embedding is a function $f: \mathcal{X} \to \mathbb{R}^d$ that maps some input domain $\mathcal{X}$ — text strings, images, audio clips — to a point in $d$-dimensional real-valued space. The function is learned, not designed. A neural network is trained on large amounts of data with an objective that forces semantically related inputs to map to geometrically nearby points. Once trained, the network is frozen and its internal activations at some layer become the embedding vector.
+An embedding is a function $f: \mathcal{X} \to \mathbb{R}^d$ that maps some input domain $\mathcal{X}$ (text strings, images, audio clips) to a point in $d$-dimensional real-valued space. The function is learned, not designed. A neural network is trained on large amounts of data with an objective that forces semantically related inputs to map to geometrically nearby points. Once trained, the network is frozen and its internal activations at some layer become the embedding vector.
 
 #### [Word2Vec](https://arxiv.org/abs/1301.3781) and the skip-gram objective
 
@@ -33,7 +33,7 @@ where $P(c \mid w)$ is modelled via a softmax over all vocabulary words:
 
 $$P(c \mid w) = \frac{\exp(\mathbf{u}_c^\top \mathbf{v}_w)}{\sum_{c' \in \mathcal{V}} \exp(\mathbf{u}_{c'}^\top \mathbf{v}_w)}$$
 
-Here $\mathbf{v}_w$ is the "input" embedding for word $w$ and $\mathbf{u}_c$ is the "output" embedding for context word $c$. The problem is that evaluating this softmax requires summing over all $|\mathcal{V}|$ vocabulary members per training step — $O(|\mathcal{V}|)$ which is prohibitely expensive at vocabulary sizes of 100K+.
+Here $\mathbf{v}_w$ is the "input" embedding for word $w$ and $\mathbf{u}_c$ is the "output" embedding for context word $c$. The problem is that evaluating this softmax requires summing over all $|\mathcal{V}|$ vocabulary members per training step, $O(|\mathcal{V}|)$, which is prohibitively expensive at vocabulary sizes of 100K+.
 
 The practical solution is **negative sampling**: instead of computing the full softmax, train a binary classifier that distinguishes the true context word from $K$ randomly sampled "noise" words. The objective becomes:
 
@@ -41,11 +41,11 @@ $$\mathcal{L}_{\text{NS}} = \log \sigma(\mathbf{u}_c^\top \mathbf{v}_w) + \sum_{
 
 where $\sigma$ is the sigmoid function and $P_n$ is a noise distribution (typically unigram frequency raised to the 3/4 power). This replaces $O(|\mathcal{V}|)$ with $O(K)$ per update, with $K = 5$–$20$ in practice.
 
-The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic — $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ — falls out as an emergent property, not something explicitly built in: it reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space.
+The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic, $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$, falls out as an emergent property, not something explicitly built in: it reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space.
 
 ![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://miro.medium.com/1*d0JWmF36SUey7aS8bvA-dw.jpeg)
 
-Word2Vec is a useful intuition builder but it has hard limits. Each word gets exactly one vector regardless of context, so "bank" (financial) and "bank" (river) share a single representation. And it operates at the word level — there's no way to represent a whole sentence.
+Word2Vec is a useful intuition builder but it has hard limits. Each word gets exactly one vector regardless of context, so "bank" (financial) and "bank" (river) share a single representation. And it operates at the word level, with no way to represent a whole sentence.
 
 #### Transformers and contextual embeddings
 
@@ -55,13 +55,13 @@ For a single attention head with input matrix $X \in \mathbb{R}^{n \times d_\tex
 
 $$\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right) V$$
 
-where $Q = XW^Q$, $K = XW^K$, $V = XW^V$ are linear projections, and $d_k$ is the key dimension. The $1/\sqrt{d_k}$ scaling factor prevents the dot products from growing large enough to push softmax into regions of vanishing gradient — without it, the softmax saturates and learning stalls.
+where $Q = XW^Q$, $K = XW^K$, $V = XW^V$ are linear projections, and $d_k$ is the key dimension. The $1/\sqrt{d_k}$ scaling factor prevents the dot products from growing large enough to push softmax into regions of vanishing gradient; without it, the softmax saturates and learning stalls.
 
 Multi-head attention runs $H$ such operations in parallel with separate projections, then concatenates and projects the outputs:
 
 $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_H) W^O, \quad \text{head}_i = \text{Attention}(XW_i^Q, XW_i^K, XW_i^V)$$
 
-With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates in $d_k = 64$ dimensions. Different heads learn to attend to different types of relationships — syntax, coreference, semantic roles — simultaneously.
+With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates in $d_k = 64$ dimensions. Different heads learn to attend to different types of relationships (syntax, coreference, semantic roles) simultaneously.
 
 The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. The word "bank" in "river bank" ends up near "water" rather than "finance" because the attention weights pull the representation in the direction of the context.
 
@@ -75,7 +75,7 @@ $$\mathbf{e}_\text{mean-pool} = \frac{1}{n} \sum_{i=1}^{n} \mathbf{h}_i^{(L)}$$
 
 Mean pooling treats all tokens equally; the CLS token approach trains the model to distil the full sequence meaning into that single position. Empirically, mean pooling tends to outperform CLS pooling on retrieval benchmarks when the model wasn't specifically trained with a CLS objective.
 
-#### Contrastive learning — teaching similarity
+#### Contrastive learning: teaching similarity
 
 A pre-trained language model knows syntax and semantics, but its internal similarity geometry isn't necessarily aligned with what you want a retrieval system to do. A model trained on next-token prediction (like GPT) will have token representations useful for generation, not necessarily for semantic retrieval. Contrastive fine-tuning reshapes the embedding space specifically for similarity search.
 
@@ -87,21 +87,21 @@ where $\mathbf{z}_i$ and $\mathbf{z}_i^+$ are the normalized embeddings of a pos
 
 The denominator sums over all non-matching samples in the batch — this is **in-batch negative sampling**, and it's why larger training batch sizes produce better embedding models. With $N = 4096$ samples per batch, each training example is contrasted against 4095 negatives simultaneously. The signal from 4095 negatives is much richer than from a handful, forcing the model to learn a much stricter notion of "similar."
 
-> **Hard negatives:** the most effective training uses **hard negatives** — samples that are superficially similar to the query but subtly different (e.g., the same question paraphrased slightly, or a document from the same domain but a different topic). In-batch random negatives are mostly easy (a query about cooking vs a passage about finance is trivially distinguishable). Hard negatives force the model to develop fine-grained discriminative representations. Models like [E5](https://arxiv.org/abs/2212.03533), [GTE](https://arxiv.org/abs/2308.03281), and the OpenAI text-embedding-3 series are trained with hard negative mining pipelines — the measurable quality difference between them and earlier models is largely attributable to this.
+> **Hard negatives:** the most effective training uses **hard negatives**, which are samples superficially similar to the query but subtly different (e.g., the same question paraphrased slightly, or a document from the same domain but a different topic). In-batch random negatives are mostly easy (a query about cooking vs a passage about finance is trivially distinguishable). Hard negatives force the model to develop fine-grained discriminative representations. Models like [E5](https://arxiv.org/abs/2212.03533), [GTE](https://arxiv.org/abs/2308.03281), and the OpenAI text-embedding-3 series are trained with hard negative mining pipelines — the measurable quality difference between them and earlier models is largely attributable to this.
 
-**Temperature calibration** has a mathematically interesting role. The optimal $\tau$ isn't a fixed constant — it depends on the expected magnitude of similarity scores in your data. If your embeddings are $\ell_2$-normalized (as is standard), cosine similarity ranges from -1 to 1. The InfoNCE loss with $\tau = 0.07$ (a common value) turns this into an effective "temperature" for the distribution: $\text{sim}/0.07$ values range from about -14 to +14, giving a reasonably peaked softmax. Too-small $\tau$ produces a distribution so sharp that small numerical errors dominate; too-large $\tau$ makes the loss insensitive to the exact relative ordering of candidates. OpenAI's models use a learned `logit_scale` parameter that plays the role of $1/\tau$, optimising it jointly with the embedding weights during training.
+**Temperature calibration** has a mathematically interesting role. The optimal $\tau$ isn't a fixed constant; it depends on the expected magnitude of similarity scores in your data. If your embeddings are $\ell_2$-normalized (as is standard), cosine similarity ranges from -1 to 1. The InfoNCE loss with $\tau = 0.07$ (a common value) turns this into an effective "temperature" for the distribution: $\text{sim}/0.07$ values range from about -14 to +14, giving a reasonably peaked softmax. Too-small $\tau$ produces a distribution so sharp that small numerical errors dominate; too-large $\tau$ makes the loss insensitive to the exact relative ordering of candidates. OpenAI's models use a learned `logit_scale` parameter that plays the role of $1/\tau$, optimising it jointly with the embedding weights during training.
 
 #### The geometry of learned embedding space
 
 A few geometric properties of embedding spaces are worth understanding because they dictate how you should configure distance metrics and quantisation.
 
-**$\ell_2$ normalisation.** Most production embedding models output $\ell_2$-normalised vectors — each vector satisfies $\|\mathbf{z}\|_2 = 1$. On the unit hypersphere, cosine similarity and Euclidean distance are monotonically related:
+**$\ell_2$ normalisation.** Most production embedding models output $\ell_2$-normalised vectors, each satisfying $\|\mathbf{z}\|_2 = 1$. On the unit hypersphere, cosine similarity and Euclidean distance are monotonically related:
 
 $$\|\mathbf{z}_i - \mathbf{z}_j\|_2^2 = 2 - 2\cos\theta_{ij}$$
 
 So minimising L2 distance and maximising cosine similarity are equivalent for normalised vectors. The practical reason to normalise is that it makes similarity scores comparable across different inputs — unnormalised dot products are biased by vector magnitude, which correlates with input length and vocabulary frequency.
 
-**Anisotropy and dimensional collapse.** Language models trained only with next-token prediction tend to produce anisotropic embedding spaces — all vectors cluster in a narrow cone of the "occupied" subspace rather than spreading uniformly across $\mathbb{R}^d$. This was documented in the "BERT sentence embeddings" literature ([Ethayarajh 2019](https://arxiv.org/abs/1908.10084), [Li et al. 2020](https://arxiv.org/abs/2011.05864)) and is measurable as a high average cosine similarity across random sentence pairs ($\bar{\cos} \approx 0.9$ for vanilla BERT vs $\bar{\cos} \approx 0.02$ for a well-trained retrieval model). Contrastive fine-tuning pushes the embeddings toward **isotropy** — spreading them across the full surface of the unit sphere — which dramatically improves nearest-neighbour search quality.
+**Anisotropy and dimensional collapse.** Language models trained only with next-token prediction tend to produce anisotropic embedding spaces — all vectors cluster in a narrow cone of the "occupied" subspace rather than spreading uniformly across $\mathbb{R}^d$. This was documented in the "BERT sentence embeddings" literature ([Ethayarajh 2019](https://arxiv.org/abs/1908.10084), [Li et al. 2020](https://arxiv.org/abs/2011.05864)) and is measurable as a high average cosine similarity across random sentence pairs ($\bar{\cos} \approx 0.9$ for vanilla BERT vs $\bar{\cos} \approx 0.02$ for a well-trained retrieval model). Contrastive fine-tuning pushes the embeddings toward **isotropy**, spreading them across the full surface of the unit sphere — which dramatically improves nearest-neighbour search quality.
 
 **Matryoshka Representation Learning (MRL).** OpenAI's `text-embedding-3` models use a training technique called [MRL (Kusupati et al. 2022)](https://arxiv.org/abs/2205.13147) that makes the embedding dimensions hierarchically meaningful. The full $d$-dimensional vector is trained, but the loss is summed over a set of nested truncation sizes $m_1 < m_2 < \ldots < m_L = d$:
 
