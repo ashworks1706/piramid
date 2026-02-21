@@ -31,160 +31,173 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### Bug Fixes
 
-**Storage Correctness**
+**Storage**
 
-- [ ] in `insert_internal` in `storage/collection/operations.rs`, bytes are written to the mmap file and the index entry is inserted before dimension validation runs. if validation fails the mmap has a ghost entry with no index pointer, which silently accumulates over time and wastes space. dimension validation should happen before any writes.
-- [ ] HNSW deletes use tombstones for graph connectivity but never remove the deleted vector from `vector_cache`. the cache entry stays in memory until manual compaction is triggered, meaning collections with frequent deletes will grow unbounded in memory. other index types (IVF, Flat) correctly remove from cache on delete. fix: evict from `vector_cache` after tombstone is set, or schedule a background eviction pass.
-- [ ] `storage/persistence/vector_index.rs` downcasts `Box<dyn VectorIndex>` to concrete types using raw `*const dyn VectorIndex` pointer casts with `unsafe`. there is no type-level guarantee the cast is valid and a wrong index type at runtime would be undefined behaviour. should be replaced with a `to_serializable()` method on the `VectorIndex` trait that each implementation returns safely.
-- [ ] `grow_mmap_if_needed` in `storage/persistence/mmap.rs` calls `.unwrap()` on `mmap.as_ref()` unconditionally at the start. if mmap is disabled in collection config, this panics on the first insert that requires a grow. needs a guard for the mmap-disabled path.
-- [ ] `update_metadata` and `update_vector` in `storage/collection/operations.rs` each log 3 WAL entries per operation: an Update entry they log directly, then a Delete entry from calling `delete()`, then an Insert entry from calling `insert()`. a single logical update should produce one WAL entry. fix: use `delete_internal` and `insert_internal` directly and log only the single Update entry already at the top of each function.
-- [ ] upsert on the update path double-quantizes vectors: it serializes the already-quantized entry to bytes, then deserializes it back into a Document (which still holds a `QuantizedVector`), then `insert_internal` calls `get_vector()` to dequantize and immediately re-quantizes again. the vector goes through quantize → serialize → deserialize → dequantize → re-quantize. fix: pass the original raw f32 through the upsert path directly.
-- [ ] IVF `insert` silently drops vectors during the bootstrap phase: if `centroids.is_empty()` and `vectors.len() < num_clusters`, it returns early without inserting the new vector into any structure. vectors inserted before the threshold are permanently lost from the IVF index with no error or warning. fix: buffer pre-cluster vectors and replay them into the index once clusters are built.
-- [ ] IVF `insert` uses `Vec::contains` to check for duplicate IDs in the inverted list, which is O(cluster_size) per insert. should use the existing `vector_to_cluster` HashMap for the duplicate check instead.
+- [ ] in `insert_internal` (`storage/collection/operations.rs`), dimension validation runs after the mmap write — if validation fails, the mmap has a ghost entry with no index pointer that silently wastes space. move dimension validation before any writes.
+- [ ] HNSW tombstone deletes never evict from `vector_cache` — deleted entries stay in memory until manual compaction. other index types (IVF, Flat) evict correctly on delete. fix: evict from `vector_cache` immediately after tombstone is set.
+- [ ] `grow_mmap_if_needed` (`storage/persistence/mmap.rs`) calls `.unwrap()` on `mmap.as_ref()` unconditionally — panics on the first grow when mmap is disabled in config. add a guard for the mmap-disabled path.
+- [ ] `update_metadata` and `update_vector` each write 3 WAL entries per call (Update + Delete + Insert) because they delegate to `delete()` and `insert()` instead of the internal variants. use `delete_internal` + `insert_internal` and emit only the single Update entry already logged at the top of each function.
+- [ ] upsert double-quantizes on the update path: quantize → serialize → deserialize → dequantize → re-quantize. pass the original f32 through the upsert path directly.
+- [ ] `storage/persistence/vector_index.rs` downcasts `Box<dyn VectorIndex>` via raw `*const dyn VectorIndex` pointer casts with `unsafe` — undefined behaviour on a wrong index type. replace with a `to_serializable()` method on the `VectorIndex` trait.
+- [ ] `save_index` is called on every single insert, upsert, delete, and update — serializing the full `HashMap<UUID → EntryPointer>` to disk on every mutation is O(N) disk I/O per write. checkpoint-only saves, not per operation.
+- [ ] offset calculation on every insert scans all entries via `.max()` over all `EntryPointer` values — O(N) per insert. replace with a single `next_offset: u64` field on the collection struct.
 
-**Server & API Correctness**
+**IVF Index**
 
-- [ ] every read endpoint (`GET /collections/:name`, `GET /collections/:name/vectors/:id`, `POST /collections/:name/search`, etc.) calls `get_or_create_collection` which creates a new empty collection on disk if the name does not exist. a GET or search on a non-existent collection should return 404, not silently create it. read-only handlers should use a `get_collection` helper that returns NotFound instead.
-- [ ] `CachedEmbedder` in `embeddings/cache.rs` uses `std::sync::Mutex` around the LRU cache inside an async context. holding a sync mutex across `.await` points blocks the Tokio thread pool under cache contention. should use `tokio::sync::Mutex` or restructure to release the lock before any await.
+- [ ] IVF `insert` silently drops vectors during bootstrap: if `centroids.is_empty()` and `vectors.len() < num_clusters`, it returns early without inserting anywhere — vectors are permanently lost from the index with no error. buffer pre-cluster vectors and replay them into the index once clusters are built.
+- [ ] IVF `insert` uses `Vec::contains` for duplicate ID checking (O(cluster_size) per insert) — use the existing `vector_to_cluster` HashMap instead.
 
-**Storage Write Performance**
+**Server & API**
 
-- [ ] `save_index` is called on every single insert, upsert, delete, and update in `storage/collection/operations.rs`. this serializes the entire `HashMap<UUID → EntryPointer>` to disk on every mutation which is O(N) disk I/O per write. it should only trigger at checkpoint time, not per operation. will noticeably degrade write throughput as collections grow.
-- [ ] offset calculation on every insert scans all entries in the index to find the write position via `.max()` over all `EntryPointer` values. this is O(N) per insert and should be replaced with a single `next_offset: u64` field tracked on the collection struct and incremented after each write.
-
-**Schema Support**
-
-- [ ] Define expected dimensions per collection
-- [ ] Metadata schema validation
-
-**Metadata Improvements**
-
-- [ ] Complex filters (AND/OR/NOT combinations)
-- [ ] Metadata indexing for fast filtering
-- [ ] Range queries on numeric metadata
-- [ ] Regex/pattern matching on string metadata
-- [ ] Date range filters
-- [ ] Array membership checks
-
-**Query Optimization**
-
-- [ ] Query result caching
-- [ ] Query planning/optimization
-- [ ] Query budget enforcement (timeouts, complexity limits)
-
-**Async Storage I/O**
-
-- [ ] Non-blocking writes (`tokio-fs`)
-- [ ] Async write pipeline (batching/coalescing, buffering, background flush worker)
-- [ ] Prefetching for sequential reads
-- [ ] Background job queue for long operations
-
-**ACID Transactions**
-
-- [ ] Atomic batch operations (all-or-nothing)
-- [ ] Rollback on failure
-- [ ] Isolation (at least serializable)
-- [ ] Idempotency keys
-- [ ] Request deduplication
-
-**Backup & Restore**
-
-- [ ] Snapshot API (copy-on-write)
-- [ ] Point-in-time recovery (PITR)
-- [ ] Incremental backups
-- [ ] Database migrations
-
-**Benchmarks**
-
-- [ ] Set up benchmarks for latency, index strategies, memory usage, etc.
-
-**Python Support**
-
-- [ ] Python client SDK
-- [ ] Add docs
-- [ ] Easy API docs for SDKs (Rust via MkDocs)
-
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features
-- [ ] update blogs to reflect any code changes and new features
+- [ ] every read endpoint calls `get_or_create_collection`, auto-creating a new empty collection on disk if the name does not exist. read-only handlers should use a `get_collection` that returns 404 on NotFound.
+- [ ] `CachedEmbedder` (`embeddings/cache.rs`) holds `std::sync::Mutex` across `.await` points — blocks Tokio threads under cache contention. switch to `tokio::sync::Mutex` or drop the lock before any await.
 
 ---
 
-### Future Considerations
+### Write Path & Durability
 
-**Index/Search Improvements**
+**Async I/O**
 
-- [ ] move quantization from Storage to Index layer: currently `storage/collection/operations.rs` applies `QuantizedVector::from_f32_with_config()` at insert time, permanently discarding the original f32. This causes two concrete problems: (1) no speed benefit — the index only stores UUIDs so HNSW/IVF graph traversal still fetches full f32s from `vector_cache` for every distance comparison, meaning the quantization compression never accelerates search at all; (2) accuracy loss with no upside — `search/engine.rs` does dequantize at score time, but it reconstructs from a lossy approximation, not the original, so final scores are degraded. The fix has three parts: store original f32 in mmap as the source of truth, move quantization inside the index layer so graph traversal uses compressed vectors for fast candidate selection, then re-rank the final `ef` candidates using the original f32s from storage for accurate scoring. As a result of this fix, the dequantization step currently in `search/engine.rs` should be removed entirely — once storage returns raw f32 there is nothing to decode, and the search engine scores directly against the original vector. This is the standard approach used by FAISS, Qdrant, and Weaviate.
-- [ ] src/quantization/ module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the .vidx.db file, and search_layer's distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final ef candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
-- [ ] Adaptive index tuning: auto-adjust ef/nprobe/filter_overfetch based on latency/error budgets and collection density
-- [ ] Filter-aware search across indexes: add IVF prefiltering with metadata posting lists to avoid full-scan overfetch
-- [ ] Hybrid retrieval: combine dense ANN with sparse/BM25 scoring and rerank
-- [ ] Background index maintenance: online HNSW/IVF compaction and tombstone cleanup without blocking reads
-- [ ] Range and preset search modes: expose range queries and "fast/balanced/high" presets mapped to tuned params
-- [ ] Search observability: per-collection recall/latency histograms and sampled miss diagnostics in `/api/metrics`
-- [ ] Piramid uses random initialisation (just takes the first KK vectors). k-means++ initialises centroids by sampling proportionally to ∥x−nearest existing centroid∥2∥x−nearest existing centroid∥2, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions
+- [ ] non-blocking writes via `tokio-fs`
+- [ ] async write pipeline: batching/coalescing, buffered writes, background flush worker
+- [ ] prefetching for sequential reads
+- [ ] background job queue for long-running storage operations
 
-**Reliability & Safety**
+**Crash Safety & Recovery**
 
-- [ ] WAL/schema versioning across all files with checksums; recovery paths that handle partial corruption safely
-- [ ] Dimension/metric validation per collection; fail-fast on mismatched inserts/searches; add dry-run config validation
-- [ ] Snapshot + PITR plan; import/export for portability; corruption detection and safe rebuild prompts
-- [ ] Chaos tests for WAL replay (crash at checkpoints), index rebuild idempotence, mmap-off fallback
+- [ ] WAL and all persistence file formats need version fields and checksums; recovery paths must handle partial writes and format mismatches safely
+- [ ] dimension/metric validation per collection at open time; fail-fast on mismatched inserts/searches; dry-run config validation
+- [ ] corrupted file detection on startup with safe rebuild prompt
+- [ ] automatic index rebuild from WAL on detected corruption
+- [ ] chaos tests: crash at WAL checkpoints, index rebuild idempotence, mmap-off fallback, partial-write recovery
 
-**Caching & Filters**
+**Transactions & Consistency**
 
-- [ ] Metadata cache alongside vector cache with rebuild/invalidation metrics; configurable cache caps/eviction
-- [ ] Filter acceleration: IVF prefiltering (posting lists), bitmap/roaring filters for post-filter paths, filter selectivity stats
-- [ ] Background cache warmup tasks and refresh scheduling
+- [ ] atomic batch operations (all-or-nothing insert/delete sets)
+- [ ] rollback on failure
+- [ ] idempotency keys + request deduplication
+- [ ] snapshot API (copy-on-write) + point-in-time recovery
+- [ ] incremental backups and database migrations
 
-**Limits & Guardrails**
+---
 
-- [ ] Enforce collection/request-level resource limits (vectors, bytes, QPS) with clear errors and metrics
-- [ ] Backpressure and rate limits surfaced in health/metrics endpoints
+### Index & Search Quality
 
-**Observability**
+**Quantization Refactor**
 
-- [ ] Structured tracing with request IDs end-to-end; slow-query logging with thresholds per collection
-- [ ] Per-collection latency/recall histograms; cache/index freshness surfaced in `/api/metrics`
+- [ ] move quantization from Storage to Index layer: `storage/collection/operations.rs` currently applies `QuantizedVector::from_f32_with_config()` at insert time, permanently discarding the original f32. Two problems: (1) no speed benefit — the index only stores UUIDs so graph traversal still fetches full f32s from `vector_cache` for every distance comparison; (2) accuracy loss — `search/engine.rs` dequantizes at score time but reconstructs from a lossy approximation, not the original. Fix: store original f32 in mmap, move quantization inside the index layer for graph traversal, re-rank final `ef` candidates with original f32 from storage, and remove the dequantization step in `search/engine.rs` entirely. This is the standard approach used by FAISS, Qdrant, and Weaviate.
+- [ ] `src/quantization/` exists in scaffolded form — once integrated, PQ codes would live alongside the HNSW graph in `.vidx.db` and `search_layer` would use lookup-table ADC instead of full dot products. Reranking the final `ef` candidates with mmap'd f32 keeps recall high while search-phase compute drops ~8× and memory ~32×.
 
-**Advanced Search**
+**Index Improvements**
 
-- [ ] Recommendation API (similar to these IDs, not those)
-- [ ] Grouped/diverse search (max results per category)
-- [ ] Scroll/pagination for large result sets
-- [ ] Metadata-only search (no vector similarity)
-- [ ] Vector similarity between two stored vectors
-- [ ] Vector count per metadata filter
+- [ ] IVF uses random centroid initialisation (first K vectors) — k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
+- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
+- [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
+- [ ] circuit breaker for embedding API failures with fallback behaviour
+
+**Filter & Cache Acceleration**
+
+- [ ] metadata cache alongside vector cache with configurable eviction and rebuild/invalidation metrics
+- [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
+- [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
+- [ ] background cache warmup and refresh scheduling
+
+**Query Features**
+
+- [ ] query result caching (LRU, TTL-based)
+- [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
+- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
+- [ ] filter-aware search: expose range queries, AND/OR/NOT filter combinations
+- [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
+
+---
+
+### Schema, Filters & Clients
+
+**Schema**
+
+- [ ] expected dimensions defined per collection at creation time
+- [ ] metadata schema validation (typed fields, required/optional)
+
+**Metadata Filters**
+
+- [ ] complex boolean filters (AND/OR/NOT combinations)
+- [ ] metadata indexing for fast pre-filtering
+- [ ] range queries on numeric fields
+- [ ] regex/pattern matching on string fields
+- [ ] date range filters
+- [ ] array membership checks
+- [ ] metadata-only search (no vector similarity)
+- [ ] vector count per metadata filter
+
+**Search API Extensions**
+
+- [ ] recommendation API (similar to these IDs, not those)
+- [ ] grouped/diverse search (max results per category/namespace)
+- [ ] scroll/cursor pagination for large result sets
+- [ ] vector similarity between two stored vectors (no query vector)
 - [ ] SQL integration
 
-**Additional Features**
+**Clients & SDK**
 
-- [ ] Corrupted file detection + auto-repair
-- [ ] Automatic index rebuild on corruption
-- [ ] Circuit breaker for embedding API failures
-- [ ] Collection aliases
-- [ ] Move collection between directories
+- [ ] Python client SDK + docs
+- [ ] easy API reference for SDKs (Rust via MkDocs / Mintlify)
+- [ ] collection aliases and rename
+- [ ] move collection between directories
 
 **MCP Integration**
 
 - [ ] MCP server implementation
-- [ ] Tools: `search_similar`, `get_document`, `list_collections`, `add_document`
-- [ ] Agent-friendly responses (structured JSON-LD)
+- [ ] tools: `search_similar`, `get_document`, `list_collections`, `add_document`
+- [ ] agent-friendly structured responses (JSON-LD)
 
-**Distributed Systems**
+---
 
-- [ ] Sharding strategies (range, hash, etc.)
-- [ ] Replication strategies (master-slave, multi-master, etc.)
-- [ ] Consistency models (strong, eventual, etc.)
-- [ ] Distributed transactions
-- [ ] Cluster management (node discovery, leader election, etc.)
+### Operations & Reliability
 
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features
-- [ ] update blogs to reflect any code changes and new features
+- [ ] enforce collection/request-level resource limits (max vectors, max bytes, QPS) with clear errors surfaced in metrics
+- [ ] backpressure and rate limiting on write/search paths
+- [ ] structured tracing with request IDs end-to-end; slow-query logging with configurable thresholds
+- [ ] per-collection latency/recall histograms; cache and index freshness in `/api/metrics`
+- [ ] set up benchmarks for latency, index strategies, memory usage across collection sizes
+- [ ] refactor codebase for better modularity; expand unit and integration test coverage
+- [ ] robust CI/CD pipeline covering all critical paths
+- [ ] keep documentation and blogs in sync with code changes
+
+---
+
+### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
+
+- [ ] add `zipy` crate to `Cargo.toml` as an optional feature
+- [ ] refactor `ExecutionMode` to support `Zipy(Arc<ZipyEngine>)` as a compute backend
+- [ ] attempt Zipy initialization on boot, fallback to CPU on failure
+- [ ] hydrate existing on-disk vectors into GPU VRAM on startup
+- [ ] dual-write architecture: inserts write to both disk (persistence) and Zipy (VRAM)
+- [ ] route `POST /search` requests to Zipy when active
+- [ ] auto-switch to CPU search if Zipy returns OOM or timeout
+- [ ] extend `/api/health` with GPU status (temperature, VRAM used/free)
+
+---
+
+### Distributed & Enterprise
+
+**Scale**
+
+- [ ] sharding strategies (range, hash)
+- [ ] replication (primary-replica, multi-primary)
+- [ ] consistency models (strong, eventual, bounded staleness)
+- [ ] distributed transactions and cluster management (leader election, node discovery)
+
+**Security**
+
+- [ ] JWT token authentication
+- [ ] multi-tenant isolation with collection-level permissions
+- [ ] rate limiting and per-tenant quotas
+- [ ] audit logging
+
+**Platform**
+
+- [ ] API versioning in URLs or headers; backward compatibility strategy; deprecation warnings
+- [ ] email/webhook alerts for errors, disk pressure, memory, slow queries, index corruption
+- [ ] import from JSON/CSV/Parquet with streaming and progress tracking
+- [ ] export to JSON/CSV/Parquet; format validation on import
