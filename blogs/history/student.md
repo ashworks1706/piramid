@@ -9,6 +9,7 @@ I’ve always liked working on hard things. Challenges are the fastest way I kno
 After a lot of web dev and AI work, I finally picked up [Designing Data-Intensive Applications](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/).
 
 ![Designing Data-Intensive Applications by Martin Kleppmann — the book that changed how I think about systems](https://m.media-amazon.com/images/I/91YfNb49PLL._AC_UF1000,1000_QL80_.jpg)
+*Designing Data-Intensive Applications by Martin Kleppmann — the book that reframed how I think about reliability, consistency, and the real tradeoffs inside production systems.*
 
 I expected a technical handbook, but it was much more than that. It changed how I think about software engineering.
 
@@ -27,6 +28,7 @@ I started with smaller projects: an ecommerce backend, CLI tools, and some memor
 Learning Rust felt like learning a different programming world. Ownership, borrowing, lifetimes, and memory models forced me to think differently.
 
 ![Rust ownership — every value has exactly one owner; when the owner leaves scope, the memory is freed without a GC](https://doc.rust-lang.org/book/img/trpl04-01.svg)
+*Rust's ownership model: each value has exactly one owner, and when that owner goes out of scope the memory is freed automatically, without a garbage collector.*
 
 I also found [Rustfinity](https://www.rustfinity.com/), which helped a lot with hands-on learning. I’ve always liked practical platforms like [boot.dev](https://boot.dev/), and Rustfinity gave me that same “learn by doing” feeling.
 

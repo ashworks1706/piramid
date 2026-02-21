@@ -13,6 +13,7 @@ The first is the **B-tree** (and its variants, primarily B+ trees). A B+ tree st
 The second is the **[LSM-tree (Log-Structured Merge-tree)](https://en.wikipedia.org/wiki/Log-structured_merge-tree)**, used by [RocksDB](https://rocksdb.org/), [Cassandra](https://cassandra.apache.org/), [LevelDB](https://github.com/google/leveldb), and many others. The core insight is to make all writes sequential by buffering them in an in-memory table (the *memtable*) and periodically flushing it to an immutable sorted file on disk (an SSTable). Over time you accumulate multiple SSTables at level 0. Background compaction jobs merge and sort these into larger SSTables at progressively deeper levels, discarding deleted and overwritten keys in the process. Reads are more expensive since you may need to check the memtable, bloom filters, and multiple SSTables at different levels, but writes are always sequential, which on spinning disks especially is a dramatic throughput advantage. The tradeoff is *write amplification*: data gets rewritten multiple times across compaction levels, which increases I/O and wears SSDs faster. The compaction process is also continuous, running in the background at all times.
 
 ![B-tree vs LSM-tree — B-trees do in-place page updates with a buffer pool; LSM-trees buffer writes in a memtable and flush to immutable SSTables, merging them in background compaction passes](https://miro.medium.com/v2/resize:fit:1400/1*q0c_4lFmPkFGMHuIBVH2mA.png)
+*B-trees do in-place page updates with a buffer pool (left); LSM-trees buffer writes in a memtable and compact them into immutable sorted files (right). The tradeoff is read performance versus write throughput.*
 
 These two architectures represent a fundamental tension:
 - B-trees offer stable read performance and in-place updates, at the cost of write amplification from page splits and the need to manage a buffer pool explicitly.
@@ -55,6 +56,7 @@ Piramid uses mmap for the data file by default. The write ordering requirements 
 One additional detail on growth: when a collection's data file needs to expand, Piramid unmaps it, calls [`ftruncate`](https://man7.org/linux/man-pages/man2/ftruncate.2.html) to extend the file to twice the required size, and remaps. The doubling factor amortizes the remap cost across future inserts, the same geometric growth strategy a `Vec` uses to avoid $O(n^2)$ reallocations.
 
 ![Memory-mapped I/O — mmap projects the file's byte range into the process's virtual address space; the OS page cache handles faulting pages in on first access and evicts them under memory pressure](https://miro.medium.com/v2/resize:fit:1400/1*k7i8F7CXC4Ry2bQLHVQxqA.png)
+*mmap maps the file into the process's virtual address space. First access triggers a page fault; the OS loads the 4KB page and subsequent accesses read directly from RAM. No syscall, no explicit read.*
 
 
 ### Warming
@@ -101,6 +103,7 @@ WalEntry::Checkpoint { timestamp, seq }
 The durability knob is the `sync_on_write` config. `flush()` drains the userspace `BufWriter` to the kernel buffer, fast, but a power loss can still drop buffered kernel writes. [`fsync`](https://man7.org/linux/man-pages/man2/fsync.2.html) pushes all the way to the storage device, slow (1–10ms per call depending on the device), but truly durable. With `sync_on_write: false` (the default), writes are fast at the cost of a small data loss window on power failure. With `sync_on_write: true`, every write waits for the device to acknowledge the flush. The right choice depends on whether you're running on a server with a UPS, an NVMe with power-loss protection, or a laptop.
 
 ![Write-ahead log — every mutation is appended to the WAL before touching the data files; on recovery the log is replayed forward from the last checkpoint to reconstruct any changes that didn't make it to disk](https://miro.medium.com/v2/resize:fit:1400/1*kR1z9pV7Iu7eSI9K1a0cWQ.png)
+*Every write hits the WAL first. On crash, recovery replays the log from the last checkpoint forward to reconstruct any changes that didn't make it to the data files.*
 
 
 ### Checkpoints and WAL rotation
@@ -113,10 +116,14 @@ Piramid uses a simpler *sharp checkpoint*: at checkpoint time, it serializes the
 
 The checkpoint is triggered by two independent conditions: every `checkpoint_frequency` operations (default: 1000), or every `checkpoint_interval_secs` seconds (disabled by default). The operation counter fires first in write-heavy workloads; the time interval is a safety net for collections that receive infrequent writes but still benefit from periodic durability snapshots.
 
+<!-- TODO: WAL rotation timeline — a horizontal timeline showing WAL entries accumulating, a checkpoint marker where all in-memory state flushes to .db files, then the log rotating to a fresh file with the sequence continuing -->
+
 The cost is real: for large HNSW graphs, serializing the vector index is expensive in both time and I/O. This is why the default interval is 1000 operations rather than something lower. The fast preset raises it to 10000; high-durability mode drops it to 100 and also flips `sync_on_write: true`. These presets map roughly to the LSM-tree levels-of-durability philosophy, where you're explicitly trading write throughput against recovery latency and data loss window.
 
 
 ### Compaction
+
+<!-- TODO: Data file compaction diagram — before: the file with live entries (solid) interspersed with dead/orphaned bytes (hatched), labeled "fragmented"; after: a tightly packed file with only live entries and a much smaller file size -->
 
 In an LSM-tree, compaction is a continuous background process: SSTables at each level are periodically merged and rewritten to eliminate deleted keys, expired entries, and overwritten versions. The benefit is that read amplification stays bounded, so you never have to consult too many SSTables to answer a query, and reclaimed space is freed gradually rather than accumulating. The cost is ongoing write amplification; data is physically rewritten multiple times as it moves down the tree levels.
 
