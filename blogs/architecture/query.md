@@ -56,7 +56,7 @@ $$\mathbb{E}\left[\|\mathbf{x} - \mathbf{y}\|^2\right] = 2, \quad \text{Var}\lef
 
 This is the concentration of measure. When all pairwise distances concentrate around the same value, there's no meaningful structure for a tree to exploit — you have to check nearly everything anyway. A KD-tree in $d = 100$ is already degraded to near-linear scan performance. At $d = 1536$ a tree structure adds overhead with essentially no benefit.
 
-![Curse of dimensionality — as $d$ grows, the volume of a hypersphere shrinks relative to its enclosing cube and all points collapse to the same distance from any query, destroying the structure that spatial indexes rely on](https://miro.medium.com/v2/resize:fit:1400/1*BkNPLIPV4Gzb6w0b6VxCsw.png)
+![Curse of dimensionality — as $d$ grows, the volume of a hypersphere shrinks relative to its enclosing cube and all points collapse to the same distance from any query, destroying the structure that spatial indexes rely on](https://cofactorgenomics.com/wp-content/uploads/2019/04/picture1.png)
 
 ---
 
@@ -104,7 +104,7 @@ The recall/speed tradeoff is entirely controlled by $ef$: larger $ef$ explores m
 
 > **The graph property that makes this work:** HNSW graphs approximate [*Delaunay graphs*](https://en.wikipedia.org/wiki/Delaunay_triangulation) at each layer — a structure where edges connect nodes that are "natural neighbors" of each other (no other node sits geometrically between them). Delaunay graphs have the property that greedy routing always converges. The select-neighbors heuristic during construction tries to maintain this: when pruning a node's connections to keep only $M$, it prefers neighbors that are "diverse" in direction rather than the $M$ nearest by distance alone. This keeps the graph navigable even in high-dimensional spaces where the nearest neighbor cluster is very tight.
 
-![HNSW greedy search — the query descends from the sparse top layers to the dense layer 0, narrowing the candidate region at each step before running the full beam search](https://miro.medium.com/v2/resize:fit:1400/1*L72yR6j_lJXZKk5vZhYN6A.png)
+![HNSW greedy search — the query descends from the sparse top layers to the dense layer 0, narrowing the candidate region at each step before running the full beam search](https://www.pinecone.io/_next/image/?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fvr8gru94%2Fproduction%2Fdc5cb11ea197ceb4e1f18214066c8c51526b9af5-1920x1080.png&w=3840&q=75)
 
 ---
 
