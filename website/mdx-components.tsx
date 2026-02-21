@@ -1,5 +1,7 @@
 import type { MDXComponents } from "mdx/types";
 
+type ImgProps = React.ImgHTMLAttributes<HTMLImageElement>;
+
 const Callout = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-3 text-slate-100 shadow-lg shadow-indigo-900/30">
     <div className="text-sm font-semibold text-indigo-200">{title}</div>
@@ -9,10 +11,41 @@ const Callout = ({ title, children }: { title: string; children: React.ReactNode
 
 export const mdxComponents: MDXComponents = {
   Callout,
-  h1: (props) => <h1 className="text-4xl font-semibold tracking-tight text-white" {...props} />,
-  h2: (props) => <h2 className="mt-10 text-3xl font-semibold tracking-tight text-white" {...props} />,
-  h3: (props) => <h3 className="mt-8 text-2xl font-semibold text-slate-100" {...props} />,
-  h4: (props) => <h4 className="mt-6 text-xl font-semibold text-slate-100" {...props} />,
+  // eslint-disable-next-line jsx-a11y/alt-text
+  img: ({ src, alt, ...props }: ImgProps) => (
+    <span className="block my-6">
+      <img
+        src={src}
+        alt={alt ?? ""}
+        className="max-w-full h-auto rounded-xl border border-white/10 shadow-lg shadow-slate-900/40 mx-auto"
+        loading="lazy"
+        {...props}
+      />
+    </span>
+  ),
+  h1: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h1 id={id} className="text-4xl font-semibold tracking-tight text-white" {...rest}>
+      {children}
+    </h1>
+  ),
+  h2: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h2 id={id} className="mt-10 text-3xl font-semibold tracking-tight text-white group flex items-center gap-2" {...rest}>
+      {children}
+      {id && <a href={`#${id}`} className="opacity-0 group-hover:opacity-50 hover:opacity-100! text-indigo-400 font-normal text-2xl no-underline transition-opacity" aria-hidden="true" tabIndex={-1}>#</a>}
+    </h2>
+  ),
+  h3: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h3 id={id} className="mt-8 text-2xl font-semibold text-slate-100 group flex items-center gap-2" {...rest}>
+      {children}
+      {id && <a href={`#${id}`} className="opacity-0 group-hover:opacity-50 hover:opacity-100! text-indigo-400 font-normal text-xl no-underline transition-opacity" aria-hidden="true" tabIndex={-1}>#</a>}
+    </h3>
+  ),
+  h4: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h4 id={id} className="mt-6 text-xl font-semibold text-slate-100 group flex items-center gap-2" {...rest}>
+      {children}
+      {id && <a href={`#${id}`} className="opacity-0 group-hover:opacity-50 hover:opacity-100! text-indigo-400 font-normal text-lg no-underline transition-opacity" aria-hidden="true" tabIndex={-1}>#</a>}
+    </h4>
+  ),
   p: (props) => <p className="leading-7 text-slate-200" {...props} />,
   ul: (props) => <ul className="ml-6 list-disc space-y-1 text-slate-200" {...props} />,
   ol: (props) => <ol className="ml-6 list-decimal space-y-1 text-slate-200" {...props} />,

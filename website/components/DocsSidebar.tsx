@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { SidebarSection } from "../lib/blogs";
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
 };
 
 export function DocsSidebar({ sections, sticky = true, className = "" }: Props) {
+  const pathname = usePathname();
   const hrefForSlug = (slugParts: string[]) => {
     const slugPath = slugParts.join("/");
     return slugPath === "index" ? "/blogs" : "/blogs/" + slugPath;
@@ -38,11 +40,16 @@ export function DocsSidebar({ sections, sticky = true, className = "" }: Props) 
               {section.items.map((item) => {
                 const href = hrefForSlug(item.slug);
                 const label = item.slug.join("/") === "index" ? "Overview" : item.title;
+                const isActive = pathname === href;
                 return (
                   <Link
                     key={href}
                     href={href}
-                    className="block rounded-lg px-3 py-2 text-sm text-slate-200 hover:bg-indigo-500/10 hover:text-white transition"
+                    className={`block rounded-lg px-3 py-2 text-sm transition ${
+                      isActive
+                        ? "bg-indigo-500/20 text-white font-semibold ring-1 ring-inset ring-indigo-400/30"
+                        : "text-slate-200 hover:bg-indigo-500/10 hover:text-white"
+                    }`}
                   >
                     {label}
                   </Link>

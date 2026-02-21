@@ -50,6 +50,21 @@ code {
   }
 }
 
+/* Make images and tables overflow-safe on mobile */
+article img,
+.blog-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+}
+
+article table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
@@ -162,11 +177,55 @@ code {
 
 /* Common blog utilities */
 .blog-card {
+  position: relative;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
-  padding: 1.25rem;
+  padding: 1.25rem 1.5rem;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.blog-card:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.04));
+  box-shadow: 0 20px 60px rgba(99, 102, 241, 0.18);
+  transform: translateY(-2px);
+}
+
+/* Stretch the first anchor to cover the entire card */
+.blog-card > a:first-child {
+  position: relative;
+  z-index: 1;
+}
+
+.blog-card > a:first-child::after {
+  content: '';
+  position: absolute;
+  inset: -1.25rem -1.5rem;
+  z-index: 0;
+}
+
+.blog-card > p,
+.blog-card > * + * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Responsive grid container for the overview page cards */
+.blog-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 640px) {
+  .blog-cards-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .blog-muted {

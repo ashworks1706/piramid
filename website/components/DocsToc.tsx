@@ -42,19 +42,22 @@ export function DocsToc({ headings }: { headings: Heading[] }) {
     <aside className="hidden xl:block w-64">
       <div className="sticky top-24 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-slate-900/30 backdrop-blur space-y-3">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">On this page</div>
-        <div className="space-y-1 text-sm">
+        <div className="relative pl-3 border-l border-white/10 space-y-0.5 text-sm">
           {headings.map((h) => (
             <a
               key={h.id}
               href={`#${h.id}`}
-              className={`block rounded-lg px-2 py-1 transition ${
-                h.level > 2 ? "pl-4 text-xs" : ""
+              className={`block rounded-r-lg py-1 pr-2 transition-colors leading-snug ${
+                h.level >= 4 ? "pl-6 text-xs" : h.level === 3 ? "pl-4 text-xs" : "pl-2"
               } ${
                 activeId === h.id
-                  ? "bg-indigo-500/15 text-white ring-1 ring-indigo-400/40"
-                  : "text-slate-200 hover:bg-indigo-500/10 hover:text-white"
+                  ? "text-indigo-300 font-medium"
+                  : "text-slate-400 hover:text-slate-100"
               }`}
             >
+              {activeId === h.id && (
+                <span className="absolute -left-px top-auto w-0.5 rounded-full bg-indigo-400" style={{ height: "1.25rem" }} />
+              )}
               {h.text}
             </a>
           ))}
