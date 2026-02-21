@@ -6,15 +6,15 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Blogs**
 
-[ ] add vector database components diagram on evolution page
-[ ] add more images for the database page methadologies,  links for bigger terms, add summary at the end  
-[ ] add more images for the embeddings page, link my workshop content there, links for bigger terms, add summary at the end
-[ ] add more images for storage page, links for bigger terms, add summary at the end
-[ ] add more images for indexing page and links for bigger terms, add summary at the end 
-[ ] add more images for query page and links for bigger terms, add summary at the end 
-[ ] fix UI on overview page, make the block card clickable, make responsive on mobile 
-[ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
-[ ] add limitations and future work section to the end of the blogs, add more images for the limitations and future work section, links for bigger terms, add summary at the end of the limitations and future work section
+- [ ] add vector database components diagram on evolution page
+- [ ] add more images for the database page methadologies,  links for bigger terms, add summary at the end  
+- [ ] add more images for the embeddings page, link my workshop content there, links for bigger terms, add summary at the end
+- [ ] add more images for storage page, links for bigger terms, add summary at the end
+- [ ] add more images for indexing page and links for bigger terms, add summary at the end 
+- [ ] add more images for query page and links for bigger terms, add summary at the end 
+- [ ] fix UI on overview page, make the block card clickable, make responsive on mobile 
+- [ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
+- [ ] add limitations and future work section to the end of the blogs, add more images for the limitations and future work section, links for bigger terms, add summary at the end of the limitations and future work section
 
 **Documentation**
 
