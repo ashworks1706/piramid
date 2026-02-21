@@ -1,7 +1,6 @@
 import fs from "fs";
 import { notFound } from "next/navigation";
 import { compileMDX } from "next-mdx-remote/rsc";
-import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeKatex from "rehype-katex";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
@@ -54,7 +53,7 @@ export default async function DocPage({ params }: { params: Promise<{ slug: stri
       parseFrontmatter: true,
       mdxOptions: {
         remarkPlugins: [remarkGfm, remarkMath, remarkRewriteImages(blog.filePath)],
-        rehypePlugins: [rehypeSlug, rehypeAutolinkHeadings, rehypeKatex],
+        rehypePlugins: [rehypeSlug, rehypeKatex],
       },
     },
   });

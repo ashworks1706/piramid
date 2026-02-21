@@ -1,7 +1,7 @@
 import type { MDXComponents } from "mdx/types";
 import { BlogImage } from "./components/BlogImage";
 
-type ImgProps = React.ImgHTMLAttributes<HTMLImageElement>;
+type ImgProps = { src?: string; alt?: string };
 
 const Callout = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-3 text-slate-100 shadow-lg shadow-indigo-900/30">

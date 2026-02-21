@@ -227,7 +227,15 @@ export function extractHeadings(filePath: string): Heading[] {
     const match = /^(#{1,6})\s+(.*)$/.exec(line.trim());
     if (match) {
       const level = match[1].length;
-      const text = match[2].trim();
+      // Strip markdown link syntax: [text](url) → text, also strip backticks and bold/italic markers
+      const rawText = match[2].trim();
+      const text = rawText
+        .replace(/\[([^\]]*?)\]\([^)]*\)/g, "$1") // [text](url) → text
+        .replace(/`([^`]*)`/g, "$1")               // `code` → code
+        .replace(/\*\*([^*]*)\*\*/g, "$1")         // **bold** → bold
+        .replace(/\*([^*]*)\*/g, "$1")             // *italic* → italic
+        .trim();
+      // Slug from the plain text so it matches what rehype-slug generates
       const id = slugger.slug(text);
       headings.push({ id, text, level });
     }
