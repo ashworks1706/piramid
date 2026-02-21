@@ -164,12 +164,16 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
 
+*depends on the quantization refactor being complete — VRAM hydration and dual-write require raw f32 vectors in storage as the source of truth*
+
 - [ ] add `zipy` crate to `Cargo.toml` as an optional feature
-- [ ] refactor `ExecutionMode` to support `Zipy(Arc<ZipyEngine>)` as a compute backend
+- [ ] wire the existing `ExecutionMode::Gpu` variant to dispatch through `ZipyEngine` — do not add a new variant, `Gpu` is already the intended hook and adding another leaves it as dead code
 - [ ] attempt Zipy initialization on boot, fallback to CPU on failure
-- [ ] hydrate existing on-disk vectors into GPU VRAM on startup
-- [ ] dual-write architecture: inserts write to both disk (persistence) and Zipy (VRAM)
-- [ ] route `POST /search` requests to Zipy when active
+- [ ] hydrate existing on-disk vectors from mmap into GPU VRAM on startup (raw f32 — requires quantization refactor done first)
+- [ ] dual-write architecture: inserts write to both mmap (persistence) and Zipy VRAM so VRAM stays warm without re-hydrating on every restart (requires quantization refactor done first)
+- [ ] wire distance computation inside each index (HNSW hop distances, IVF centroid lookups, Flat candidate scores) to dispatch through Zipy when `ExecutionMode::Gpu` is active — the HTTP search handler does not change, only the internal compute path does
+- [ ] flat search: replace the sequential per-vector distance loop with a single batched GPU matrix-multiply dispatch via Zipy (turns O(N) CPU calls into one GPU kernel)
+- [ ] IVF: offload k-means cluster training and nearest-centroid lookups to Zipy GPU kernels (Zipy's TODO explicitly targets both)
 - [ ] auto-switch to CPU search if Zipy returns OOM or timeout
 - [ ] extend `/api/health` with GPU status (temperature, VRAM used/free)
 
