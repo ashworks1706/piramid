@@ -29,7 +29,7 @@ The constraint that really shapes when you use in-memory storage is cost. At cur
 ![Relational database](https://insightsoftware.com/wp-content/uploads/2022/02/dog_relational_database-1.png)
 *Tables, rows, foreign keys, and SQL — the relational model is still the right default for anything where correctness of data relationships genuinely matters.*
 
-<!-- TODO: MVCC diagram showing a write creating a new row version while older versions remain visible to concurrent readers, illustrating how Postgres avoids read-write contention without locking -->
+![how Postgres avoids read-write contention without locking](https://devcenter3.assets.heroku.com/article-images/457-imported-1443570195-457-imported-1443554663-34-original.jpg)
 
 Relational databases are probably what most people picture when they hear "database." [Postgres](https://www.postgresql.org/), [MySQL](https://www.mysql.com/), [SQLite](https://www.sqlite.org/): data organized into tables with defined schemas, rows representing individual records, and SQL as the query language. The relational part is specifically about modeling _relationships_ between entities in separate tables and querying across them with joins.
 
@@ -88,7 +88,7 @@ What connects all of these is the same underlying reality: each one traded the g
 
 #### Cloud-native databases
 
-<!-- TODO: Cloud-native architecture diagram showing compute tier (stateless query engines, connection handlers) fully separated from storage tier (distributed object store / S3), with elastic horizontal scaling arrows on the compute side -->
+[Cloud native s3](https://miro.medium.com/1*Ow7jvYztPy9iYwhS7PuIlA.jpeg)
 
 Cloud-native databases are less about a data model and more about an architectural philosophy that emerged from operating at internet scale. The defining characteristic is the separation of compute from storage: the compute tier (query engines, warehouse nodes, connection handlers) is stateless and elastically scalable, while the storage tier is independently scalable, durable, and typically built on top of distributed object storage.
 

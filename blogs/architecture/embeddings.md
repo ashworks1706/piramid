@@ -94,7 +94,7 @@ The denominator sums over all non-matching samples in the batch; this is **in-ba
 
 **Temperature calibration** has a mathematically interesting role. The optimal $\tau$ isn't a fixed constant; it depends on the expected magnitude of similarity scores in your data. If your embeddings are $\ell_2$-normalized (as is standard), cosine similarity ranges from -1 to 1. The InfoNCE loss with $\tau = 0.07$ (a common value) turns this into an effective "temperature" for the distribution: $\text{sim}/0.07$ values range from about -14 to +14, giving a reasonably peaked softmax. Too-small $\tau$ produces a distribution so sharp that small numerical errors dominate; too-large $\tau$ makes the loss insensitive to the exact relative ordering of candidates. OpenAI's models use a learned `logit_scale` parameter that plays the role of $1/\tau$, optimising it jointly with the embedding weights during training.
 
-<!-- TODO: Contrastive training diagram showing an anchor query, a positive passage (pulled closer), and a hard negative (pushed away), with arrows indicating the InfoNCE loss pulling positives together and pushing negatives apart in embedding space -->
+![Contrastive training](https://lilianweng.github.io/posts/2021-05-31-contrastive/triplet-loss.png)
 
 #### The geometry of learned embedding space
 
@@ -205,8 +205,7 @@ Request
               └── Provider   (OpenAIEmbedder or LocalEmbedder)
 ```
 
-<!-- TODO: Embedder stack diagram showing the three nested layers as boxes — RetryEmbedder on the outside, CachedEmbedder in the middle, Provider at the core, with request/response arrows flowing inward on the way down and outward on the way back up -->
-
+![Embedder Stack](https://lh3.googleusercontent.com/gg-dl/AOI_d__ff4WOgcc7TA--Xp70QuIUStWX0--J0haJu7csqbCkjlEM1NvxfVHaNZM2VnjdsKWLX_dHzLn-PeA4pNzGgon5E1-wAxAYkR4BVwVpodscNoufnwgdREbztjNLry69F4fs1qgBBJoACldKqnEtN4Dj-mttCWJu6WTd1vbhxe-yUrV2eA=s1024-rj?authuser=1)
 The ordering is deliberate. The cache sits *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
 The cache is keyed on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
@@ -265,7 +264,7 @@ These are the numbers that motivate quantisation and dimensionality reduction.
 
 #### int8 scalar quantisation
 
-<!-- TODO: int8 quantisation diagram — a float32 range mapped linearly to 256 integer buckets, with the uniform step size ε_q shown as the gap between original float value and its nearest quantised level -->
+![int8 quantisation diagram — a float32 range mapped linearly to 256 integer buckets, with the uniform step size ε_q shown as the gap between original float value and its nearest quantised level](https://developer-blogs.nvidia.com/wp-content/uploads/2021/07/8-bit-signed-integer-quantization.png)
 
 Piramid supports int8 scalar quantisation, which compresses each float32 component to a signed int8 by linearly mapping the observed range:
 
