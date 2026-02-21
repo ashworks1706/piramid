@@ -7,7 +7,7 @@ In the [previous section](/blogs/architecture/database) we established that a ve
 
 ### From words to numbers — why representation matters
 
-Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or TF-IDF. A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
+Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf). A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
 
 TF-IDF weights are:
 
@@ -23,7 +23,7 @@ Distributed representations (embeddings) solve this by learning a *dense* $d$-di
 
 An embedding is a function $f: \mathcal{X} \to \mathbb{R}^d$ that maps some input domain $\mathcal{X}$ — text strings, images, audio clips — to a point in $d$-dimensional real-valued space. The function is learned, not designed. A neural network is trained on large amounts of data with an objective that forces semantically related inputs to map to geometrically nearby points. Once trained, the network is frozen and its internal activations at some layer become the embedding vector.
 
-#### Word2Vec and the skip-gram objective
+#### [Word2Vec](https://arxiv.org/abs/1301.3781) and the skip-gram objective
 
 The simplest historical example that makes this concrete is Word2Vec. Its skip-gram variant trains a shallow neural network to predict context words $c$ from a center word $w$ within a window of size $k$. The training objective maximises:
 
@@ -47,7 +47,7 @@ Word2Vec is a useful intuition builder but it has hard limits. Each word gets ex
 
 #### Transformers and contextual embeddings
 
-Modern embedding models are transformer-based and address both limitations. The transformer architecture was introduced in "Attention is All You Need" (Vaswani et al. 2017). Its central mechanism is **multi-head self-attention**, which lets every token's representation be influenced by every other token in the sequence.
+Modern embedding models are transformer-based and address both limitations. The transformer architecture was introduced in ["Attention is All You Need" (Vaswani et al. 2017)](https://arxiv.org/abs/1706.03762). Its central mechanism is **multi-head self-attention**, which lets every token's representation be influenced by every other token in the sequence.
 
 For a single attention head with input matrix $X \in \mathbb{R}^{n \times d_\text{model}}$ (where $n$ is sequence length), the computation is:
 
@@ -63,7 +63,7 @@ With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates i
 
 The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. The word "bank" in "river bank" ends up near "water" rather than "finance" because the attention weights pull the representation in the direction of the context.
 
-> **Positional encoding:** transformers have no inherent notion of word order (unlike RNNs). Position is injected by adding a positional encoding $\mathbf{pe}_{pos}$ to each token embedding before the first attention layer. The original formulation uses sinusoidal functions: $\mathbf{pe}_{pos,2i} = \sin(pos / 10000^{2i/d})$, $\mathbf{pe}_{pos,2i+1} = \cos(pos / 10000^{2i/d})$. Modern models use RoPE (Rotary Position Embedding) which encodes relative rather than absolute positions and generalises better to sequences longer than those seen during training.
+> **Positional encoding:** transformers have no inherent notion of word order (unlike RNNs). Position is injected by adding a positional encoding $\mathbf{pe}_{pos}$ to each token embedding before the first attention layer. The original formulation uses sinusoidal functions: $\mathbf{pe}_{pos,2i} = \sin(pos / 10000^{2i/d})$, $\mathbf{pe}_{pos,2i+1} = \cos(pos / 10000^{2i/d})$. Modern models use [RoPE (Rotary Position Embedding)](https://arxiv.org/abs/2104.09864) which encodes relative rather than absolute positions and generalises better to sequences longer than those seen during training.
 
 To get a single embedding vector for an entire input text, most models either use the final-layer hidden state of a special `[CLS]` token inserted at the start of the sequence, or compute the **mean pool** of all token representations across the final layer:
 
@@ -75,7 +75,7 @@ Mean pooling treats all tokens equally; the CLS token approach trains the model 
 
 A pre-trained language model knows syntax and semantics, but its internal similarity geometry isn't necessarily aligned with what you want a retrieval system to do. A model trained on next-token prediction (like GPT) will have token representations useful for generation, not necessarily for semantic retrieval. Contrastive fine-tuning reshapes the embedding space specifically for similarity search.
 
-Contrastive training operates on pairs: a query $q$ and a positive $p^+$ (semantically related) and a set of negatives $\{n_j\}$ (unrelated). The standard loss is a variant of InfoNCE (Noise Contrastive Estimation):
+Contrastive training operates on pairs: a query $q$ and a positive $p^+$ (semantically related) and a set of negatives $\{n_j\}$ (unrelated). The standard loss is a variant of [InfoNCE (Noise Contrastive Estimation)](https://arxiv.org/abs/1807.03748):
 
 $$\mathcal{L} = -\frac{1}{N} \sum_{i=1}^{N} \log \frac{e^{\text{sim}(\mathbf{z}_i, \mathbf{z}_i^+) / \tau}}{\sum_{j=1}^{N} e^{\text{sim}(\mathbf{z}_i, \mathbf{z}_j^-) / \tau}}$$
 
@@ -83,7 +83,7 @@ where $\mathbf{z}_i$ and $\mathbf{z}_i^+$ are the normalized embeddings of a pos
 
 The denominator sums over all non-matching samples in the batch — this is **in-batch negative sampling**, and it's why larger training batch sizes produce better embedding models. With $N = 4096$ samples per batch, each training example is contrasted against 4095 negatives simultaneously. The signal from 4095 negatives is much richer than from a handful, forcing the model to learn a much stricter notion of "similar."
 
-> **Hard negatives:** the most effective training uses **hard negatives** — samples that are superficially similar to the query but subtly different (e.g., the same question paraphrased slightly, or a document from the same domain but a different topic). In-batch random negatives are mostly easy (a query about cooking vs a passage about finance is trivially distinguishable). Hard negatives force the model to develop fine-grained discriminative representations. Models like E5, GTE, and the OpenAI text-embedding-3 series are trained with hard negative mining pipelines — the measurable quality difference between them and earlier models is largely attributable to this.
+> **Hard negatives:** the most effective training uses **hard negatives** — samples that are superficially similar to the query but subtly different (e.g., the same question paraphrased slightly, or a document from the same domain but a different topic). In-batch random negatives are mostly easy (a query about cooking vs a passage about finance is trivially distinguishable). Hard negatives force the model to develop fine-grained discriminative representations. Models like [E5](https://arxiv.org/abs/2212.03533), [GTE](https://arxiv.org/abs/2308.03281), and the OpenAI text-embedding-3 series are trained with hard negative mining pipelines — the measurable quality difference between them and earlier models is largely attributable to this.
 
 **Temperature calibration** has a mathematically interesting role. The optimal $\tau$ isn't a fixed constant — it depends on the expected magnitude of similarity scores in your data. If your embeddings are $\ell_2$-normalized (as is standard), cosine similarity ranges from -1 to 1. The InfoNCE loss with $\tau = 0.07$ (a common value) turns this into an effective "temperature" for the distribution: $\text{sim}/0.07$ values range from about -14 to +14, giving a reasonably peaked softmax. Too-small $\tau$ produces a distribution so sharp that small numerical errors dominate; too-large $\tau$ makes the loss insensitive to the exact relative ordering of candidates. OpenAI's models use a learned `logit_scale` parameter that plays the role of $1/\tau$, optimising it jointly with the embedding weights during training.
 
@@ -97,9 +97,9 @@ $$\|\mathbf{z}_i - \mathbf{z}_j\|_2^2 = 2 - 2\cos\theta_{ij}$$
 
 So minimising L2 distance and maximising cosine similarity are equivalent for normalised vectors. The practical reason to normalise is that it makes similarity scores comparable across different inputs — unnormalised dot products are biased by vector magnitude, which correlates with input length and vocabulary frequency.
 
-**Anisotropy and dimensional collapse.** Language models trained only with next-token prediction tend to produce anisotropic embedding spaces — all vectors cluster in a narrow cone of the "occupied" subspace rather than spreading uniformly across $\mathbb{R}^d$. This was documented in the "BERT sentence embeddings" literature (Ethayarajh 2019, Li et al. 2020) and is measurable as a high average cosine similarity across random sentence pairs ($\bar{\cos} \approx 0.9$ for vanilla BERT vs $\bar{\cos} \approx 0.02$ for a well-trained retrieval model). Contrastive fine-tuning pushes the embeddings toward **isotropy** — spreading them across the full surface of the unit sphere — which dramatically improves nearest-neighbour search quality.
+**Anisotropy and dimensional collapse.** Language models trained only with next-token prediction tend to produce anisotropic embedding spaces — all vectors cluster in a narrow cone of the "occupied" subspace rather than spreading uniformly across $\mathbb{R}^d$. This was documented in the "BERT sentence embeddings" literature ([Ethayarajh 2019](https://arxiv.org/abs/1908.10084), [Li et al. 2020](https://arxiv.org/abs/2011.05864)) and is measurable as a high average cosine similarity across random sentence pairs ($\bar{\cos} \approx 0.9$ for vanilla BERT vs $\bar{\cos} \approx 0.02$ for a well-trained retrieval model). Contrastive fine-tuning pushes the embeddings toward **isotropy** — spreading them across the full surface of the unit sphere — which dramatically improves nearest-neighbour search quality.
 
-**Matryoshka Representation Learning (MRL).** OpenAI's `text-embedding-3` models use a training technique called MRL (Kusupati et al. 2022) that makes the embedding dimensions hierarchically meaningful. The full $d$-dimensional vector is trained, but the loss is summed over a set of nested truncation sizes $m_1 < m_2 < \ldots < m_L = d$:
+**Matryoshka Representation Learning (MRL).** OpenAI's `text-embedding-3` models use a training technique called [MRL (Kusupati et al. 2022)](https://arxiv.org/abs/2205.13147) that makes the embedding dimensions hierarchically meaningful. The full $d$-dimensional vector is trained, but the loss is summed over a set of nested truncation sizes $m_1 < m_2 < \ldots < m_L = d$:
 
 $$\mathcal{L}_\text{MRL} = \sum_{\ell=1}^{L} \lambda_\ell \cdot \mathcal{L}\bigl(\mathbf{z}_{[1:m_\ell]}\bigr)$$
 
@@ -148,7 +148,7 @@ One thing worth knowing about `text-embedding-3-small` vs `text-embedding-3-larg
 
 #### Local HTTP and TEI
 
-The local provider speaks to any OpenAI-compatible or TEI-style HTTP endpoint. TEI (Text Embeddings Inference) is Hugging Face's high-throughput embedding server — it exposes the same `/embeddings` JSON contract as the OpenAI API, making it a drop-in replacement. Ollama, TEI, and other locally-hosted embedding runtimes all work as long as they implement that protocol.
+The local provider speaks to any OpenAI-compatible or TEI-style HTTP endpoint. [TEI (Text Embeddings Inference)](https://github.com/huggingface/text-embeddings-inference) is Hugging Face's high-throughput embedding server — it exposes the same `/embeddings` JSON contract as the OpenAI API, making it a drop-in replacement. [Ollama](https://ollama.com/), TEI, and other locally-hosted embedding runtimes all work as long as they implement that protocol.
 
 A typical local setup for TEI running a 768-dimensional model:
 
