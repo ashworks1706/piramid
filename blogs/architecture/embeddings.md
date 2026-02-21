@@ -205,7 +205,7 @@ Request
               └── Provider   (OpenAIEmbedder or LocalEmbedder)
 ```
 
-![Embedder Stack](https://lh3.googleusercontent.com/gg-dl/AOI_d__ff4WOgcc7TA--Xp70QuIUStWX0--J0haJu7csqbCkjlEM1NvxfVHaNZM2VnjdsKWLX_dHzLn-PeA4pNzGgon5E1-wAxAYkR4BVwVpodscNoufnwgdREbztjNLry69F4fs1qgBBJoACldKqnEtN4Dj-mttCWJu6WTd1vbhxe-yUrV2eA=s1024-rj?authuser=1)
+![Embedder Stack](../../assets/blogs/embedder_stack.png)
 The ordering is deliberate. The cache sits *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
 The cache is keyed on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.

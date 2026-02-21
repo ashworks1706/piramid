@@ -126,7 +126,7 @@ let search_k = if params.filter.is_some() {
 
 The `expansion` factor is the `filter_overfetch` from the search config (default 5), or a per-request override. So if you ask for top-10 with a filter, Piramid fetches 50 candidates from the ANN index, scores and filters all 50, then returns the best 10 that survived.
 
-<!-- TODO: Overfetch + filter diagram — ANN search returning a large candidate pool (ef x filter_overfetch), then a metadata filter keeping only the qualifying subset, with arrows showing how the surviving results are re-sorted and truncated to k -->
+![Overfetch + filter diagram — ANN search returning a large candidate pool (ef x filter_overfetch), then a metadata filter keeping only the qualifying subset, with arrows showing how the surviving results are re-sorted and truncated to k](https://global.discourse-cdn.com/dlai/original/3X/2/8/28d6189faeed383efb359904d81169a4a581af3f.jpeg)
 
 **Step 2: Score.** For each candidate ID returned by the ANN index, the engine retrieves the full float32 vector and calculates the exact similarity score using the configured metric. This is done on the raw vectors in memory with no approximation at scoring time, even if the index search itself was approximate. The scoring is exact even when the retrieval is ANN.
 
