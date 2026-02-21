@@ -44,7 +44,7 @@ Piramid's `Metric::calculate` does a small but important transform on Euclidean:
 
 ### The curse of dimensionality
 
-Tree-based spatial indexes — KD-trees, ball-trees, R-trees — work well in 2, 3, maybe 10 dimensions. In $d = 1536$ they are essentially useless. Here's why.
+Tree-based spatial indexes — [KD-trees](https://en.wikipedia.org/wiki/K-d_tree), [ball-trees](https://en.wikipedia.org/wiki/Ball_tree), [R-trees](https://en.wikipedia.org/wiki/R-tree) — work well in 2, 3, maybe 10 dimensions. In $d = 1536$ they are essentially useless. Here's why.
 
 In a KD-tree, a hyperplane splits space at each node. Searching for the nearest neighbor involves traversing the tree and backtracking whenever the current best candidate's hypersphere could intersect the other side of a split. In low dimensions, these backtracks are rare because the hyperspheres are tight. In high dimensions, the geometry breaks. The volume of a $d$-dimensional ball of radius $r$ is:
 
@@ -62,7 +62,7 @@ This is the concentration of measure. When all pairwise distances concentrate ar
 
 There are three broad families of approach.
 
-**Locality-sensitive hashing (LSH)** uses a family of hash functions $\{h_1, \ldots, h_L\}$ where similar vectors are likely to hash to the same bucket. For cosine similarity, the standard construction is random hyperplane hashing: for each hash function, sample a random vector $\mathbf{r}$ from a Gaussian, then $h(\mathbf{x}) = \text{sign}(\mathbf{r} \cdot \mathbf{x})$. Two vectors with angle $\theta$ between them collide in the same bucket with probability $1 - \theta/\pi$. You use $L$ independent hash tables and return the union of all matched buckets as candidates.
+**[Locality-sensitive hashing (LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing)** uses a family of hash functions $\{h_1, \ldots, h_L\}$ where similar vectors are likely to hash to the same bucket. For cosine similarity, the standard construction is random hyperplane hashing: for each hash function, sample a random vector $\mathbf{r}$ from a Gaussian, then $h(\mathbf{x}) = \text{sign}(\mathbf{r} \cdot \mathbf{x})$. Two vectors with angle $\theta$ between them collide in the same bucket with probability $1 - \theta/\pi$. You use $L$ independent hash tables and return the union of all matched buckets as candidates.
 
 LSH has attractive theoretical guarantees but poor practical performance on modern high-dimensional dense embeddings. The number of hash tables needed to get good recall grows with dimension, and the bucket sizes are hard to tune — too coarse and you return too many false candidates, too fine and you miss true neighbors. In practice, graph-based methods have largely replaced LSH for embedding search.
 
@@ -76,7 +76,7 @@ With $C = \sqrt{n}$ clusters and $n_{\text{probe}} = \sqrt{C}$, each query touch
 
 ### HNSW — the algorithm behind Piramid's index
 
-Hierarchical Navigable Small World (HNSW), proposed by Malkov and Yashunin in 2018, is currently the dominant algorithm for in-memory ANN search. It's what Piramid uses as its primary index type and deserves a proper explanation.
+[Hierarchical Navigable Small World (HNSW)](https://arxiv.org/abs/1603.09320), proposed by Malkov and Yashunin in 2018, is currently the dominant algorithm for in-memory ANN search. It's what Piramid uses as its primary index type and deserves a proper explanation.
 
 The core insight behind NSW (the non-hierarchical predecessor) is that if you build a graph by inserting nodes sequentially and connecting each new node to its nearest neighbors at the time of insertion, you get a *navigable small world* graph. Navigable means that greedy routing — always follow the edge that gets you closest to the query — converges to the true nearest neighbor in $O(\log n)$ steps instead of $O(n)$.
 
@@ -100,7 +100,7 @@ The complexity of this search is $O(\log n)$ for the greedy descent and roughly 
 
 The recall/speed tradeoff is entirely controlled by $ef$: larger $ef$ explores more candidates, finds better neighbors, but costs more computation. The construction-time $ef_{\text{construction}}$ controls graph quality during build; the query-time $ef_{\text{search}}$ controls query quality at search time. You can have a well-built graph (high $ef_{\text{construction}}$) and then lower $ef_{\text{search}}$ for fast lower-quality queries, or raise it for high-recall searches on the same graph.
 
-> **The graph property that makes this work:** HNSW graphs approximate *Delaunay graphs* at each layer — a structure where edges connect nodes that are "natural neighbors" of each other (no other node sits geometrically between them). Delaunay graphs have the property that greedy routing always converges. The select-neighbors heuristic during construction tries to maintain this: when pruning a node's connections to keep only $M$, it prefers neighbors that are "diverse" in direction rather than the $M$ nearest by distance alone. This keeps the graph navigable even in high-dimensional spaces where the nearest neighbor cluster is very tight.
+> **The graph property that makes this work:** HNSW graphs approximate [*Delaunay graphs*](https://en.wikipedia.org/wiki/Delaunay_triangulation) at each layer — a structure where edges connect nodes that are "natural neighbors" of each other (no other node sits geometrically between them). Delaunay graphs have the property that greedy routing always converges. The select-neighbors heuristic during construction tries to maintain this: when pruning a node's connections to keep only $M$, it prefers neighbors that are "diverse" in direction rather than the $M$ nearest by distance alone. This keeps the graph navigable even in high-dimensional spaces where the nearest neighbor cluster is very tight.
 
 ---
 
