@@ -10,7 +10,7 @@ Formally, you want:
 
 $$\text{kNN}(\mathbf{q}, k) = \underset{S \subseteq [n],\, |S|=k}{\arg\max} \sum_{i \in S} \text{sim}(\mathbf{q}, \mathbf{x}_i)$$
 
-If you just compute this directly — calculate $\text{sim}(\mathbf{q}, \mathbf{x}_i)$ for every $i$, sort, and take the top $k$, which is $O(nd)$ operations per query. For $n = 10^6$ and $d = 1536$, that's $1.536 \times 10^9$ floating-point operations per query. A modern CPU doing 1 GFLOP/s (single-threaded for this kind of sequential scan) takes about 1.5 seconds. A single GPU can do it sub-100ms, but the machine still has to touch all $nd$ floats. At $n = 10^8$ (a reasonably sized production corpus) you're looking at minutes per query no matter how fast your hardware is.
+If you just compute this directly: calculate $\text{sim}(\mathbf{q}, \mathbf{x}_i)$ for every $i$, sort, and take the top $k$, which is $O(nd)$ operations per query. For $n = 10^6$ and $d = 1536$, that's $1.536 \times 10^9$ floating-point operations per query. A modern CPU doing 1 GFLOP/s (single-threaded for this kind of sequential scan) takes about 1.5 seconds. A single GPU can do it sub-100ms, but the machine still has to touch all $nd$ floats. At $n = 10^8$ (a reasonably sized production corpus) you're looking at minutes per query no matter how fast your hardware is.
 
 The entire field of approximate nearest neighbor (ANN) search exists to escape this linear bottleneck.
 
@@ -148,7 +148,7 @@ if storage.config().parallelism.parallel_search {
 }
 ```
 
-Each query is independent — they share only immutable references to the vector store, so the parallelism is lock-free.
+Each query is independent; they share only immutable references to the vector store, so the parallelism is lock-free.
 
 ### SearchConfig: the recall/speed dial
 

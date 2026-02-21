@@ -217,22 +217,22 @@ fn is_retryable_error(error: &EmbeddingError) -> bool {
 }
 ```
 
-A 401 authentication failure propagates immediately — no delay, no retry. A 429 rate limit or a connection error retries with backoff. After exhausting all retries, the last error propagates up as a 5xx from the Piramid API.
+A 401 authentication failure propagates immediately: no delay, no retry. A 429 rate limit or a connection error retries with backoff. After exhausting all retries, the last error propagates up as a 5xx from the Piramid API.
 
-> **The embedding provider is also a health endpoint.** `GET /api/health/embeddings` checks whether the configured provider is reachable and responding. A failing embedding provider will surface there before it causes query failures — worth monitoring in production alongside standard CPU/memory metrics.
+> **The embedding provider is also a health endpoint.** `GET /api/health/embeddings` checks whether the configured provider is reachable and responding. A failing embedding provider will surface there before it causes query failures, worth monitoring in production alongside standard CPU/memory metrics.
 
 
 ### The caching tradeoff
 
-The LRU cache holds up to 10,000 embeddings by default. Each `text-embedding-3-small` vector is $1536 \times 4 = 6{,}144$ bytes. A full 10K-entry cache occupies roughly 60MB — a manageable overhead relative to the collection's vector storage.
+The LRU cache holds up to 10,000 embeddings by default. Each `text-embedding-3-small` vector is $1536 \times 4 = 6{,}144$ bytes. A full 10K-entry cache occupies roughly 60MB, a manageable overhead relative to the collection's vector storage.
 
 Cache effectiveness is entirely workload-dependent:
 
 **High hit rate:** a RAG system where a fixed corpus is loaded at startup and then queried repeatedly. After the first pass over the corpus, every document re-embed on restart hits the cache, eliminating API calls entirely during warm-up. Effective cache size is $\min(\text{corpus size}, 10\text{K})$.
 
-**Near-zero hit rate:** a system where every input is a unique real-time user query. Each query is distinct, the cache never hits, and the overhead is a lock acquisition per request — the `CachedEmbedder` wraps access in a `Mutex<LruCache>`. That's a few hundred nanoseconds per call, not worth worrying about.
+**Near-zero hit rate:** a system where every input is a unique real-time user query. Each query is distinct, the cache never hits, and the overhead is a lock acquisition per request (the `CachedEmbedder` wraps access in a `Mutex<LruCache>`). That's a few hundred nanoseconds per call, not worth worrying about.
 
-**The eviction boundary matters:** if your hot corpus has 12,000 documents and the cache holds 10,000, the oldest 2,000 entries get continuously evicted and re-fetched. This is a surprising cliff effect — the 10K default works well for corpora that fit, and degrades suddenly for slightly larger ones. If you have a fixed corpus, set the cache size to `corpus_size + 20%` to avoid thrashing.
+**The eviction boundary matters:** if your hot corpus has 12,000 documents and the cache holds 10,000, the oldest 2,000 entries get continuously evicted and re-fetched. This is a surprising cliff effect; the 10K default works well for corpora that fit, and degrades suddenly for slightly larger ones. If you have a fixed corpus, set the cache size to `corpus_size + 20%` to avoid thrashing.
 
 One thing the cache doesn't do is persist across restarts. It is in-memory only. A server restart means re-embedding your entire corpus on the first pass. For large corpora on paid embedding APIs, this can be a non-trivial cost. A persistent embedding store (write the vectors to a separate key-value store keyed by content hash) is a common production pattern to address this, but it's outside Piramid's current scope.
 
@@ -245,7 +245,7 @@ For $n = 10^6$, $d = 1536$ (OpenAI `text-embedding-3-small`):
 
 $$4 \times 10^6 \times 1536 = 6.144 \times 10^9 \text{ bytes} = 6.14\text{ GB}$$
 
-For `text-embedding-3-large` at $d = 3072$ the raw storage doubles to 12.3 GB. These numbers don't include the index structure — HNSW adds roughly another 550 MB of edge storage for $10^6$ vectors at $M = 16$ (see the indexing section for the derivation). Total working memory is:
+For `text-embedding-3-large` at $d = 3072$ the raw storage doubles to 12.3 GB. These numbers don't include the index structure; HNSW adds roughly another 550 MB of edge storage for $10^6$ vectors at $M = 16$ (see the indexing section for the derivation). Total working memory is:
 
 | Model | $d$ | Vectors | Raw storage | + HNSW index | Total |
 |-------|-----|---------|-------------|--------------|-------|
@@ -261,15 +261,15 @@ Piramid supports int8 scalar quantisation, which compresses each float32 compone
 
 $$\hat{x}_i = \text{round}\!\left(\frac{x_i - x_{\min}}{x_{\max} - x_{\min}} \times 255\right) - 128$$
 
-Storage drops from $4d$ to $d$ bytes per vector — a 4× reduction. Quantisation error introduces a small amount of distance measurement error. The distance error for a quantised component is bounded by the quantisation step size:
+Storage drops from $4d$ to $d$ bytes per vector, a 4× reduction. Quantisation error introduces a small amount of distance measurement error. The distance error for a quantised component is bounded by the quantisation step size:
 
 $$\epsilon_q = \frac{x_{\max} - x_{\min}}{255}$$
 
-For $\ell_2$-normalised embeddings, each component has range roughly $[-0.1, 0.1]$ (most of the variance is absorbed by the length-1 constraint spreading across 1536 dimensions), so $\epsilon_q \approx 0.0008$. The total L2 distance error accumulated over $d = 1536$ components is approximately $\sqrt{d} \cdot \epsilon_q \approx 0.031$ — small relative to typical inter-cluster distances.
+For $\ell_2$-normalised embeddings, each component has range roughly $[-0.1, 0.1]$ (most of the variance is absorbed by the length-1 constraint spreading across 1536 dimensions), so $\epsilon_q \approx 0.0008$. The total L2 distance error accumulated over $d = 1536$ components is approximately $\sqrt{d} \cdot \epsilon_q \approx 0.031$, small relative to typical inter-cluster distances.
 
-> **When to use quantisation:** int8 is appropriate when recall degradation is acceptable (< 1–2 pp Recall@10 drop for most datasets) and memory is the binding constraint. It is not appropriate when precision is critical — compliance retrieval, exact deduplication, or narrow similarity thresholding. For those workloads, keep full float32.
+> **When to use quantisation:** int8 is appropriate when recall degradation is acceptable (< 1–2 pp Recall@10 drop for most datasets) and memory is the binding constraint. It is not appropriate when precision is critical: compliance retrieval, exact deduplication, or narrow similarity thresholding. For those workloads, keep full float32.
 
-#### MRL truncation — a cleaner memory/quality tradeoff
+#### MRL truncation: a cleaner memory/quality tradeoff
 
 For `text-embedding-3` models, MRL truncation is often a better choice than quantisation for reducing memory. Truncating from 1536 to 512 dimensions is a 3× reduction with typically less recall degradation than int8 quantisation, because you're discarding the least-informative dimensions rather than uniformly degrading all of them.
 
@@ -282,7 +282,7 @@ The approximate recall retention curve for `text-embedding-3-small`:
 | 256 | ~94% | 6× savings |
 | 64 | ~85% | 24× savings |
 
-Combining MRL truncation (e.g. to 512) with int8 quantisation gives a 12× memory reduction with recall typically staying above 95% — a practical configuration for memory-constrained deployments.
+Combining MRL truncation (e.g. to 512) with int8 quantisation gives a 12× memory reduction with recall typically staying above 95%, a practical configuration for memory-constrained deployments.
 
-Piramid currently applies quantisation at the storage layer rather than at embedding time. The full float32 vector is returned by the provider and stored, and quantisation is applied when writing to disk. This means the HNSW index always operates on full-precision vectors in memory while only the persistent storage benefits from compression. Full PQ integration (operating the ANN search on compressed codes) is on the roadmap and would reduce in-memory vector storage by 32× on top of the index savings — see the indexing section for the full memory math.
+Piramid currently applies quantisation at the storage layer rather than at embedding time. The full float32 vector is returned by the provider and stored, and quantisation is applied when writing to disk. This means the HNSW index always operates on full-precision vectors in memory while only the persistent storage benefits from compression. Full PQ integration (operating the ANN search on compressed codes) is on the roadmap and would reduce in-memory vector storage by 32× on top of the index savings; see the indexing section for the full memory math.
 
