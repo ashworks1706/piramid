@@ -7,10 +7,12 @@ A database is a structured collection of data that allows for efficient storage,
 There are many types of databases, and each one exists because of a specific set of tradeoffs its designers decided to prioritize. Understanding them is worth doing properly, because vector databases don't exist in isolation; they slot into a broader ecosystem, and knowing where other systems stop is how you understand where vector databases begin.
 
 ![Databases](https://media.geeksforgeeks.org/wp-content/uploads/20250703161012389874/Types-of-Databases.webp)
+*The main families of databases, each built around different assumptions about data shape, access patterns, and the tradeoffs designers were willing to accept.*
 
 #### In-memory databases
 
 ![In Memory Database](https://hazelcast.com/wp-content/uploads/2021/12/In-Memory-Database-Diagram_v0.1.png)
+*An in-memory database keeps all data in RAM, cutting out disk I/O entirely and enabling sub-microsecond latency that disk-backed systems simply can't match.*
 
 The premise is simple: instead of reading and writing data to disk, you keep everything in RAM. That sounds obvious until you look at the actual numbers. A RAM access is around 100ns. A random read on a fast NVMe SSD is somewhere between 100μs and 1ms, a factor of $10^3$ to $10^4$ difference, and for workloads doing millions of operations per second, that gap is the entire ballgame.
 
@@ -25,6 +27,9 @@ The constraint that really shapes when you use in-memory storage is cost. At cur
 #### Relational databases
 
 ![Relational database](https://insightsoftware.com/wp-content/uploads/2022/02/dog_relational_database-1.png)
+*Tables, rows, foreign keys, and SQL — the relational model is still the right default for anything where correctness of data relationships genuinely matters.*
+
+<!-- TODO: MVCC diagram showing a write creating a new row version while older versions remain visible to concurrent readers, illustrating how Postgres avoids read-write contention without locking -->
 
 Relational databases are probably what most people picture when they hear "database." [Postgres](https://www.postgresql.org/), [MySQL](https://www.mysql.com/), [SQLite](https://www.sqlite.org/): data organized into tables with defined schemas, rows representing individual records, and SQL as the query language. The relational part is specifically about modeling _relationships_ between entities in separate tables and querying across them with joins.
 
@@ -43,6 +48,7 @@ But to understand why the relational model became dominant in the first place, i
 #### Hierarchical databases
 
 ![Hierarchical Database](https://dataintegrationinfo.com/wp-content/uploads/2020/08/image1-2.png)
+*The hierarchical model organizes data as an inverted tree — fast and simple when the domain is genuinely tree-shaped, brittle the moment you hit a many-to-many relationship.*
 
 The hierarchical model predates relational by about a decade. [IBM's IMS (Information Management System)](https://www.ibm.com/products/ims), developed in 1966 for managing the [Apollo program](https://en.wikipedia.org/wiki/Apollo_program)'s parts inventory, was one of the first production database systems and it organized data as an inverted tree. Every record (called a segment) has exactly one parent and can have multiple children, and the only way to get to data is by navigating downward from the root. To find an employee's salary you'd traverse: Root → Division → Department → Employee → Salary. If the tree has depth $d$, that retrieval costs $O(d)$ steps, which is fine as long as you know your access path and the tree is shallow.
 
@@ -53,6 +59,7 @@ The model is more alive today than people realize. [LDAP (Lightweight Directory 
 #### Network databases
 
 ![Network Database](https://media.geeksforgeeks.org/wp-content/uploads/20200727113000/network.png)
+*The network model lifts the one-parent restriction, letting a record participate in multiple named sets — more expressive than hierarchical, but still fully navigational.*
 
 The network model was developed roughly contemporaneously with hierarchical, formalized through the [CODASYL](https://en.wikipedia.org/wiki/CODASYL) specifications in 1969, with Charles Bachman's IDS (Integrated Data Store) as the canonical early implementation. The single change from hierarchical is that the one-parent restriction is lifted: a record can participate in multiple named "sets" (owner-member relationships), so many-to-many relationships can be expressed directly without duplication.
 
@@ -64,7 +71,8 @@ The navigational concept itself didn't disappear. Every time an ORM lets you cha
 
 #### Non-relational databases
 
-![Network Database](https://www.pearsonitcertification.com/content/images/chap4_9780135853290/elementLinks/04fig04_alt.jpg)
+![NoSQL landscape](https://www.pearsonitcertification.com/content/images/chap4_9780135853290/elementLinks/04fig04_alt.jpg)
+*NoSQL covers a wide range of systems — document, key-value, wide-column, and graph — that share almost nothing except opting out of the relational table model.*
 
 NoSQL is a wide umbrella. The systems grouped under it are actually quite different from each other; the only thing they reliably share is that they don't use the relational table model, and the [CAP theorem](https://en.wikipedia.org/wiki/CAP_theorem) tends to be the lens through which their design choices make sense. The theorem states that a distributed system can guarantee at most two of the following three properties simultaneously: consistency (every read receives the most recent write), availability (every request receives a response), and partition tolerance (the system continues operating despite network splits). Since partition tolerance is non-negotiable in any real distributed system, the practical choice is always between consistency and availability under partition.
 
@@ -79,6 +87,8 @@ Graph databases like [Neo4j](https://neo4j.com/) model data as nodes and edges s
 What connects all of these is the same underlying reality: each one traded the generality and correctness guarantees of the relational model for something specific: scale, flexibility, write throughput, or traversal performance. Most operate under [BASE (Basically Available, Soft state, Eventually consistent)](https://en.wikipedia.org/wiki/Eventual_consistency#BASE) rather than ACID, and the CAP theorem governs the design space they're all navigating.
 
 #### Cloud-native databases
+
+<!-- TODO: Cloud-native architecture diagram showing compute tier (stateless query engines, connection handlers) fully separated from storage tier (distributed object store / S3), with elastic horizontal scaling arrows on the compute side -->
 
 Cloud-native databases are less about a data model and more about an architectural philosophy that emerged from operating at internet scale. The defining characteristic is the separation of compute from storage: the compute tier (query engines, warehouse nodes, connection handlers) is stateless and elastically scalable, while the storage tier is independently scalable, durable, and typically built on top of distributed object storage.
 
@@ -95,6 +105,7 @@ The tradeoffs in this category are consistent: more network hops between compute
 Vectors are mathematical representations of data points in a multi-dimensional space. Each vector consists of a list of numbers (called dimensions) that capture the characteristics of the data point. For example, in natural language processing, a vector might represent a word or a sentence, where each dimension captures some aspect of its meaning or context.
 
 ![Vectors illustration](https://www.nvidia.com/content/nvidiaGDC/us/en_US/glossary/vector-database/_jcr_content/root/responsivegrid/nv_container_1795650/nv_image_copy.coreimg.100.1070.jpeg/1710829331227/vector-database-embedding-1920x1080.jpeg)
+*Vectors in high-dimensional space: semantically similar inputs cluster nearby, which is what makes similarity search possible and why the geometry of the space matters so much.*
 
 A vector database is a type of database that is designed to store and manage high-dimensional data, such as vectors. While traditional databases search for exact matches (like finding the exact word "apple" in a text column), vector databases search for semantic similarity. They allow you to find data that _means_ the same thing, even if it doesn't look exactly the same. This is the underlying technology powering modern AI, including large language models, recommendation engines, and reverse image searches.
 

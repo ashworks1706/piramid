@@ -3,6 +3,7 @@
 In the [previous section](/blogs/architecture/database) we established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
+*Embeddings turn raw text into fixed-length vectors where geometry encodes meaning — the closer two vectors are, the more semantically similar the inputs that produced them.*
 
 
 ### From words to numbers: why representation matters
@@ -44,6 +45,7 @@ where $\sigma$ is the sigmoid function and $P_n$ is a noise distribution (typica
 The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic, $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$, falls out as an emergent property, not something explicitly built in: it reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space.
 
 ![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://miro.medium.com/1*d0JWmF36SUey7aS8bvA-dw.jpeg)
+*The word2vec arithmetic demo — royalty minus gender plus gender-swap lands near queen. It's a side effect of the geometry, not something that was explicitly designed in.*
 
 Word2Vec is a useful intuition builder but it has hard limits. Each word gets exactly one vector regardless of context, so "bank" (financial) and "bank" (river) share a single representation. And it operates at the word level, with no way to represent a whole sentence.
 
@@ -66,6 +68,7 @@ With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates i
 The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. The word "bank" in "river bank" ends up near "water" rather than "finance" because the attention weights pull the representation in the direction of the context.
 
 ![Transformer architecture — queries, keys and values flow through multi-head self-attention and feed-forward layers, with residual connections and layer norm at each step (Vaswani et al. 2017)](https://machinelearningmastery.com/wp-content/uploads/2021/08/attention_research_1.png)
+*The original transformer from "Attention is All You Need" — queries, keys, and values run through multi-head attention and feed-forward layers with residual connections around each. The encoder half is what most embedding models use.*
 
 > **Positional encoding:** transformers have no inherent notion of word order (unlike RNNs). Position is injected by adding a positional encoding $\mathbf{pe}_{pos}$ to each token embedding before the first attention layer. The original formulation uses sinusoidal functions: $\mathbf{pe}_{pos,2i} = \sin(pos / 10000^{2i/d})$, $\mathbf{pe}_{pos,2i+1} = \cos(pos / 10000^{2i/d})$. Modern models use [RoPE (Rotary Position Embedding)](https://arxiv.org/abs/2104.09864) which encodes relative rather than absolute positions and generalises better to sequences longer than those seen during training.
 
@@ -91,6 +94,8 @@ The denominator sums over all non-matching samples in the batch; this is **in-ba
 
 **Temperature calibration** has a mathematically interesting role. The optimal $\tau$ isn't a fixed constant; it depends on the expected magnitude of similarity scores in your data. If your embeddings are $\ell_2$-normalized (as is standard), cosine similarity ranges from -1 to 1. The InfoNCE loss with $\tau = 0.07$ (a common value) turns this into an effective "temperature" for the distribution: $\text{sim}/0.07$ values range from about -14 to +14, giving a reasonably peaked softmax. Too-small $\tau$ produces a distribution so sharp that small numerical errors dominate; too-large $\tau$ makes the loss insensitive to the exact relative ordering of candidates. OpenAI's models use a learned `logit_scale` parameter that plays the role of $1/\tau$, optimising it jointly with the embedding weights during training.
 
+<!-- TODO: Contrastive training diagram showing an anchor query, a positive passage (pulled closer), and a hard negative (pushed away), with arrows indicating the InfoNCE loss pulling positives together and pushing negatives apart in embedding space -->
+
 #### The geometry of learned embedding space
 
 A few geometric properties of embedding spaces are worth understanding because they dictate how you should configure distance metrics and quantisation.
@@ -112,6 +117,7 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 > **Choosing dimensions with MRL:** a useful heuristic for selecting the truncation size $m$ is to plot Recall@10 vs $m$ on a sample of your actual query/document pairs and find the elbow point. For most English text retrieval tasks, the elbow is around 256–512 dimensions. Going below 128 usually degrades recall noticeably, while going from 1024 to 1536 often gives less than 1 point of improvement. Only you can decide what tradeoff is right given your latency budget and recall requirements.
 
 ![Matryoshka Representation Learning — the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://sthalles.github.io/assets/matryoshka-representation-learning/representation-learning.png)
+*MRL nests the learning objectives: each prefix of the vector is trained to work as a standalone embedding, so you can truncate at any supported size and still get competitive recall.*
 
 ### Providers in Piramid
 
@@ -199,6 +205,8 @@ Request
               └── Provider   (OpenAIEmbedder or LocalEmbedder)
 ```
 
+<!-- TODO: Embedder stack diagram showing the three nested layers as boxes — RetryEmbedder on the outside, CachedEmbedder in the middle, Provider at the core, with request/response arrows flowing inward on the way down and outward on the way back up -->
+
 The ordering is deliberate. The cache sits *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
 The cache is keyed on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
@@ -256,6 +264,8 @@ For `text-embedding-3-large` at $d = 3072$ the raw storage doubles to 12.3 GB. T
 These are the numbers that motivate quantisation and dimensionality reduction.
 
 #### int8 scalar quantisation
+
+<!-- TODO: int8 quantisation diagram — a float32 range mapped linearly to 256 integer buckets, with the uniform step size ε_q shown as the gap between original float value and its nearest quantised level -->
 
 Piramid supports int8 scalar quantisation, which compresses each float32 component to a signed int8 by linearly mapping the observed range:
 

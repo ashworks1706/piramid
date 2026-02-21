@@ -59,6 +59,7 @@ When all distances are nearly equal, there is no local structure for a spatial i
 > **What actually works at high dimensions:** graph-based indexes (HNSW) exploit the empirical cluster structure of the data directly rather than trying to partition abstract coordinates. Quantisation-based indexes (IVF + PQ) exploit the fact that even high-dimensional vectors often lie near a much lower-dimensional manifold. Neither tries to fight the geometry of $\mathbb{R}^d$ directly.
 
 ![Curse of dimensionality — as dimensions grow, all pairwise distances concentrate around the same value and spatial indexes lose their ability to prune the search space](https://towardsdatascience.com/wp-content/uploads/2023/12/1BSCbxVtV4F6dCkcAL1-y-A.png)
+*As $d$ grows, all points collapse to roughly the same distance from any query — which breaks every partitioning assumption that spatial indexes rely on.*
 
 ### Why approximate is good enough
 
@@ -69,6 +70,8 @@ For RAG pipelines it almost never does. An LLM context window holds 5–20 retri
 Where recall does matter: deduplication (you need exact matches, not approximate ones), compliance retrieval (must surface every relevant document), and similarity thresholding (returning "no match" for queries below a distance cutoff requires precise distances). For those workloads, Flat or a post-search exact reranker is appropriate.
 
 ### Flat: the honest baseline
+
+<!-- TODO: Linear scan illustration — a query point on the left, arrows fanning out to all N stored vectors, labeled O(N·d); contrasted with the HNSW graph on the right showing only the small candidate set explored during traversal -->
 
 The Flat index does not pretend to be smart. For every query it iterates over every known vector ID, computes the configured similarity score, then returns the top $k$ in $O(Nd)$ time. There is no build phase, no build memory overhead, and recall is exactly 1.0 by definition.
 
@@ -100,6 +103,7 @@ Piramid's auto-selector threshold of 10,000 is deliberately conservative: it lea
 [HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm behind most high-performance vector databases like [Pinecone](https://www.pinecone.io/), Weaviate, Milvus, and Qdrant. at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
 
 ![HNSW layered graph — layer 2 is sparse for long-range navigation, layer 1 is denser, layer 0 holds all nodes with the full connection density; search descends from top to bottom](https://miro.medium.com/1*hEu_9Z1Ra5ndhDS1n_Kjdg.png)
+*HNSW layers: the top is a sparse express lane for long-range jumps, and each lower layer adds more nodes and edges until layer 0, which has everything. Search descends from top to bottom.*
 
 #### The small-world graph idea
 
@@ -254,7 +258,8 @@ During search, tombstoned nodes are used as traversal intermediaries; their edge
 
 ### IVF: Voronoi cells and k-means
 
-![IVF vs HNSW](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm1J-FSFmhU3OB-AdeufzY3Msu5Bmk1iNbCQ&s)
+![IVF partitioned vector space](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm1J-FSFmhU3OB-AdeufzY3Msu5Bmk1iNbCQ&s)
+*IVF partitions the vector space into Voronoi cells via k-means. At query time only the closest `nprobe` cells are scanned, limiting the search to a small fraction of the dataset.*
 
 IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using [k-means](https://en.wikipedia.org/wiki/K-means_clustering), and for each cluster maintains an **inverted list** (a list of vector IDs assigned to that cluster). At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
 
@@ -449,6 +454,8 @@ For HNSW, `remove` tombstones the node. For IVF, `remove` looks up the vector's 
 The vector index is always kept in memory and is the source of truth for fast queries. Disk persistence of the index happens as part of the compaction cycle through the storage layer's serialisation path; the index structs derive `serde::Serialize` and `serde::Deserialize`, so they can round-trip cleanly to the `.vidx.db` file.
 
 ### Product quantisation and future compression
+
+<!-- TODO: PQ compression diagram — a d-dimensional vector split into m equal subvectors, each subvector mapped to the nearest centroid in its codebook (shown as a small grid of 256 centroids), producing a compact m-byte code -->
 
 As collections scale past a few million vectors, memory becomes the binding constraint. A 1536-dimensional `f32` embedding is 6,144 bytes. Ten million of them occupy ~58 GB, well beyond single-server RAM. Product quantisation (PQ) is the standard technique for compressing vectors by 8–64× with only modest recall degradation.
 
