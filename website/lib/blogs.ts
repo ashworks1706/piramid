@@ -15,7 +15,12 @@ export type BlogMeta = {
 
 export type BlogSearchEntry = {
   slug: string[];
-  title: string;
+  pageTitle: string;
+  /** The heading text for this section (undefined = page-level entry) */
+  section?: string;
+  /** Anchor fragment id so we can link directly to this heading */
+  headingId?: string;
+  /** Plain-text content of just this section, capped for serialisation */
   text: string;
 };
 
@@ -198,15 +203,76 @@ function stripFrontmatterAndMarkdown(raw: string): string {
 
 export function buildSearchIndex(): BlogSearchEntry[] {
   if (cachedSearch) return cachedSearch;
-  cachedSearch = listBlogs().map((blog) => {
+  const slugger = new GithubSlugger();
+  const entries: BlogSearchEntry[] = [];
+
+  for (const blog of listBlogs()) {
     const raw = fs.readFileSync(blog.filePath, "utf8");
-    const text = stripFrontmatterAndMarkdown(raw);
-    return {
+
+    // Strip frontmatter
+    let body = raw;
+    if (body.startsWith("---")) {
+      const end = body.indexOf("---", 3);
+      if (end !== -1) body = body.slice(end + 3);
+    }
+
+    // Split body into sections by headings
+    // Each section = { headingText, headingId, rawContent }
+    type Section = { headingText: string; headingId: string; raw: string };
+    const headingRe = /^(#{1,6})[ \t]+(.+)$/m;
+    const sections: Section[] = [];
+
+    let remaining = body;
+    slugger.reset();
+
+    while (remaining.length > 0) {
+      const match = headingRe.exec(remaining);
+      if (!match) {
+        // No more headings — rest is content of whatever came before
+        if (sections.length > 0) {
+          sections[sections.length - 1].raw += remaining;
+        }
+        break;
+      }
+      // Content before first heading goes into a preamble (no headingId)
+      const before = remaining.slice(0, match.index);
+      if (sections.length > 0) {
+        sections[sections.length - 1].raw += before;
+      }
+      // Strip markdown from heading text for the display label
+      const rawHeadingText = match[2]
+        .replace(/\[([^\]]*?)\]\([^)]*\)/g, "$1")
+        .replace(/`([^`]*)`/g, "$1")
+        .replace(/\*\*([^*]*)\*\*/g, "$1")
+        .replace(/\*([^*]*)\*/g, "$1")
+        .trim();
+      const id = slugger.slug(rawHeadingText);
+      sections.push({ headingText: rawHeadingText, headingId: id, raw: "" });
+      remaining = remaining.slice(match.index + match[0].length);
+    }
+
+    // Convert each section to a search entry
+    for (const sec of sections) {
+      const text = stripFrontmatterAndMarkdown(sec.raw).slice(0, 500);
+      if (!text && !sec.headingText) continue; // skip empty
+      entries.push({
+        slug: blog.slug,
+        pageTitle: blog.title,
+        section: sec.headingText,
+        headingId: sec.headingId,
+        text,
+      });
+    }
+
+    // Also add a page-level entry (no headingId) for title-based matching
+    entries.push({
       slug: blog.slug,
-      title: blog.title,
-      text,
-    };
-  });
+      pageTitle: blog.title,
+      text: stripFrontmatterAndMarkdown(body).slice(0, 300),
+    });
+  }
+
+  cachedSearch = entries;
   return cachedSearch;
 }
 

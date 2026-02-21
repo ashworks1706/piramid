@@ -29,7 +29,6 @@ export default function Home() {
           <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
             Piramid is an open-source project I built to understand how vector databases actually work —
             the indexing algorithms, storage engine, embeddings layer, and everything in between.
-            The blog is a deep-dive into all of it.
           </p>
           <div className="flex flex-wrap gap-3 pt-1">
             <Link
