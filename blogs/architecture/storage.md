@@ -123,7 +123,7 @@ The cost is real: for large HNSW graphs, serializing the vector index is expensi
 
 ### Compaction
 
-![Data file compaction diagram — before: the file with live entries (solid) interspersed with dead/orphaned bytes (hatched), labeled "fragmented"; after: a tightly packed file with only live entries and a much smaller file size](https://lh3.googleusercontent.com/gg-dl/AOI_d_9KFJLWEzRz5sXhnyExrR6Bce4SsLlvKvw8WU9zqnHfs9RJHcvopZo_MCohoVwendeGhQrDdgSazTx6baFPZJH6U4YjSAa-7wcDMmRUPstKEu3AF-_PjGXN9tBjAJ7-lLa8G4qipy3sOpMbAVpDjdYInQFF46_E06ioLhP-1GerQANk=s1024-rj?authuser=1)
+![Data file compaction diagram — before: the file with live entries (solid) interspersed with dead/orphaned bytes (hatched), labeled "fragmented"; after: a tightly packed file with only live entries and a much smaller file size](../../assets/blogs/data-compaction.png)
 
 In an LSM-tree, compaction is a continuous background process: SSTables at each level are periodically merged and rewritten to eliminate deleted keys, expired entries, and overwritten versions. The benefit is that read amplification stays bounded, so you never have to consult too many SSTables to answer a query, and reclaimed space is freed gradually rather than accumulating. The cost is ongoing write amplification; data is physically rewritten multiple times as it moves down the tree levels.
 

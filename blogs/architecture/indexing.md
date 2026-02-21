@@ -71,7 +71,7 @@ Where recall does matter: deduplication (you need exact matches, not approximate
 
 ### Flat: the honest baseline
 
-![Linear scan illustration — a query point on the left, arrows fanning out to all N stored vectors, labeled O(N·d); contrasted with the HNSW graph on the right showing only the small candidate set explored during traversal](https://lh3.googleusercontent.com/gg-dl/AOI_d_-cFnn29ryxl142aT55WuVcd_Tu1Kc3ljUIPCrodFSLp4ySmPcT_ZD9P_560gAgyXdJgd7fEpZcAcv-IF8OCgjDTTipEb0HS5tzkZwNRrEeARyj_YdGq7xPCjfmp4CZDHXjHhqfRgDKxOcP9dKIswgAzQe0RwS5ql6pPaKOXEq2TgA2=s1024-rj?authuser=1)
+![Linear scan illustration — a query point on the left, arrows fanning out to all N stored vectors, labeled O(N·d); contrasted with the HNSW graph on the right showing only the small candidate set explored during traversal](../../assets/blogs/linear-scan.png)
 
 The Flat index does not pretend to be smart. For every query it iterates over every known vector ID, computes the configured similarity score, then returns the top $k$ in $O(Nd)$ time. There is no build phase, no build memory overhead, and recall is exactly 1.0 by definition.
 
@@ -455,7 +455,7 @@ The vector index is always kept in memory and is the source of truth for fast qu
 
 ### Product quantisation and future compression
 
-![Product quantisation splits vectors into subvectors and encodes each subvector as a byte-sized centroid ID, enabling 32× compression with fast approximate distance via lookup tables.](https://lh3.googleusercontent.com/gg-dl/AOI_d_9M_DBApf9Sx6KQfLjCRyfL9kyY3S12Azj-Cra_X64uKPze1WXiNldxPIJ1sVmOoGRzZ5ua0wTrhonLwTJSW6f0uF3MAHrkvkF3Zz0w7siTNJnZ50m4ie8Yq4vHD6EVwyA9STMH6p3fhsCp6y6yEMtvWFehgAwkgx8uJd60y2z0RsJNpw=s1024-rj?authuser=1)
+![Product quantisation splits vectors into subvectors and encodes each subvector as a byte-sized centroid ID, enabling 32× compression with fast approximate distance via lookup tables.](../../assets/blogs/pq-compression.png)
 
 [Product quantisation](https://en.wikipedia.org/wiki/Product_quantization) is a powerful technique for compressing high-dimensional vectors while preserving the ability to compute approximate distances efficiently.
 
