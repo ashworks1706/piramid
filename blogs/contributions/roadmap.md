@@ -4,6 +4,18 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### Documentation & Testing
 
+
+**Blogs**
+
+[ ] add vector database components diagram on evolution page
+[ ] add more images for the database page methadologies,  links for bigger terms  
+[ ] add more images for the embeddings page, link my workshop content there, links for bigger terms
+[ ] add more images for storage page, links for bigger terms 
+[ ] add more images for indexing page and links for bigger terms 
+[ ] fix UI on overview page, make the block card clickable, make responsive on mobile 
+[ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
+[ ] 
+
 **Documentation**
 
 - [ ] Separate API docs to `docs.piramiddb.com` (Mintlify)
@@ -12,7 +24,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] Fix dashboard UI
 - [ ] Add more metrics to dashboard (memory usage, disk usage, query latency, etc.)
-- [ ] Add GPU metrics to dashboard (temperature, memory usage, etc.)
 - [ ] Fix Docker image
 
 ---
@@ -38,6 +49,13 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Prefetching for sequential reads
 - [ ] Background job queue for long operations
 
+** Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features 
+- [ ] update blogs to reflect any code changes and new features 
+
 **Query Optimization**
 
 - [ ] Query result caching
@@ -51,6 +69,13 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Incremental backups
 - [ ] Database migrations
 
+** Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features 
+- [ ] update blogs to reflect any code changes and new features 
+
 **Metadata Improvements**
 
 - [ ] Complex filters (AND/OR/NOT combinations)
@@ -59,6 +84,13 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Regex/pattern matching on string metadata
 - [ ] Date range filters
 - [ ] Array membership checks
+
+** Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features 
+- [ ] update blogs to reflect any code changes and new features 
 
 **Schema Support**
 
