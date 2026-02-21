@@ -14,7 +14,6 @@
         "architecture/storage",
         "architecture/indexing",
         "architecture/query",
-        "architecture/limitations"
       ]
     },
     {
@@ -27,13 +26,13 @@
       ]
     },
     {
-      "label": "Customers",
+      "label": "Clients",
       "items": [
-        "customers",
-        "customers/sdk",
-        "customers/dashboard",
-        "customers/cli",
-        "customers/env"
+        "clients",
+        "clients/sdk",
+        "clients/dashboard",
+        "clients/cli",
+        "clients/env"
       ]
     },
     { "label": "Contributions", "items": ["contributions", "roadmap"] }

@@ -62,7 +62,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Query result caching
 - [ ] Query planning/optimization
 - [ ] Query budget enforcement (timeouts, complexity limits)
-- [ ] Implement quantization for HNSW configurable vector compression (e.g. 8-bit, 4-bit, etc.)
 
 **Backup & Restore**
 
@@ -125,6 +124,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Background index maintenance: online HNSW/IVF compaction and tombstone cleanup without blocking reads
 - [ ] Range and preset search modes: expose range queries and "fast/balanced/high" presets mapped to tuned params
 - [ ] Search observability: per-collection recall/latency histograms and sampled miss diagnostics in `/api/metrics`
+- [ ] Implement quantization for HNSW configurable vector compression (e.g. 8-bit, 4-bit, etc.)
+- [ ] src/quantization/ module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the .vidx.db file, and search_layer's distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final ef candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
+- [ ] Piramid uses random initialisation (just takes the first KK vectors). k-means++ initialises centroids by sampling proportionally to ∥x−nearest existing centroid∥2∥x−nearest existing centroid∥2, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions
 
 **Regular codebase refreshment**
 - [ ] refactor codebase for better modularity and maintainability
