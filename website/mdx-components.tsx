@@ -1,4 +1,5 @@
 import type { MDXComponents } from "mdx/types";
+import { BlogImage } from "./components/BlogImage";
 
 type ImgProps = React.ImgHTMLAttributes<HTMLImageElement>;
 
@@ -12,17 +13,7 @@ const Callout = ({ title, children }: { title: string; children: React.ReactNode
 export const mdxComponents: MDXComponents = {
   Callout,
   // eslint-disable-next-line jsx-a11y/alt-text
-  img: ({ src, alt, ...props }: ImgProps) => (
-    <span className="block my-6">
-      <img
-        src={src}
-        alt={alt ?? ""}
-        className="max-w-full h-auto rounded-xl border border-white/10 shadow-lg shadow-slate-900/40 mx-auto"
-        loading="lazy"
-        {...props}
-      />
-    </span>
-  ),
+  img: ({ src, alt }: ImgProps) => <BlogImage src={src} alt={alt} />,
   h1: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (
     <h1 id={id} className="text-4xl font-semibold tracking-tight text-white" {...rest}>
       {children}
