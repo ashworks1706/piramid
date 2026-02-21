@@ -33,24 +33,24 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Storage**
 
-- [ ] in `insert_internal` (`storage/collection/operations.rs`), dimension validation runs after the mmap write — if validation fails, the mmap has a ghost entry with no index pointer that silently wastes space. move dimension validation before any writes.
-- [ ] HNSW tombstone deletes never evict from `vector_cache` — deleted entries stay in memory until manual compaction. other index types (IVF, Flat) evict correctly on delete. fix: evict from `vector_cache` immediately after tombstone is set.
-- [ ] `grow_mmap_if_needed` (`storage/persistence/mmap.rs`) calls `.unwrap()` on `mmap.as_ref()` unconditionally — panics on the first grow when mmap is disabled in config. add a guard for the mmap-disabled path.
-- [ ] `update_metadata` and `update_vector` each write 3 WAL entries per call (Update + Delete + Insert) because they delegate to `delete()` and `insert()` instead of the internal variants. use `delete_internal` + `insert_internal` and emit only the single Update entry already logged at the top of each function.
-- [ ] upsert double-quantizes on the update path: quantize → serialize → deserialize → dequantize → re-quantize. pass the original f32 through the upsert path directly.
-- [ ] `storage/persistence/vector_index.rs` downcasts `Box<dyn VectorIndex>` via raw `*const dyn VectorIndex` pointer casts with `unsafe` — undefined behaviour on a wrong index type. replace with a `to_serializable()` method on the `VectorIndex` trait.
-- [ ] `save_index` is called on every single insert, upsert, delete, and update — serializing the full `HashMap<UUID → EntryPointer>` to disk on every mutation is O(N) disk I/O per write. checkpoint-only saves, not per operation.
-- [ ] offset calculation on every insert scans all entries via `.max()` over all `EntryPointer` values — O(N) per insert. replace with a single `next_offset: u64` field on the collection struct.
+- [ ] dimension validation runs after the vector is already written to disk — if it fails, we're left with a ghost entry that wastes space forever. validate dimensions before touching the file.
+- [ ] when HNSW deletes a vector it only marks a tombstone in the graph but never removes it from the in-memory cache, so deleted vectors keep consuming memory until a manual compaction is run. IVF and Flat both clean up correctly — HNSW should too.
+- [ ] if mmap is disabled in the collection config, the storage layer panics on the first write that needs to grow the file. needs a proper guard instead of an unconditional unwrap.
+- [ ] updating a vector or its metadata writes three separate WAL log entries per operation (update + delete + insert) instead of one. this inflates the WAL unnecessarily and makes recovery replay more expensive than it needs to be.
+- [ ] on the upsert update path, vectors get quantized twice — once when originally stored and again on the way back in. the original float values should be passed through directly instead.
+- [ ] index serialization uses unsafe pointer casts to convert the index trait object to a concrete type — if the wrong type is ever stored this is undefined behaviour. should use a safe serialization method on the index trait instead.
+- [ ] the index file is fully rewritten to disk on every single insert, update, or delete. for large collections this becomes a serious write bottleneck. it should only flush at checkpoint intervals, not per operation.
+- [ ] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
 
 **IVF Index**
 
-- [ ] IVF `insert` silently drops vectors during bootstrap: if `centroids.is_empty()` and `vectors.len() < num_clusters`, it returns early without inserting anywhere — vectors are permanently lost from the index with no error. buffer pre-cluster vectors and replay them into the index once clusters are built.
-- [ ] IVF `insert` uses `Vec::contains` for duplicate ID checking (O(cluster_size) per insert) — use the existing `vector_to_cluster` HashMap instead.
+- [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning — they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
+- [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
 **Server & API**
 
-- [ ] every read endpoint calls `get_or_create_collection`, auto-creating a new empty collection on disk if the name does not exist. read-only handlers should use a `get_collection` that returns 404 on NotFound.
-- [ ] `CachedEmbedder` (`embeddings/cache.rs`) holds `std::sync::Mutex` across `.await` points — blocks Tokio threads under cache contention. switch to `tokio::sync::Mutex` or drop the lock before any await.
+- [ ] read endpoints (GET collection, GET vector, search) silently create a new empty collection on disk if the name doesn't exist, instead of returning a 404. only write endpoints should be allowed to create collections.
+- [ ] the embedding cache uses a blocking mutex inside async request handlers, which can stall the async runtime under load. should use an async-aware lock or be restructured to avoid holding it across await points.
 
 ---
 
@@ -85,8 +85,8 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Quantization Refactor**
 
-- [ ] move quantization from Storage to Index layer: `storage/collection/operations.rs` currently applies `QuantizedVector::from_f32_with_config()` at insert time, permanently discarding the original f32. Two problems: (1) no speed benefit — the index only stores UUIDs so graph traversal still fetches full f32s from `vector_cache` for every distance comparison; (2) accuracy loss — `search/engine.rs` dequantizes at score time but reconstructs from a lossy approximation, not the original. Fix: store original f32 in mmap, move quantization inside the index layer for graph traversal, re-rank final `ef` candidates with original f32 from storage, and remove the dequantization step in `search/engine.rs` entirely. This is the standard approach used by FAISS, Qdrant, and Weaviate.
-- [ ] `src/quantization/` exists in scaffolded form — once integrated, PQ codes would live alongside the HNSW graph in `.vidx.db` and `search_layer` would use lookup-table ADC instead of full dot products. Reranking the final `ef` candidates with mmap'd f32 keeps recall high while search-phase compute drops ~8× and memory ~32×.
+- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. this is how FAISS, Qdrant, and Weaviate all do it.
+- [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented — it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
 
 **Index Improvements**
 
