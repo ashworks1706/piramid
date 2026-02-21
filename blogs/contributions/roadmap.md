@@ -31,51 +31,22 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ### Post-Launch
 
-**Benchmarks**
+**Storage Correctness**
 
-- [ ] Set up benchmarks for latency, index strategies, memory usage, etc.
+- [ ] in `insert_internal` in `storage/collection/operations.rs`, bytes are written to the mmap file and the index entry is inserted before dimension validation runs. if validation fails the mmap has a ghost entry with no index pointer, which silently accumulates over time and wastes space. dimension validation should happen before any writes.
+- [ ] HNSW deletes use tombstones for graph connectivity but never remove the deleted vector from `vector_cache`. the cache entry stays in memory until manual compaction is triggered, meaning collections with frequent deletes will grow unbounded in memory. other index types (IVF, Flat) correctly remove from cache on delete. fix: evict from `vector_cache` after tombstone is set, or schedule a background eviction pass.
+- [ ] `storage/persistence/vector_index.rs` downcasts `Box<dyn VectorIndex>` to concrete types using raw `*const dyn VectorIndex` pointer casts with `unsafe`. there is no type-level guarantee the cast is valid and a wrong index type at runtime would be undefined behaviour. should be replaced with a `to_serializable()` method on the `VectorIndex` trait that each implementation returns safely.
+- [ ] `grow_mmap_if_needed` in `storage/persistence/mmap.rs` calls `.unwrap()` on `mmap.as_ref()` unconditionally at the start. if mmap is disabled in collection config, this panics on the first insert that requires a grow. needs a guard for the mmap-disabled path.
 
-**ACID Transactions**
+**Storage Write Performance**
 
-- [ ] Atomic batch operations (all-or-nothing)
-- [ ] Rollback on failure
-- [ ] Isolation (at least serializable)
-- [ ] Idempotency keys
-- [ ] Request deduplication
+- [ ] `save_index` is called on every single insert, upsert, delete, and update in `storage/collection/operations.rs`. this serializes the entire `HashMap<UUID → EntryPointer>` to disk on every mutation which is O(N) disk I/O per write. it should only trigger at checkpoint time, not per operation. will noticeably degrade write throughput as collections grow.
+- [ ] offset calculation on every insert scans all entries in the index to find the write position via `.max()` over all `EntryPointer` values. this is O(N) per insert and should be replaced with a single `next_offset: u64` field tracked on the collection struct and incremented after each write.
 
-**Async Storage I/O**
+**Schema Support**
 
-- [ ] Non-blocking writes (`tokio-fs`)
-- [ ] Async write pipeline (batching/coalescing, buffering, background flush worker)
-- [ ] Prefetching for sequential reads
-- [ ] Background job queue for long operations
-
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features 
-- [ ] update blogs to reflect any code changes and new features 
-
-**Query Optimization**
-
-- [ ] Query result caching
-- [ ] Query planning/optimization
-- [ ] Query budget enforcement (timeouts, complexity limits)
-
-**Backup & Restore**
-
-- [ ] Snapshot API (copy-on-write)
-- [ ] Point-in-time recovery (PITR)
-- [ ] Incremental backups
-- [ ] Database migrations
-
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features 
-- [ ] update blogs to reflect any code changes and new features 
+- [ ] Define expected dimensions per collection
+- [ ] Metadata schema validation
 
 **Metadata Improvements**
 
@@ -86,23 +57,50 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Date range filters
 - [ ] Array membership checks
 
-**Regular codebase refreshment**
-- [ ] refactor codebase for better modularity and maintainability
-- [ ] add more unit tests and integration tests
-- [ ] make sure ci cd pipeline is robust and covers all critical paths
-- [ ] update documentation to reflect any code changes and new features 
-- [ ] update blogs to reflect any code changes and new features 
+**Query Optimization**
 
-**Schema Support**
+- [ ] Query result caching
+- [ ] Query planning/optimization
+- [ ] Query budget enforcement (timeouts, complexity limits)
 
-- [ ] Define expected dimensions per collection
-- [ ] Metadata schema validation
+**Async Storage I/O**
+
+- [ ] Non-blocking writes (`tokio-fs`)
+- [ ] Async write pipeline (batching/coalescing, buffering, background flush worker)
+- [ ] Prefetching for sequential reads
+- [ ] Background job queue for long operations
+
+**ACID Transactions**
+
+- [ ] Atomic batch operations (all-or-nothing)
+- [ ] Rollback on failure
+- [ ] Isolation (at least serializable)
+- [ ] Idempotency keys
+- [ ] Request deduplication
+
+**Backup & Restore**
+
+- [ ] Snapshot API (copy-on-write)
+- [ ] Point-in-time recovery (PITR)
+- [ ] Incremental backups
+- [ ] Database migrations
+
+**Benchmarks**
+
+- [ ] Set up benchmarks for latency, index strategies, memory usage, etc.
 
 **Python Support**
 
 - [ ] Python client SDK
 - [ ] Add docs
 - [ ] Easy API docs for SDKs (Rust via MkDocs)
+
+**Regular codebase refreshment**
+- [ ] refactor codebase for better modularity and maintainability
+- [ ] add more unit tests and integration tests
+- [ ] make sure ci cd pipeline is robust and covers all critical paths
+- [ ] update documentation to reflect any code changes and new features
+- [ ] update blogs to reflect any code changes and new features
 
 ---
 
@@ -124,7 +122,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Background index maintenance: online HNSW/IVF compaction and tombstone cleanup without blocking reads
 - [ ] Range and preset search modes: expose range queries and "fast/balanced/high" presets mapped to tuned params
 - [ ] Search observability: per-collection recall/latency histograms and sampled miss diagnostics in `/api/metrics`
-- [ ] Implement quantization for HNSW configurable vector compression (e.g. 8-bit, 4-bit, etc.)
+- [ ] move quantization from Storage to Index layer: currently `storage/collection/operations.rs` applies `QuantizedVector::from_f32_with_config()` at insert time, permanently discarding the original f32. This causes two concrete problems: (1) no speed benefit — the index only stores UUIDs so HNSW/IVF graph traversal still fetches full f32s from `vector_cache` for every distance comparison, meaning the quantization compression never accelerates search at all; (2) accuracy loss with no upside — `search/engine.rs` does dequantize at score time, but it reconstructs from a lossy approximation, not the original, so final scores are degraded. The fix has three parts: store original f32 in mmap as the source of truth, move quantization inside the index layer so graph traversal uses compressed vectors for fast candidate selection, then re-rank the final `ef` candidates using the original f32s from storage for accurate scoring. As a result of this fix, the dequantization step currently in `search/engine.rs` should be removed entirely — once storage returns raw f32 there is nothing to decode, and the search engine scores directly against the original vector. This is the standard approach used by FAISS, Qdrant, and Weaviate.
 - [ ] src/quantization/ module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the .vidx.db file, and search_layer's distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final ef candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
 - [ ] Piramid uses random initialisation (just takes the first KK vectors). k-means++ initialises centroids by sampling proportionally to ∥x−nearest existing centroid∥2∥x−nearest existing centroid∥2, which produces better initial spread and usually converges in fewer iterations. It's a potential improvement to the build phase for distributions where random initialisation produces early clustering near dense regions
 
