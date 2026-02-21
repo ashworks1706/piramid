@@ -39,7 +39,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] updating a vector or its metadata writes three separate WAL log entries per operation (update + delete + insert) instead of one. this inflates the WAL unnecessarily and makes recovery replay more expensive than it needs to be.
 - [ ] on the upsert update path, vectors get quantized twice — once when originally stored and again on the way back in. the original float values should be passed through directly instead.
 - [ ] index serialization uses unsafe pointer casts to convert the index trait object to a concrete type — if the wrong type is ever stored this is undefined behaviour. should use a safe serialization method on the index trait instead.
-- [ ] the index file is fully rewritten to disk on every single insert, update, or delete. for large collections this becomes a serious write bottleneck. it should only flush at checkpoint intervals, not per operation.
+- [ ] the index pointer file (`.index.db`) is fully rewritten on every single insert, update, or delete, while the ANN graph file (`.vecindex.db`) is only written at checkpoints. this inconsistency means the two files can describe different states between checkpoints — if the WAL is disabled or corrupted during that window, the ANN graph silently misses entries with no error. both files should flush together at checkpoint time only, with the WAL as the only per-mutation write.
 - [ ] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
 
 **IVF Index**
@@ -97,7 +97,8 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Filter & Cache Acceleration**
 
-- [ ] metadata cache alongside vector cache with configurable eviction and rebuild/invalidation metrics
+- [ ] the collection map in AppState keeps every opened collection in memory forever with no eviction — a server that opens many collections will grow unbounded. `cache_max_bytes` config exists but nothing enforces it. needs an LRU eviction policy so idle collections can be closed and their memory (vector cache, metadata cache, mmap) released.
+- [ ] metadata cache alongside vector cache with configurable eviction and rebuild/invalidation metrics — note: once the quantization refactor is complete and PQ is integrated, the metadata cache becomes redundant (metadata lives in the same mmap Document as the vector, so re-ranking reads it for free) and should be removed at that point
 - [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
 - [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
 - [ ] background cache warmup and refresh scheduling
