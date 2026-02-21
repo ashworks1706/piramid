@@ -11,7 +11,7 @@ It started as a simple idea, but I knew from day one it would be difficult. Stil
 
 I opened [Excalidraw](https://excalidraw.com) and started sketching everything I could think of: architecture, data flow, storage layout, indexing strategies, search paths, API shape, CLI flow, caching, and collection lifecycle. Then I went even broader into things like consistency, durability, backup/restore, observability, deployment, and scaling.
 
-<!-- TODO: Piramid component architecture diagram — showing the API server, collection manager, embedder stack (retry + cache + provider), vector index (HNSW/IVF/Flat), storage layer (mmap + offset index), and WAL, all connected with request flow arrows from top to bottom -->
+{/* TODO: Piramid component architecture diagram — showing the API server, collection manager, embedder stack (retry + cache + provider), vector index (HNSW/IVF/Flat), storage layer (mmap + offset index), and WAL, all connected with request flow arrows from top to bottom */}
 
 At every step I noticed the same thing: every decision connects to five others. Nothing in database systems is isolated. It’s deep, and everything needs to work together.
 
