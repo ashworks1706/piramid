@@ -1,5 +1,6 @@
 import type { MDXComponents } from "mdx/types";
 import { BlogImage } from "./components/BlogImage";
+import { PostCard, PostCards } from "./components/PostCard";
 
 type ImgProps = { src?: string; alt?: string };
 
@@ -12,6 +13,8 @@ const Callout = ({ title, children }: { title: string; children: React.ReactNode
 
 export const mdxComponents: MDXComponents = {
   Callout,
+  PostCard,
+  PostCards,
   // eslint-disable-next-line jsx-a11y/alt-text
   img: ({ src, alt }: ImgProps) => <BlogImage src={src} alt={alt} />,
   h1: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (

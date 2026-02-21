@@ -34,29 +34,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* What's in the blog */}
-        <section className="space-y-6">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">What's covered</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { title: "Vector databases", desc: "What they are, how they differ from relational, graph, and document stores." },
-              { title: "Embeddings", desc: "Word2Vec, transformers, contrastive learning, and the geometry of embedding spaces." },
-              { title: "Indexing", desc: "HNSW, IVF, flat search — the algorithms, the math, and when to use each." },
-              { title: "Query engine", desc: "ANN search, metadata filtering, overfetch, and the recall/latency tradeoff." },
-              { title: "Storage", desc: "mmap, WAL, checkpoints, compaction, and how durability actually works." },
-              { title: "Operations", desc: "Config, health endpoints, logging, and running it in production." },
-            ].map((item) => (
-              <div key={item.title} className="rounded-2xl border border-white/8 bg-white/[0.03] p-5 space-y-1.5">
-                <div className="text-sm font-semibold text-slate-100">{item.title}</div>
-                <div className="text-sm text-slate-500 leading-relaxed">{item.desc}</div>
-              </div>
-            ))}
-          </div>
-          <Link href="/blogs" className="inline-flex text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
-            Browse all posts →
-          </Link>
-        </section>
-
         {/* Footer */}
         <footer className="flex flex-wrap gap-x-5 gap-y-1 pb-4 text-sm text-slate-500">
           <Link href="/blogs" className="hover:text-slate-300 transition-colors">Blog</Link>
