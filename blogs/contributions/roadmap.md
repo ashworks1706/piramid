@@ -6,7 +6,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Blogs**
 
-- [ ] add vector database components diagram on evolution page
 - [ ] add more images for the database page methadologies,  links for bigger terms, add summary at the end  
 - [ ] add more images for the embeddings page, link my workshop content there, links for bigger terms, add summary at the end
 - [ ] add more images for storage page, links for bigger terms, add summary at the end

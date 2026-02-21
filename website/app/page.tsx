@@ -31,6 +31,9 @@ export default function Home() {
             >
               View on GitHub
             </a>
+            <code className="rounded-full border border-white/10 bg-white/[0.04] px-5 py-2 text-sm font-mono text-slate-400 select-all tracking-tight">
+              cargo install piramid
+            </code>
           </div>
         </section>
 

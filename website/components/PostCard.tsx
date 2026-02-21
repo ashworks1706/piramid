@@ -30,7 +30,7 @@ export function PostCard({
           →
         </span>
       </div>
-      <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{children}</p>
+      <div className="mt-1.5 text-xs text-slate-500 leading-relaxed">{children}</div>
     </Link>
   );
 }
