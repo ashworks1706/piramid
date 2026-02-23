@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation.
+This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation. Zipy GPU integration is a Phase-2 optional acceleration layer — Piramid is fully functional without it. Zipy work begins after base piramid are complete.
 
 ### Documentation & Testing
 
@@ -64,14 +64,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] automatic index rebuild from WAL on detected corruption
 - [ ] chaos tests: crash at WAL checkpoints, index rebuild idempotence, mmap-off fallback, partial-write recovery
 
-**Transactions & Consistency**
-
-- [ ] atomic batch operations (all-or-nothing insert/delete sets)
-- [ ] rollback on failure
-- [ ] idempotency keys + request deduplication
-- [ ] snapshot API (copy-on-write) + point-in-time recovery
-- [ ] incremental backups and database migrations
-
 ---
 
 ### Index & Search Quality
@@ -87,6 +79,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
+- [ ] Introduce ComputeBackend trait (Cpu | ZipyGpu) — index traversal must dispatch distance computation through a backend abstraction instead of assuming CPU-only execution. (Design-only for now; GPU implementation deferred to Phase 2.)
 
 **Filter & Cache Acceleration**
 
@@ -99,7 +92,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] query result caching (LRU, TTL-based)
 - [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
-- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
 - [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
 
 ---
@@ -111,24 +103,10 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] enforce dimension constraints end-to-end: set expected dimensions at collection creation time, re-validate at open time (fail-fast on mismatch), and validate before any mmap write so a failed insert never leaves a ghost entry on disk
 - [ ] metadata schema validation (typed fields, required/optional)
 
-**Metadata Filters**
-
-- [ ] complex boolean filters (AND/OR/NOT combinations)
-- [ ] metadata indexing for fast pre-filtering
-- [ ] range queries on numeric fields
-- [ ] regex/pattern matching on string fields
-- [ ] date range filters
-- [ ] array membership checks
-- [ ] metadata-only search (no vector similarity)
-- [ ] vector count per metadata filter
-
 **Search API Extensions**
 
-- [ ] recommendation API (similar to these IDs, not those)
 - [ ] grouped/diverse search (max results per category/namespace)
 - [ ] scroll/cursor pagination for large result sets
-- [ ] vector similarity between two stored vectors (no query vector)
-- [ ] SQL integration
 
 **Clients & SDK**
 
@@ -159,43 +137,55 @@ This is the working roadmap for contributors. If you want to help, start here an
 ---
 
 ### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
+*(Phase 2 - blocked by quantization refactor & storage durability work. Zipy integration will be implemented after core storage, indexing, and quantization are stable. Zipy must be optional and cannot change persistence guarantees.)*
 
-*depends on the quan- [ ] fix UI on overview page, make the block card clickable on index md page, make responsive on mobile 
-- [ ] add section '#' icons, right sidebar embedded link formatting, leftsidebar page route highlighting 
-tization refactor being complete — VRAM hydration and dual-write require raw f32 vectors in storage as the source of truth*
+- [ ] add `zipy` crate to `Cargo.toml` as an optional feature (feature-flagged)
+- [ ] define `ComputeBackend` trait + `ExecutionMode` hook; ensure indexes call trait methods (design only)
+- [ ] wire the existing `ExecutionMode::Gpu` variant to dispatch through `ZipyEngine` when feature enabled — fallback to CPU by default
+- [ ] attempt Zipy initialization on boot, fallback to CPU on failure (graceful degrade)
+- [ ] add `/api/health` GPU status fields (temperature, VRAM used/free)
 
-- [ ] add `zipy` crate to `Cargo.toml` as an optional feature
-- [ ] wire the existing `ExecutionMode::Gpu` variant to dispatch through `ZipyEngine` — do not add a new variant, `Gpu` is already the intended hook and adding another leaves it as dead code
-- [ ] attempt Zipy initialization on boot, fallback to CPU on failure
-- [ ] hydrate existing on-disk vectors from mmap into GPU VRAM on startup (raw f32 — requires quantization refactor done first)
-- [ ] dual-write architecture: inserts write to both mmap (persistence) and Zipy VRAM so VRAM stays warm without re-hydrating on every restart (requires quantization refactor done first)
-- [ ] wire distance computation inside each index (HNSW hop distances, IVF centroid lookups, Flat candidate scores) to dispatch through Zipy when `ExecutionMode::Gpu` is active — the HTTP search handler does not change, only the internal compute path does
-- [ ] flat search: replace the sequential per-vector distance loop with a single batched GPU matrix-multiply dispatch via Zipy (turns O(N) CPU calls into one GPU kernel)
-- [ ] IVF: offload k-means cluster training and nearest-centroid lookups to Zipy GPU kernels (Zipy's TODO explicitly targets both)
-- [ ] auto-switch to CPU search if Zipy returns OOM or timeout
-- [ ] extend `/api/health` with GPU status (temperature, VRAM used/free)
+**Blocked / Future (implement after Quantization & Durability are done):**
+- [ ] hydrate on-disk vectors into GPU VRAM on startup (requires raw f32 source-of-truth)
+- [ ] dual-write architecture: insert -> mmap + Zipy VRAM (warm VRAM)
+- [ ] dispatch distance computation (HNSW hops, IVF centroid lookups, Flat scores) through Zipy when `ExecutionMode::Gpu` active
+- [ ] flat search: replace per-vector CPU loop with single batched GPU dispatch
+- [ ] IVF: offload k-means / centroid lookups to Zipy GPU kernels
+- [ ] auto-switch to CPU if Zipy reports OOM/timeout
 
 ---
 
-### Distributed & Enterprise
-
-**Scale**
-
-- [ ] sharding strategies (range, hash)
-- [ ] replication (primary-replica, multi-primary)
-- [ ] consistency models (strong, eventual, bounded staleness)
-- [ ] distributed transactions and cluster management (leader election, node discovery)
+### Later
 
 **Security**
 
 - [ ] JWT token authentication
-- [ ] multi-tenant isolation with collection-level permissions
 - [ ] rate limiting and per-tenant quotas
 - [ ] audit logging
 
+**Metadata Filters**
+
+- [ ] metadata indexing for fast pre-filtering
+- [ ] range queries on numeric fields
+- [ ] regex/pattern matching on string fields
+- [ ] date range filters
+- [ ] array membership checks
+- [ ] vector count per metadata filter
+- [ ] complex boolean filters (AND/OR/NOT combinations)
+
+**Transactions & Consistency**
+
+- [ ] atomic batch operations (all-or-nothing insert/delete sets)
+- [ ] rollback on failure
+- [ ] idempotency keys + request deduplication
+- [ ] snapshot API (copy-on-write) + point-in-time recovery
+- [ ] incremental backups and database migrations
+
 **Platform**
 
+- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
+- [ ] metadata-only search (no vector similarity)
+- [ ] vector similarity between two stored vectors (no query vector)
+- [ ] recommendation API (similar to these IDs, not those)
 - [ ] API versioning in URLs or headers; backward compatibility strategy; deprecation warnings
 - [ ] email/webhook alerts for errors, disk pressure, memory, slow queries, index corruption
-- [ ] import from JSON/CSV/Parquet with streaming and progress tracking
-- [ ] export to JSON/CSV/Parquet; format validation on import
