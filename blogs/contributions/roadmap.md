@@ -80,6 +80,12 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
 - [ ] Introduce ComputeBackend trait (Cpu | ZipyGpu) — index traversal must dispatch distance computation through a backend abstraction instead of assuming CPU-only execution. (Design-only for now; GPU implementation deferred to Phase 2.)
+- [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
+- [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
+- [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
+- [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
+- [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
+- [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results
 
 **Filter & Cache Acceleration**
 
