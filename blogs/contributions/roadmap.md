@@ -84,6 +84,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
 - [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
 - [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
+- [ ] add Annoy
 - [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
 - [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results
 
