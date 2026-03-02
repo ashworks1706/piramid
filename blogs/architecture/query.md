@@ -1,18 +1,6 @@
 # Query
 
-In the [previous sections](/blogs/architecture/indexing) I covered how vectors get inserted and organised into index structures. Now let's talk about the other side: what actually happens when you send a query.
-
-### What the problem actually is
-
-It sounds conceptually simple, but the mechanics of doing that at scale without brute-forcing every comparison are genuinely non-trivial, and the tradeoffs I had to work through are worth understanding.
-
-You have a collection of $n$ vectors $\{\mathbf{x}_1, \mathbf{x}_2, \ldots, \mathbf{x}_n\} \subset \mathbb{R}^d$. You receive a query vector $\mathbf{q} \in \mathbb{R}^d$ and want the $k$ vectors from the collection that are most similar to $\mathbf{q}$ under some distance or similarity function $\text{sim}(\cdot, \cdot)$.
-
-Formally, you want:
-
-$$\text{kNN}(\mathbf{q}, k) = \underset{S \subseteq [n],\, |S|=k}{\arg\max} \sum_{i \in S} \text{sim}(\mathbf{q}, \mathbf{x}_i)$$ For $n = 10^6$ and $d = 1536$, that's $1.536 \times 10^9$ floating-point operations per query. A modern CPU doing 1 GFLOP/s (single-threaded for this kind of sequential scan) takes about 1.5 seconds. A single GPU can do it sub-100ms, but the machine still has to touch all $nd$ floats. At $n = 10^8$ (a reasonably sized production corpus) you're looking at minutes per query no matter how fast your hardware is.
-
-The entire field of approximate nearest neighbor (ANN) search exists to escape this linear bottleneck.
+In the [previous section](/blogs/architecture/indexing) I went through how the index gets built — HNSW graph construction, IVF clustering, why classical spatial indexes collapse at high dimensions. Now the index exists. This post is purely about what happens when a search request comes in.
 
 ---
 
