@@ -242,7 +242,7 @@ With $N = 10^6$, $M = 16$, $M_{\max} = 32$: roughly $10^6 \times 32 \times (16/1
 
 Deletion in graph-based indexes is notoriously awkward. Physically removing a node and its edges can disconnect parts of the graph; future traversals may fail to reach regions that were only accessible through the removed node. This is not a theoretical concern: if a hub node (one that happens to be the entry path to an entire cluster) is deleted and its edges removed, searches into that cluster will silently produce incorrect results.
 
-I went with **tombstoning**: a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
+I went with **tombstoning** after seeing the alternative up close. I met a member of the [SuperMemory](https://supermemory.com) team once who showed me their agentic knowledge graphs — they were doing full node deletion with LRU eviction, rebuilding the entire graph structure every time nodes were removed. The overhead was enormous. Rebuilding an entire index on the spot just because of one deletion is insanity. The analogy I keep coming back to is how Instagram handled the likes feature — they optimized the UX and accepted some technical sacrifice behind the scenes, and the result was great. People are the actual product. So a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
 
 ```rust
 fn mark_tombstone(&mut self, id: &Uuid) {
@@ -332,6 +332,8 @@ After the clusters are built, new vectors are assigned to the nearest existing c
 
 The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. I trigger this through the compaction mechanism, exactly as with HNSW graph rebuilds.
 
+> **Where this is headed:** I haven't run formal benchmarks between HNSW and IVF yet — I've been focused on building features and keeping the codebase clean. I expect HNSW to dominate on 100K+ vector datasets in latency, but IVF might close the gap significantly once I add GPU parallelism through [Zipy](https://github.com/ashworks1706/zipy). IVF's cluster scanning is embarrassingly parallel and maps naturally to GPU compute. HNSW is trickier since graph traversal is inherently sequential, but I'm reading papers on GPU-accelerated graph search and think there's a way to batch the neighbor distance computations within each traversal step. If I can make that work, the performance gains would be substantial.
+
 #### Searching with nprobe
 
 At query time, IVF scans all $K$ centroids to find the `nprobe` nearest (this is a flat scan over centroids, fast since $K \ll N$). Then it scores every vector in those `nprobe` inverted lists and returns the top $k$. The IVF code falls back to a brute-force scan if clusters haven't been built yet:
@@ -359,7 +361,7 @@ Setting `nprobe = K` degrades IVF exactly to the Flat index, a useful debugging 
 
 ### Auto-selection
 
-Auto-selection picks the index type based on collection size:
+This is part of what I mean by making the database "natively smart" — the system should pick the right index, not the user. Auto-selection chooses based on collection size:
 
 ```
 < 10,000 vectors  →  Flat

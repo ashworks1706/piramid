@@ -2,6 +2,8 @@
 
 In the [previous section](/blogs/architecture/database) I established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
+I first truly understood how embeddings work when I took DAT 494 (Advanced Deep Learning) at ASU, where we covered tokenization, embedding layers, pretraining, and post-training from the ground up. But what really made it click was building things from scratch — I implemented [LLMs from fundamentals](https://github.com/ashworks1706/LLM-from-scratch) covering Llama, KiVi, PaLiGemma, DeepSeek, and Mixtral, and taught [4 workshops on LLM and RLHF engineering](https://github.com/ashworks1706/RLHF-from-scratch) to 600+ attendees at [AIS](https://ais-asu.com/). Resources like [Umar Jamil](https://www.youtube.com/@umarjamilai), [Sebastian Raschka](https://sebastianraschka.com/), [3Blue1Brown](https://www.youtube.com/@3blue1brown), and [AI Engineering by O'Reilly](https://www.oreilly.com/library/view/ai-engineering/9781098166298/) were huge for building my intuition. I've collected [all my learning resources here](https://somwrks.notion.site/notes-) for anyone interested. The pretraining stage — tokenization and the embedding layer specifically — is where the geometry of these spaces truly clicked for me.
+
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
 
 
@@ -120,7 +122,7 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 
 ### Providers
 
-Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and Piramid handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
+Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and Piramid handles the rest. I started with two provider types — OpenAI and local HTTP/TEI — because they're the most popular and the easiest to get running. I really want to add [Cohere](https://cohere.com/) and [Jina](https://jina.ai/) support too, but working alone on this entire project — code, SDKs, blogs, website — while juggling two research labs, a part-time job, two student orgs, and classes means I have to be ruthless about scope. More providers are coming. Both current providers implement the same `Embedder` trait:
 
 ```rust
 #[async_trait]
@@ -205,6 +207,8 @@ Request
 ```
 
 ![Embedder Stack](../../assets/blogs/embedder_stack.png)
+This stack exists because things break in practice. I learned this the hard way — during a demo of [SparkyAI](https://github.com/ashworks1706/SparkyAI) in front of my professor, the embedding provider hit a cold start timeout and the whole system just froze. I had to fall back to a local model on the spot. After that I decided any embedding layer I build needs retry logic baked in, not bolted on.
+
 The ordering is deliberate. I put the cache *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
 I key the cache on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
@@ -276,6 +280,8 @@ $$\epsilon_q = \frac{x_{\max} - x_{\min}}{255}$$
 For $\ell_2$-normalised embeddings, each component has range roughly $[-0.1, 0.1]$ (most of the variance is absorbed by the length-1 constraint spreading across 1536 dimensions), so $\epsilon_q \approx 0.0008$. The total L2 distance error accumulated over $d = 1536$ components is approximately $\sqrt{d} \cdot \epsilon_q \approx 0.031$, small relative to typical inter-cluster distances.
 
 > **When to use quantisation:** int8 is appropriate when recall degradation is acceptable (< 1–2 pp Recall@10 drop for most datasets) and memory is the binding constraint. It is not appropriate when precision is critical: compliance retrieval, exact deduplication, or narrow similarity thresholding. For those workloads, keep full float32.
+
+I started with int8 rather than fp16 or bfloat16 because it was the simplest to implement and gives the most dramatic compression ratio for an MVP. The goal isn't to lock users into one quantization format — I want this to be fully configurable, with fp16 and bfloat16 as future options. But for getting something working that I could demo and benchmark, int8 with a 4× reduction was the obvious first step. I've focused on writing modular code so adding more quantization variants is a matter of implementing additional formats, not restructuring the whole storage layer.
 
 #### MRL truncation: a cleaner memory/quality tradeoff
 
