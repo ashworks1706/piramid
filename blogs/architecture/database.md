@@ -55,7 +55,7 @@ The hierarchical model predates relational by about a decade. [IBM's IMS (Inform
 This maps naturally to domains that are genuinely tree-shaped: organizational hierarchies, bill-of-materials systems, filesystem metadata. The problem surfaces immediately with many-to-many relationships: an employee belonging to multiple projects, a part appearing in multiple assemblies. IMS handles this via "logical" parent pointers that effectively bolt a second tree on top of the first, which works but adds real complexity and means your data model has to anticipate every access pattern you'll ever need, at design time.
 
 The model is more alive today than people realize. [LDAP (Lightweight Directory Access Protocol)](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol) is hierarchical by definition; every entry has a Distinguished Name that encodes its full path from root (`cn=alice,ou=engineering,dc=example,dc=com`). The Windows Registry is hierarchical. The HTML/XML DOM is hierarchical. For these specific use cases, the model is exactly right. But it breaks down hard whenever the data's natural structure isn't a tree, and that fragility is what motivated the next step.
-
+<!-- 
 #### Network databases
 
 ![Network Database](https://media.geeksforgeeks.org/wp-content/uploads/20200727113000/network.png)
@@ -67,7 +67,7 @@ But the programming model was still fully navigational. You positioned a cursor 
 
 This coupling was precisely what [Edgar Codd](https://en.wikipedia.org/wiki/Edgar_F._Codd) attacked. In 1973, Codd and Bachman held what became known as "The Great Debate" at the ACM SIGFIDET workshop. Codd's argument was that navigational access forced too much internal detail onto application developers, and that a set-oriented, declarative language (what would become SQL) would let the database engine optimize access paths rather than requiring programmers to hard-code them. Relational won. But you'll still find production CA IDMS instances running today inside large banks and insurance companies on COBOL stacks decades old, because migrating working financial code is expensive enough that it often just doesn't happen.
 
-The navigational concept itself didn't disappear. Every time an ORM lets you chain `user.posts.comments` to walk object relationships, you're doing navigational access through a relational backend. Graph databases took the core pointer-following idea and gave it a clean, explicit API for the cases where the relational model genuinely fights you.
+The navigational concept itself didn't disappear. Every time an ORM lets you chain `user.posts.comments` to walk object relationships, you're doing navigational access through a relational backend. Graph databases took the core pointer-following idea and gave it a clean, explicit API for the cases where the relational model genuinely fights you. -->
 
 #### Non-relational databases
 
@@ -86,7 +86,7 @@ Graph databases like [Neo4j](https://neo4j.com/) model data as nodes and edges s
 
 What connects all of these is the same underlying reality: each one traded the generality and correctness guarantees of the relational model for something specific: scale, flexibility, write throughput, or traversal performance. Most operate under [BASE (Basically Available, Soft state, Eventually consistent)](https://en.wikipedia.org/wiki/Eventual_consistency#BASE) rather than ACID, and the CAP theorem governs the design space they're all navigating.
 
-#### Cloud-native databases
+<!-- #### Cloud-native databases
 
 [Cloud native s3](https://miro.medium.com/1*Ow7jvYztPy9iYwhS7PuIlA.jpeg)
 
@@ -98,7 +98,7 @@ Cloud-native databases are less about a data model and more about an architectur
 
 [Snowflake](https://www.snowflake.com/) approaches the problem from the analytics side. Data is stored in micro-partitions (50–500MB compressed columnar files on S3) automatically clustered by ingestion order or user-defined keys. Query execution happens in separate virtual warehouses that share nothing, so different workloads don't compete for cache or CPU. Storage and compute billing decouple entirely: you pay for a warehouse only while queries are running, and storage is just S3 object pricing. For analytics workloads with bursty query patterns, this is dramatically cheaper than keeping a cluster sized for peak load running continuously.
 
-The tradeoffs in this category are consistent: more network hops between compute and storage add latency, variable billing makes cost harder to predict, and you give up low-level tuning control in exchange for operationally managed availability and failover. You're essentially handing infrastructure concern to the cloud provider and getting elastic scale back in return.
+The tradeoffs in this category are consistent: more network hops between compute and storage add latency, variable billing makes cost harder to predict, and you give up low-level tuning control in exchange for operationally managed availability and failover. You're essentially handing infrastructure concern to the cloud provider and getting elastic scale back in return. -->
 
 ### What is a vector database?
 
