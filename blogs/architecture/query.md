@@ -53,7 +53,7 @@ Range, equality, not-equal, and set membership are all supported. This all happe
 
 ### SearchConfig: the recall/latency dial
 
-The `SearchConfig` struct exposes three named presets that control how thoroughly the index is explored per query:
+Three named presets control how thoroughly the index is explored per query:
 
 | Preset | `ef` (HNSW) | `nprobe` (IVF) | Use case |
 |--------|-------------|----------------|----------|
@@ -61,7 +61,7 @@ The `SearchConfig` struct exposes three named presets that control how thoroughl
 | `balanced` | default | default | General interactive RAG |
 | `high` | 400 | 20 | Compliance retrieval, precision-critical |
 
-`ef` is the most important knob for HNSW. It sets the beam width for the layer-0 search: larger means the algorithm explores more of the graph before committing to a result set, which finds better neighbours but costs more CPU. A useful rule of thumb: at $ef = M \cdot k$ (for $M = 16$, $k = 10$: $ef = 160$) you typically see Recall@10 above 95%. Pushing to $ef = 400$ usually hits 99%+. The cost scales roughly linearly with $ef$.
+`ef` is the most important knob for HNSW. It sets the beam width for the layer-0 search: larger means the algorithm explores more of the graph before committing to a result set, which finds better neighbours but costs more CPU. A useful rule of thumb: at $ef = M \cdot k$ (for $M = 16$, $k = 10$: $ef = 160$) you typically see Recall@10 above 95%. Pushing to $ef = 400$ usually hits 99%+. Cost scales roughly linearly with $ef$.
 
 | ef | Recall@10 (approx) | latency multiplier |
 |----|-------------------|--------------------|
@@ -96,7 +96,7 @@ But for very selective filters (say, 1–2% of the dataset qualifies), even a la
 
 ### Batch search and parallelism
 
-For multiple queries at once, I route them through `search_batch_collection` which reuses the same vector and metadata maps across the whole batch. When `parallel_search` is enabled, queries run in parallel via [Rayon](https://github.com/rayon-rs/rayon):
+For multiple queries at once, I route them through `search_batch_collection`, which reuses the same vector and metadata maps across the whole batch. When `parallel_search` is enabled, queries run in parallel via [Rayon](https://github.com/rayon-rs/rayon) — which is one of my favorite Rust crates just for how little code it takes to get real parallelism:
 
 ```rust
 if storage.config().parallelism.parallel_search {

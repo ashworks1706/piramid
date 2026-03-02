@@ -16,11 +16,11 @@ A Recall@10 of 0.95 means 9.5 out of 10 returned results are genuinely in the to
 
 ### Why high-dimensional spaces break classical indexes
 
-The reason I didn't use a B-tree or even a kd-tree in Piramid is not laziness; it's that those structures provably collapse at high dimensionality. Understanding why is important context before looking at HNSW and IVF.
+The reason I didn't use a B-tree or even a kd-tree in Piramid isn't laziness — it's that those structures provably collapse at high dimensionality. Understanding why is important context before looking at HNSW and IVF, because otherwise "graph-based index" sounds like an arbitrary choice.
 
 #### The kd-tree and why it fails
 
-A kd-tree partitions $\mathbb{R}^d$ by recursively splitting on alternating axes. At $d = 2$ or $d = 3$ it is an elegant exact nearest-neighbour structure with $O(\log N)$ average query time. At $d = 1536$, it is slightly worse than a random scan.
+A kd-tree partitions $\mathbb{R}^d$ by recursively splitting on alternating axes. At $d = 2$ or $d = 3$ it's an elegant exact nearest-neighbour structure with $O(\log N)$ average query time. At $d = 1536$ — the space I'm actually working in — it's slightly worse than a random scan. The geometry breaks in a very specific way.
 
 The key quantity is the volume ratio of a hypersphere to its enclosing hypercube. In $d$ dimensions, the volume of a unit ball is:
 
@@ -30,11 +30,11 @@ This goes to zero as $d \to \infty$. Practically, almost all the volume of a hig
 
 > **Intuition for the shell concentration:** In $d$ dimensions, the fraction of a unit ball's volume that lies within distance $\epsilon$ of the surface is $1 - (1-\epsilon)^d$. At $d = 1000$ and $\epsilon = 0.01$, this is $1 - 0.99^{1000} \approx 0.99996$, essentially all of the ball is shell.
 
-Ball trees, cover trees, and R-trees all suffer the same underlying problem. Any space-partitioning data structure that works by dividing $\mathbb{R}^d$ into regions will find that a query hypersphere at high $d$ intersects almost every region, destroying the logarithmic speedup.
+Ball trees, cover trees, and R-trees all hit the same underlying problem. Any space-partitioning structure that works by dividing $\mathbb{R}^d$ into regions will find that a query hypersphere at high $d$ intersects almost every region, destroying the logarithmic speedup.
 
 #### [Locality Sensitive Hashing](https://en.wikipedia.org/wiki/Locality-sensitive_hashing)
 
-LSH takes a different approach. Rather than partitioning space, it probabilistically maps similar vectors to the same hash bucket, then only computes exact distances within a bucket. For a good hash family, the collision probability is a decreasing function of distance:
+LSH takes a different approach: rather than partitioning space, it probabilistically maps similar vectors to the same hash bucket, then only computes exact distances within a bucket. It was the dominant ANN approach circa 2010–2014 before HNSW came along, and the core idea is still elegant. For a good hash family, the collision probability is a decreasing function of distance:
 
 $$P(\text{hash}(\mathbf{x}) = \text{hash}(\mathbf{y})) = f\!\left(\frac{\|\mathbf{x} - \mathbf{y}\|}{\text{threshold}}\right)$$
 
@@ -46,15 +46,15 @@ To achieve recall $1 - \delta$ with $L$ independent hash tables and $K$ bits per
 
 $$L \geq \frac{\ln \delta}{\ln(1 - p_1^K)}$$
 
-where $p_1$ is the collision probability at your target distance. This is workable but requires many hash tables (memory multiplier), and the constant factors are large. LSH dominated ANN benchmarks circa 2010–2014 but was comprehensively beaten in recall/latency/memory by HNSW once that paper appeared in 2016.
+where $p_1$ is the collision probability at your target distance. This is workable but requires many hash tables (memory multiplier), and the constant factors are large. LSH dominated ANN benchmarks circa 2010–2014 but was comprehensively beaten in recall/latency/memory by HNSW once that paper appeared in 2016. The gap isn't close.
 
 #### The curse of dimensionality, formally
 
-The core issue underlying both failures is the concentration of measure. For $N$ vectors drawn uniformly from the unit hypercube in $\mathbb{R}^d$, the ratio of the maximum to minimum distance from a query point converges to 1:
+The core issue underlying both failures has a formal name: the concentration of measure. For $N$ vectors drawn uniformly from the unit hypercube in $\mathbb{R}^d$, the ratio of the maximum to minimum distance from a query point converges to 1:
 
 $$\lim_{d \to \infty} \frac{\max_{x \in S} \|\mathbf{q} - \mathbf{x}\|_2 - \min_{x \in S} \|\mathbf{q} - \mathbf{x}\|_2}{\min_{x \in S} \|\mathbf{q} - \mathbf{x}\|_2} \to 0$$
 
-When all distances are nearly equal, there is no local structure for a spatial index to exploit; every point is equidistant from every other. In practice at $d = 1536$ real embeddings are far from uniformly distributed (they cluster by topic and semantics), which is why ANN indexes still work. But the observation explains why cosine similarity outperforms raw Euclidean distance for text: normalising away magnitude removes one whole axis of spurious distance variation, making the distribution better-behaved.
+When all distances are nearly equal, there's no local structure for a spatial index to exploit — every point is equidistant from every other. In practice at $d = 1536$ real embeddings are far from uniformly distributed (they cluster by topic and semantics, because that's what the model was trained to do), which is why ANN indexes still work. But the observation explains why cosine similarity outperforms raw Euclidean distance for text: normalising away magnitude removes one whole axis of spurious distance variation.
 
 > **What actually works at high dimensions:** graph-based indexes (HNSW) exploit the empirical cluster structure of the data directly rather than trying to partition abstract coordinates. Quantisation-based indexes (IVF + PQ) exploit the fact that even high-dimensional vectors often lie near a much lower-dimensional manifold. Neither tries to fight the geometry of $\mathbb{R}^d$ directly.
 
@@ -63,9 +63,9 @@ When all distances are nearly equal, there is no local structure for a spatial i
 
 ### Why approximate is good enough
 
-Given that exact nearest neighbour is $O(Nd)$ and ANN indexes achieve ~97% recall at a fraction of the cost, the right question is whether that 3% miss rate matters for your application.
+This is a question I thought about a lot when building Piramid. Intuitively, "97% recall" sounds like a compromise. But when you look at what you're actually doing with the results, the math changes.
 
-For RAG pipelines it almost never does. An LLM context window holds 5–20 retrieved chunks. If one of them is a 12th-nearest-neighbour rather than the 10th, the generated answer is unchanged with very high probability; the semantic gap between the 10th and 12th most similar vectors is imperceptible to a language model. The accuracy loss from a well-configured HNSW index is typically 1–5%, and the query latency improvement over exact search is 10–100×.
+For RAG pipelines it almost never does. An LLM context window holds 5–20 retrieved chunks. If one of them is a 12th-nearest-neighbour rather than the 10th, the generated answer is unchanged with very high probability — the semantic gap between the 10th and 12th most similar vectors is essentially imperceptible to a language model. The accuracy loss from a well-configured HNSW index is typically 1–5%, and the query latency improvement over exact search is 10–100×.
 
 Where recall does matter: deduplication (you need exact matches, not approximate ones), compliance retrieval (must surface every relevant document), and similarity thresholding (returning "no match" for queries below a distance cutoff requires precise distances). For those workloads, Flat or a post-search exact reranker is appropriate.
 
@@ -100,20 +100,20 @@ Piramid's auto-selector threshold of 10,000 is deliberately conservative: it lea
 
 ### HNSW: navigating a small world
 
-[HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm behind most high-performance vector databases like [Pinecone](https://www.pinecone.io/), Weaviate, Milvus, and Qdrant. at their core. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
+[HNSW (Hierarchical Navigable Small World, Malkov and Yashunin 2018)](https://arxiv.org/abs/1603.09320) is the algorithm at the core of most high-performance vector databases — Pinecone, Weaviate, Milvus, and the Qdrant I used for years before building this. The intuition comes from graph theory's small-world phenomenon: in certain natural and engineered networks, the average shortest path between any two nodes grows only as $O(\log N)$ even as $N$ becomes very large. HNSW constructs exactly this kind of network over your vectors and traverses it greedily during search.
 
 ![HNSW layered graph — layer 2 is sparse for long-range navigation, layer 1 is denser, layer 0 holds all nodes with the full connection density; search descends from top to bottom](https://miro.medium.com/1*hEu_9Z1Ra5ndhDS1n_Kjdg.png)
 *HNSW layers: the top is a sparse express lane for long-range jumps, and each lower layer adds more nodes and edges until layer 0, which has everything. Search descends from top to bottom.*
 
 #### The small-world graph idea
 
-The NSW (non-hierarchical) paper by Malkov et al. (2014) showed that if you build a graph where each vector-node is connected to its approximate nearest neighbours, plus a few "long-range" links to far-away nodes that act like highways, then greedy search on that graph finds nearest neighbours in $O(\log N)$ hops with good probability.
+The NSW (non-hierarchical) paper by Malkov et al. (2014) showed something counterintuitive: if you build a graph where each vector-node is connected to its approximate nearest neighbours plus a few "long-range" links to far-away nodes acting as shortcuts, greedy search on that graph finds nearest neighbours in $O(\log N)$ hops with good probability.
 
-Each node starts with short-range connections to similar vectors, forming local clusters. The long-range edges emerge naturally from the construction order: vectors inserted early (when the graph was sparse) connect to whatever was available at the time, spanning large distances. Late insertions find dense local neighbourhoods. The mix produces the small-world property.
+Each node starts with short-range connections to similar vectors, forming local clusters. The long-range edges emerge naturally from the construction order: vectors inserted early (when the graph was sparse) connect to whatever was available at the time, spanning large distances. Late insertions find dense local neighbourhoods. The combination produces the small-world property — and it falls out from the construction process rather than being explicitly engineered in.
 
-Greedy search simply starts from an arbitrary entry node and repeatedly moves to whichever current node's neighbour is closest to the query. It terminates when no neighbour is closer than the current node, a local minimum that empirically is almost always the global minimum for typical embedding distributions.
+Greedy search simply starts from an arbitrary entry node and repeatedly moves to whichever of the current node's neighbours is closest to the query. It terminates when no neighbour is closer than the current node — a local minimum that empirically is almost always the global minimum for typical embedding distributions.
 
-The raw NSW problem is that the entry point matters. Starting in the wrong region wastes many hops just navigating to the relevant part of the space. HNSW solves this with a hierarchy of layers: layer 0 is the dense local graph, and each higher layer is a progressively sparser "skip list in graph form" that lets you coarsely navigate to the right region before descending into the dense layer.
+The raw NSW problem is that the entry point matters a lot. Starting in the wrong region wastes many hops just navigating to the relevant part of the space. HNSW solves this with a hierarchy of layers: layer 0 is the dense local graph, and each higher layer is a progressively sparser navigation structure that lets you coarsely zoom to the right region before descending into the dense layer.
 
 #### Layer probability and occupancy
 
@@ -205,13 +205,13 @@ The termination condition `candidate.distance > furthest_distance` is key: once 
 
 #### ef_construction vs ef_search
 
-These two parameters are often confused because they're both called `ef` internally but serve entirely different purposes.
+These two parameters are often confused because they both show up as `ef` internally, but they do completely different things.
 
 `ef_construction` controls graph quality at build time. It is the beam width used during `search_layer` while inserting; higher values mean each new node finds better neighbours, resulting in a denser and more accurate graph. The cost is $O(ef_{\text{const}})$ per layer per insert. Setting `ef_construction = 200` means each insertion explores up to 200 candidates to find the best $M = 16$ neighbours to connect to.
 
 `ef_search` controls query recall at query time. It is the beam width for the final layer-0 search. It does not affect the graph structure at all, only how thoroughly the already-built graph is explored during a query. You can set `ef_search = 50` at query time on a graph built with `ef_construction = 400` without any degradation to the graph itself.
 
-> **The practical implication:** you should build with high `ef_construction` (200–400) and then tune `ef_search` per use case. A graph built with `ef_construction = 64` and queried with `ef_search = 400` will never reach the recall of a graph built with `ef_construction = 400` and queried with `ef_search = 200`, because the underlying graph simply doesn't have the connections needed. Build quality is permanent; search quality is adjustable.
+> **The practical implication:** build with high `ef_construction` (200–400) and tune `ef_search` per use case. A graph built with `ef_construction = 64` and queried with `ef_search = 400` will never match the recall of a graph built with `ef_construction = 400` and queried with `ef_search = 200` — because the underlying graph just doesn't have the connections needed. Build quality is permanent. Search quality is adjustable.
 
 Both default to 200. Override `ef_search` per query via `SearchConfig`:
 
@@ -261,7 +261,7 @@ During search, tombstoned nodes are used as traversal intermediaries; their edge
 ![IVF partitioned vector space](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQm1J-FSFmhU3OB-AdeufzY3Msu5Bmk1iNbCQ&s)
 *IVF partitions the vector space into Voronoi cells via k-means. At query time only the closest `nprobe` cells are scanned, limiting the search to a small fraction of the dataset.*
 
-IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using [k-means](https://en.wikipedia.org/wiki/K-means_clustering), and for each cluster maintains an **inverted list** (a list of vector IDs assigned to that cluster). At query time it only scans the `nprobe` closest clusters instead of all $N$ vectors.
+IVF (Inverted File Index) takes a completely different approach to the ANN problem. Rather than building a navigable graph, it partitions the vector space into $K$ clusters using [k-means](https://en.wikipedia.org/wiki/K-means_clustering), and for each cluster maintains an **inverted list** (the IDs of vectors assigned to that cluster). At query time it only scans the `nprobe` closest clusters rather than everything.
 
 The geometric picture is a **[Voronoi diagram](https://en.wikipedia.org/wiki/Voronoi_diagram)**. Each centroid $\mathbf{c}_i$ defines a cell:
 

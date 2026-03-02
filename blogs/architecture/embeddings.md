@@ -9,13 +9,13 @@ I first truly understood how embeddings work when I took DAT 494 (Advanced Deep 
 
 ### From words to numbers: why representation matters
 
-Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf). A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
+Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) — and it's worth understanding why that broke, because it makes the whole point of embeddings obvious. A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
 
 TF-IDF weights are:
 
 $$\text{tf-idf}(t, d, D) = \underbrace{\frac{f_{t,d}}{\sum_{t'} f_{t',d}}}_{\text{term frequency}} \times \underbrace{\log\frac{|D|}{|\{d' \in D : t \in d'\}|}}_{\text{inverse document frequency}}$$
 
-This is fast and interpretable. The problem is that it is purely lexical. The words "car" and "automobile" are orthogonal vectors even though they mean the same thing. "Not good" and "bad" are distant even though they express the same sentiment. Any query about "machine learning" misses documents about "deep learning" or "neural networks" unless those exact words appear. Synonymy, polysemy, and compositionality all break TF-IDF.
+This is fast and interpretable. The problem is that it's purely lexical — it has no notion of meaning. The words "car" and "automobile" are orthogonal vectors even though they mean the same thing. "Not good" and "bad" are distant even though they express the same sentiment. Any query about "machine learning" misses documents about "deep learning" or "neural networks" unless those exact words appear. Synonymy, polysemy, compositionality — TF-IDF breaks on all of them.
 
 Distributed representations (embeddings) solve this by learning a *dense* $d$-dimensional vector for each concept where the coordinates encode meaning, so similar meanings land near each other. The key insight is the **distributional hypothesis**: words that appear in similar contexts tend to have similar meanings. If you train a model to predict context from word (or word from context), the internal representations it must learn to do this successfully will encode semantic similarity as geometric proximity.
 
@@ -27,7 +27,7 @@ An embedding is a function $f: \mathcal{X} \to \mathbb{R}^d$ that maps some inpu
 
 #### [Word2Vec](https://arxiv.org/abs/1301.3781) and the skip-gram objective
 
-The simplest historical example that makes this concrete is Word2Vec. Its skip-gram variant trains a shallow neural network to predict context words $c$ from a center word $w$ within a window of size $k$. The training objective maximises:
+Word2Vec is the clearest example that makes this concrete — and it's worth working through even though modern models look nothing like it, because the intuition carries forward. The skip-gram variant trains a shallow neural network to predict context words $c$ from a center word $w$ within a window of size $k$. The training objective maximises:
 
 $$\mathcal{L} = \sum_{t=1}^{T} \sum_{-k \le j \le k,\, j \ne 0} \log P(w_{t+j} \mid w_t)$$
 
@@ -43,16 +43,16 @@ $$\mathcal{L}_{\text{NS}} = \log \sigma(\mathbf{u}_c^\top \mathbf{v}_w) + \sum_{
 
 where $\sigma$ is the sigmoid function and $P_n$ is a noise distribution (typically unigram frequency raised to the 3/4 power). This replaces $O(|\mathcal{V}|)$ with $O(K)$ per update, with $K = 5$–$20$ in practice.
 
-The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic, $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$, falls out as an emergent property, not something explicitly built in: it reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space.
+The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic — $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ — falls out as an emergent property, not something explicitly built in. It reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space. That blew my mind when I first saw it.
 
 ![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://miro.medium.com/1*d0JWmF36SUey7aS8bvA-dw.jpeg)
 *The word2vec arithmetic demo — royalty minus gender plus gender-swap lands near queen. It's a side effect of the geometry, not something that was explicitly designed in.*
 
-Word2Vec is a useful intuition builder but it has hard limits. Each word gets exactly one vector regardless of context, so "bank" (financial) and "bank" (river) share a single representation. And it operates at the word level, with no way to represent a whole sentence.
+Word2Vec is a useful mental model but the limits become obvious fast. Each word gets exactly one vector regardless of context — so "bank" (financial) and "bank" (river) share the same point in space, which is obviously wrong. And it operates at the word level with no mechanism for whole sentences.
 
 #### Transformers and contextual embeddings
 
-Modern embedding models are transformer-based and address both limitations. The transformer architecture was introduced in ["Attention is All You Need" (Vaswani et al. 2017)](https://arxiv.org/abs/1706.03762). Its central mechanism is **multi-head self-attention**, which lets every token's representation be influenced by every other token in the sequence.
+Modern embedding models are transformer-based and address both limitations. If you've read the title ["Attention is All You Need" (Vaswani et al. 2017)](https://arxiv.org/abs/1706.03762) without really digging into it — this is the part that matters. The transformer's central mechanism is **multi-head self-attention**, which lets every token's representation be influenced by every other token in the sequence. So "bank" in "river bank" ends up near "water" rather than "finance", because the context shifts the representation.
 
 For a single attention head with input matrix $X \in \mathbb{R}^{n \times d_\text{model}}$ (where $n$ is sequence length), the computation is:
 
@@ -66,7 +66,7 @@ $$\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, \ldots, \text{head}_H
 
 With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates in $d_k = 64$ dimensions. Different heads learn to attend to different types of relationships (syntax, coreference, semantic roles) simultaneously.
 
-The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. The word "bank" in "river bank" ends up near "water" rather than "finance" because the attention weights pull the representation in the direction of the context.
+The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. This is the fundamental fix for Word2Vec's one-vector-per-word problem: the same token gets a different representation every time depending on what surrounds it.
 
 ![Transformer architecture — queries, keys and values flow through multi-head self-attention and feed-forward layers, with residual connections and layer norm at each step (Vaswani et al. 2017)](https://machinelearningmastery.com/wp-content/uploads/2021/08/attention_research_1.png)
 *The original transformer from "Attention is All You Need" — queries, keys, and values run through multi-head attention and feed-forward layers with residual connections around each. The encoder half is what most embedding models use.*
@@ -81,7 +81,7 @@ Mean pooling treats all tokens equally; the CLS token approach trains the model 
 
 #### Contrastive learning: teaching similarity
 
-A pre-trained language model knows syntax and semantics, but its internal similarity geometry isn't necessarily aligned with what you want a retrieval system to do. A model trained on next-token prediction (like GPT) will have token representations useful for generation, not necessarily for semantic retrieval. Contrastive fine-tuning reshapes the embedding space specifically for similarity search.
+Here's the part that isn't obvious at first: a pre-trained language model knows syntax and semantics, but that doesn't mean its internal similarity geometry lines up with what you want for retrieval. A GPT-style model trained on next-token prediction has representations useful for generation — not necessarily for finding similar documents. Contrastive fine-tuning is what reshapes that space specifically for similarity search, and it's why retrieval-specific models outperform general-purpose LLMs at this task.
 
 Contrastive training operates on pairs: a query $q$ and a positive $p^+$ (semantically related) and a set of negatives $\{n_j\}$ (unrelated). The standard loss is a variant of [InfoNCE (Noise Contrastive Estimation)](https://arxiv.org/abs/1807.03748):
 
@@ -99,7 +99,7 @@ The denominator sums over all non-matching samples in the batch; this is **in-ba
 
 #### The geometry of learned embedding space
 
-A few geometric properties of embedding spaces are worth understanding because they dictate how you should configure distance metrics and quantisation.
+A few geometric properties of embedding spaces are worth internalizing — they're what actually determines how you should configure distance metrics and quantisation, and I spent longer than I'd like to admit debugging recall issues before these clicked for me.
 
 **$\ell_2$ normalisation.** Most production embedding models output $\ell_2$-normalised vectors, each satisfying $\|\mathbf{z}\|_2 = 1$. On the unit hypersphere, cosine similarity and Euclidean distance are monotonically related:
 
