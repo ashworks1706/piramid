@@ -1,16 +1,16 @@
 # Query
 
-In the [previous sections](/blogs/architecture/indexing) we looked at how vectors get inserted and organised into index structures. Now let's talk about the other side of that: what actually happens when you send a query. It sounds conceptually simple, but the mechanics of doing that at scale without brute-forcing every comparison are genuinely non-trivial, and the tradeoffs involved are worth understanding.
+In the [previous sections](/blogs/architecture/indexing) I covered how vectors get inserted and organised into index structures. Now let's talk about the other side: what actually happens when you send a query.
 
 ### What the problem actually is
+
+It sounds conceptually simple, but the mechanics of doing that at scale without brute-forcing every comparison are genuinely non-trivial, and the tradeoffs I had to work through are worth understanding.
 
 You have a collection of $n$ vectors $\{\mathbf{x}_1, \mathbf{x}_2, \ldots, \mathbf{x}_n\} \subset \mathbb{R}^d$. You receive a query vector $\mathbf{q} \in \mathbb{R}^d$ and want the $k$ vectors from the collection that are most similar to $\mathbf{q}$ under some distance or similarity function $\text{sim}(\cdot, \cdot)$.
 
 Formally, you want:
 
-$$\text{kNN}(\mathbf{q}, k) = \underset{S \subseteq [n],\, |S|=k}{\arg\max} \sum_{i \in S} \text{sim}(\mathbf{q}, \mathbf{x}_i)$$
-
-If you just compute this directly: calculate $\text{sim}(\mathbf{q}, \mathbf{x}_i)$ for every $i$, sort, and take the top $k$, which is $O(nd)$ operations per query. For $n = 10^6$ and $d = 1536$, that's $1.536 \times 10^9$ floating-point operations per query. A modern CPU doing 1 GFLOP/s (single-threaded for this kind of sequential scan) takes about 1.5 seconds. A single GPU can do it sub-100ms, but the machine still has to touch all $nd$ floats. At $n = 10^8$ (a reasonably sized production corpus) you're looking at minutes per query no matter how fast your hardware is.
+$$\text{kNN}(\mathbf{q}, k) = \underset{S \subseteq [n],\, |S|=k}{\arg\max} \sum_{i \in S} \text{sim}(\mathbf{q}, \mathbf{x}_i)$$ For $n = 10^6$ and $d = 1536$, that's $1.536 \times 10^9$ floating-point operations per query. A modern CPU doing 1 GFLOP/s (single-threaded for this kind of sequential scan) takes about 1.5 seconds. A single GPU can do it sub-100ms, but the machine still has to touch all $nd$ floats. At $n = 10^8$ (a reasonably sized production corpus) you're looking at minutes per query no matter how fast your hardware is.
 
 The entire field of approximate nearest neighbor (ANN) search exists to escape this linear bottleneck.
 
@@ -109,9 +109,7 @@ The recall/speed tradeoff is entirely controlled by $ef$: larger $ef$ explores m
 
 ---
 
-### The search engine
-
-The actual query pipeline in Piramid is implemented in `src/search/engine.rs`. It's a clean three-step flow: overfetch from the ANN index, score, filter.
+If you just compute this directly: calculate $\text{sim}(\mathbf{q}, \mathbf{x}_i)$ for every $i$, sort, and take the top $k$, which is $O(nd)$ operations per query. It's a clean three-step flow: overfetch from the ANN index, score, filter.
 
 **Step 1: Overfetch.** If a metadata filter is attached to the query, Piramid can't know in advance how many of the ANN candidates will survive the filter. If it only fetched $k$ candidates and the filter rejects 80% of them, you'd get far fewer than $k$ results. The fix is to fetch more:
 
@@ -140,7 +138,9 @@ Filter::new()
 
 All conditions must pass. Range, equality, not-equal, and set membership (`in`) are all supported. The filter is applied post-ANN, which means it operates on metadata stored in memory, a fast in-process lookup with no secondary I/O.
 
-**Batch search.** For multiple simultaneous queries, Piramid has a `search_batch_collection` function that reuses the same vector and metadata maps across all queries in the batch. When `parallel_search` is enabled (backed by [Rayon](https://github.com/rayon-rs/rayon)), queries within a batch execute in parallel across available CPU threads:
+### The search engine
+
+I implemented the actual query pipeline in `src/search/engine.rs`. **Batch search.** For multiple simultaneous queries, I built a `search_batch_collection` function that reuses the same vector and metadata maps across all queries in the batch.
 
 ```rust
 if storage.config().parallelism.parallel_search {

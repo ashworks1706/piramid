@@ -2,7 +2,7 @@
 
 A vector database without a good index is just a very sophisticated `for` loop. The core problem is this: given a query vector $\mathbf{q} \in \mathbb{R}^d$ and a collection of $N$ stored vectors, find the $k$ closest by some distance metric. The naïve approach scans every vector and computes the distance, $O(Nd)$ per query. At $N = 10^6$ with $d = 1536$ (OpenAI's `text-embedding-3-large`), that is 1.5 billion multiply-accumulate operations per query. Even with SIMD, you're looking at tens of milliseconds. That is fine for batch analysis; it is not fine for a latency-sensitive RAG pipeline that needs sub-millisecond retrieval.
 
-There are three index types (Flat, IVF, and HNSW) with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
+I built three index types — Flat, IVF, and HNSW — with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
 
 ### Measuring quality: Recall@k
 
@@ -16,7 +16,7 @@ A Recall@10 of 0.95 means 9.5 out of 10 returned results are genuinely in the to
 
 ### Why high-dimensional spaces break classical indexes
 
-The reason Piramid doesn't use a B-tree or even a kd-tree for vector search is not laziness; it's that those structures provably collapse at high dimensionality. Understanding why is important context before looking at HNSW and IVF.
+The reason I didn't use a B-tree or even a kd-tree in Piramid is not laziness; it's that those structures provably collapse at high dimensionality. Understanding why is important context before looking at HNSW and IVF.
 
 #### The kd-tree and why it fails
 
@@ -169,7 +169,7 @@ for lc in (0..=layer).rev() {
 
 The bidirectionality is critical. A unidirectional graph would have large "dead end" regions, where nodes that many others point to have no useful outgoing edges. Bidirectional edges guarantee that traversal can always go in both directions, which is what makes the small-world property hold under greedy descent.
 
-After adding the back-edge, if the neighbour's connection list exceeds $M$, it gets pruned back. Piramid uses simple distance-based selection: keep the $M$ closest. The original HNSW paper proposes a diversity-aware heuristic that prefers candidates spread across different directions, which improves recall slightly but adds implementation complexity. Piramid's simple greedy selection works well in practice.
+After adding the back-edge, if the neighbour's connection list exceeds $M$, it gets pruned back. I went with simple distance-based selection: keep the $M$ closest. The original HNSW paper proposes a diversity-aware heuristic that prefers candidates spread across different directions, which improves recall slightly but adds implementation complexity. Piramid's simple greedy selection works well in practice.
 
 Time complexity per insert is $O(M \cdot ef_{\text{const}} \cdot \log N)$, where the $\log N$ comes from the number of layers, $M$ from the connections per layer, and $ef_{\text{const}}$ from the width of each layer's search.
 
@@ -242,7 +242,7 @@ With $N = 10^6$, $M = 16$, $M_{\max} = 32$: roughly $10^6 \times 32 \times (16/1
 
 Deletion in graph-based indexes is notoriously awkward. Physically removing a node and its edges can disconnect parts of the graph; future traversals may fail to reach regions that were only accessible through the removed node. This is not a theoretical concern: if a hub node (one that happens to be the entry path to an entire cluster) is deleted and its edges removed, searches into that cluster will silently produce incorrect results.
 
-HNSW in Piramid uses **tombstoning**: a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
+I went with **tombstoning**: a deleted node has its `tombstone` flag set to `true` but its edges are kept intact in memory.
 
 ```rust
 fn mark_tombstone(&mut self, id: &Uuid) {
@@ -278,7 +278,7 @@ Centroid computation uses Lloyd's k-means algorithm:
 3. **Update:** recompute each centroid as the mean of its assigned vectors: $\mathbf{c}_j \leftarrow \frac{1}{|V_j|} \sum_{\mathbf{x} \in V_j} \mathbf{x}$.
 4. Repeat steps 2–3 until convergence or `max_iterations`.
 
-Piramid runs 10 iterations by default. Lloyd's algorithm minimises the within-cluster sum of squared distances (inertia):
+I run 10 iterations by default. Lloyd's algorithm minimises the within-cluster sum of squared distances (inertia):
 
 $$\mathcal{J} = \sum_{j=1}^{K} \sum_{\mathbf{x} \in V_j} \|\mathbf{x} - \mathbf{c}_j\|^2$$
 
@@ -304,7 +304,7 @@ where $\alpha$ is the cost per centroid distance computation and $\beta$ is the 
 
 $$\frac{\partial \text{cost}}{\partial K} = \alpha - \beta \cdot \frac{N}{K^2} = 0 \implies K^* = \sqrt{\frac{\beta N}{\alpha}}$$
 
-Since $\beta \approx \alpha$ (both are dot products of similar-dimensional vectors with the same SIMD path), we get $K^* \approx \sqrt{N}$. This is where Piramid's auto-config comes from:
+Since $\beta \approx \alpha$ (both are dot products of similar-dimensional vectors with the same SIMD path), we get $K^* \approx \sqrt{N}$. That's where my auto-config for IVF comes from:
 
 ```rust
 pub fn auto(num_vectors: usize) -> Self {
@@ -330,7 +330,7 @@ This is why IVF works poorly for synthetic uniform distributions in benchmarks b
 
 After the clusters are built, new vectors are assigned to the nearest existing centroid and appended to that inverted list. No re-clustering happens. This is correct for stationary data distributions, but if the distribution shifts over time (new document topics, new languages, a different embedding model) some clusters become overloaded (recall degrades because the list is too long) and others become nearly empty (throughput degrades because you're scanning small irrelevant lists). The `nprobe` budget buys you decreasing recall per probe when clusters are imbalanced.
 
-The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. Piramid triggers this through the compaction mechanism exactly as HNSW triggers a graph rebuild.
+The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. I trigger this through the compaction mechanism, exactly as with HNSW graph rebuilds.
 
 #### Searching with nprobe
 
@@ -367,7 +367,7 @@ Auto-selection picks the index type based on collection size:
 > 100,000         →  HNSW
 ```
 
-This mirrors the conventional wisdom in the ANN libraries community. Below 10K, the flat scan fits in L3 cache and often beats any ANN index on raw latency while giving perfect recall. The IVF middle range is where the graph structure of HNSW would be overloaded during construction (you'd spend as many operations building as you'd save searching), but where brute force is getting noticeably slow. Above 100K, HNSW's $O(\log N)$ search and strong recall make it the clear winner for a latency-first system.
+I picked these thresholds based on what the ANN community generally agrees on, and they make sense at the hardware level too. Below 10K, the flat scan fits in L3 cache and often beats any ANN index on raw latency while giving perfect recall. The IVF middle range is where HNSW's construction cost wouldn't be justified yet, but brute force is getting noticeably slow. Above 100K, HNSW's $O(\log N)$ search and strong recall make it the clear winner for a latency-first system.
 
 These thresholds are tunable if you specify the index type explicitly in your collection config. If you need HNSW at 5,000 vectors because your query rate is very high, nothing stops you.
 
@@ -453,7 +453,7 @@ For HNSW, `remove` tombstones the node. For IVF, `remove` looks up the vector's 
 
 The vector index is always kept in memory and is the source of truth for fast queries. Disk persistence of the index happens as part of the compaction cycle through the storage layer's serialisation path; the index structs derive `serde::Serialize` and `serde::Deserialize`, so they can round-trip cleanly to the `.vidx.db` file.
 
-### Product quantisation and future compression
+### Product quantisation
 
 ![Product quantisation splits vectors into subvectors and encodes each subvector as a byte-sized centroid ID, enabling 32× compression with fast approximate distance via lookup tables.](../../assets/blogs/pq-compression.png)
 
@@ -500,9 +500,3 @@ The PQ distances are approximate. To recover precision, the standard pipeline is
 3. Rerank by computing exact distances with the original float32 vectors for just those $\gamma k$ candidates.
 
 The exact reranking step costs $O(\gamma k \cdot d)$, which is cheap because $\gamma k \ll \text{ef}$. The combined recall of this pipeline approaches exact-search recall at a fraction of the memory and compute.
-
-#### Future compression
-
-The `src/quantization/` module exists in scaffolded form. Once integrated, the PQ codes would be stored alongside the HNSW graph in the `.vidx.db` file, and `search_layer`'s distance function would use lookup-table ADC instead of full dot products. The reranking pass over the final `ef` candidates would still use mmap'd float32 vectors, keeping recall high while the search-phase compute drops by 8× and memory drops by 32×.
-
-For a $10^6$-vector collection at $d = 1536$: current memory is ~6.14 GB for vectors + ~546 MB for the graph = 6.7 GB. With PQ ($m = 192$): ~192 MB for codes + same ~546 MB graph = 738 MB. That is a 9× total reduction, bringing large collections well within single-server RAM without a GPU.

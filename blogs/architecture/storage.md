@@ -1,6 +1,6 @@
 # Storage
 
-Coming from [embeddings](/blogs/architecture/embeddings), you have a vector. Now the question is how Piramid actually keeps it alive (on disk, across restarts, through crashes) while still being fast enough to read back at query time. Before getting into what Piramid specifically does, it's worth understanding the landscape of how databases generally solve the storage problem, because Piramid's choices only make sense in that context.
+Coming from [embeddings](/blogs/architecture/embeddings), you have a vector. Now the question is how I actually keep it alive in Piramid — on disk, across restarts, through crashes — while still being fast enough to read back at query time. Before getting into the decisions I made, it's worth understanding the landscape of how databases generally solve the storage problem, because my choices only make sense in that context.
 
 ### How databases store data
 
@@ -12,14 +12,14 @@ The first is the **B-tree** (and its variants, primarily B+ trees). A B+ tree st
 
 The second is the **[LSM-tree (Log-Structured Merge-tree)](https://en.wikipedia.org/wiki/Log-structured_merge-tree)**, used by [RocksDB](https://rocksdb.org/), [Cassandra](https://cassandra.apache.org/), [LevelDB](https://github.com/google/leveldb), and many others. The core insight is to make all writes sequential by buffering them in an in-memory table (the *memtable*) and periodically flushing it to an immutable sorted file on disk (an SSTable). Over time you accumulate multiple SSTables at level 0. Background compaction jobs merge and sort these into larger SSTables at progressively deeper levels, discarding deleted and overwritten keys in the process. Reads are more expensive since you may need to check the memtable, bloom filters, and multiple SSTables at different levels, but writes are always sequential, which on spinning disks especially is a dramatic throughput advantage. The tradeoff is *write amplification*: data gets rewritten multiple times across compaction levels, which increases I/O and wears SSDs faster. The compaction process is also continuous, running in the background at all times.
 
-![B-tree vs LSM-tree — B-trees do in-place page updates with a buffer pool; LSM-trees buffer writes in a memtable and flush to immutable SSTables, merging them in background compaction passes](https://miro.medium.com/v2/resize:fit:1400/1*q0c_4lFmPkFGMHuIBVH2mA.png)
-*B-trees do in-place page updates with a buffer pool (left); LSM-trees buffer writes in a memtable and compact them into immutable sorted files (right). The tradeoff is read performance versus write throughput.*
+![B-tree vs LSM-tree — B-trees do in-place page updates with a buffer pool; LSM-trees buffer writes in a memtable and flush to immutable SSTables, merging them in background compaction passes](../../assets/blogs/lsm.png)
+
 
 These two architectures represent a fundamental tension:
 - B-trees offer stable read performance and in-place updates, at the cost of write amplification from page splits and the need to manage a buffer pool explicitly.
 - LSM-trees offer high write throughput via sequential I/O, at the cost of read overhead and ongoing compaction I/O in the background.
 
-It doesn't fit cleanly into either model, and that's intentional. The access patterns are different: vectors are written once (or rarely updated), read often during search, and occasionally deleted. The query critical path is ANN index traversal, not heap page lookups. Understanding where a vector database lands relative to these two models helps explain why its storage design looks the way it does.
+Piramid doesn't fit cleanly into either model, and that's intentional. The access patterns are different: vectors are written once (or rarely updated), read often during search, and occasionally deleted. The query critical path is ANN index traversal, not heap page lookups. Understanding where a vector database lands relative to these two models helps explain why its storage design looks the way it does.
 
 
 ### On-disk layout
@@ -36,7 +36,7 @@ my_docs.wal.db      — the write-ahead log
 
 The data file is the closest thing to a traditional heap file: a flat, append-oriented binary store of serialized document entries. Unlike a B+ tree page file, there's no fixed page size and no tree structure. Vectors are written sequentially at the end of the file as they arrive, and their byte locations are tracked in a separate in-memory and on-disk index (`my_docs.index.db`), which maps each document UUID to an `(offset, length)` pair. A lookup for a specific document goes: read the offset index to find the byte range, then read those bytes from the data file and deserialize. There's no page directory, no slot array, no internal tree to navigate, just a flat file and a map telling you where things are.
 
-This is simpler than a B+ tree heap, and for Piramid's access patterns that simplicity is a feature. Documents are written once and rarely touched again; point lookups by UUID are satisfied by the offset index; range scans by vector similarity are handled entirely by the vector index, not by scanning the data file at all. The data file is mostly relevant for retrieval *after* the ANN index returns candidate IDs.
+This is simpler than a B+ tree heap, and for the access patterns I'm targeting that simplicity is a feature. Documents are written once and rarely touched again; point lookups by UUID are satisfied by the offset index; range scans by vector similarity are handled entirely by the vector index, not by scanning the data file at all. The data file is mostly relevant for retrieval *after* the ANN index returns candidate IDs.
 
 The vector index file holds the ANN structure (HNSW graph adjacency lists, IVF centroids, etc.) serialized separately. This separation is important: the data file and the vector index have completely different access patterns and different rebuild costs. The data file is append-heavy and can be written to incrementally. The vector index is rebuilt from scratch during index rebuild operations or compaction, because rebuilding an HNSW graph incrementally from a corrupted state is hard to do correctly. Keeping them separate lets each evolve and persist independently, and means a corrupt vector index doesn't invalidate your raw data.
 
@@ -51,9 +51,9 @@ The alternative is [`mmap`](https://man7.org/linux/man-pages/man2/mmap.2.html), 
 
 The advantage is simplicity: no buffer pool code to write, efficient random access, and sequential reads benefit from the kernel's readahead heuristics. The disadvantage is that you give up control. The OS doesn't know that your WAL needs to flush before your data pages; it doesn't know which pages you'd prefer to keep hot; it can't prevent a page from being evicted at an inopportune time. For a database with strict write-ordering requirements, this loss of control matters.
 
-Piramid uses mmap for the data file by default. The write ordering requirements are handled by the WAL (discussed below) rather than by careful page flushing, so the loss of dirty page control is less critical. For a system whose primary bottleneck is ANN search (which happens entirely in the vector index, in memory) rather than page I/O, the simplicity of mmap is a reasonable tradeoff. The `use_mmap: false` path falls back to heap allocation backed by regular file I/O if you need more control.
+I went with mmap for the data file by default. The write ordering requirements are handled by the WAL (discussed below) rather than by careful page flushing, so the loss of dirty page control is less critical. Piramid's primary bottleneck is ANN search, which happens entirely in the vector index in memory, not page I/O — so the simplicity of mmap is a reasonable tradeoff. The `use_mmap: false` path falls back to heap allocation backed by regular file I/O if you need more control.
 
-One additional detail on growth: when a collection's data file needs to expand, Piramid unmaps it, calls [`ftruncate`](https://man7.org/linux/man-pages/man2/ftruncate.2.html) to extend the file to twice the required size, and remaps. The doubling factor amortizes the remap cost across future inserts, the same geometric growth strategy a `Vec` uses to avoid $O(n^2)$ reallocations.
+One additional detail on growth: when a collection's data file needs to expand, I unmap it, call [`ftruncate`](https://man7.org/linux/man-pages/man2/ftruncate.2.html) to extend the file to twice the required size, and remap. The doubling factor amortizes the remap cost across future inserts, the same geometric growth strategy a `Vec` uses to avoid $O(n^2)$ reallocations.
 
 ![Memory-mapped I/O — mmap projects the file's byte range into the process's virtual address space; the OS page cache handles faulting pages in on first access and evicts them under memory pressure](https://miro.medium.com/v2/resize:fit:1400/1*k7i8F7CXC4Ry2bQLHVQxqA.png)
 *mmap maps the file into the process's virtual address space. First access triggers a page fault; the OS loads the 4KB page and subsequent accesses read directly from RAM. No syscall, no explicit read.*
@@ -61,7 +61,7 @@ One additional detail on growth: when a collection's data file needs to expand, 
 
 ### Warming
 
-This one is a practical consequence of how mmap works. When Piramid loads a collection on startup, neither the data file nor the vector index file is resident in RAM yet; they're backed by the page cache, but each page needs a fault to get there. If the server starts accepting traffic immediately, the first requests pay page fault latency on every cold access, up to several milliseconds per fault if the page cache is cold after a restart.
+This one is a practical consequence of how mmap works. When I load a collection on startup, neither the data file nor the vector index file is resident in RAM yet; they're backed by the page cache, but each page needs a fault to get there. If the server starts accepting traffic immediately, the first requests pay page fault latency on every cold access, up to several milliseconds per fault if the page cache is cold after a restart.
 
 The solution is to explicitly warm the files before the server opens for traffic, by touching every 4KB-aligned page in sequence:
 
@@ -89,7 +89,7 @@ The theoretical framework behind WAL design is the **[ARIES](https://en.wikipedi
 
 Aries uses both undo and redo log records as a result of the steal/no-force combination. It assigns each log record a **Log Sequence Number** (LSN), a monotonically increasing identifier. Each data page stores the LSN of the most recent log record that modified it. During recovery, ARIES runs three passes: an *analysis pass* to determine which transactions were active at crash time, a *redo pass* that replays all logged changes from the last checkpoint forward (reapplying both committed and uncommitted changes to reconstruct the crash-time state), and an *undo pass* that rolls back changes from transactions that were in-flight at the time of the crash.
 
-Piramid's WAL is simpler than full ARIES, intentionally so. It uses a **redo-only** log. Each entry is a complete logical record (the full vector, text, metadata, and ID), not a page-level physical diff. There's no undo pass because Piramid doesn't have multi-statement transactions that need rollback. On recovery, it replays all entries with `seq > last_checkpoint_seq` in order, and that's sufficient to reconstruct the collection state. The `seq` field on each entry plays the same role as an LSN, establishing a total ordering of mutations that makes replay deterministic.
+I kept Piramid's WAL simpler than full ARIES, intentionally. It uses a **redo-only** log. Each entry is a complete logical record — the full vector, text, metadata, and ID — not a page-level physical diff. There's no undo pass because Piramid doesn't have multi-statement transactions that need rollback. On recovery, it replays all entries with `seq > last_checkpoint_seq` in order, and that's sufficient to reconstruct the collection state. The `seq` field on each entry plays the same role as an LSN, establishing a total ordering of mutations that makes replay deterministic.
 
 The four entry types in the log are:
 
@@ -112,7 +112,7 @@ The WAL would grow forever without a mechanism to bound its size. That mechanism
 
 In Postgres, this is a *fuzzy checkpoint*: dirty pages are flushed incrementally over a configurable spread period to avoid a spike of I/O, and the checkpoint record in the WAL marks the range of LSNs that were active during the checkpoint. Recovery only needs to redo from the oldest dirty page's LSN at the time the checkpoint started, not from the checkpoint record itself, which requires careful tracking of active transactions. This makes Postgres checkpoints more complex but avoids a write surge.
 
-Piramid uses a simpler *sharp checkpoint*: at checkpoint time, it serializes the full in-memory state (the offset index, vector index, and collection metadata) to their respective `.db` files, writes a `Checkpoint` entry to the WAL, and then rotates the WAL to a fresh file. Everything before the checkpoint sequence is now redundant for recovery. There's no fuzzy spreading, no active transaction tracking. It's a complete, synchronous snapshot of the collection's state.
+I went with a simpler *sharp checkpoint*: at checkpoint time, I serialize the full in-memory state (the offset index, vector index, and collection metadata) to their respective `.db` files, write a `Checkpoint` entry to the WAL, and rotate the WAL to a fresh file. Everything before the checkpoint sequence is now redundant for recovery. No fuzzy spreading, no active transaction tracking — just a complete, synchronous snapshot of the collection's state.
 
 The checkpoint is triggered by two independent conditions: every `checkpoint_frequency` operations (default: 1000), or every `checkpoint_interval_secs` seconds (disabled by default). The operation counter fires first in write-heavy workloads; the time interval is a safety net for collections that receive infrequent writes but still benefit from periodic durability snapshots.
 
@@ -129,11 +129,11 @@ In an LSM-tree, compaction is a continuous background process: SSTables at each 
 
 In a B+ tree-based system like Postgres, space reclamation is handled by [*VACUUM*](https://www.postgresql.org/docs/current/sql-vacuum.html): a separate process that walks heap pages, marks dead tuple space as reusable, and updates the free space map. Updates and deletes in Postgres don't overwrite in place; they write a new version and mark the old one dead (MVCC), so VACUUM runs asynchronously to reclaim the dead space without blocking reads.
 
-Piramid's approach is closer in spirit to a compacting B-tree (like [LMDB](https://www.symas.com/lmdb)'s copy-on-write tree) than to either of the above. When a document is deleted, its UUID is removed from the in-memory offset index, but its bytes remain in the data file. Updates write a new entry at a new offset and remove the old UUID→offset mapping; the old bytes are orphaned. Over time this creates fragmentation; the data file holds dead bytes you're paying disk space for but never reading.
+My approach is closer in spirit to a compacting B-tree (like [LMDB](https://www.symas.com/lmdb)'s copy-on-write tree) than to either of the above. When a document is deleted, its UUID is removed from the in-memory offset index, but its bytes remain in the data file. Updates write a new entry at a new offset and remove the old UUID→offset mapping; the old bytes are orphaned. Over time this creates fragmentation; the data file holds dead bytes you're paying disk space for but never reading.
 
 Compaction resolves this with a full rewrite. It reads all live documents from the current mmap, truncates the file back to initial size, remaps, clears all indexes and caches, then reinserts every live document through the normal insert path. After reinsertion it saves the index, vector index, and metadata to disk, then rotates the WAL. The result is a clean file with zero fragmentation and no dead entries.
 
-The cost is proportional to the number of live documents and is blocking at the collection level, so no reads or writes can proceed against that collection during compaction. This is quite different from LSM-tree compaction, which runs entirely in the background and doesn't block reads. The tradeoff Piramid makes is simplicity of implementation over operational transparency: compaction is something you trigger explicitly (or schedule during low-traffic windows) rather than something that happens automatically. For collections that are mostly append-only, compaction frequency can be very low or zero. For collections with high deletion or update churn, it matters more.
+The cost is proportional to the number of live documents and is blocking at the collection level, so no reads or writes can proceed against that collection during compaction. This is quite different from LSM-tree compaction, which runs entirely in the background and doesn't block reads. The tradeoff I made here is simplicity over operational transparency: compaction is something you trigger explicitly (or schedule during low-traffic windows) rather than something that happens automatically. For collections that are mostly append-only, compaction frequency can be very low or zero. For collections with high deletion or update churn, it matters more.
 
 
 ### In-memory caches

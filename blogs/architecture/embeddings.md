@@ -1,6 +1,6 @@
 # Embeddings
 
-In the [previous section](/blogs/architecture/database) we established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
+In the [previous section](/blogs/architecture/database) I established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
 
@@ -120,7 +120,7 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 
 ### Providers
 
-Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and the server handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
+Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and Piramid handles the rest. There are two supported provider types today, both implementing the same `Embedder` trait:
 
 ```rust
 #[async_trait]
@@ -136,7 +136,7 @@ The `dimensions()` method lets downstream code validate that a stored collection
 
 #### OpenAI
 
-The OpenAI provider supports three models:
+I support three models through the OpenAI provider:
 
 | Model | Dimensions | Notes |
 |-------|-----------|-------|
@@ -154,7 +154,7 @@ let api_key = config.api_key.clone()
 
 The `base_url` field can override `DEFAULT_OPENAI_API_URL`. This is primarily useful for pointing Piramid at an OpenAI-compatible proxy (Azure OpenAI, LiteLLM, etc.) without changing any other config.
 
-One thing worth knowing about `text-embedding-3-small` vs `text-embedding-3-large`: the larger model produces higher-dimensional vectors with meaningfully better semantic resolution, but at 2× the API cost and 2× the in-memory storage per vector. For most RAG use cases, `text-embedding-3-small` at full 1536 dimensions or even at 512 (via MRL truncation) hits a good cost/quality balance. The legacy `ada-002` exists for collections built before the v3 models.
+One thing worth knowing about `text-embedding-3-small` vs `text-embedding-3-large`: the larger model produces higher-dimensional vectors with meaningfully better semantic resolution, but at 2× the API cost and 2× the in-memory storage per vector. For most RAG use cases I've seen, `text-embedding-3-small` at full 1536 dimensions or even at 512 (via MRL truncation) hits a good cost/quality balance. The legacy `ada-002` exists for collections built before the v3 models.
 
 #### Local HTTP and TEI
 
@@ -195,7 +195,7 @@ The `timeout` field is important to set in production. If the embedding endpoint
 
 When you call `POST /api/collections/{collection}/embed`, Piramid takes your text, routes it through the configured embedder stack, and stores the resulting vector. `POST /api/collections/{collection}/search/text` does the same for the query text; it's embedded on the fly and then passed into the ANN search path.
 
-The embedder stack is layered:
+I structured the embedder stack as three layers:
 
 ```
 Request
@@ -205,9 +205,9 @@ Request
 ```
 
 ![Embedder Stack](../../assets/blogs/embedder_stack.png)
-The ordering is deliberate. The cache sits *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
+The ordering is deliberate. I put the cache *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
-The cache is keyed on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
+I key the cache on the exact raw text string. Identical inputs across different collections on the same server share the same cache entry. This is intentional: if the same document appears in multiple collections, the embed call is only paid once per server lifetime (until eviction). The tradeoff is that the cache is semantically unaware: "computer science" and "CS" are different keys even though they'd produce nearby vectors. A semantic-deduplication cache would be more memory-efficient for collections with near-duplicate content, but adds significant complexity.
 
 #### Retry and error classification
 
@@ -292,5 +292,5 @@ The approximate recall retention curve for `text-embedding-3-small`:
 
 Combining MRL truncation (e.g. to 512) with int8 quantisation gives a 12× memory reduction with recall typically staying above 95%, a practical configuration for memory-constrained deployments.
 
-Quantisation is applied at the storage layer rather than at embedding time. The full float32 vector is returned by the provider and stored, and quantisation is applied when writing to disk. This means the HNSW index always operates on full-precision vectors in memory while only the persistent storage benefits from compression. Full PQ integration (operating the ANN search on compressed codes) is on the roadmap and would reduce in-memory vector storage by 32× on top of the index savings; see the indexing section for the full memory math.
+I apply quantisation at the storage layer rather than at embedding time. The full float32 vector is returned by the provider and stored, and quantisation is applied when writing to disk. This means the HNSW index always operates on full-precision vectors in memory while only the persistent storage benefits from compression. Full PQ integration (operating the ANN search on compressed codes) is on the roadmap and would reduce in-memory vector storage by 32× on top of the index savings; see the indexing section for the full memory math.
 
