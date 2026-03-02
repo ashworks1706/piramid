@@ -2,20 +2,6 @@
 
 This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation. Zipy GPU integration is a Phase-2 optional acceleration layer — Piramid is fully functional without it. Zipy work begins after base piramid are complete.
 
-### Documentation & Testing
-
-
-**Documentation**
-
-- [ ] Separate API docs to `docs.piramiddb.com` (Mintlify)
-- [ ] document rust sdk with examples, link blogs from /blogs
-
-**Dashboard**
-
-- [ ] Fix dashboard UI
-- [ ] Add more metrics to dashboard (memory usage, disk usage, query latency, etc.)
-- [ ] Fix Docker image
-
 ---
 
 ### Bug Fixes patch
@@ -116,6 +102,22 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] easy API reference for SDKs (Rust via MkDocs / Mintlify)
 - [ ] collection aliases and rename
 - [ ] allow moving collection between directories and setting DIR paths customization
+
+---
+
+### Documentation & Testing
+
+
+**Documentation**
+
+- [ ] Separate API docs to `docs.piramiddb.com` (Mintlify)
+- [ ] document rust sdk with examples, link blogs from /blogs
+
+**Dashboard**
+
+- [ ] Fix dashboard UI
+- [ ] Add more metrics to dashboard (memory usage, disk usage, query latency, etc.)
+- [ ] Fix Docker image
 
 ---
 
