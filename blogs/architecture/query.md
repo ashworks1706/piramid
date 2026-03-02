@@ -2,120 +2,45 @@
 
 In the [previous section](/blogs/architecture/indexing) I went through how the index gets built — HNSW graph construction, IVF clustering, why classical spatial indexes collapse at high dimensions. Now the index exists. This post is purely about what happens when a search request comes in.
 
----
+### What "similarity" actually computes
 
-### Distance metrics
+Before anything traverses a graph or probes a cluster, the engine has to know what "close" means for this collection. I support three distance metrics.
 
-Before getting into algorithms, it's worth being precise about what "similarity" means geometrically. There are three metrics that actually matter for practical embedding search:
-
-**Cosine similarity** measures the angle between two vectors, ignoring their magnitudes:
+**Cosine similarity** is the right default for basically any text embedding model. Modern embedding APIs — OpenAI, BGE, E5 — all return $\ell_2$-normalised vectors, so cosine reduces to a plain dot product:
 
 $$\cos(\mathbf{a}, \mathbf{b}) = \frac{\mathbf{a} \cdot \mathbf{b}}{\|\mathbf{a}\|_2 \|\mathbf{b}\|_2}$$
 
-Range is $[-1, 1]$, higher is more similar. This is the right choice for most embedding models since modern text embeddings are almost always $\ell_2$-normalised at the source, and cosine similarity of normalised vectors is equal to their dot product. It's also computationally equivalent to Euclidean distance on the unit sphere: $\|\mathbf{a} - \mathbf{b}\|^2 = 2 - 2\cos\theta$ when $\|\mathbf{a}\| = \|\mathbf{b}\| = 1$.
+When both vectors are unit-norm this is just $\mathbf{a} \cdot \mathbf{b}$, which skips the norm computation entirely and is why dot product is preferred on hot paths.
 
-**Euclidean distance** is physical distance through the embedding space:
+**Euclidean (L2)** is the straight-line distance through embedding space. I use it mainly for embeddings where magnitude carries meaning — some image and audio models, physics simulation vectors, cases where you're representing a literal position rather than a direction.
 
-$$d_{\text{euc}}(\mathbf{a}, \mathbf{b}) = \sqrt{\sum_{i=1}^d (a_i - b_i)^2} = \|\mathbf{a} - \mathbf{b}\|_2$$
+$$d_{\text{euc}}(\mathbf{a}, \mathbf{b}) = \sqrt{\sum_{i=1}^d (a_i - b_i)^2}$$
 
-Smaller is more similar. You'd use this when the magnitude of embeddings carries meaningful information, like certain image embeddings, physics simulation vectors, or scenarios where you're representing a literal position in space rather than a direction.
+One thing I do in the implementation: I return $1/(1 + d_\text{euc})$ instead of the raw distance. That maps the $[0, \infty)$ range into $(0, 1]$ so scores are directly comparable across cosine and Euclidean collections. A score of 0.95 means something consistent regardless of which metric is running under the hood.
 
-**Dot product** is the unnormalised inner product:
+**Dot product** (unnormalised) is used for recommendation-style workloads where vector magnitude encodes item relevance or popularity. Without normalisation, a higher-magnitude embedding will naturally rank higher, which is sometimes exactly what you want.
 
-$$\mathbf{a} \cdot \mathbf{b} = \sum_{i=1}^d a_i b_i$$
+### The three-step execution path
 
-Larger is more similar. Useful for recommendation systems where vector magnitude encodes something meaningful (item popularity, user engagement level). A more popular item having a higher-magnitude embedding will naturally rank higher under dot product search, which can be the desired behaviour. Under $\ell_2$ normalisation, dot product and cosine similarity are identical. Without normalisation, they diverge.
+Once the query vector is available — either passed directly or embedded on the fly from text — the engine in `src/search/engine.rs` runs three steps: overfetch, score, filter.
 
-The implementation does a small but important transform on Euclidean distance: it returns $1 / (1 + d_{\text{euc}})$ rather than the raw distance. This maps the unbounded $[0, \infty)$ range into $(0, 1]$ and makes it possible to sort and compare scores consistently across searches; a score of 0.95 means something similar whether the collection uses cosine or Euclidean. Dot product is returned raw since its scale depends entirely on the embedding model used.
-
----
-
-### The curse of dimensionality
-
-Tree-based spatial indexes like [KD-trees](https://en.wikipedia.org/wiki/K-d_tree), [ball-trees](https://en.wikipedia.org/wiki/Ball_tree), and [R-trees](https://en.wikipedia.org/wiki/R-tree) work well in 2, 3, maybe 10 dimensions. In $d = 1536$ they are essentially useless. Here's why.
-
-In a KD-tree, a hyperplane splits space at each node. Searching for the nearest neighbor involves traversing the tree and backtracking whenever the current best candidate's hypersphere could intersect the other side of a split. In low dimensions, these backtracks are rare because the hyperspheres are tight. In high dimensions, the geometry breaks. The volume of a $d$-dimensional ball of radius $r$ is:
-
-$$V_d(r) = \frac{\pi^{d/2}}{\Gamma(d/2 + 1)} r^d$$
-
-As $d$ grows, all the volume of the ball concentrates near the *surface* (the shell), not in the interior. Equivalently, if you pick two random points on the unit hypersphere in $d$ dimensions, their distance converges to $\sqrt{2}$ with vanishing variance:
-
-$$\mathbb{E}\left[\|\mathbf{x} - \mathbf{y}\|^2\right] = 2, \quad \text{Var}\left[\|\mathbf{x} - \mathbf{y}\|^2\right] \to 0 \text{ as } d \to \infty$$
-
-This is the concentration of measure. When all pairwise distances concentrate around the same value, there's no meaningful structure for a tree to exploit, so you have to check nearly everything anyway. A KD-tree in $d = 100$ is already degraded to near-linear scan performance. At $d = 1536$ a tree structure adds overhead with essentially no benefit.
-
-![Curse of dimensionality — as $d$ grows, the volume of a hypersphere shrinks relative to its enclosing cube and all points collapse to the same distance from any query, destroying the structure that spatial indexes rely on](https://cofactorgenomics.com/wp-content/uploads/2019/04/picture1.png)
-
----
-
-### How ANN algorithms escape the linear trap
-
-There are three broad families of approach.
-
-**[Locality-sensitive hashing (LSH)](https://en.wikipedia.org/wiki/Locality-sensitive_hashing)** uses a family of hash functions $\{h_1, \ldots, h_L\}$ where similar vectors are likely to hash to the same bucket. For cosine similarity, the standard construction is random hyperplane hashing: for each hash function, sample a random vector $\mathbf{r}$ from a Gaussian, then $h(\mathbf{x}) = \text{sign}(\mathbf{r} \cdot \mathbf{x})$. Two vectors with angle $\theta$ between them collide in the same bucket with probability $1 - \theta/\pi$. You use $L$ independent hash tables and return the union of all matched buckets as candidates.
-
-LSH has attractive theoretical guarantees but poor practical performance on modern high-dimensional dense embeddings. The number of hash tables needed to get good recall grows with dimension, and the bucket sizes are hard to tune: too coarse and you return too many false candidates, too fine and you miss true neighbors. In practice, graph-based methods have largely replaced LSH for embedding search.
-
-**Inverted File Index (IVF)** clusters the dataset into $C$ cells using k-means (or similar), then at query time probes the $n_{\text{probe}}$ closest cluster centroids and does a brute-force scan within those cells only. The probe set is determined by $\text{argmin}_c \|\mathbf{q} - \boldsymbol{\mu}_c\|$ over the centroid set $\{\boldsymbol{\mu}_1, \ldots, \boldsymbol{\mu}_C\}$.
-
-With $C = \sqrt{n}$ clusters and $n_{\text{probe}} = \sqrt{C}$, each query touches approximately $\sqrt{n}$ vectors instead of $n$, transforming $O(n)$ to $O(\sqrt{n})$ at the cost of some missed neighbors that live in unprobed cells. This is $10^3 \times$ faster than brute force at $n = 10^6$ with reasonable recall.
-
-**Graph-based methods** are where the state of the art currently is. The intuition is that if you build a graph where each node is connected to its approximate nearest neighbors, you can navigate from any starting point toward any query by repeatedly moving to the closest neighbor among the current node's connections. This is the small-world network idea applied to metric spaces.
-
----
-
-### HNSW
-
-[Hierarchical Navigable Small World (HNSW)](https://arxiv.org/abs/1603.09320), proposed by Malkov and Yashunin in 2018, is currently the dominant algorithm for in-memory ANN search. It's the primary index type and deserves a proper explanation.
-
-The core insight behind NSW (the non-hierarchical predecessor) is that if you build a graph by inserting nodes sequentially and connecting each new node to its nearest neighbors at the time of insertion, you get a *navigable small world* graph. Navigable means that greedy routing (always move to whichever neighbor is closest to the query) converges to the true nearest neighbor in $O(\log n)$ steps instead of $O(n)$.
-
-The problem with flat NSW is that early-inserted nodes become overly central in the graph (they have many connections added later during other nodes' insertions), creating a hub structure that slows down routing. HNSW solves this by adding a hierarchy of layers.
-
-**Layer construction.** Each node gets a maximum layer $l_{\max}$ drawn from an exponential distribution:
-
-$$l_{\max} \sim \lfloor -\ln(\text{Uniform}(0,1)) \cdot m_l \rfloor, \quad m_l = \frac{1}{\ln M}$$
-
-where $M$ is the target number of connections per node. This gives layer 0 all nodes, layer 1 roughly $1/M$ of them, layer 2 roughly $1/M^2$, and so on. At layer $l$, each node maintains at most $M$ bidirectional connections (or $M_{\max} = 2M$ at layer 0, since layer 0 carries the full resolution of the graph).
-
-For $M = 16$ (Piramid's default), $m_l = 1/\ln(16) \approx 0.36$. The probability of a node reaching layer $l$ is $e^{-l/m_l} = M^{-l}$: so about 6% of nodes appear at layer 1, 0.4% at layer 2, and so on. The top layers are sparse and can be traversed in very few hops.
-
-**Search algorithm.** Given a query $\mathbf{q}$ and target $k$, the search works in two phases:
-
-1. **Greedy descent**: start from the entry point (the node at the highest layer). At each layer $l$ from $l_{\max}$ down to layer 1, do a greedy local search with $ef = 1$, finding the single closest node in the current layer and moving to it. This descent narrows the entry point of the fine search from the global graph down to a local region that's close to $\mathbf{q}$ in the original space.
-
-2. **Layer-0 beam search**: at layer 0, run a beam search with parameter $ef \geq k$. Maintain a candidate set (min-heap by distance) and a nearest set (max-heap of size $ef$). Pop the closest candidate, explore its layer-0 neighbors, add any unvisited neighbor that's closer than the current furthest neighbor in the nearest set. Stop when the closest unvisited candidate is further than the worst nearest neighbor. Return the top $k$ from the nearest set.
-
-The complexity of this search is $O(\log n)$ for the greedy descent and roughly $O(ef \cdot M \cdot d)$ for the beam search, dominated by the $ef \times M$ distance computations at layer 0.
-
-The recall/speed tradeoff is entirely controlled by $ef$: larger $ef$ explores more candidates, finds better neighbors, but costs more computation. The construction-time $ef_{\text{construction}}$ controls graph quality during build; the query-time $ef_{\text{search}}$ controls query quality at search time. You can have a well-built graph (high $ef_{\text{construction}}$) and then lower $ef_{\text{search}}$ for fast lower-quality queries, or raise it for high-recall searches on the same graph.
-
-> **The graph property that makes this work:** HNSW graphs approximate [*Delaunay graphs*](https://en.wikipedia.org/wiki/Delaunay_triangulation) at each layer, a structure where edges connect nodes that are "natural neighbors" of each other (no other node sits geometrically between them). Delaunay graphs have the property that greedy routing always converges. The select-neighbors heuristic during construction tries to maintain this: when pruning a node's connections to keep only $M$, it prefers neighbors that are "diverse" in direction rather than the $M$ nearest by distance alone. This keeps the graph navigable even in high-dimensional spaces where the nearest neighbor cluster is very tight.
-
-![HNSW greedy search — the query descends from the sparse top layers to the dense layer 0, narrowing the candidate region at each step before running the full beam search](https://www.pinecone.io/_next/image/?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2Fvr8gru94%2Fproduction%2Fdc5cb11ea197ceb4e1f18214066c8c51526b9af5-1920x1080.png&w=3840&q=75)
-*HNSW search descends through layers: coarse greedy jumps at the top to land near the target region, then a careful beam search at layer 0 for the final candidate set.*
-
----
-
-If you just compute this directly: calculate $\text{sim}(\mathbf{q}, \mathbf{x}_i)$ for every $i$, sort, and take the top $k$, which is $O(nd)$ operations per query. It's a clean three-step flow: overfetch from the ANN index, score, filter.
-
-**Step 1: Overfetch.** If a metadata filter is attached to the query, Piramid can't know in advance how many of the ANN candidates will survive the filter. If it only fetched $k$ candidates and the filter rejects 80% of them, you'd get far fewer than $k$ results. The fix is to fetch more:
+**Step 1: Overfetch from the ANN index.** The index is asked for more candidates than the caller actually wants. If a metadata filter is attached, I can't know in advance how many ANN hits will survive it. Fetching exactly $k$ and then filtering would often return fewer than $k$ results. The fix is straightforward:
 
 ```rust
-let search_k = if params.filter.is_some() { 
-    k.saturating_mul(expansion) 
-} else { 
-    k 
+let search_k = if params.filter.is_some() {
+    k.saturating_mul(expansion)
+} else {
+    k
 };
 ```
 
-The `expansion` factor is the `filter_overfetch` from the search config (default 5), or a per-request override. So if you ask for top-10 with a filter, Piramid fetches 50 candidates from the ANN index, scores and filters all 50, then returns the best 10 that survived.
+`expansion` is the `filter_overfetch` config (default 5). For a top-10 request with a filter, the index gets asked for 50 candidates. If the filter has ~20% selectivity, you expect about 10 survivors on average from those 50.
 
 ![Overfetch + filter diagram — ANN search returning a large candidate pool (ef x filter_overfetch), then a metadata filter keeping only the qualifying subset, with arrows showing how the surviving results are re-sorted and truncated to k](https://global.discourse-cdn.com/dlai/original/3X/2/8/28d6189faeed383efb359904d81169a4a581af3f.jpeg)
 
-**Step 2: Score.** For each candidate ID returned by the ANN index, the engine retrieves the full float32 vector and calculates the exact similarity score using the configured metric. This is done on the raw vectors in memory with no approximation at scoring time, even if the index search itself was approximate. The scoring is exact even when the retrieval is ANN.
+**Step 2: Score exactly.** For every candidate ID the index returns, I fetch the full float32 vector and compute an exact similarity score using the configured metric. No approximation at this stage, even if the retrieval was approximate. The ANN index finds the right neighbourhood cheaply; the exact scoring happens on the small result set.
 
-**Step 3: Filter and truncate.** If a filter is present, it's applied to the scored hits before sorting and truncating. The filter is a chain of conditions with AND semantics:
+**Step 3: Filter and truncate.** If a metadata filter is present, it runs here against the scored hits. The filter is a chain of conditions with AND semantics:
 
 ```rust
 Filter::new()
@@ -124,11 +49,54 @@ Filter::new()
     .is_in("category", vec!["science", "tech"])
 ```
 
-All conditions must pass. Range, equality, not-equal, and set membership (`in`) are all supported. The filter is applied post-ANN, which means it operates on metadata stored in memory, a fast in-process lookup with no secondary I/O.
+Range, equality, not-equal, and set membership are all supported. This all happens in-process against the metadata stored in memory — no secondary I/O. After filtering, sort by score, truncate to $k$, done.
 
-### The search engine
+### SearchConfig: the recall/latency dial
 
-I implemented the actual query pipeline in `src/search/engine.rs`. **Batch search.** For multiple simultaneous queries, I built a `search_batch_collection` function that reuses the same vector and metadata maps across all queries in the batch.
+The `SearchConfig` struct exposes three named presets that control how thoroughly the index is explored per query:
+
+| Preset | `ef` (HNSW) | `nprobe` (IVF) | Use case |
+|--------|-------------|----------------|----------|
+| `fast` | 50 | 1 | Batch pipelines, latency over recall |
+| `balanced` | default | default | General interactive RAG |
+| `high` | 400 | 20 | Compliance retrieval, precision-critical |
+
+`ef` is the most important knob for HNSW. It sets the beam width for the layer-0 search: larger means the algorithm explores more of the graph before committing to a result set, which finds better neighbours but costs more CPU. A useful rule of thumb: at $ef = M \cdot k$ (for $M = 16$, $k = 10$: $ef = 160$) you typically see Recall@10 above 95%. Pushing to $ef = 400$ usually hits 99%+. The cost scales roughly linearly with $ef$.
+
+| ef | Recall@10 (approx) | latency multiplier |
+|----|-------------------|--------------------|
+| 10 | ~85% | 1× |
+| 50 | ~93% | 1.8× |
+| 100 | ~96% | 2.5× |
+| 200 | ~98% | 4× |
+| 400 | ~99.5% | 7× |
+
+You can override `SearchConfig` per request without touching the collection's default:
+
+```yaml
+# collection config default
+index:
+  type: Hnsw
+  ef_search: 200
+
+# per-request override in SearchParams
+search_config_override:
+  ef: 400
+```
+
+That one query runs at `ef=400` while everything else keeps running at the default. Useful when 99% of traffic is interactive RAG at `balanced` and an occasional compliance query needs `high`.
+
+> **ef and overfetch interact.** If you have a filter with `expansion = 5` and request $k = 10$ at `ef = 50`, the engine runs HNSW with beam width `max(ef=50, expansion*k=50) = 50` and hands 50 candidates to the filter. Raising to `ef = 400` gives the filter 50 candidates drawn from a much larger portion of the graph — better coverage of the eligible set for selective filters.
+
+### Filtered search and the selectivity problem
+
+The hardest practical case in vector search is combining ANN with a highly selective metadata filter. I use in-traversal filtering for HNSW: filtered-out nodes are still used as graph traversal stepping stones but excluded from the result heap. This is better than naive post-filter because traversal keeps going until `ef` *qualifying* candidates are found rather than stopping at `ef` total candidates.
+
+But for very selective filters (say, 1–2% of the dataset qualifies), even a large `ef` budget can't surface enough eligible candidates in one pass. Every hop in the graph is likely to land on a non-qualifying node. The `filter_overfetch` parameter is the practical knob here: set it to something like 50 for a 2% selective filter and you'll usually get enough hits. For < 1% selectivity, the right architecture is a purpose-built filtered index with separate entry points per filter attribute — that's on the roadmap.
+
+### Batch search and parallelism
+
+For multiple queries at once, I route them through `search_batch_collection` which reuses the same vector and metadata maps across the whole batch. When `parallel_search` is enabled, queries run in parallel via [Rayon](https://github.com/rayon-rs/rayon):
 
 ```rust
 if storage.config().parallelism.parallel_search {
@@ -139,24 +107,4 @@ if storage.config().parallelism.parallel_search {
 }
 ```
 
-Each query is independent; they share only immutable references to the vector store, so the parallelism is lock-free.
-
-### SearchConfig: the recall/speed dial
-
-The `SearchConfig` struct controls the recall/speed tradeoff at query time. There are three named presets:
-
-| Preset | `ef` (HNSW) | `nprobe` (IVF) | Use case |
-|--------|-------------|----------------|----------|
-| `fast` | 50 | 1 | Low-latency, recall can be approximate |
-| `balanced` | default | default | General use |
-| `high` | 400 | 20 | High-recall, latency less critical |
-
-You can also pass a `SearchConfig` override per request via `SearchParams` without changing the collection's default config. This matters for cases like: the collection normally runs at `balanced`, but a specific important query needs `high` recall, so just pass a `search_config_override` in the params and that one query runs at `ef=400` without touching global settings.
-
-The `ef` parameter is the most important knob. A useful empirical rule: at $ef = M \cdot k$ (so for $M = 16$, $k = 10$: $ef = 160$) you typically see Recall@10 above 95% on well-distributed embedding spaces. Pushing to $ef = 400$ usually reaches 99%+. The cost is roughly linear in $ef$: doubling $ef$ roughly doubles query time.
-
-> **One subtlety:** when `search_config_override` changes `ef`, the overfetch stack still applies on top. If you're using a filter with `expansion = 5` and kick off a query for $k = 10$ with `ef = 50`, Piramid actually runs the HNSW search with `ef = max(50, 5 * 10) = 50` and fetches 50 candidates to hand to the filter. If you raise to $ef = 400$, you get 50 filter candidates from 400 explored nodes, giving much better graph coverage for the filtered result set.
-
----
-
-> There's also a flat brute-force index (no ANN approximation), which is useful for small collections where recall must be exact, or for testing and benchmarking. Flat search always touches every vector and computes the exact distance, so recall is 1.0 by construction. The tradeoff is linear query time, which is fine for $n < 10^4$ or so but impractical beyond that. The SearchConfig parameters (`ef`, `nprobe`) are ignored for the flat index since there's nothing to tune when it always scans everything.
+Each query is independent and reads only immutable references to the vector store, so there's no locking in the hot path.
