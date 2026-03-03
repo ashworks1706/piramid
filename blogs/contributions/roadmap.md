@@ -26,10 +26,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
-### Index Quality patch 
+### Index Quality patch
 
-**Quantization Refactor (1.1.0)** 
-
+**Quantization Refactor (1.1.0)**
 - [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
 - [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented — it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
 
@@ -39,7 +38,10 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
-- [ ] Introduce ComputeBackend trait (Cpu | ZipyGpu) — index traversal must dispatch distance computation through a backend abstraction instead of assuming CPU-only execution. (Design-only for now; GPU implementation deferred to Phase 2.)
+
+**Introduce ComputeBackend trait (Cpu | ZipyGpu):**
+
+- [ ] index traversal must dispatch distance computation through a backend abstraction. Design the handshake for Zipy to take ownership of distance-calc batches.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
 - [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
 - [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
@@ -48,7 +50,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
 - [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
 
-### Searching patch 
+### Searching patch
 
 **Filter & Cache Acceleration (1.1.2)**
 
@@ -84,7 +86,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
-### Schema, Filters & Clients 
+### Schema, Filters & Clients
 
 **Schema (1.1.6)**
 
@@ -106,7 +108,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 ---
 
 ### Documentation & Testing
-
 
 **Documentation**
 
@@ -135,33 +136,33 @@ This is the working roadmap for contributors. If you want to help, start here an
 ---
 
 ### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
-*(Phase 2 - blocked by quantization refactor & storage durability work. Zipy integration will be implemented after core storage, indexing, and quantization are stable. Zipy must be optional and cannot change persistence guarantees.)*
 
-- [ ] add `zipy` crate to `Cargo.toml` as an optional feature (feature-flagged)
-- [ ] define `ComputeBackend` trait + `ExecutionMode` hook; ensure indexes call trait methods (design only)
-- [ ] wire the existing `ExecutionMode::Gpu` variant to dispatch through `ZipyEngine` when feature enabled — fallback to CPU by default
+*(Phase 2 - Systems-level integration between Storage and Inference. Blocked by quantization refactor & storage durability work.)*
+
+- [ ] **Unified ComputeBackend Implementation:*- Wire the `ZipyGpu` backend to dispatch distance-calc batches to Zipy's wgpu kernels.
+- [ ] **Shared VRAM Memory Pool:*- Implement a memory-mapping protocol between Piramid and Zipy to allow zero-copy access to physical GPU buffers.
+- [ ] **KV-Cache Storage Type:*- Extend the storage layer to support persisting pre-computed KV-cache blocks for "Zero-Prefill" RAG.
+- [ ] **Pinned Memory Staging:*- Implement wgpu staging belts to stream mmap data directly to Zipy's VRAM without intermediate CPU copies.
+- [ ] **Direct-to-Attention Handshake:*- Implement the logic for Piramid to pass VRAM pointers of retrieved document caches directly to Zipy’s PagedAttention block table.
 - [ ] attempt Zipy initialization on boot, fallback to CPU on failure (graceful degrade)
 - [ ] add `/api/health` GPU status fields (temperature, VRAM used/free)
 
-**Blocked / Future (implement after Quantization & Durability are done):**
-- [ ] hydrate on-disk vectors into GPU VRAM on startup (requires raw f32 source-of-truth)
-- [ ] dual-write architecture: insert -> mmap + Zipy VRAM (warm VRAM)
-- [ ] dispatch distance computation (HNSW hops, IVF centroid lookups, Flat scores) through Zipy when `ExecutionMode::Gpu` active
-- [ ] flat search: replace per-vector CPU loop with single batched GPU dispatch
-- [ ] IVF: offload k-means / centroid lookups to Zipy GPU kernels
+**Blocked / Future (Systems Optimization):**
+
+- [ ] **Warm Index Mirroring:*- Automatically hydrate frequently accessed index clusters into Zipy-managed VRAM on startup.
+- [ ] **Batched Retrieval Dispatch:*- Group multiple RAG search requests into a single GPU command buffer for Zipy's executor.
+- [ ] **Unified Circuit Breaker:*- Implement cross-process resource monitoring to balance VRAM allocation between Piramid indexes and Zipy KV-caches.
 - [ ] auto-switch to CPU if Zipy reports OOM/timeout
 
 ---
 
 ### Later
 
-
 **MCP Integration**
 
 - [ ] MCP server implementation
 - [ ] tools: `search_similar`, `get_document`, `list_collections`, `add_document`
 - [ ] agent-friendly structured responses (JSON-LD)
-
 
 **Security**
 
