@@ -25,6 +25,10 @@ Piramid is a Rust vector database tuned for low-latency agentic workloads. The l
 - Limits and disk/memory guards; tracing + metrics/health endpoints
 - Roadmap: GPU kernel (Zipy) co-resident with the LLM for single-hop latency
 
+## Updates
+- busy with school and labs, will resume project soon...
+- heavily looking for collaborators 
+
 ## Quick Start
 
 ### Cargo (recommended)
