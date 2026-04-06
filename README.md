@@ -1,3 +1,7 @@
+### imp updates
+- busy with school and labs, will resume project soon...
+- heavily looking for collaborators 
+---
 <img width="1114" height="191" alt="Piramid Logo" src="https://github.com/user-attachments/assets/efaa4c47-62d1-4397-9899-8bd58d400fc6" />
 
 <p align="center">
@@ -24,10 +28,6 @@ Piramid is a Rust vector database tuned for low-latency agentic workloads. The l
 - Embeddings: OpenAI and local HTTP (Ollama/TEI-style), caching and retries
 - Limits and disk/memory guards; tracing + metrics/health endpoints
 - Roadmap: GPU kernel (Zipy) co-resident with the LLM for single-hop latency
-
-## Updates
-- busy with school and labs, will resume project soon...
-- heavily looking for collaborators 
 
 ## Quick Start
 
