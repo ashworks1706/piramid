@@ -40,6 +40,8 @@ This is simpler than a B+ tree heap, and for the access patterns I'm targeting, 
 
 The vector index file holds the ANN structure (HNSW graph adjacency lists, IVF centroids, etc.) serialized separately. This separation is important: the data file and the vector index have completely different access patterns and different rebuild costs. The data file is append-heavy and can be written to incrementally. The vector index is rebuilt from scratch during index rebuild operations or compaction, because rebuilding an HNSW graph incrementally from a corrupted state is hard to do correctly. Keeping them separate lets each evolve and persist independently, and means a corrupt vector index doesn't invalidate your raw data.
 
+> **Planned extension — KV-cache block storage:** A future storage type alongside `Document` will allow Piramid to persist pre-computed transformer KV tensors keyed by document ID. When [Zipy](https://github.com/ashworks1706/zipy) (the inference engine counterpart) evicts a KV-cache block from VRAM to reclaim capacity, it can offload it to Piramid's NVMe-backed store and reload it on the next retrieval hit — turning Piramid into the persistent spill target for the inference engine's KV cache and enabling "Zero-Prefill" RAG where the LLM skips re-reading the document entirely.
+
 
 ### Memory-mapped I/O vs the buffer pool
 
