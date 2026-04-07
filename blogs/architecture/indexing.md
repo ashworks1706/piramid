@@ -324,7 +324,7 @@ After the clusters are built, new vectors are assigned to the nearest existing c
 
 The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. I trigger this through the compaction mechanism, exactly as with HNSW graph rebuilds.
 
-> **Where this is headed:** I haven't run formal benchmarks between HNSW and IVF yet — I've been focused on building features and keeping the codebase clean. I expect HNSW to dominate on 100K+ vector datasets in latency, but IVF might close the gap significantly once I add GPU parallelism through [Zipy](https://github.com/ashworks1706/zipy). IVF's cluster scanning is embarrassingly parallel and maps naturally to GPU compute. HNSW is trickier since graph traversal is inherently sequential, but I'm reading papers on GPU-accelerated graph search and think there's a way to batch the neighbor distance computations within each traversal step. If I can make that work, the performance gains would be substantial.
+> **Where this is headed:** I haven't run formal benchmarks between HNSW and IVF yet — I've been focused on building features and keeping the codebase clean. I expect HNSW to dominate on 100K+ vector datasets in latency, but IVF might close the gap significantly once I add native GPU parallelism. IVF's cluster scanning is embarrassingly parallel and maps naturally to GPU compute. HNSW is trickier since graph traversal is inherently sequential, but I'm reading papers on GPU-accelerated graph search and think there's a way to batch the neighbor distance computations within each traversal step. If I can make that work, the performance gains would be substantial.
 
 #### Searching with nprobe
 

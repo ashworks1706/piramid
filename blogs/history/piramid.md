@@ -36,7 +36,7 @@ I’m not saying this for sympathy — I’m saying it because it explains the e
 
 ### What’s next
 
-The next big thing is GPU parallelism through [Zipy](https://github.com/ashworks1706/zipy). IVF’s cluster scanning is embarrassingly parallel and maps naturally to GPU compute, and I think there’s a path to accelerating HNSW’s neighbor distance computations within each traversal step too. That’s the problem I’m most excited about.
+The next big thing is native GPU parallelism. IVF’s cluster scanning is embarrassingly parallel and maps naturally to GPU compute, and I think there’s a path to accelerating HNSW’s neighbor distance computations within each traversal step too. That’s the problem I’m most excited about.
 
 But the reason I keep building is simpler than any technical goal. The world is too complex to take a right decision — it’s more about the journey and whether you feel fulfilled with it. I never let people tell me what to do. I just pick something and go with it.
 

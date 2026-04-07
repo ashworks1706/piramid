@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation. Zipy GPU integration is a Phase-2 optional acceleration layer — Piramid is fully functional without it. Zipy work begins after base piramid are complete.
+This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation. GPU acceleration is a Phase-2 optional capability — Piramid is fully functional without it. GPU work begins after base piramid tasks are complete.
 
 ---
 
@@ -31,6 +31,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 **Quantization Refactor (1.1.0)**
 - [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
 - [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented — it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
+- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation — store and serve vectors in native half-precision without upcasting to FP32. Required for zero-copy handoff to GPU kernels (wgpu WGSL shaders operate in FP16/BF16), eliminating a costly precision-conversion step on the hot search path.
 
 **Index Improvements (1.1.1)**
 
@@ -39,9 +40,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
 
-**Introduce ComputeBackend trait (Cpu | ZipyGpu):**
+**Introduce ComputeBackend trait (Cpu | Gpu):**
 
-- [ ] index traversal must dispatch distance computation through a backend abstraction. Design the handshake for Zipy to take ownership of distance-calc batches.
+- [ ] index traversal must dispatch distance computation through a backend abstraction. Design the handshake for the GPU backend to take ownership of distance-calc batches.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
 - [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
 - [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
@@ -97,6 +98,8 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] grouped/diverse search (max results per category/namespace)
 - [ ] scroll/cursor pagination for large result sets
+- [ ] **Batch search endpoint:** add `POST /api/collections/:name/search/batch` accepting an array of query vectors and returning an array of result sets in a single round-trip — required for the batched RAG scheduler pipeline where multiple queries are issued per inference request.
+- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so an inference scheduler can push queries one at a time and receive results as they complete, enabling continuous batching iteration-level scheduling without pre-grouping queries (see [Zipy](https://github.com/ashworks1706/zipy) for the inference-side implementation).
 
 **Clients & SDK (1.1.8)**
 
@@ -135,24 +138,41 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
-### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
+### GPU Acceleration & Inference Fusion
 
-*(Phase 2 - Systems-level integration between Storage and Inference. Blocked by quantization refactor & storage durability work.)*
+*(Phase 2 - Systems-level integration between Storage and Inference. Blocked by quantization refactor & storage durability work. The inference engine counterpart to this work is [Zipy](https://github.com/ashworks1706/zipy). The items below are Piramid's side of the shared memory and Zero-Prefill contract between the two projects.)*
 
-- [ ] **Unified ComputeBackend Implementation:*- Wire the `ZipyGpu` backend to dispatch distance-calc batches to Zipy's wgpu kernels.
-- [ ] **Shared VRAM Memory Pool:*- Implement a memory-mapping protocol between Piramid and Zipy to allow zero-copy access to physical GPU buffers.
-- [ ] **KV-Cache Storage Type:*- Extend the storage layer to support persisting pre-computed KV-cache blocks for "Zero-Prefill" RAG.
-- [ ] **Pinned Memory Staging:*- Implement wgpu staging belts to stream mmap data directly to Zipy's VRAM without intermediate CPU copies.
-- [ ] **Direct-to-Attention Handshake:*- Implement the logic for Piramid to pass VRAM pointers of retrieved document caches directly to Zipy’s PagedAttention block table.
-- [ ] attempt Zipy initialization on boot, fallback to CPU on failure (graceful degrade)
+**Compute backend:**
+
+- [ ] **Unified ComputeBackend Implementation:** Wire the `Gpu` backend to dispatch distance-calc batches to wgpu kernels.
+- [ ] attempt GPU initialization on boot, fallback to CPU on failure (graceful degrade)
 - [ ] add `/api/health` GPU status fields (temperature, VRAM used/free)
+
+**Shared memory protocol (Piramid ↔ Zipy Phase 5):**
+
+- [ ] **IPC Wire Format:** Define a `SharedBufferHandle` type — wraps a VRAM raw pointer, byte length, and a sync token — transmitted over a Unix domain socket or memfd. This is Piramid's side of the Shared Memory Protocol that lets the inference engine pull index data directly into GPU buffers without a CPU copy.
+- [ ] **Shared VRAM Memory Pool:** Implement a memory-mapping protocol to allow zero-copy access to physical GPU buffers.
+- [ ] **Pinned Memory Staging:** Implement wgpu staging belts to stream mmap data directly to VRAM without intermediate CPU copies.
+- [ ] **Direct-to-Attention Handshake:** Implement the logic for Piramid to pass VRAM pointers of retrieved document caches directly to a PagedAttention block table.
+
+**Zero-Prefill RAG (Piramid ↔ Zipy Phase 4 & 5):**
+
+- [ ] **KV-Cache Storage Type:** Add a `KvCacheBlock` storage entry type alongside `Document` — stores pre-computed transformer KV tensors (FP16, safetensors layout) keyed by document ID. When a document's KV block is resident, Zipy can skip prefill entirely for that document.
+- [ ] **Zero-Prefill Search Response Extension:** Extend the `Hit` type to optionally carry a KV-cache block pointer alongside the document ID and text — when the block is available and VRAM is resident, Zipy can inject it directly into the attention mechanism without re-reading the document.
+- [ ] **KV-Cache Block Invalidation:** When a document is updated or deleted, invalidate and evict its associated KV-cache block from both the Piramid storage layer and any VRAM-resident copy, so stale KV data is never passed to the inference engine.
+- [ ] **NVMe KV-Cache Offload Target:** Implement Piramid as the persistent NVMe store for Zipy's spilled KV blocks — when Zipy evicts blocks from VRAM to reclaim capacity, Piramid receives and durably stores them keyed by sequence ID for rapid warm reload.
+
+**Safetensors / precision compatibility (Piramid ↔ Zipy Phase 1):**
+
+- [ ] **Safetensors-compatible vector export:** Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format so Zipy's staging belt can load it directly into GPU buffers without a format-conversion step.
 
 **Blocked / Future (Systems Optimization):**
 
-- [ ] **Warm Index Mirroring:*- Automatically hydrate frequently accessed index clusters into Zipy-managed VRAM on startup.
-- [ ] **Batched Retrieval Dispatch:*- Group multiple RAG search requests into a single GPU command buffer for Zipy's executor.
-- [ ] **Unified Circuit Breaker:*- Implement cross-process resource monitoring to balance VRAM allocation between Piramid indexes and Zipy KV-caches.
-- [ ] auto-switch to CPU if Zipy reports OOM/timeout
+- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into GPU-managed VRAM on startup.
+- [ ] **Batched Retrieval Dispatch:** Group multiple RAG search requests into a single GPU command buffer.
+- [ ] **Unified Circuit Breaker:** Implement cross-process resource monitoring to balance VRAM allocation between Piramid indexes and LLM KV-caches.
+- [ ] auto-switch to CPU if GPU reports OOM/timeout
+- [ ] **Speculative Decode Context:** Annotate search results with token-level context windows in a format compatible with Zipy's speculative decoding pipeline, so retrieved documents can prime draft-model generation without a separate prefill pass.
 
 ---
 
