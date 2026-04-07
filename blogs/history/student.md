@@ -44,28 +44,28 @@ Over time I worked on more than just basic retrieval. I dealt with ranking quali
 
 One thing I found beautiful about databases is how differently people use them. One person calls them through a Python client, another through npm, another through direct APIs in production systems. The same core engine has to serve very different needs, workloads, and expectations.
 
-I read a lot from [qdrant](https://qdrant.tech/), [chroma](https://www.trychroma.com/), [milvus](https://milvus.io/), [weaviate](https://weaviate.io/), [pgvector](https://github.com/pgvector/pgvector), and [helix](https://helix-db.com/). Each one has a different design focus and tradeoff profile. Helix in particular seemed very focused on LLM and MCP-heavy workflows, which makes total sense in the current AI wave.
+I read a lot from [qdrant](https://qdrant.tech/), [chroma](https://www.trychroma.com/), [milvus](https://milvus.io/), [weaviate](https://weaviate.io/), [pgvector](https://github.com/pgvector/pgvector), and [helix](https://helix-db.com/). Each one has a different design focus and tradeoff profile. Helix in particular seemed very focused on agentic and MCP-heavy workflows, which makes total sense in the current AI wave.
 
 Seeing how differently these systems approached similar problems was super useful. It made me realize there’s no single “perfect” design, only designs that are good for specific constraints.
 
 > Even though many of these products solve real problems really well, there are still open spaces to explore. I wasn’t thinking about differentiation in startup terms. I just wanted to build systems because I genuinely enjoy the engineering side.
 
 
-### GPU kernels
+### Parallelism & performance
 
-At some point I kept thinking about RAG latency in real products. Even if each component is fast individually, the end-to-end flow can still feel slow: call vector DB, wait, call LLM, wait, run app logic, then return a response.
+At some point I kept thinking about retrieval latency in real products. Even if each component is fast individually, the end-to-end flow can still feel slow: database lookup, network round-trips, and application logic all add up.
 
-That’s when the core idea clicked for me: what if the LLM and vector retrieval could run closer together, ideally on the same device? If we can reduce cross-service round trips, latency drops a lot, especially at scale.
+That’s when the performance focus clicked for me: minimize retrieval latency by parallelizing the vector search itself. IVF’s cluster scanning is embarrassingly parallel, and HNSW’s neighbor distance computations within each traversal step could benefit from batched execution.
 
-I started thinking about whether parts of retrieval and generation could be colocated on GPU workflows. If that works well, it could be a big win in high-volume systems where every extra hop is expensive.
+
 
 Then I went deep into internals: memory management, storage layouts, index behavior, and search mechanics. That rabbit hole was intense and honestly addictive.
 
-I also got confused by the word “kernel” because it means different things in different contexts. In deep learning classes it can mean convolution kernels, in OS it means the operating system kernel, and in GPU programming it means code executed on the GPU. Once I separated those meanings, things got clearer.
+I also got confused by the word “kernel” because it means different things in different contexts. In deep learning classes it can mean convolution kernels, in OS it means the operating system kernel, and in systems programming it means code executed on a compute unit. Once I separated those meanings, things got clearer.
 
-I didn't want to jump fully into [CUDA](https://developer.nvidia.com/cuda-toolkit) while still getting comfortable with Rust, so I started exploring Rust-friendly GPU paths (like [`wgpu`](https://wgpu.rs/)) just to build intuition first.
+I didn't want to jump fully into [CUDA](https://developer.nvidia.com/cuda-toolkit) while still getting comfortable with Rust, so I started exploring Rust-friendly paths (like [`wgpu`](https://wgpu.rs/)) just to build intuition first.
 
-Right now, GPU kernels are still a future step for this project. But the direction is clear, and that clarity is enough to keep building.
+Right now, parallel acceleration is still a future step for this project. But the direction is clear, and that clarity is enough to keep building.
 
 
 

@@ -10,7 +10,7 @@ Before talking about how indexes work, it helps to be precise about what "good" 
 
 $$\text{Recall@}k = \frac{|\text{ANN results} \cap \text{true } k\text{-NN}|}{k}$$
 
-A Recall@10 of 0.95 means 9.5 out of 10 returned results are genuinely in the top-10 by exact distance, meaning you missed half a result on average. For RAG, an LLM consuming the top-5 retrieved chunks rarely produces a noticeably worse answer if one chunk is an 11th-nearest rather than a 9th-nearest neighbour. The semantic delta is tiny. This is why targeting Recall@10 ≥ 0.95 is reasonable for production and you should not sacrifice 2–3× query latency chasing 0.99.
+A Recall@10 of 0.95 means 9.5 out of 10 returned results are genuinely in the top-10 by exact distance, meaning you missed half a result on average. For RAG, a downstream model consuming the top-5 retrieved chunks rarely produces a noticeably worse answer if one chunk is an 11th-nearest rather than a 9th-nearest neighbour. The semantic delta is tiny. This is why targeting Recall@10 ≥ 0.95 is reasonable for production and you should not sacrifice 2–3× query latency chasing 0.99.
 
 > **The recall-latency frontier**: every ANN algorithm traces a curve when you sweep its quality parameters. More recall always costs more latency. The goal of index design is to push that frontier as far to the upper-left (high recall, low latency) as possible. HNSW currently has the best-known frontier for general dense vectors at high dimensions.
 
@@ -65,7 +65,7 @@ When all distances are nearly equal, there's no local structure for a spatial in
 
 This is a question I thought about a lot when building Piramid. Intuitively, "97% recall" sounds like a compromise. But when you look at what you're actually doing with the results, the math changes.
 
-For RAG pipelines it almost never does. An LLM context window holds 5–20 retrieved chunks. If one of them is a 12th-nearest-neighbour rather than the 10th, the generated answer is unchanged with very high probability — the semantic gap between the 10th and 12th most similar vectors is essentially imperceptible to a language model. The accuracy loss from a well-configured HNSW index is typically 1–5%, and the query latency improvement over exact search is 10–100×.
+For RAG pipelines it almost never does. A retrieval consumer typically uses 5–20 retrieved chunks. If one of them is a 12th-nearest-neighbour rather than the 10th, the generated answer is unchanged with very high probability — the semantic gap between the 10th and 12th most similar vectors is essentially imperceptible. The accuracy loss from a well-configured HNSW index is typically 1–5%, and the query latency improvement over exact search is 10–100×.
 
 Where recall does matter: deduplication (you need exact matches, not approximate ones), compliance retrieval (must surface every relevant document), and similarity thresholding (returning "no match" for queries below a distance cutoff requires precise distances). For those workloads, Flat or a post-search exact reranker is appropriate.
 
@@ -324,7 +324,7 @@ After the clusters are built, new vectors are assigned to the nearest existing c
 
 The fix is a periodic rebuild: re-run k-means on the current live vector set, reassign all vectors to new centroids, and reconstruct the inverted lists. I trigger this through the compaction mechanism, exactly as with HNSW graph rebuilds.
 
-> **Where this is headed:** I haven't run formal benchmarks between HNSW and IVF yet — I've been focused on building features and keeping the codebase clean. I expect HNSW to dominate on 100K+ vector datasets in latency, but IVF might close the gap significantly once I add native GPU parallelism. IVF's cluster scanning is embarrassingly parallel and maps naturally to GPU compute. HNSW is trickier since graph traversal is inherently sequential, but I'm reading papers on GPU-accelerated graph search and think there's a way to batch the neighbor distance computations within each traversal step. If I can make that work, the performance gains would be substantial.
+> **Where this is headed:** I haven't run formal benchmarks between HNSW and IVF yet — I've been focused on building features and keeping the codebase clean. I expect HNSW to dominate on 100K+ vector datasets in latency, but IVF might close the gap significantly once I add native parallelism. IVF's cluster scanning is embarrassingly parallel. HNSW is trickier since graph traversal is inherently sequential, but there's a path to batch the neighbor distance computations within each traversal step. If that lands, the performance gains would be substantial.
 
 #### Searching with nprobe
 
