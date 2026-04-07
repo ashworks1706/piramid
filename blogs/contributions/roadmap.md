@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation. Zipy GPU integration is a Phase-2 optional acceleration layer — Piramid is fully functional without it. Zipy work begins after base piramid are complete.
+This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation. GPU acceleration is a Phase-2 optional capability — Piramid is fully functional without it. GPU work begins after base piramid tasks are complete.
 
 ---
 
@@ -39,9 +39,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
 
-**Introduce ComputeBackend trait (Cpu | ZipyGpu):**
+**Introduce ComputeBackend trait (Cpu | Gpu):**
 
-- [ ] index traversal must dispatch distance computation through a backend abstraction. Design the handshake for Zipy to take ownership of distance-calc batches.
+- [ ] index traversal must dispatch distance computation through a backend abstraction. Design the handshake for the GPU backend to take ownership of distance-calc batches.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
 - [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
 - [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
@@ -135,24 +135,24 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
-### [Zipy](https://github.com/ashworks1706/zipy) GPU Acceleration
+### GPU Acceleration
 
 *(Phase 2 - Systems-level integration between Storage and Inference. Blocked by quantization refactor & storage durability work.)*
 
-- [ ] **Unified ComputeBackend Implementation:*- Wire the `ZipyGpu` backend to dispatch distance-calc batches to Zipy's wgpu kernels.
-- [ ] **Shared VRAM Memory Pool:*- Implement a memory-mapping protocol between Piramid and Zipy to allow zero-copy access to physical GPU buffers.
-- [ ] **KV-Cache Storage Type:*- Extend the storage layer to support persisting pre-computed KV-cache blocks for "Zero-Prefill" RAG.
-- [ ] **Pinned Memory Staging:*- Implement wgpu staging belts to stream mmap data directly to Zipy's VRAM without intermediate CPU copies.
-- [ ] **Direct-to-Attention Handshake:*- Implement the logic for Piramid to pass VRAM pointers of retrieved document caches directly to Zipy’s PagedAttention block table.
-- [ ] attempt Zipy initialization on boot, fallback to CPU on failure (graceful degrade)
+- [ ] **Unified ComputeBackend Implementation:** Wire the `Gpu` backend to dispatch distance-calc batches to wgpu kernels.
+- [ ] **Shared VRAM Memory Pool:** Implement a memory-mapping protocol to allow zero-copy access to physical GPU buffers.
+- [ ] **KV-Cache Storage Type:** Extend the storage layer to support persisting pre-computed KV-cache blocks for "Zero-Prefill" RAG.
+- [ ] **Pinned Memory Staging:** Implement wgpu staging belts to stream mmap data directly to VRAM without intermediate CPU copies.
+- [ ] **Direct-to-Attention Handshake:** Implement the logic for Piramid to pass VRAM pointers of retrieved document caches directly to a PagedAttention block table.
+- [ ] attempt GPU initialization on boot, fallback to CPU on failure (graceful degrade)
 - [ ] add `/api/health` GPU status fields (temperature, VRAM used/free)
 
 **Blocked / Future (Systems Optimization):**
 
-- [ ] **Warm Index Mirroring:*- Automatically hydrate frequently accessed index clusters into Zipy-managed VRAM on startup.
-- [ ] **Batched Retrieval Dispatch:*- Group multiple RAG search requests into a single GPU command buffer for Zipy's executor.
-- [ ] **Unified Circuit Breaker:*- Implement cross-process resource monitoring to balance VRAM allocation between Piramid indexes and Zipy KV-caches.
-- [ ] auto-switch to CPU if Zipy reports OOM/timeout
+- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into GPU-managed VRAM on startup.
+- [ ] **Batched Retrieval Dispatch:** Group multiple RAG search requests into a single GPU command buffer.
+- [ ] **Unified Circuit Breaker:** Implement cross-process resource monitoring to balance VRAM allocation between Piramid indexes and LLM KV-caches.
+- [ ] auto-switch to CPU if GPU reports OOM/timeout
 
 ---
 

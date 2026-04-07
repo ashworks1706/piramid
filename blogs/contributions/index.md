@@ -42,7 +42,7 @@ Also if you think the changes you made deserve to be in the blogs, please feel f
 
 ## Scope notes
 
-Current focus is search/index quality and performance. Zipy/GPU co-location is tracked separately and is not default in this repo yet. SDK and dashboard changes are welcome only when discussed first.
+Current focus is search/index quality and performance. GPU co-location is a planned Phase-2 capability tracked separately and is not default in this repo yet. SDK and dashboard changes are welcome only when discussed first.
 
 ## Security / reporting
 
