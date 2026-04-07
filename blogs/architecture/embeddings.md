@@ -2,7 +2,7 @@
 
 In the [previous section](/blogs/architecture/database) I established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
-I first truly understood how embeddings work when I took DAT 494 (Advanced Deep Learning) at ASU, where we covered tokenization, embedding layers, pretraining, and post-training from the ground up. But what really made it click was building things from scratch — I implemented [LLMs from fundamentals](https://github.com/ashworks1706/LLM-from-scratch) covering Llama, KiVi, PaLiGemma, DeepSeek, and Mixtral, and taught [4 workshops on LLM and RLHF engineering](https://github.com/ashworks1706/RLHF-from-scratch) to 600+ attendees at [AIS](https://ais-asu.com/). Resources like [Umar Jamil](https://www.youtube.com/@umarjamilai), [Sebastian Raschka](https://sebastianraschka.com/), [3Blue1Brown](https://www.youtube.com/@3blue1brown), and [AI Engineering by O'Reilly](https://www.oreilly.com/library/view/ai-engineering/9781098166298/) were huge for building my intuition. I've collected [all my learning resources here](https://somwrks.notion.site/notes-) for anyone interested. The pretraining stage — tokenization and the embedding layer specifically — is where the geometry of these spaces truly clicked for me.
+I first truly understood how embeddings work when I took DAT 494 (Advanced Deep Learning) at ASU, where we covered tokenization, embedding layers, pretraining, and post-training from the ground up. But what really made it click was building things from scratch — I implemented [language models from fundamentals](https://github.com/ashworks1706/LLM-from-scratch) covering Llama, KiVi, PaLiGemma, DeepSeek, and Mixtral, and taught [4 workshops on language model and RLHF engineering](https://github.com/ashworks1706/RLHF-from-scratch) to 600+ attendees at [AIS](https://ais-asu.com/). Resources like [Umar Jamil](https://www.youtube.com/@umarjamilai), [Sebastian Raschka](https://sebastianraschka.com/), [3Blue1Brown](https://www.youtube.com/@3blue1brown), and [AI Engineering by O'Reilly](https://www.oreilly.com/library/view/ai-engineering/9781098166298/) were huge for building my intuition. I've collected [all my learning resources here](https://somwrks.notion.site/notes-) for anyone interested. The pretraining stage — tokenization and the embedding layer specifically — is where the geometry of these spaces truly clicked for me.
 
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
 
@@ -81,7 +81,7 @@ Mean pooling treats all tokens equally; the CLS token approach trains the model 
 
 #### Contrastive learning: teaching similarity
 
-Here's the part that isn't obvious at first: a pre-trained language model knows syntax and semantics, but that doesn't mean its internal similarity geometry lines up with what you want for retrieval. A GPT-style model trained on next-token prediction has representations useful for generation — not necessarily for finding similar documents. Contrastive fine-tuning is what reshapes that space specifically for similarity search, and it's why retrieval-specific models outperform general-purpose LLMs at this task.
+Here's the part that isn't obvious at first: a pre-trained language model knows syntax and semantics, but that doesn't mean its internal similarity geometry lines up with what you want for retrieval. A GPT-style model trained on next-token prediction has representations useful for generation — not necessarily for finding similar documents. Contrastive fine-tuning is what reshapes that space specifically for similarity search, and it's why retrieval-specific models outperform general-purpose language models at this task.
 
 Contrastive training operates on pairs: a query $q$ and a positive $p^+$ (semantically related) and a set of negatives $\{n_j\}$ (unrelated). The standard loss is a variant of [InfoNCE (Noise Contrastive Estimation)](https://arxiv.org/abs/1807.03748):
 
@@ -154,13 +154,13 @@ let api_key = config.api_key.clone()
     .ok_or_else(|| EmbeddingError::ConfigError("...".into()))?;
 ```
 
-The `base_url` field can override `DEFAULT_OPENAI_API_URL`. This is primarily useful for pointing Piramid at an OpenAI-compatible proxy (Azure OpenAI, LiteLLM, etc.) without changing any other config.
+The `base_url` field can override `DEFAULT_OPENAI_API_URL`. This is primarily useful for pointing Piramid at an OpenAI-compatible proxy (Azure OpenAI, or other compatible proxies) without changing any other config.
 
 One thing worth knowing about `text-embedding-3-small` vs `text-embedding-3-large`: the larger model produces higher-dimensional vectors with meaningfully better semantic resolution, but at 2× the API cost and 2× the in-memory storage per vector. For most RAG use cases I've seen, `text-embedding-3-small` at full 1536 dimensions or even at 512 (via MRL truncation) hits a good cost/quality balance. The legacy `ada-002` exists for collections built before the v3 models.
 
 #### Local HTTP and TEI
 
-The local provider speaks to any OpenAI-compatible or TEI-style HTTP endpoint. [TEI (Text Embeddings Inference)](https://github.com/huggingface/text-embeddings-inference) is Hugging Face's high-throughput embedding server; it exposes the same `/embeddings` JSON contract as the OpenAI API, making it a drop-in replacement. [Ollama](https://ollama.com/), TEI, and other locally-hosted embedding runtimes all work as long as they implement that protocol.
+The local provider speaks to any OpenAI-compatible or TEI-style HTTP endpoint. [TEI (Hugging Face text embeddings server)](https://github.com/huggingface/text-embeddings-inference) is Hugging Face's high-throughput embedding server; it exposes the same `/embeddings` JSON contract as the OpenAI API, making it a drop-in replacement. [Ollama](https://ollama.com/), TEI, and other locally-hosted embedding runtimes all work as long as they implement that protocol.
 
 A typical local setup for TEI running a 768-dimensional model:
 
@@ -172,7 +172,7 @@ embeddings:
   timeout: 10
 ```
 
-If you're already running a local LLM for generation, you almost certainly want embedding to be local too. Having both on the same machine eliminates the network round-trip and keeps your documents away from remote APIs entirely. A local TEI instance on a modern CPU can embed short texts in under 5ms, comparable to OpenAI API latency but without the variance of an external network call.
+If you're already running a local model for generation, you almost certainly want embedding to be local too. Having both on the same machine eliminates the network round-trip and keeps your documents away from remote APIs entirely. A local TEI instance on a modern CPU can embed short texts in under 5ms, comparable to OpenAI API latency but without the variance of an external network call.
 
 > **Model alignment:** be careful about mixing embedding models across insert and search operations. If you insert documents with one model and then reconfigure the server to use a different model (different architecture, even same dimensionality), searches will produce nonsense results; the query embedding and the stored embeddings come from different spaces. There's no model-version locking per collection, so this is easy to do accidentally. Worth noting in production ops.
 

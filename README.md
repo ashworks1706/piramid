@@ -20,7 +20,7 @@
     <a href="https://piramiddb.com/blogs/contributions">Contributing</a>
 </p>
 
-Piramid is a Rust vector database tuned for low-latency agentic workloads. The long-term goal is to colocate vector search and the LLM on the same GPU to avoid CPU round-trips. Today it is a lean CPU server with fast search, WAL durability, embedding providers, and guardrails for production use.
+Piramid is a Rust vector database tuned for low-latency agentic workloads. Today it is a lean CPU server with fast search, WAL durability, embedding providers, and guardrails for production use.
 
 - Single binary (`piramid`) with CLI + server
 - Search engines: HNSW, IVF, flat; filters and metadata
@@ -151,4 +151,4 @@ cargo run -- serve --data-dir ./data
 
 ## Acknowledgments
 
-Built by @ashworks1706. Future work includes native GPU kernel support for co-located LLM + vector search.
+Built by @ashworks1706.
