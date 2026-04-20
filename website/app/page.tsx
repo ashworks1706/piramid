@@ -12,11 +12,13 @@ export default function Home() {
         {/* Hero */}
         <section className="space-y-7">
           <h1 className="text-4xl sm:text-5xl font-semibold leading-[1.15] tracking-tight text-white">
-            A vector database,<br className="hidden sm:block" /> built from scratch in Rust.
+             Inference Engine for Retrieval Augmented Systems
           </h1>
           <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
-            Piramid is an open-source project I built to understand how vector databases actually work —
-            the indexing algorithms, storage engine, embeddings layer, and everything in between.
+            Inspired from google deepmind's RETRO project, Piramid is meant to convert traditional RAG applications involving separate LLM and Database connections 
+            into one single hosted binary to serve and fuse transformer's attention with database queries.
+
+
           </p>
           <div className="flex flex-wrap gap-3 pt-1">
             <Link
