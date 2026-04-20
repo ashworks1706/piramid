@@ -20,7 +20,7 @@
     <a href="https://piramiddb.com/blogs/contributions">Contributing</a>
 </p>
 
-Piramid is a Rust vector database tuned for low-latency agentic workloads. Inspired from google deepmind's RETRO project, Piramid is meant to convert traditional RAG applications involving separate LLM and Database connections into one single hosted binary to serve and fuse transformer's attention with database queries.
+Piramid is a combination of vector database and transformer inference tuned for low-latency agentic workloads written in Rust. Inspired from google deepmind's RETRO project, Piramid is meant to convert traditional RAG applications involving separate LLM and Database connections into one single hosted binary to serve and fuse transformer's attention with database queries.
 
 - Single binary (`piramid`) with CLI + server
 - Search engines: HNSW, IVF, flat; filters and metadata
