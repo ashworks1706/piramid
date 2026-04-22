@@ -35,6 +35,47 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
 
+### Searching patch
+
+**Server & API (1.0.3)**
+
+- [ ] read endpoints (GET collection, GET vector, search) silently create a new empty collection on disk if the name doesn't exist, instead of returning a 404. only write endpoints should be allowed to create collections.
+- [ ] the embedding cache uses a blocking mutex inside async request handlers, which can stall the async runtime under load. should use an async-aware lock or be restructured to avoid holding it across await points.
+
+
+**Filter & Cache Acceleration (1.1.2)**
+
+- [ ] the collection map in AppState keeps every opened collection in memory forever with no eviction — a server that opens many collections will grow unbounded. `cache_max_bytes` config exists but nothing enforces it. needs an LRU eviction policy so idle collections can be closed and their memory (vector cache, metadata cache, mmap) released.
+- [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
+- [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
+- [ ] collection preloading on startup: optionally pre-open a configured list of collections rather than waiting for the first request
+
+**Query Features (1.1.3)**
+
+- [ ] query result caching (LRU, TTL-based)
+- [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
+- [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
+
+**Metadata Filters**
+
+- [ ] metadata indexing for fast pre-filtering
+- [ ] range queries on numeric fields
+- [ ] regex/pattern matching on string fields
+- [ ] date range filters
+- [ ] array membership checks
+- [ ] vector count per metadata filter
+- [ ] complex boolean filters (AND/OR/NOT combinations)
+
+**Search API Extensions (1.1.7)**
+
+- [ ] **Batch search endpoint:** add `POST /api/collections/:name/search/batch` accepting an array of query vectors and returning an array of result sets in a single round-trip — useful for high-throughput agentic pipelines where multiple queries are issued per request.
+- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
+- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
+- [ ] metadata-only search (no vector similarity)
+- [ ] recommendation API (similar to these IDs, not those)
+
+
+
 ### GPU Acceleration patch
 
 **Introduce GPUBackend trait:**
@@ -77,45 +118,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] learnable gating mechanism to balance attention between internal context and external memory
 - [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable
 - [ ] cross attention with database vectors as keyvalues with query from transformer 
-
-### Searching patch
-
-**Server & API (1.0.3)**
-
-- [ ] read endpoints (GET collection, GET vector, search) silently create a new empty collection on disk if the name doesn't exist, instead of returning a 404. only write endpoints should be allowed to create collections.
-- [ ] the embedding cache uses a blocking mutex inside async request handlers, which can stall the async runtime under load. should use an async-aware lock or be restructured to avoid holding it across await points.
-
-
-**Filter & Cache Acceleration (1.1.2)**
-
-- [ ] the collection map in AppState keeps every opened collection in memory forever with no eviction — a server that opens many collections will grow unbounded. `cache_max_bytes` config exists but nothing enforces it. needs an LRU eviction policy so idle collections can be closed and their memory (vector cache, metadata cache, mmap) released.
-- [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
-- [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
-- [ ] collection preloading on startup: optionally pre-open a configured list of collections rather than waiting for the first request
-
-**Query Features (1.1.3)**
-
-- [ ] query result caching (LRU, TTL-based)
-- [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
-- [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
-
-**Metadata Filters**
-
-- [ ] metadata indexing for fast pre-filtering
-- [ ] range queries on numeric fields
-- [ ] regex/pattern matching on string fields
-- [ ] date range filters
-- [ ] array membership checks
-- [ ] vector count per metadata filter
-- [ ] complex boolean filters (AND/OR/NOT combinations)
-
-**Search API Extensions (1.1.7)**
-
-- [ ] **Batch search endpoint:** add `POST /api/collections/:name/search/batch` accepting an array of query vectors and returning an array of result sets in a single round-trip — useful for high-throughput agentic pipelines where multiple queries are issued per request.
-- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
-- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
-- [ ] metadata-only search (no vector similarity)
-- [ ] recommendation API (similar to these IDs, not those)
 
 ---
 
