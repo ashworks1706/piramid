@@ -75,7 +75,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] recommendation API (similar to these IDs, not those)
 
 
-
 ### GPU Acceleration patch
 
 **Introduce GPUBackend trait:**
