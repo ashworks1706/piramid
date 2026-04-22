@@ -71,10 +71,12 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] add support for quantization 
 - [ ] add streaming api 
 
-### Agentic Features Patch
-- [ ] add support for agentic workflows with tools, memory, and planning 
+### Transformer x Database Attention Fusion Patch
 
-
+- [ ] modify transformer blocks :  configurable key/value projection heads for database vectors
+- [ ] learnable gating mechanism to balance attention between internal context and external memory
+- [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable
+- [ ] cross attention with database vectors as keyvalues with query from transformer 
 
 ### Searching patch
 
