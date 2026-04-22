@@ -19,11 +19,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning — they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
 - [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
-**Server & API (1.0.3)**
-
-- [ ] read endpoints (GET collection, GET vector, search) silently create a new empty collection on disk if the name doesn't exist, instead of returning a 404. only write endpoints should be allowed to create collections.
-- [ ] the embedding cache uses a blocking mutex inside async request handlers, which can stall the async runtime under load. should use an async-aware lock or be restructured to avoid holding it across await points.
-
 ---
 
 ### Index Quality patch
@@ -40,7 +35,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
 
-**Introduce ComputeBackend trait:**
+### GPU Acceleration patch
+
+**Introduce GPUBackend trait:**
 
 - [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
@@ -51,7 +48,41 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
 - [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
 
+**GPU backend:**
+
+- [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
+- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
+
+**Safetensors / precision compatibility:**
+
+- [ ] **Safetensors-compatible vector export:** Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format for interoperability with other tools.
+
+**Blocked / Future (Systems Optimization):**
+
+- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into memory on startup.
+- [ ] **Batched Retrieval Dispatch:** Group multiple search requests into a single compute batch.
+
+### Transformer Inference Patch 
+
+**Introduce Transformer:**
+- [ ] add support for running small transformer models 
+- [ ] add kvcaching, batching and async support to the transformer inference module 
+- [ ] add paged attention support for long contexts 
+- [ ] add support for quantization 
+- [ ] add streaming api 
+
+### Agentic Features Patch
+- [ ] add support for agentic workflows with tools, memory, and planning 
+
+
+
 ### Searching patch
+
+**Server & API (1.0.3)**
+
+- [ ] read endpoints (GET collection, GET vector, search) silently create a new empty collection on disk if the name doesn't exist, instead of returning a 404. only write endpoints should be allowed to create collections.
+- [ ] the embedding cache uses a blocking mutex inside async request handlers, which can stall the async runtime under load. should use an async-aware lock or be restructured to avoid holding it across await points.
+
 
 **Filter & Cache Acceleration (1.1.2)**
 
@@ -65,6 +96,24 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] query result caching (LRU, TTL-based)
 - [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
 - [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
+
+**Metadata Filters**
+
+- [ ] metadata indexing for fast pre-filtering
+- [ ] range queries on numeric fields
+- [ ] regex/pattern matching on string fields
+- [ ] date range filters
+- [ ] array membership checks
+- [ ] vector count per metadata filter
+- [ ] complex boolean filters (AND/OR/NOT combinations)
+
+**Search API Extensions (1.1.7)**
+
+- [ ] **Batch search endpoint:** add `POST /api/collections/:name/search/batch` accepting an array of query vectors and returning an array of result sets in a single round-trip — useful for high-throughput agentic pipelines where multiple queries are issued per request.
+- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
+- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
+- [ ] metadata-only search (no vector similarity)
+- [ ] recommendation API (similar to these IDs, not those)
 
 ---
 
@@ -81,25 +130,21 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] WAL and all persistence file formats need version fields and checksums; recovery paths must handle partial writes and format mismatches safely
 - [ ] dry-run config validation on startup; fail-fast on mismatched config between what's stored and what's loaded
-- [ ] corrupted file detection on startup with safe rebuild prompt
 - [ ] automatic index rebuild from WAL on detected corruption
-- [ ] chaos tests: crash at WAL checkpoints, index rebuild idempotence, mmap-off fallback, partial-write recovery
+
+### Operations & Reliability (1.1.9)
+
+- [ ] set up benchmarks for latency, index strategies, memory usage across collection sizes
+- [ ] refactor codebase for better modularity; expand unit and integration test coverage
+- [ ] robust CI/CD pipeline covering all critical paths
+- [ ] keep documentation and blogs in sync with code changes
+
 
 ---
 
+### Later
+
 ### Schema, Filters & Clients
-
-**Schema (1.1.6)**
-
-- [ ] enforce dimension constraints end-to-end: set expected dimensions at collection creation time, re-validate at open time (fail-fast on mismatch), and validate before any mmap write so a failed insert never leaves a ghost entry on disk
-- [ ] metadata schema validation (typed fields, required/optional)
-
-**Search API Extensions (1.1.7)**
-
-- [ ] grouped/diverse search (max results per category/namespace)
-- [ ] scroll/cursor pagination for large result sets
-- [ ] **Batch search endpoint:** add `POST /api/collections/:name/search/batch` accepting an array of query vectors and returning an array of result sets in a single round-trip — useful for high-throughput agentic pipelines where multiple queries are issued per request.
-- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
 
 **Clients & SDK (1.1.8)**
 
@@ -123,64 +168,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Add more metrics to dashboard (memory usage, disk usage, query latency, etc.)
 - [ ] Fix Docker image
 
----
 
-### Operations & Reliability (1.1.9)
-
-- [ ] enforce collection/request-level resource limits (max vectors, max bytes, QPS) with clear errors surfaced in metrics
-- [ ] backpressure and rate limiting on write/search paths
-- [ ] structured tracing with request IDs end-to-end; slow-query logging with configurable thresholds
-- [ ] per-collection latency/recall histograms; cache and index freshness in `/api/metrics`
-- [ ] set up benchmarks for latency, index strategies, memory usage across collection sizes
-- [ ] refactor codebase for better modularity; expand unit and integration test coverage
-- [ ] robust CI/CD pipeline covering all critical paths
-- [ ] keep documentation and blogs in sync with code changes
-
----
-
-### Performance & Parallelism (Phase 2)
-
-*(Blocked by quantization refactor & storage durability work.)*
-
-**Compute backend:**
-
-- [ ] **ComputeBackend Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
-- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
-
-**Safetensors / precision compatibility:**
-
-- [ ] **Safetensors-compatible vector export:** Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format for interoperability with other tools.
-
-**Blocked / Future (Systems Optimization):**
-
-- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into memory on startup.
-- [ ] **Batched Retrieval Dispatch:** Group multiple search requests into a single compute batch.
-
----
-
-### Later
-
-**MCP Integration**
-
-- [ ] MCP server implementation
-- [ ] tools: `search_similar`, `get_document`, `list_collections`, `add_document`
-- [ ] agent-friendly structured responses (JSON-LD)
-
-**Security**
-
-- [ ] JWT token authentication
-- [ ] rate limiting and per-tenant quotas
-- [ ] audit logging
-
-**Metadata Filters**
-
-- [ ] metadata indexing for fast pre-filtering
-- [ ] range queries on numeric fields
-- [ ] regex/pattern matching on string fields
-- [ ] date range filters
-- [ ] array membership checks
-- [ ] vector count per metadata filter
-- [ ] complex boolean filters (AND/OR/NOT combinations)
 
 **Transactions & Consistency**
 
@@ -192,9 +180,5 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Platform**
 
-- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
-- [ ] metadata-only search (no vector similarity)
-- [ ] vector similarity between two stored vectors (no query vector)
-- [ ] recommendation API (similar to these IDs, not those)
 - [ ] API versioning in URLs or headers; backward compatibility strategy; deprecation warnings
 - [ ] email/webhook alerts for errors, disk pressure, memory, slow queries, index corruption
