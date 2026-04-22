@@ -171,8 +171,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Add more metrics to dashboard (memory usage, disk usage, query latency, etc.)
 - [ ] Fix Docker image
 
-
-
 **Transactions & Consistency**
 
 - [ ] atomic batch operations (all-or-nothing insert/delete sets)
