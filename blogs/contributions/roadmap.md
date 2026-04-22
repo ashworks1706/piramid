@@ -143,7 +143,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] robust CI/CD pipeline covering all critical paths
 - [ ] keep documentation and blogs in sync with code changes
 
-
 ---
 
 ### Later
