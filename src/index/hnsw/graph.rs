@@ -70,7 +70,7 @@ impl HnswIndex{
         }
     }
     // Generate a random layer for a new node based on exponential decay why? because 
-    // in HNSW, higher layers have exponentially fewer nodes, so we want to assign layers
+    // higher layers have exponentially fewer nodes, so we want to assign layers
     // to new nodes in a way that reflects this distribution
     fn random_layer(&self) -> usize{
         // exponential decay probability 
@@ -365,9 +365,8 @@ impl HnswIndex{
 
     // distance function that calculates using configured metric
     fn distance(&self, a: &[f32], b: &[f32]) -> f32 {
-        // HNSW works with distances (lower = better)
         // But our metrics return similarity scores (higher = better for Cosine/Dot)
-        // So we need to invert for those metrics
+        // we need to invert for those metrics for HNSW
         match self.config.metric {
             Metric::Cosine => 1.0 - self.config.metric.calculate(a, b, self.config.mode),
             Metric::DotProduct => 1.0 - self.config.metric.calculate(a, b, self.config.mode),
@@ -398,8 +397,6 @@ impl HnswIndex{
     }
 
     // Get statistics about the index
-    // we do this by iterating through all nodes and collecting data such as
-    // total number of nodes, max layer, size of each layer, average connections per node
     pub fn stats(&self) -> HnswStats {
         let mut total_nodes = 0;
         let mut tombstones = 0;
