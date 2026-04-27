@@ -1,6 +1,4 @@
-// This module provides a unified interface for different embedding providers,
-// allowing users to generate embeddings from text without needing to handle
-// the embeddings externally.
+// allowing users to generate embeddings from text without needing to handle the embeddings externally
 
 mod types;
 pub mod providers;

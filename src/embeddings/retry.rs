@@ -1,17 +1,16 @@
-// Retry wrapper for embedders with exponential backoff
-// This module provides a RetryEmbedder that wraps any Embedder implementation and adds retry logic with exponential backoff. If an embedding request fails due to a transient error (e.g., network issue, rate limit), the RetryEmbedder will automatically retry the request up to a specified number of times, with increasing delays between attempts. This helps improve the robustness of embedding requests by handling temporary failures gracefully.
+// wraps any Embedder implementation and adds retry logic with exponential backoff. 
+// If an embedding request fails due to a transient error, RetryEmbedder will automatically retry the request up to a specified number of times with increasing delays between attempts.
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use crate::embeddings::{Embedder, EmbeddingResponse, EmbeddingResult, EmbeddingError};
 
-// RetryEmbedder wraps another Embedder and adds retry logic with exponential backoff
 pub struct RetryEmbedder {
-    inner: Arc<dyn Embedder>, // The underlying embedder that actually performs the embedding
-    max_retries: u32, // Maximum number of retry attempts
-    initial_delay_ms: u64, // Initial delay before the first retry attempt in milliseconds
-    max_delay_ms: u64, // Maximum delay between retry attempts in milliseconds
+    inner: Arc<dyn Embedder>,
+    max_retries: u32, 
+    initial_delay_ms: u64, 
+    max_delay_ms: u64, 
 } 
 
 // Configuration options for the RetryEmbedder
@@ -22,7 +21,7 @@ pub struct RetryConfig {
     pub max_delay_ms: u64,
 }
 
-// Default retry configuration: 3 retries, starting at 1 second, doubling each time, up to 30 seconds
+// Default: 3 retries, starting at 1 second, doubling each time, up to 30 seconds
 impl Default for RetryConfig {
     fn default() -> Self {
         Self {
@@ -49,11 +48,10 @@ impl RetryEmbedder {
     }
 }
 
-// Implement the Embedder trait for RetryEmbedder. The embed method will attempt to call the inner embedder's embed method, and if it fails with a retryable error, it will wait for a certain amount of time (starting with initial_delay_ms and doubling each time) before retrying, up to max_retries times. If all attempts fail, it will return the last error.
+// The embed method will attempt to call the inner embedder's embed method, and if it fails with a retryable error, it will wait for a certain amount of time starting with initial_delay_ms and doubling each time before retrying, up to max_retries times. If all attempts fail, it will return the last error.
 #[async_trait]
 impl Embedder for RetryEmbedder {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
-        // We will keep track of the number of attempts and the current delay. We will loop until we either get a successful response or exhaust our retries. On each failure, we check if the error is retryable. If it is not retryable, we return the error immediately. If it is retryable, we log the failure and wait for the specified delay before trying again. The delay increases exponentially with each attempt, up to a maximum limit.
         let mut attempts = 0;
         let mut delay_ms = self.initial_delay_ms;
         
@@ -98,6 +96,5 @@ impl Embedder for RetryEmbedder {
 
 // Determine if an error is retryable
 fn is_retryable_error(error: &EmbeddingError) -> bool {
-    // Use the built-in is_recoverable method
     error.is_recoverable()
 }
