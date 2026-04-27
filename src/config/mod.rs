@@ -1,5 +1,4 @@
-// Configuration module for Piramid
-// Centralized configuration management for all components
+// Configuration module
 
 mod execution;
 mod storage;

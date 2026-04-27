@@ -2,19 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 
-// Quantization level for vector compression
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum QuantizationLevel {
     // No quantization - full precision float32
     #[default]
     None,
-    // 8-bit integer quantization (4x memory reduction)
+    // 8-bit integer quantization
     Int8,
-    // Product quantization (block-wise min/max compression)
+    // Product quantization block-wise min/max compression
     Pq { subquantizers: usize },
-    // 4-bit integer quantization (8x memory reduction) - Future
+    // 4-bit integer quantization
     Int4,
-    // 16-bit float quantization (2x memory reduction) - Future
+    // 16-bit float quantization 
     Float16,
 }
 

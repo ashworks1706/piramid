@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-// Parallelism mode
+//  mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ParallelismMode {
     // Single-threaded execution
@@ -34,7 +34,7 @@ impl Default for ParallelismConfig {
 }
 
 impl ParallelismConfig {
-    // Single-threaded mode (for debugging or low-resource environments)
+    // Single-threaded mode 
     pub fn single_threaded() -> Self {
         ParallelismConfig {
             mode: ParallelismMode::SingleThreaded,
@@ -42,7 +42,7 @@ impl ParallelismConfig {
         }
     }
     
-    // Use a fixed number of threads
+    //  fixed number of threads
     pub fn fixed(num_threads: usize) -> Self {
         ParallelismConfig {
             mode: ParallelismMode::Fixed(num_threads),
@@ -50,7 +50,7 @@ impl ParallelismConfig {
         }
     }
     
-    // Get the number of threads to use
+    // the number of threads to use
     pub fn num_threads(&self) -> usize {
         match self.mode {
             ParallelismMode::SingleThreaded => 1,

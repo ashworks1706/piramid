@@ -2,12 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-// Search mode
+// mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SearchMode {
-    // K-nearest neighbors (return top k results)
+    // K-nearest neighbors return top k results
     KNN,
-    // Range search (return all within distance threshold)
+    // Range search return all within distance threshold
     Range,
 }
 
