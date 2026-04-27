@@ -15,17 +15,11 @@ struct HnswNode{
     tombstone: bool,
 }
 
-// Helper struct for priority queue during search
 #[derive(Debug, Clone)]
 struct SearchCandidate {
     id: Uuid,
     distance: f32,
 }
-// partial_eq means we can compare two SearchCandidate for equality based on distance
-// PartialEq is a trait in Rust that allows you to define how two instances of a type
-// are compared for equality, by implementing PartialEq for SearchCandidate, we are saying
-// that SearchCandidate can be compared for equality and we provide the implementation of
-// how to compare them in the fn eq() method
 impl PartialEq for SearchCandidate {
     fn eq(&self, other: &Self) -> bool {
         self.distance == other.distance // equality based on distance
@@ -34,35 +28,23 @@ impl PartialEq for SearchCandidate {
 
 impl Eq for SearchCandidate {}
 
-// partial_ord means we can compare two SearchCandidate for ordering based on distance
-// PartialOrd is a trait in Rust that allows you to define how two instances of a type
-// are compared for ordering (less than, greater than, etc.), by implementing PartialOrd
-// for SearchCandidate, we are saying that SearchCandidate can be compared for ordering
-// and we provide the implementation of how to compare them in the fn partial_cmp() method
 impl PartialOrd for SearchCandidate {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other)) // we order using the Ord implementation below
     }
 }
 
-// Ord is a trait in Rust that allows you to define a total ordering for a type,
-// by implementing Ord for SearchCandidate, we are saying that SearchCandidate has a
-// total ordering and we provide the implementation of how to compare them in the fn cmp() method
 impl Ord for SearchCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // For max heap, reverse ordering so closest (smallest distance) comes first
         other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal) 
-        // Ordering::Equal means the two distances are equal
-        // by doing this, we order SearchCandidate in descending order of distance. how? by 
-        // comparing other to self instead of self to other, so the one with smaller distance
-        // is considered "greater" in the context of a max-heap, thus it will be popped first
     }
 }
 
 // Main HNSW index structure
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HnswIndex{
-    config: HnswConfig, // configuration parameters, for example: m, ef_construction, ml, metric
+    config: HnswConfig,
     nodes: HashMap<Uuid, HnswNode>,
     max_level: isize,
     start_node: Option<Uuid>,
