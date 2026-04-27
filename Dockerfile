@@ -1,22 +1,5 @@
-# =============================================================================
-# Full Rust server + Next.js dashboard
-# =============================================================================
-
 # -----------------------------------------------------------------------------
-# Stage 1: Build the Next.js dashboard
-# -----------------------------------------------------------------------------
-FROM node:20-slim AS dashboard-builder
-
-WORKDIR /app/dashboard
-
-COPY dashboard/package.json dashboard/package-lock.json ./
-RUN npm ci
-
-COPY dashboard ./
-RUN npm run build
-
-# -----------------------------------------------------------------------------
-# Stage 2: Build Rust server
+# Build Rust server
 # -----------------------------------------------------------------------------
 FROM rust:1.83-slim AS rust-builder
 
@@ -34,7 +17,7 @@ COPY src ./src
 RUN cargo build --release --bin piramid-server
 
 # -----------------------------------------------------------------------------
-# Stage 3: Runtime
+# Runtime
 # -----------------------------------------------------------------------------
 FROM debian:bookworm-slim
 
@@ -48,7 +31,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-builder /app/target/release/piramid-server ./piramid-server
-COPY --from=dashboard-builder /app/dashboard/out ./dashboard
 
 RUN mkdir -p /app/data
 

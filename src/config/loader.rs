@@ -3,7 +3,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-/// Resolved runtime configuration (application + process-level settings).
+/// Resolved runtime configuration application + process-level settings for the server.
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
     pub app: AppConfig,
@@ -16,7 +16,7 @@ pub struct RuntimeConfig {
     pub cache_max_bytes: Option<u64>,
 }
 
-/// Load configuration from (optional) file, then apply environment overrides.
+/// Load configuration from file, then apply environment overrides.
 pub fn load_app_config() -> AppConfig {
     let mut cfg = if let Some(file_cfg) = load_from_file() {
         file_cfg

@@ -42,7 +42,7 @@ Also if you think the changes you made deserve to be in the blogs, please feel f
 
 ## Scope notes
 
-Current focus is search/index quality and performance. SDK and dashboard changes are welcome only when discussed first.
+Current focus is search/index quality and performance. SDK changes are welcome only when discussed first.
 
 ## Security / reporting
 

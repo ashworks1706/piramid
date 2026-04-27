@@ -30,7 +30,6 @@
       "items": [
         "clients",
         "clients/sdk",
-        "clients/dashboard",
         "clients/cli",
         "clients/env"
       ]

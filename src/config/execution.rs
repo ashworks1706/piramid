@@ -1,27 +1,20 @@
 // Execution mode configuration for vector operations
-// Allows users to choose between implementations
 
 use serde::{Deserialize, Serialize};
 
-// Execution mode for vector operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ExecutionMode {
     #[default]
     Auto,
     Simd,
     Scalar,
-    // Offload to GPU via CUDA/OpenCL
     Gpu,
-    // Multi-threaded CPU execution
     Parallel,
-    // Use bitwise operations on 1-bit quantized vectors
     Binary,
-    // Use Just-In-Time compiled kernels for specific vector dimensions
     Jit,
 }
 
 impl ExecutionMode {
-    // Resolve execution mode based on CPU capabilities
     pub fn resolve(&self) -> ExecutionMode {
         match self {
             ExecutionMode::Auto => {
@@ -70,12 +63,10 @@ impl ExecutionMode {
         }
     }
     
-    // Check if SIMD is available and should be used
     pub fn use_simd(&self) -> bool {
         matches!(self.resolve(), ExecutionMode::Simd | ExecutionMode::Parallel)
     }
     
-    // Check if parallel execution should be used
     pub fn use_parallel(&self) -> bool {
         matches!(self.resolve(), ExecutionMode::Parallel)
     }

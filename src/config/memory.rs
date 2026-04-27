@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-// Memory limit configuration
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct MemoryConfig {
     // Maximum memory per collection in bytes (None = unlimited)
@@ -44,7 +43,7 @@ impl MemoryConfig {
         }
     }
     
-    // Disable memory-mapped files (use regular heap allocation)
+    // Disable memory-mapped files for regular heap allocation
     pub fn no_mmap() -> Self {
         MemoryConfig {
             max_memory_per_collection: None,

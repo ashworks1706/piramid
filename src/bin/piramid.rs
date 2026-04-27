@@ -1,5 +1,3 @@
-// Piramid CLI: unified interface for server and setup tasks.
-// This binary provides a single entry point for starting the server and performing setup tasks like generating config files. It replaces the previous piramid-server binary and adds new functionality.
 
 use std::fs;
 use std::io::Write;
@@ -25,7 +23,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the server directly (replaces piramid-server).
+    /// Start the server directly
     Serve {
         /// Optional config file (sets CONFIG_FILE)
         #[arg(long)]
@@ -41,9 +39,9 @@ enum Commands {
         no_anim: bool,
     },
 
-    /// Generate a config file with defaults (YAML).
+    /// Generate a config file with defaults (YAML)
     Init {
-        /// Path to write the config file (default: piramid.yaml)
+        /// Path to write the config file
         #[arg(long, short, default_value = "piramid.yaml")]
         path: PathBuf,
         /// Output format (yaml or json)
@@ -54,7 +52,6 @@ enum Commands {
         no_anim: bool,
     },
 
-    /// Show the resolved config (after env overrides).
     ShowConfig {
         /// Optional config file to load (overrides CONFIG_FILE)
         #[arg(long)]
@@ -192,7 +189,6 @@ fn start_server_inline() -> std::io::Result<()> {
 }
 
 fn animate(label: &str) {
-    // Keep animation anchored at the top for clarity; then print the label and return.
     print!("\x1b[2J\x1b[H\x1b[?25l");
     let _ = std::io::stdout().flush();
 
@@ -210,7 +206,6 @@ fn animate(label: &str) {
 }
 
 fn run_interactive() {
-    // Show a short animation when entering the interactive menu.
     animate("Piramid");
     println!("piramid (interactive)");
     println!("Select an option:");

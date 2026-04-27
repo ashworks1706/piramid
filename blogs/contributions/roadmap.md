@@ -164,11 +164,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] Separate API docs to `docs.piramiddb.com` (Mintlify)
 - [ ] document rust sdk with examples, link blogs from /blogs
 
-**Dashboard**
-
-- [ ] Fix dashboard UI
-- [ ] Add more metrics to dashboard (memory usage, disk usage, query latency, etc.)
-- [ ] Fix Docker image
 
 **Transactions & Consistency**
 
