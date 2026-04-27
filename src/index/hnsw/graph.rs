@@ -185,12 +185,6 @@ impl HnswIndex{
         }
     }
 
-    // Public search function - returns k nearest neighbor IDs
-    // how do we even search in hnsw, what is the core condition for determining nearest neighbour?
-    // the core condition is based on distance metric, we want to find nodes that are closest
-    // to the query vector based on the configured distance metric (e.g., cosine, euclidean, dot
-    // product)
-    // searching is done in two phases:
     // 1. Greedy search from top layer down to layer 1 to find entry point for layer 0
     // 2. Search layer 0 with ef parameter to find k nearest neighbors
     // ef is a parameter that controls the accuracy/speed tradeoff during search
