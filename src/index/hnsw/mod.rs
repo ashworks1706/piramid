@@ -33,7 +33,7 @@ impl VectorIndex for HnswIndex {
         self.remove(id);
     }
     
-    // Get statistics about the HNSW index, including total nodes, max layer, layer sizes, average connections, and memory usage. This information can be useful for monitoring the health of the index and understanding its structure and performance characteristics.
+    // Get statistics about the HNSW index, including total nodes, max layer, layer sizes, average connections, and memory usage.
     fn stats(&self) -> IndexStats {
         let hnsw_stats = self.stats();
         

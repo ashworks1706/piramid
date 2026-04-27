@@ -1,4 +1,3 @@
-// Index module - unified interface for multiple indexing strategies
 // Supports: HNSW, Flat, IVF
 
 mod traits;
