@@ -1,7 +1,4 @@
 // ## Crate organization
-// - Core: storage, metrics, metadata, query, search
-// - Server: HTTP API (axum-based, modular)
-// - Error handling: thiserror-based Result types
 
 pub mod config;
 pub mod metrics;

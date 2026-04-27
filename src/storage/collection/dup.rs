@@ -1,4 +1,4 @@
-// This module implements a simple duplicate detection algorithm for a collection of vectors.
+// a simple duplicate detection algorithm for a collection of vectors.
 
 use uuid::Uuid;
 use std::collections::HashSet;
@@ -14,15 +14,15 @@ pub struct DuplicateHit {
     pub score: f32,
 }
 
-// This function finds pairs of vectors in the collection that are similar according to the given metric and threshold.
+// finds pairs of vectors in the collection that are similar according to the given metric and threshold.
 pub fn find_duplicates(
-    collection: &Collection, // The collection to search for duplicates.
-    metric: Metric, // The similarity metric to use for comparing vectors.
-    threshold: f32, // The minimum similarity score for two vectors to be considered duplicates.
-    limit: Option<usize>, // An optional limit on the number of duplicate pairs to return.
-    k_override: Option<usize>, // An optional override for the number of nearest neighbors to consider when searching for duplicates.
-    ef_override: Option<usize>, // An optional override for the ef parameter used in the vector index search.
-    nprobe_override: Option<usize>, // An optional override for the nprobe parameter used in the vector index search.
+    collection: &Collection, // collection to search for duplicates.
+    metric: Metric, // similarity metric to use for comparing vectors.
+    threshold: f32, // minimum similarity score for two vectors to be considered duplicates.
+    limit: Option<usize>, // optional limit on the number of duplicate pairs to return.
+    k_override: Option<usize>, // optional override for the number of nearest neighbors to consider when searching for duplicates.
+    ef_override: Option<usize>, // optional override for the ef parameter used in the vector index search.
+    nprobe_override: Option<usize>, // optional override for the nprobe parameter used in the vector index search.
 ) -> Result<Vec<DuplicateHit>> {
     let mut pairs = Vec::new();
     let vectors = collection.vectors_view();

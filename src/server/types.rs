@@ -1,5 +1,4 @@
 // These structs define the JSON shape for API communication.
-// Serde does the heavy lifting: Serialize = Rust → JSON, Deserialize = JSON → Rust.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
