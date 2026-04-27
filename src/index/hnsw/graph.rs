@@ -93,8 +93,7 @@ impl HnswIndex{
             self.start_node = Some(id); // set entry point
             self.max_level = layer as isize; // this makes sure max_level is always the highest level
             let node = HnswNode{ 
-                connections: vec![Vec::new(); layer + 1], // this creates empty connections for
-                                                          // each layer
+                connections: vec![Vec::new(); layer + 1], // this creates empty connections for each layer
                 tombstone: false,
             }; // create the node
             self.nodes.insert(id, node); // insert into the index
@@ -266,8 +265,7 @@ impl HnswIndex{
         // max-heap)
         let mut furthest_distance = nearest.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
 
-        // Greedy search within the layer basically, greedy search means we always explore the
-        // closest candidate first
+        // Greedy search within the layer basically, we explore closest candidate first
         while let Some(candidate) = candidates.pop() {
             if candidate.distance > furthest_distance {
                 break;
