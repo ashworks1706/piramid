@@ -1,6 +1,5 @@
 // src/server/handlers/ready.rs
-// This handler provides a comprehensive readiness and integrity snapshot of the server and its collections.
-// It checks if the server is shutting down, gathers health info for each collection, and reports disk usage stats.
+// checks if the server is shutting down, gathers health info for each collection, and reports disk usage stats.
 
 use axum::{extract::State, response::Json};
 use crate::error::{Result, ServerError};
@@ -18,13 +17,13 @@ fn disk_stats(path: &str) -> (Option<u64>, Option<u64>) {
         let c_path = match CString::new(path) {
             Ok(p) => p,
             Err(_) => return (None, None),
-        }; // SAFETY: We ensure the path is a valid C string and statvfs is called correctly
-        let mut stat: libc::statvfs = unsafe { std::mem::zeroed() }; // SAFETY: We ensure the statvfs struct is properly initialized and used
+        }; // ensure the path is a valid C string and statvfs is called correctly
+        let mut stat: libc::statvfs = unsafe { std::mem::zeroed() }; //  ensure the statvfs struct is properly initialized and used
         let rc = unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) };
         if rc == 0 {
             let total = (stat.f_blocks as u64).saturating_mul(stat.f_frsize as u64);
             let avail = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
-            return (Some(total), Some(avail)); // SAFETY: We ensure the statvfs call is successful and the fields are accessed correctly
+            return (Some(total), Some(avail)); // We ensure the statvfs call is successful and the fields are accessed correctly
         }
     }
     (None, None)
@@ -32,9 +31,9 @@ fn disk_stats(path: &str) -> (Option<u64>, Option<u64>) {
 
 
 // GET /api/readyz - readiness + integrity snapshot
-// This endpoint is more comprehensive than /api/health and is meant for human inspection or advanced monitoring. It checks:
-// - If the server is in the process of shutting down (returns 503 if so)
-// - For each collection: if it's loaded, vector count, index type, last checkpoint time, checkpoint age, WAL size, schema version, and integrity status
+// This endpoint is more comprehensive. 
+// -  server is in the process of shutting down (returns 503 if so)
+// -  each collection: if it's loaded, vector count, index type, last checkpoint time, checkpoint age, WAL size, schema version, and integrity status
 // - Disk usage stats for the data directory
 pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzResponse>> {
     // 1. Check if server is shutting down - if so, return 503 to indicate we're not ready to serve traffic
@@ -65,7 +64,7 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
             .map(|m| m.len())
             .ok(); // If the WAL file doesn't exist or we can't read it, we just return None for its size
 
-        // For simplicity, we assume integrity is ok if we can read the collection metadata and count without errors. In a real implementation, you might want to add more thorough checks.
+        //   might want to add more thorough checks.
         collections_health.push(CollectionHealth {
             name,
             loaded: true,

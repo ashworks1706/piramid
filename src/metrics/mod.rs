@@ -1,8 +1,4 @@
-// This module provides different ways to compare vectors in high-dimensional space.
-// Each metric has different characteristics and use cases:
-// - Cosine: Best for text embeddings (direction matters, not magnitude)
-// - Euclidean: Physical distance in space (magnitude matters)
-// - Dot Product: Fast, good for normalized vectors
+
 
 pub mod cosine;
 pub mod euclidean;
@@ -18,11 +14,8 @@ pub use embed::{EmbedMetrics, EmbedMetricsSnapshot};
 
 use crate::config::ExecutionMode;
 
-// Distance/similarity metric for vector comparison.
-// 
-// Different metrics have different semantics:
-// - Similarity metrics (Cosine, DotProduct): higher = more similar
-// - Distance metrics (Euclidean): lower = more similar
+// Similarity metrics (Cosine, DotProduct): higher = more similar
+// Distance metrics (Euclidean): lower = more similar
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Metric {
     #[default]

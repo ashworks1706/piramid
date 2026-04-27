@@ -1,5 +1,4 @@
-// Search result type - what you get back from a search query
-// This file defines the Hit struct, which represents a single search result containing the vector entry and its similarity score.
+// defines the Hit struct, which represents a single search result containing the vector entry and its similarity score.
 use uuid::Uuid;
 use crate::metadata::Metadata;
 

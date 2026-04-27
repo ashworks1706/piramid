@@ -1,5 +1,4 @@
 // Scalar implementation of Euclidean distance
-// Pure Rust, no vectorization
 
 pub fn euclidean_distance_scalar(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vectors must have same length");

@@ -21,7 +21,6 @@ pub async fn health_embeddings(State(state): State<SharedState>) -> StatusCode {
     }
 }
 
-// GET /api/metrics - basic metrics about collections and vectors
 // reports total collections, total vectors, and per-collection stats : vector count, index type, memory usage, and latency stats if available
 pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsResponse>> {
     let mut collection_metrics = Vec::new();

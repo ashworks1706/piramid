@@ -1,5 +1,4 @@
 // Search module - all search operations
-//
 // Future search types:
 // - range_search: Find all vectors within a distance threshold
 // - batch_search: Search multiple queries at once
