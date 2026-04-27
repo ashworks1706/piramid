@@ -28,3 +28,4 @@ pub use wal::WalConfig;
 pub use collection::CollectionConfig;
 pub use search_mode::{SearchMode, RangeSearchParams};
 pub use app::AppConfig;
+ 
