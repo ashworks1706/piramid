@@ -1,4 +1,3 @@
-// Index trait - unified interface for all indexing strategies
 // All indexes (HNSW, Flat, IVF, etc.) implement this trait
 
 use uuid::Uuid;
@@ -6,19 +5,17 @@ use std::collections::HashMap;
 use crate::config::SearchConfig;
 use serde::{Serialize, Deserialize};
 
-// Core trait that all vector indexes must implement
-// Provides a unified interface for insertion, search, and removal
 pub trait VectorIndex: Send + Sync {
     // Insert a vector into the index
-    // 
+    
     // # Arguments
-    // * `id` - Unique identifier for the vector
-    // * `vector` - The vector to index
-    // * `vectors` - All vectors in the collection (for distance calculations)
+    // * id - Unique identifier for the vector
+    // * vector - The vector to index
+    // * vectors - All vectors in the collection (for distance calculations)
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>);
     
     // Search for k nearest neighbors with default quality settings
-    // 
+    
     // # Arguments
     // * `query` - Query vector
     // * `k` - Number of neighbors to return
@@ -27,12 +24,12 @@ pub trait VectorIndex: Send + Sync {
     // # Returns
     // Vector of IDs sorted by similarity (most similar first)
     // Search for k nearest neighbors with custom quality settings
-    // 
+
     // # Arguments
-    // * `query` - Query vector
-    // * `k` - Number of neighbors to return
-    // * `vectors` - All vectors in the collection
-    // * `quality` - Search quality parameters (controls recall/speed tradeoff)
+    // * query- Query vector
+    // * k - Number of neighbors to return
+    // * vectors - All vectors in the collection
+    // * quality - Search quality parameters (controls recall/speed tradeoff)
     // 
     // # Returns
     // Vector of IDs sorted by similarity (most similar first)
@@ -93,7 +90,7 @@ pub enum IndexType {
     Ivf,
 }
 
-// Implement Display for IndexType for better readability in logs and stats
+// better readability in logs and stats
 impl std::fmt::Display for IndexType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -111,7 +108,7 @@ pub enum SerializableIndex {
     Hnsw(crate::index::hnsw::HnswIndex),
     Ivf(crate::index::ivf::IvfIndex),
 }
-// Implement a method to convert the SerializableIndex back into a trait object for use in the system. This allows us to persist the index state and later restore it while still using the unified VectorIndex interface for operations.
+// Implement a method to convert the SerializableIndex back into a trait object for use to persist the index state and later restore it while still using the unified VectorIndex interface for operations.
 impl SerializableIndex {
     pub fn to_trait_object(self) -> Box<dyn VectorIndex> {
         match self {

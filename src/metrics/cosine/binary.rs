@@ -1,11 +1,11 @@
 // Binary quantization for cosine similarity
 // Uses 1-bit quantized vectors for ultra-fast computation
-// Trade-off: Lower precision but 32x memory reduction and much faster
+//  Lower precision but 32x memory reduction and much faster
 
 pub fn cosine_similarity_binary(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vectors must have same length");
     
-    // Binarize vectors: 1 if >= 0, 0 if < 0
+    //  1 if >= 0, 0 if < 0
     let mut hamming_distance = 0u32;
     let mut count = 0u32;
     
@@ -13,7 +13,7 @@ pub fn cosine_similarity_binary(a: &[f32], b: &[f32]) -> f32 {
         let bit_a = if a[i] >= 0.0 { 1u8 } else { 0u8 };
         let bit_b = if b[i] >= 0.0 { 1u8 } else { 0u8 };
         
-        // XOR to find differences (Hamming distance)
+        // XOR to find differences Hamming distance
         if bit_a != bit_b {
             hamming_distance += 1;
         }

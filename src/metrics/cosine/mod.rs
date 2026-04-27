@@ -1,10 +1,8 @@
 // Cosine similarity between two vectors
-// Measures the cosine of the angle between vectors, ignoring magnitude.
-// 
 // Returns value in range [-1, 1] where:
-// - 1.0 = identical direction
-// - 0.0 = orthogonal (perpendicular)
-// - -1.0 = opposite direction
+// 1.0 = identical direction
+// 0.0 = orthogonal (perpendicular)
+// -1.0 = opposite direction
 
 mod scalar;
 mod simd;
