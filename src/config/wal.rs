@@ -1,5 +1,4 @@
-// Write-Ahead Log (WAL) configuration
-// This configuration struct defines the parameters for the write-ahead log, which is used to ensure durability and recoverability of the collection in case of crashes or unexpected shutdowns. The WAL allows us to log changes to the collection before they are applied, so that we can replay those changes during recovery to bring the collection back to a consistent state.
+// in case of crashes or unexpected shutdowns, replay those changes during recovery to bring the collection back to a consistent state.
 use serde::{Deserialize, Serialize};
 
 // WAL configuration
@@ -8,17 +7,17 @@ pub struct WalConfig {
     // Enable WAL
     pub enabled: bool,
     
-    // Checkpoint frequency (flush every N operations)
+    // Checkpoint frequency, flush every N operations
     pub checkpoint_frequency: usize,
 
-    // Optional time-based checkpoint interval (seconds)
+    // Optional time-based checkpoint interval, seconds
     #[serde(default)]
     pub checkpoint_interval_secs: Option<u64>,
     
     // Maximum log file size in bytes before rotation
     pub max_log_size: usize,
     
-    // Sync to disk after every write (slower but safer)
+    // Sync to disk after every write, slower but safer
     pub sync_on_write: bool,
 }
 
@@ -35,7 +34,7 @@ impl Default for WalConfig {
 }
 
 impl WalConfig {
-    // Disable WAL (not recommended for production)
+    // Disable WAL 
     pub fn disabled() -> Self {
         WalConfig {
             enabled: false,
@@ -46,7 +45,7 @@ impl WalConfig {
         }
     }
     
-    // High durability mode (sync on every write)
+    // High durability mode, sync on every write
     pub fn high_durability() -> Self {
         WalConfig {
             enabled: true,
@@ -57,7 +56,7 @@ impl WalConfig {
         }
     }
     
-    // Fast mode (larger checkpoint intervals)
+    // Fast mode, larger checkpoint intervals
     pub fn fast() -> Self {
         WalConfig {
             enabled: true,
