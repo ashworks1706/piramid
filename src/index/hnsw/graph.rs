@@ -69,15 +69,13 @@ impl HnswIndex{
             node.tombstone = true;
         }
     }
-    // Generate a random layer for a new node based on exponential decay why? because 
     // higher layers have exponentially fewer nodes, so we want to assign layers
     // to new nodes in a way that reflects this distribution
     fn random_layer(&self) -> usize{
         // exponential decay probability 
         // floor(-ln(uniform_random) * ml)
         let r: f32 = rand::random();
-        (-r.ln() * self.config.ml).floor() as usize // this basically gives us a layer based on
-                                                    // exponential decay
+        (-r.ln() * self.config.ml).floor() as usize // this basically gives us a layer based on exponential decay
     }
 
     // Insert a node with access to vector storage for distance calculations
