@@ -157,8 +157,6 @@ impl Embedder for OllamaEmbedder {
     }
 }
 
-// Ollama API types
-
 #[derive(Debug, Serialize)]
 struct OllamaEmbeddingRequest {
     model: String,

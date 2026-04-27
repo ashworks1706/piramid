@@ -1,7 +1,4 @@
-// LRU cache wrapper for embeddings to reduce API costs
-//
-// Caches embeddings in memory to avoid redundant API calls.
-// Uses LRU eviction when cache is full.
+// LRU cache wrapper for embeddings, Uses LRU eviction when cache is full.
 
 use async_trait::async_trait;
 use lru::LruCache;

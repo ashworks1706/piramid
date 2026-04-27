@@ -14,12 +14,12 @@ use crate::embeddings::cache::CachedEmbedder;
 const DEFAULT_OPENAI_API_URL: &str = "https://api.openai.com/v1/embeddings";
 const DEFAULT_CACHE_SIZE: usize = 10000;
 
-// OpenAI embedding provider (with built-in LRU cache)
+// OpenAI embedding provider with built-in LRU cache
 struct OpenAIEmbedderInner {
-    client: Client, // Reqwest client for making HTTP requests to the OpenAI API
+    client: Client, // HTTP requests to the OpenAI API
     api_key: String, // OpenAI API key for authentication
-    model: String, // OpenAI model name, e.g. "text-embedding-3-small"
-    base_url: String, // Base URL for the OpenAI API, defaulting to https://api.openai.com/v1/embeddings
+    model: String, // OpenAI model name
+    base_url: String, // URL for the OpenAI API
 }
 
 pub struct OpenAIEmbedder {
@@ -27,7 +27,7 @@ pub struct OpenAIEmbedder {
 }
 
 impl OpenAIEmbedder {
-    // Create a new OpenAI embedder with automatic caching (10K embeddings)
+    // automatic caching
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let inner = OpenAIEmbedderInner::new(config)?;
         Ok(Self {
@@ -35,7 +35,7 @@ impl OpenAIEmbedder {
         })
     }
 
-    // Create with custom cache size
+    // custom cache size
     pub fn with_cache_size(config: &EmbeddingConfig, cache_size: usize) -> EmbeddingResult<Self> {
         let inner = OpenAIEmbedderInner::new(config)?;
         Ok(Self {
@@ -78,7 +78,6 @@ impl OpenAIEmbedderInner {
         })
     }
 
-    // Get dimensions for known OpenAI models
     fn get_dimensions(&self) -> Option<usize> {
         match self.model.as_str() {
             "text-embedding-3-small" => Some(1536),
@@ -152,7 +151,6 @@ impl Embedder for OpenAIEmbedderInner {
     }
 }
 
-// Delegate Embedder trait to the cached inner embedder
 #[async_trait]
 impl Embedder for OpenAIEmbedder {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
@@ -171,8 +169,6 @@ impl Embedder for OpenAIEmbedder {
         self.cached.dimensions()
     }
 }
-
-// OpenAI API types
 
 #[derive(Debug, Serialize)]
 struct OpenAIEmbeddingRequest {
