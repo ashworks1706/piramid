@@ -33,11 +33,6 @@ Piramid is a combination of vector database and transformer inference tuned for 
 https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
 
-
-
-
-
-
 ## Quick Start
 
 ### Cargo (recommended)
