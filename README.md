@@ -27,6 +27,17 @@ Piramid is a combination of vector database and transformer inference tuned for 
 - Embeddings: OpenAI and local HTTP (Ollama/TEI-style), caching and retries
 - Limits and disk/memory guards; tracing + metrics/health endpoints
 
+#### Current stage...
+
+
+https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
+
+
+
+
+
+
+
 ## Quick Start
 
 ### Cargo (recommended)
