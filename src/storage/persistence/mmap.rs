@@ -1,5 +1,5 @@
 // Memory-mapped file utilities
-// This module provides utilities for working with memory-mapped files, including ensuring file size, creating memory maps, and growing memory maps as needed. These utilities are used in the collection storage implementation to manage the memory-mapped file that stores the collection's data.
+// ensuring file size, creating memory maps, and growing memory maps as needed.used in the collection storage to manage memory-mapped file that stores the collection's data.
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::File;
 
@@ -49,6 +49,8 @@ pub fn grow_mmap_if_needed(
         drop(mmap.take());
         file.set_len(required_size * 2)?;
         *mmap = Some(create_mmap(file)?);
-    } // If the required size is within the current size, we can simply continue using the existing memory map without any changes.
+    } 
+    // If the required size is within the current size, we can simply continue using the existing 
+    // memory map without any changes.
     Ok(())
 }

@@ -2,10 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-// index types use different parameters:
-// - HNSW uses ef (candidates explored during search)
-// - IVF uses nprobe (number of clusters to search)
-// - Flat always exhaustive (ignores these settings)
+/// - HNSW uses ef (candidates explored during search)
+/// - IVF uses nprobe (number of clusters to search)
+/// - Flat always exhaustive (ignores these settings)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SearchConfig {
     //  uses ef_search from config, or ef_construction if not set

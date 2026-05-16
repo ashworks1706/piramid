@@ -6,14 +6,12 @@ use uuid::Uuid;
 use crate::metadata::Metadata;
 use crate::quantization::QuantizedVector;
 
-// A single vector entry stored in the database
-// 
 // Vectors are stored as quantized int8 for 4x memory efficiency.
 // Users work with Vec<f32>, conversion happens automatically.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: Uuid,
-    pub vector: QuantizedVector,  // Stored as quantized
+    pub vector: QuantizedVector, 
     pub text: String,
     #[serde(default)]
     pub metadata: Metadata,

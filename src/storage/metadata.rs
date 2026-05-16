@@ -9,8 +9,8 @@ pub struct CollectionMetadata {
     pub schema_version: u32,
     pub name: String,
     pub created_at: u64,      // Unix timestamp (seconds)
-    pub updated_at: u64,      // Unix timestamp (seconds)
-    pub dimensions: Option<usize>,  // Expected vector dimensions (None = auto-detect)
+    pub updated_at: u64,      
+    pub dimensions: Option<usize>,  
     pub vector_count: usize,
 }
 
