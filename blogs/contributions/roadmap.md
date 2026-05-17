@@ -54,7 +54,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] query result caching (LRU, TTL-based)
 - [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
-- [ ] preset search modes: "fast / balanced / high-recall" mapped to tuned `ef`/`nprobe` params
 
 **Metadata Filters**
 
@@ -68,7 +67,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **Search API Extensions (1.1.7)**
 
-- [ ] **Batch search endpoint:** add `POST /api/collections/:name/search/batch` accepting an array of query vectors and returning an array of result sets in a single round-trip — useful for high-throughput agentic pipelines where multiple queries are issued per request.
 - [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
 - [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
 - [ ] metadata-only search (no vector similarity)
