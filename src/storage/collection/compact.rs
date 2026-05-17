@@ -1,5 +1,6 @@
 // Compaction logic for collections, including rewriting live documents and rebuilding indexes.
 //  takes a mutable reference to a `Collection` and performs compaction by creating a new temporary file, copying live documents to it, rebuilding the index and vector index, and then replacing the original file with the compacted version. 
+use crate::error::Result;
 use crate::storage::document::Document;
 use crate::storage::persistence::{save_index, save_vector_index, save_metadata, create_mmap, ensure_file_size};
 use super::storage::Collection;
