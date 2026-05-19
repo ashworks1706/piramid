@@ -21,6 +21,34 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
+### GPU Acceleration patch
+
+**Introduce GPUBackend trait:**
+
+- [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
+- [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
+- [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
+- [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
+- [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
+- [ ] add Annoy
+- [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
+- [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
+
+**GPU backend:**
+
+- [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
+- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
+
+**Safetensors / precision compatibility:**
+
+- [ ] **Safetensors-compatible vector export:** Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format for interoperability with other tools.
+
+**Blocked / Future (Systems Optimization):**
+
+- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into memory on startup.
+- [ ] **Batched Retrieval Dispatch:** Group multiple search requests into a single compute batch.
+
+
 ### Index Quality patch
 
 **Quantization Refactor (1.1.0)**
@@ -34,6 +62,25 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
 - [ ] circuit breaker for embedding API failures with fallback behaviour
+
+
+### Transformer Inference Patch 
+
+**Introduce Transformer:**
+- [ ] add support for running small transformer models 
+- [ ] add kvcaching, batching and async support to the transformer inference module 
+- [ ] add paged attention support for long contexts 
+- [ ] add support for quantization 
+- [ ] add streaming api 
+
+### Transformer x Database Attention Fusion Patch
+
+- [ ] modify transformer blocks :  configurable key/value projection heads for database vectors
+- [ ] learnable gating mechanism to balance attention between internal context and external memory
+- [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable
+- [ ] cross attention with database vectors as keyvalues with query from transformer 
+
+---
 
 ### Searching patch
 
@@ -72,51 +119,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] metadata-only search (no vector similarity)
 - [ ] recommendation API (similar to these IDs, not those)
 
-
-### GPU Acceleration patch
-
-**Introduce GPUBackend trait:**
-
-- [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
-- [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
-- [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
-- [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
-- [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
-- [ ] add Annoy
-- [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
-- [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
-
-**GPU backend:**
-
-- [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
-- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
-
-**Safetensors / precision compatibility:**
-
-- [ ] **Safetensors-compatible vector export:** Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format for interoperability with other tools.
-
-**Blocked / Future (Systems Optimization):**
-
-- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into memory on startup.
-- [ ] **Batched Retrieval Dispatch:** Group multiple search requests into a single compute batch.
-
-### Transformer Inference Patch 
-
-**Introduce Transformer:**
-- [ ] add support for running small transformer models 
-- [ ] add kvcaching, batching and async support to the transformer inference module 
-- [ ] add paged attention support for long contexts 
-- [ ] add support for quantization 
-- [ ] add streaming api 
-
-### Transformer x Database Attention Fusion Patch
-
-- [ ] modify transformer blocks :  configurable key/value projection heads for database vectors
-- [ ] learnable gating mechanism to balance attention between internal context and external memory
-- [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable
-- [ ] cross attention with database vectors as keyvalues with query from transformer 
-
----
 
 ### Write Path & Durability
 
