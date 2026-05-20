@@ -15,7 +15,6 @@ export const mdxComponents: MDXComponents = {
   Callout,
   PostCard,
   PostCards,
-  // eslint-disable-next-line jsx-a11y/alt-text
   img: ({ src, alt }: ImgProps) => <BlogImage src={src} alt={alt} />,
   h1: ({ id, children, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) => (
     <h1 id={id} className="text-4xl font-semibold tracking-tight text-white" {...rest}>

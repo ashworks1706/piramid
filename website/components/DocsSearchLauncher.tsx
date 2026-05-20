@@ -98,6 +98,8 @@ export function DocsSearchLauncher({ entries, className }: Props) {
     setCursor(0);
   };
 
+  const activeCursor = Math.min(cursor, Math.max(results.length - 1, 0));
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -105,16 +107,14 @@ export function DocsSearchLauncher({ entries, className }: Props) {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setCursor((c) => Math.max(c - 1, 0));
-    } else if (e.key === "Enter" && results[cursor]) {
-      const r = results[cursor];
+    } else if (e.key === "Enter" && results[activeCursor]) {
+      const r = results[activeCursor];
       const href =
         "/blogs/" + r.slug.join("/") + (r.headingId ? "#" + r.headingId : "");
       window.location.href = href;
       close();
     }
   }
-
-  useEffect(() => setCursor(0), [results]);
 
   useEffect(() => {
     const el = listRef.current?.querySelector(
@@ -169,7 +169,10 @@ export function DocsSearchLauncher({ entries, className }: Props) {
                 ref={inputRef}
                 type="search"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setCursor(0);
+                }}
                 onKeyDown={onKeyDown}
                 placeholder="Search sections and content…"
                 className="w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
@@ -192,7 +195,7 @@ export function DocsSearchLauncher({ entries, className }: Props) {
                 </div>
               ) : results.length === 0 ? (
                 <div className="px-4 py-10 text-center text-sm text-slate-500">
-                  No results for <span className="text-slate-300">"{q}"</span>
+                  No results for <span className="text-slate-300">&quot;{q}&quot;</span>
                 </div>
               ) : (
                 results.map((res, i) => {
@@ -201,7 +204,7 @@ export function DocsSearchLauncher({ entries, className }: Props) {
                     res.slug.join("/") +
                     (res.headingId ? "#" + res.headingId : "");
                   const snippet = buildSnippet(res.text, q);
-                  const isActive = i === cursor;
+                  const isActive = i === activeCursor;
 
                   return (
                     <Link

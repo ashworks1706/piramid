@@ -15,10 +15,10 @@ export default function Home() {
             Inference Engine for Retrieval Augmented Systems
           </h1>
           <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
-            Inspired from google deepmind's RETRO project, Piramid is meant to
+            Inspired from google deepmind&apos;s RETRO project, Piramid is meant to
             convert traditional RAG applications involving separate LLM and
             Database connections into one single hosted binary to serve and fuse
-            transformer's attention with database queries.
+            transformer&apos;s attention with database queries.
           </p>
           <div className="flex flex-wrap gap-3 pt-1">
             <Link
