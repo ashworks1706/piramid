@@ -12,13 +12,13 @@ export default function Home() {
         {/* Hero */}
         <section className="space-y-7">
           <h1 className="text-4xl sm:text-5xl font-semibold leading-[1.15] tracking-tight text-white">
-             Inference Engine for Retrieval Augmented Systems
+            Inference Engine for Retrieval Augmented Systems
           </h1>
           <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
-            Inspired from google deepmind's RETRO project, Piramid is meant to convert traditional RAG applications involving separate LLM and Database connections 
-            into one single hosted binary to serve and fuse transformer's attention with database queries.
-
-
+            Inspired from google deepmind's RETRO project, Piramid is meant to
+            convert traditional RAG applications involving separate LLM and
+            Database connections into one single hosted binary to serve and fuse
+            transformer's attention with database queries.
           </p>
           <div className="flex flex-wrap gap-3 pt-1">
             <Link
@@ -41,9 +41,24 @@ export default function Home() {
 
         {/* Footer */}
         <footer className="flex flex-wrap gap-x-5 gap-y-1 pb-4 text-sm text-slate-500">
-          <Link href="/blogs" className="hover:text-slate-300 transition-colors">Blog</Link>
-          <a href="https://github.com/ashworks1706/piramid" className="hover:text-slate-300 transition-colors">GitHub</a>
-          <a href="https://crates.io/crates/piramid" className="hover:text-slate-300 transition-colors">crates.io</a>
+          <Link
+            href="/blogs"
+            className="hover:text-slate-300 transition-colors"
+          >
+            Blog
+          </Link>
+          <a
+            href="https://github.com/ashworks1706/piramid"
+            className="hover:text-slate-300 transition-colors"
+          >
+            GitHub
+          </a>
+          <a
+            href="https://crates.io/crates/piramid"
+            className="hover:text-slate-300 transition-colors"
+          >
+            crates.io
+          </a>
           <span className="ml-auto">piramid © 2026</span>
         </footer>
       </main>

@@ -23,19 +23,31 @@ export function DocsPager({ prev, next, wide = false }: Props) {
     <div className={containerClass}>
       {prev && (
         <Link
-          href={prev.slug.join("/") === "index" ? "/blogs" : `/blogs/${prev.slug.join("/")}`}
+          href={
+            prev.slug.join("/") === "index"
+              ? "/blogs"
+              : `/blogs/${prev.slug.join("/")}`
+          }
           className={`${linkBase} border-white/10 bg-white/5 hover:border-indigo-400/60 hover:text-white`}
         >
           <span aria-hidden="true">←</span>
-          <span className="truncate max-w-[180px] sm:max-w-[260px]">{prev.title}</span>
+          <span className="truncate max-w-[180px] sm:max-w-[260px]">
+            {prev.title}
+          </span>
         </Link>
       )}
       {next && (
         <Link
-          href={next.slug.join("/") === "index" ? "/blogs" : `/blogs/${next.slug.join("/")}`}
+          href={
+            next.slug.join("/") === "index"
+              ? "/blogs"
+              : `/blogs/${next.slug.join("/")}`
+          }
           className={`${linkBase} border-indigo-400/50 bg-indigo-500/10 text-slate-100 shadow-indigo-900/30 hover:border-indigo-300/70`}
         >
-          <span className="truncate max-w-[180px] sm:max-w-[260px]">{next.title}</span>
+          <span className="truncate max-w-[180px] sm:max-w-[260px]">
+            {next.title}
+          </span>
           <span aria-hidden="true">→</span>
         </Link>
       )}

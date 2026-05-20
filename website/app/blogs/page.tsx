@@ -4,7 +4,12 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "../../mdx-components";
-import { findBlog, extractHeadings, blogSeo, blogNeighbors } from "../../lib/blogs";
+import {
+  findBlog,
+  extractHeadings,
+  blogSeo,
+  blogNeighbors,
+} from "../../lib/blogs";
 import { remarkRewriteImages } from "../../lib/remark-rewrite-images";
 import { DocsToc } from "../../components/DocsToc";
 import { DocsPager } from "../../components/DocsPager";
@@ -16,7 +21,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const seo = blogSeo(["index"]);
   const pageTitle = seo?.title ?? "Blogs";
   const fullTitle = `${pageTitle} | Piramid`;
-  const description = seo?.description ?? "Piramid updates, notes, and deep dives.";
+  const description =
+    seo?.description ?? "Piramid updates, notes, and deep dives.";
   const url = "/blogs";
   return {
     title: pageTitle,

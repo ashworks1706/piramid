@@ -10,7 +10,11 @@ type Props = {
   className?: string;
 };
 
-export function DocsSidebar({ sections, sticky = true, className = "" }: Props) {
+export function DocsSidebar({
+  sections,
+  sticky = true,
+  className = "",
+}: Props) {
   const pathname = usePathname();
   const hrefForSlug = (slugParts: string[]) => {
     const slugPath = slugParts.join("/");
@@ -39,7 +43,8 @@ export function DocsSidebar({ sections, sticky = true, className = "" }: Props) 
             <div className="space-y-1">
               {section.items.map((item) => {
                 const href = hrefForSlug(item.slug);
-                const label = item.slug.join("/") === "index" ? "Overview" : item.title;
+                const label =
+                  item.slug.join("/") === "index" ? "Overview" : item.title;
                 const isActive = pathname === href;
                 return (
                   <Link

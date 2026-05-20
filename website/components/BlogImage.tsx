@@ -52,14 +52,17 @@ export function BlogImage({ src, alt }: Props) {
   }, []);
 
   // Drag to pan while zoomed
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!isZoomed) return;
-    dragging.current = true;
-    setIsDragging(true);
-    dragStart.current = { x: e.clientX, y: e.clientY };
-    offsetAtDrag.current = offset;
-    e.preventDefault();
-  }, [isZoomed, offset]);
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isZoomed) return;
+      dragging.current = true;
+      setIsDragging(true);
+      dragStart.current = { x: e.clientX, y: e.clientY };
+      offsetAtDrag.current = offset;
+      e.preventDefault();
+    },
+    [isZoomed, offset],
+  );
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragging.current) return;
@@ -69,15 +72,21 @@ export function BlogImage({ src, alt }: Props) {
     });
   }, []);
 
-  const onMouseUp = useCallback(() => { dragging.current = false; setIsDragging(false); }, []);
+  const onMouseUp = useCallback(() => {
+    dragging.current = false;
+    setIsDragging(false);
+  }, []);
 
   // Touch drag
   const touchStart = useRef({ x: 0, y: 0 });
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isZoomed) return;
-    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    offsetAtDrag.current = offset;
-  }, [isZoomed, offset]);
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isZoomed) return;
+      touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      offsetAtDrag.current = offset;
+    },
+    [isZoomed, offset],
+  );
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     setOffset({
@@ -89,16 +98,23 @@ export function BlogImage({ src, alt }: Props) {
   // ESC to close
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, close]);
 
   // Prevent body scroll when lightbox open
   useEffect(() => {
-    if (open) { document.body.style.overflow = "hidden"; }
-    else { document.body.style.overflow = ""; }
-    return () => { document.body.style.overflow = ""; };
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
 
   const lightbox = open
@@ -108,7 +124,10 @@ export function BlogImage({ src, alt }: Props) {
           aria-modal="true"
           aria-label={alt ?? "Image preview"}
           className="fixed inset-0 z-9999 flex flex-col items-center justify-center"
-          style={{ background: "rgba(5, 7, 13, 0.92)", backdropFilter: "blur(12px)" }}
+          style={{
+            background: "rgba(5, 7, 13, 0.92)",
+            backdropFilter: "blur(12px)",
+          }}
           onClick={close}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
@@ -126,7 +145,9 @@ export function BlogImage({ src, alt }: Props) {
           {/* Zoom hint */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400 backdrop-blur select-none pointer-events-none">
             <span>scroll or click to zoom</span>
-            {isZoomed && <span className="text-indigo-300">{Math.round(zoom * 100)}%</span>}
+            {isZoomed && (
+              <span className="text-indigo-300">{Math.round(zoom * 100)}%</span>
+            )}
           </div>
 
           {/* Image wrapper — stop propagation so clicking the image doesn't close */}
@@ -151,7 +172,9 @@ export function BlogImage({ src, alt }: Props) {
               onTouchMove={onTouchMove}
               style={{
                 transform: `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`,
-                transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.4,0,0.2,1)",
+                transition: isDragging
+                  ? "none"
+                  : "transform 0.25s cubic-bezier(0.4,0,0.2,1)",
                 maxWidth: "90vw",
                 maxHeight: "82vh",
                 width: "auto",
@@ -159,7 +182,11 @@ export function BlogImage({ src, alt }: Props) {
                 borderRadius: "0.75rem",
                 border: "1px solid rgba(255,255,255,0.1)",
                 boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
-                cursor: isZoomed ? (isDragging ? "grabbing" : "grab") : "zoom-in",
+                cursor: isZoomed
+                  ? isDragging
+                    ? "grabbing"
+                    : "grab"
+                  : "zoom-in",
                 userSelect: "none",
               }}
             />
@@ -175,7 +202,7 @@ export function BlogImage({ src, alt }: Props) {
             </div>
           )}
         </div>,
-        document.body
+        document.body,
       )
     : null;
 
@@ -186,11 +213,17 @@ export function BlogImage({ src, alt }: Props) {
           src={src}
           alt={alt ?? ""}
           loading="lazy"
-          onClick={() => { setOpen(true); setZoomIdx(0); setOffset({ x: 0, y: 0 }); }}
+          onClick={() => {
+            setOpen(true);
+            setZoomIdx(0);
+            setOffset({ x: 0, y: 0 });
+          }}
           className="inline-block max-w-full h-auto rounded-xl border border-white/10 shadow-lg shadow-slate-900/40 cursor-zoom-in transition-all duration-200 group-hover:brightness-110 group-hover:border-indigo-400/40 group-hover:shadow-indigo-900/30"
         />
         {alt && (
-          <span className="mt-2 block text-xs text-slate-500 italic">{alt}</span>
+          <span className="mt-2 block text-xs text-slate-500 italic">
+            {alt}
+          </span>
         )}
       </span>
       {lightbox}

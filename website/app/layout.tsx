@@ -7,8 +7,20 @@ export const metadata: Metadata = {
     template: "%s | Piramid",
     default: "Piramid – Vector Database for Agentic Applications",
   },
-  description: "Piramid is a Rust vector database built for agentic workloads: mmap + WAL, HNSW/IVF/Flat indexes, filter-aware search, embeddings (OpenAI/local), for low-latency agentic applications.",
-  keywords: ["vector database", "rust", "low latency", "HNSW", "IVF", "flat index", "embeddings", "RAG", "agentic", "similarity search"],
+  description:
+    "Piramid is a Rust vector database built for agentic workloads: mmap + WAL, HNSW/IVF/Flat indexes, filter-aware search, embeddings (OpenAI/local), for low-latency agentic applications.",
+  keywords: [
+    "vector database",
+    "rust",
+    "low latency",
+    "HNSW",
+    "IVF",
+    "flat index",
+    "embeddings",
+    "RAG",
+    "agentic",
+    "similarity search",
+  ],
   authors: [{ name: "ashworks1706" }],
   creator: "ashworks1706",
   publisher: "ashworks1706",
@@ -18,9 +30,9 @@ export const metadata: Metadata = {
     googleBot: {
       index: true,
       follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
     },
   },
   openGraph: {
@@ -28,7 +40,8 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://piramiddb.com",
     title: "Piramid - Vector Database for Agentic Applications",
-    description: "Open-source hybrid vector database combining graph-based and traditional vector search capabilities.",
+    description:
+      "Open-source hybrid vector database combining graph-based and traditional vector search capabilities.",
     siteName: "Piramid",
     images: [
       {
@@ -42,7 +55,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Piramid - Vector Database for Agentic Applications",
-    description: "Open-source hybrid vector database combining graph-based and traditional vector search capabilities.",
+    description:
+      "Open-source hybrid vector database combining graph-based and traditional vector search capabilities.",
     images: ["../public/logo_dark.png"],
     creator: "@piramiddb",
   },
@@ -59,9 +73,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="antialiased">
-        {children}
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
