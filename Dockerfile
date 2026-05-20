@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY benches ./benches
+COPY assets ./assets
 
 RUN cargo build --release --bin piramid
 
