@@ -1,6 +1,4 @@
-# =============================================================================
-# Production-ready deployment configuration
-# =============================================================================
+# Production
 
 services:
   piramid:
@@ -10,14 +8,11 @@ services:
     ports:
       - "6333:6333"
     volumes:
-      # Persist data across container restarts
       - piramid-data:/app/data
     environment:
-      # Server configuration
       - PORT=6333
       - DATA_DIR=/app/data
       
-      # Optional: Enable embeddings (uncomment to use)
       # OpenAI Configuration:
       # - EMBEDDING_PROVIDER=openai
       # - EMBEDDING_MODEL=text-embedding-3-small

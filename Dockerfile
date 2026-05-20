@@ -10,9 +10,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-COPY benches ./benches
-COPY assets ./assets
+COPY . .
 
 RUN cargo build --release --bin piramid
 

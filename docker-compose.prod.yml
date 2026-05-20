@@ -1,6 +1,3 @@
-# =============================================================================
-# Copy this to docker-compose.yml and configure for your environment
-# =============================================================================
 
 services:
   piramid:
@@ -10,14 +7,13 @@ services:
     volumes:
       - piramid-data:/app/data
     environment:
-      # Server configuration
       - PORT=6333
       - DATA_DIR=/app/data
       
-      # Embedding provider - OpenAI (recommended for production)
+      # Embedding provider - OpenAI 
       - EMBEDDING_PROVIDER=openai
       - EMBEDDING_MODEL=text-embedding-3-small
-      - OPENAI_API_KEY=${OPENAI_API_KEY}  # Set in .env file
+      - OPENAI_API_KEY=${OPENAI_API_KEY}  
       
     restart: unless-stopped
     healthcheck:
@@ -31,9 +27,7 @@ volumes:
   piramid-data:
     driver: local
 
-# =============================================================================
-# ALTERNATIVE: Ollama (Local Embeddings)
-# =============================================================================
+# Ollama (Local Embeddings)
 # services:
 #   piramid:
 #     image: ghcr.io/ashworks1706/piramid:latest
