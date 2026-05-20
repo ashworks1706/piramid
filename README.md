@@ -12,12 +12,13 @@
 </p>
 
 <p align="center">
-    <a href="#quick-start">Quick Start</a> •
-    <a href="#usage">Usage</a> •
-    <a href="#configuration">Configuration</a> •
-    <a href="#development">Development</a> •
-    <a href="https://piramiddb.com/blogs/contributions">Contributing</a>
+  <a href="#overview">Overview</a> •
+  <a href="#usage">Usage</a> •
+  <a href="docs/setup.md">Setup</a> •
+  <a href="https://piramiddb.com/blogs/contributions">Contributing</a>
 </p>
+
+## Overview
 
 Piramid is a combination of vector database and transformer inference tuned for low-latency agentic workloads written in Rust. Inspired from google deepmind's RETRO project, Piramid is meant to convert traditional RAG applications involving separate LLM and Database connections into one single hosted binary to serve and fuse transformer's attention with database queries.
 
@@ -27,32 +28,21 @@ Piramid is a combination of vector database and transformer inference tuned for 
 - Embeddings: OpenAI and local HTTP (Ollama/TEI-style), caching and retries
 - Limits and disk/memory guards; tracing + metrics/health endpoints
 
-#### Current stage...
-
-
 https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
 
-## Quick Start
+## Get Started
 
-### Cargo (recommended)
+For full setup on Linux, macOS, WSL2, Docker, the website, and the SDKs, see [docs/setup.md](docs/setup.md).
+
+If you already have the binary installed, start the server with:
 
 ```bash
-cargo install piramid
-piramid init                # writes piramid.yaml
 piramid serve --data-dir ./data
 ```
 
 Server defaults to `http://0.0.0.0:6333`.
-Data is stored under `~/.piramid` by default (set `DATA_DIR` to override).
-
-### From source
-
-```bash
-git clone https://github.com/ashworks1706/piramid
-cd piramid
-cargo run --release -- serve --data-dir ./data
-```
+Data is stored under `~/.piramid` by default; set `DATA_DIR` to override it.
 
 ## Usage
 
@@ -85,90 +75,6 @@ curl -X POST http://localhost:6333/api/collections/docs/search \
 ```
 
 Health and metrics: `/healthz`, `/readyz`, `/api/metrics`.
-
-## Configuration
-
-Use a config file (`piramid.yaml`) and override with env vars.
-
-```bash
-piramid init --path piramid.yaml   # generate defaults
-piramid serve --config piramid.yaml
-```
-
-Environment overrides (examples):
-
-- Inline: `PORT=7000 DATA_DIR=~/piramid-data piramid serve`
-- Point to a config file: `CONFIG_FILE=~/piramid/piramid.yaml piramid serve`
-- Embeddings: `EMBEDDING_PROVIDER=openai OPENAI_API_KEY=sk-...`
-
-Key env overrides:
-
-```bash
-PORT=6333                 # HTTP server port
-DATA_DIR=/app/data        # Data storage directory
-CONFIG_FILE=./piramid.yaml
-
-# Embeddings
-EMBEDDING_PROVIDER=openai|local
-EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_API_KEY=sk-...
-EMBEDDING_BASE_URL=http://localhost:11434   # for local/Ollama/TEI
-EMBEDDING_TIMEOUT_SECS=15
-
-# Limits/guards
-DISK_MIN_FREE_BYTES=1073741824    # 1GB
-DISK_READONLY_ON_LOW_SPACE=true
-CACHE_MAX_BYTES=536870912         # 512MB
-```
-
-Minimal YAML sample:
-
-```yaml
-index:
-  type: Auto
-  metric: Cosine
-  mode: Auto
-search:
-  ef: null
-  nprobe: null
-  filter_overfetch: 10
-wal:
-  enabled: true
-  checkpoint_frequency: 1000
-memory:
-  use_mmap: true
-limits:
-  max_vectors: null
-  max_bytes: null
-```
-
-## Development
-
-```bash
-cargo build
-cargo test
-cargo run -- serve --data-dir ./data
-```
-
-### Local checks
-
-Install Rust with `rustup`, then add formatting/linting tools:
-
-```bash
-rustup component add rustfmt clippy
-```
-
-Run the same checks used by CI:
-
-```bash
-./scripts/check.sh
-```
-
-Enable the pre-push hook so pushes fail locally before broken Rust formatting, clippy warnings, tests, or website lint issues reach GitHub:
-
-```bash
-git config core.hooksPath .githooks
-```
 
 ## License
 
