@@ -1,6 +1,4 @@
 // This module defines the persistence service for the collection, which is responsible for managing the write-ahead log (WAL) and performing checkpoints to save the state of the collection to disk. 
-// The checkpoint function saves the current state of the collection and rotates the WAL if necessary, while the flush function ensures that all pending WAL entries are flushed to disk. 
-// The persistence service also includes logic to determine when a checkpoint should be performed based on the configured checkpoint frequency and to record the timestamp of the last checkpoint for recovery purposes.
 
 use crate::error::Result;
 use crate::storage::persistence::{save_index as save_idx, save_vector_index as save_vec_idx, save_metadata as save_meta};

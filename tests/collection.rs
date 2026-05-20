@@ -1,5 +1,5 @@
 use piramid::{
-    Collection, CollectionConfig, Document, MemoryConfig, Metric, search::SearchParams,
+    Collection, CollectionConfig, Document, MemoryConfig, Metric, metadata, search::SearchParams,
     storage::collection::CollectionOpenOptions,
 };
 use std::fs;
@@ -163,6 +163,44 @@ fn no_mmap_insert_grows_file_without_panicking() {
     let retrieved = storage.get(&id).unwrap();
     assert_eq!(retrieved.text, "large no-mmap document");
     assert_eq!(retrieved.get_vector().len(), vector.len());
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
+
+#[test]
+fn updates_write_one_wal_entry_each() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_update_wal.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_update_wal.db.index.db",
+        ".piramid/tests/test_update_wal.db.wal.db",
+        ".piramid/tests/test_update_wal.db.vecindex.db",
+        ".piramid/tests/test_update_wal.db.metadata.db",
+    ];
+    cleanup_test_files(&files);
+
+    let mut storage = Collection::open(test_path).unwrap();
+    let id = storage
+        .insert(Document::with_metadata(
+            vec![1.0, 2.0, 3.0],
+            "original".to_string(),
+            metadata([("kind", "initial".into())]),
+        ))
+        .unwrap();
+
+    storage
+        .update_metadata(&id, metadata([("kind", "updated".into())]))
+        .unwrap();
+    storage
+        .update_vector(&id, vec![3.0, 2.0, 1.0])
+        .unwrap();
+
+    let wal = fs::read_to_string(format!("{}.wal.db", test_path)).unwrap();
+    assert_eq!(wal.lines().filter(|line| line.contains("\"Insert\"" )).count(), 1);
+    assert_eq!(wal.lines().filter(|line| line.contains("\"Update\"" )).count(), 2);
+    assert_eq!(wal.lines().filter(|line| line.contains("\"Delete\"" )).count(), 0);
 
     drop(storage);
     cleanup_test_files(&files);

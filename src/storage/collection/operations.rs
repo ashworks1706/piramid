@@ -22,6 +22,30 @@ fn write_entry_bytes(storage: &mut Collection, offset: u64, bytes: &[u8]) -> Res
     Ok(())
 }
 
+fn append_entry(storage: &mut Collection, bytes: &[u8]) -> Result<EntryPointer> {
+    let offset = storage
+        .index
+        .values()
+        .map(|idx| idx.offset + idx.length as u64)
+        .max()
+        .unwrap_or(0);
+
+    let required_size = offset + bytes.len() as u64;
+    grow_mmap_if_needed(&mut storage.mmap, &storage.data_file, required_size)?;
+    write_entry_bytes(storage, offset, bytes)?;
+
+    Ok(EntryPointer::new(offset, bytes.len() as u32))
+}
+
+fn persist_after_update(storage: &mut Collection, save_vector_index: bool) -> Result<()> {
+    super::persistence::save_index(storage)?;
+    if save_vector_index {
+        super::persistence::save_vector_index(storage)?;
+    }
+    storage.track_operation()?;
+    Ok(())
+}
+
 fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()> {
     let limits = storage.config.limits;
 
@@ -104,19 +128,7 @@ pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<
     let bytes = bincode::serialize(&entry)?; 
 
     enforce_limits_single(storage, bytes.len())?;
-
-    let offset = storage.index.values()
-        .map(|idx| idx.offset + idx.length as u64)
-        .max()
-        .unwrap_or(0);
-
-    let required_size = offset + bytes.len() as u64;
-    // Grow the backing file before writing the new entry.
-    grow_mmap_if_needed(&mut storage.mmap, &storage.data_file, required_size)?;
-
-    write_entry_bytes(storage, offset, &bytes)?;
-
-    let index_entry = EntryPointer::new(offset, bytes.len() as u32);
+    let index_entry = append_entry(storage, &bytes)?;
     storage.index.insert(id, index_entry.clone());
 
     storage.metadata.set_dimensions(raw_vec.len());
@@ -153,13 +165,12 @@ pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
         metadata: entry.metadata.clone(),
         seq: 0,
     };
-    // Log the operation before mutating storage.
     storage.persistence.wal.log(&mut wal_entry)?;
-    
+
+    let id = insert_internal(storage, entry)?;
     super::persistence::save_index(storage)?;
     storage.track_operation()?;
-
-    insert_internal(storage, entry)
+    Ok(id)
 }
 
 pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Result<Vec<Uuid>> {
@@ -266,7 +277,6 @@ pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
 pub fn delete(storage: &mut Collection, id: &Uuid) -> Result<bool> {
     if storage.index.contains_key(id) {
         let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
-        // Log the delete before removing any state.
         storage.persistence.wal.log(&mut wal_entry)?;
 
         delete_internal(storage, id);
@@ -308,22 +318,26 @@ pub fn delete_batch(storage: &mut Collection, ids: &[Uuid]) -> Result<usize> {
 
 pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) -> Result<bool> {
     if let Some(entry) = get(storage, id) {
-        let vector = entry.get_vector();
-
         let mut wal_entry = WalEntry::Update {
             id: *id,
-            vector,
+            vector: entry.get_vector(),
             text: entry.text.clone(),
             metadata: metadata.clone(),
             seq: 0,
         };
         // Persist the metadata update in the WAL first.
         storage.persistence.wal.log(&mut wal_entry)?;
-        
+
         let mut entry = entry;
-        entry.metadata = metadata;
-        delete(storage, id)?;
-        insert(storage, entry)?;
+        entry.metadata = metadata.clone();
+        let bytes = bincode::serialize(&entry)?;
+
+        enforce_limits_single(storage, bytes.len())?;
+        let index_entry = append_entry(storage, &bytes)?;
+        storage.index.insert(*id, index_entry);
+        storage.metadata_cache.insert(*id, metadata);
+        storage.metadata.update_vector_count(storage.index.len());
+        persist_after_update(storage, false)?;
         Ok(true)
     } else {
         Ok(false)
@@ -344,9 +358,23 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
 
         let mut entry = entry;
         entry.vector = QuantizedVector::from_f32_with_config(&vector, &storage.config.quantization);
-        delete(storage, id)?;
 
-        insert(storage, entry)?;
+        if let Some(expected_dim) = storage.metadata.dimensions {
+            crate::validation::validate_dimensions(&vector, expected_dim)?;
+        } else {
+            storage.metadata.set_dimensions(vector.len());
+        }
+
+        let bytes = bincode::serialize(&entry)?;
+        enforce_limits_single(storage, bytes.len())?;
+
+        let index_entry = append_entry(storage, &bytes)?;
+        storage.index.insert(*id, index_entry);
+        storage.vector_cache.insert(*id, vector.clone());
+        storage.vector_index.remove(id);
+        storage.vector_index.insert(*id, &vector, &storage.vector_cache);
+        storage.metadata.update_vector_count(storage.index.len());
+        persist_after_update(storage, true)?;
         Ok(true)
     } else {
         Ok(false)
