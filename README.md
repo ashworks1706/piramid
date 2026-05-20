@@ -164,7 +164,7 @@ Run the same checks used by CI:
 ./scripts/check.sh
 ```
 
-Enable the pre-push hook so pushes fail locally before broken formatting, clippy warnings, or tests reach GitHub:
+Enable the pre-push hook so pushes fail locally before broken Rust formatting, clippy warnings, tests, or website lint issues reach GitHub:
 
 ```bash
 git config core.hooksPath .githooks
