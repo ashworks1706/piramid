@@ -2,7 +2,7 @@
 
 This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation.
 
-Piramid's north star is a consumer-hardware inference database: start as a reliable single-binary RAG database, then prove whether database memory can become part of the model's forward pass. The risky idea is not "RAG" by itself — it is making mutable database memory usable by transformer inference without copying every retrieved chunk into the prompt. That direction has been tried before in systems like RETRO, REALM, RAG, FiD, Atlas, kNN-LM, and Memorizing Transformers, so every fusion step below needs a baseline and a kill criterion.
+Piramid's north star is a consumer-hardware inference database: start as a reliable single-binary RAG database, then prove whether database memory can become part of the model's forward pass. The risky idea is not "RAG" by itself, it is making mutable database memory usable by transformer inference without copying every retrieved chunk into the prompt. That direction has been tried before in systems like RETRO, REALM, RAG, FiD, Atlas, kNN-LM, and Memorizing Transformers, so every fusion step below needs a baseline and a kill criterion.
 
 ---
 
