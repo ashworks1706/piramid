@@ -2,20 +2,20 @@
 
 In the [previous section](/blogs/architecture/database) I established that a vector database doesn't search for exact matches; it searches for geometric proximity in embedding space. That raises the obvious follow-up question: where do those vectors come from, and what does it actually mean for two vectors to be "close"? That's what this section is about.
 
-I first truly understood how embeddings work when I took DAT 494 (Advanced Deep Learning) at ASU, where we covered tokenization, embedding layers, pretraining, and post-training from the ground up. But what really made it click was building things from scratch — I implemented [language models from fundamentals](https://github.com/ashworks1706/LLM-from-scratch) covering Llama, KiVi, PaLiGemma, DeepSeek, and Mixtral, and taught [4 workshops on language model and RLHF engineering](https://github.com/ashworks1706/RLHF-from-scratch) to 600+ attendees at [AIS](https://ais-asu.com/). Resources like [Umar Jamil](https://www.youtube.com/@umarjamilai), [Sebastian Raschka](https://sebastianraschka.com/), [3Blue1Brown](https://www.youtube.com/@3blue1brown), and [AI Engineering by O'Reilly](https://www.oreilly.com/library/view/ai-engineering/9781098166298/) were huge for building my intuition. I've collected [all my learning resources here](https://somwrks.notion.site/notes-) for anyone interested. The pretraining stage — tokenization and the embedding layer specifically — is where the geometry of these spaces truly clicked for me.
+I first truly understood how embeddings work when I took DAT 494 (Advanced Deep Learning) at ASU, where we covered tokenization, embedding layers, pretraining, and post-training from the ground up. But what really made it click was building things from scratch -- I implemented [language models from fundamentals](https://github.com/ashworks1706/LLM-from-scratch) covering Llama, KiVi, PaLiGemma, DeepSeek, and Mixtral, and taught [4 workshops on language model and RLHF engineering](https://github.com/ashworks1706/RLHF-from-scratch) to 600+ attendees at [AIS](https://ais-asu.com/). Resources like [Umar Jamil](https://www.youtube.com/@umarjamilai), [Sebastian Raschka](https://sebastianraschka.com/), [3Blue1Brown](https://www.youtube.com/@3blue1brown), and [AI Engineering by O'Reilly](https://www.oreilly.com/library/view/ai-engineering/9781098166298/) were huge for building my intuition. I've collected [all my learning resources here](https://somwrks.notion.site/notes-) for anyone interested. The pretraining stage -- tokenization and the embedding layer specifically -- is where the geometry of these spaces truly clicked for me.
 
 ![embeddings](https://xomnia.com/wp-content/uploads/2025/05/vector-database.png)
 
 
 ### From words to numbers: why representation matters
 
-Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) — and it's worth understanding why that broke, because it makes the whole point of embeddings obvious. A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
+Before neural embeddings, the standard way to represent text for information retrieval was bag-of-words or [TF-IDF](https://en.wikipedia.org/wiki/Tf%E2%80%93idf) -- and it's worth understanding why that broke, because it makes the whole point of embeddings obvious. A document becomes a sparse vector of length $|\mathcal{V}|$ (the vocabulary size, typically 50,000–200,000), where component $i$ is some weight for word $i$.
 
 TF-IDF weights are:
 
 $$\text{tf-idf}(t, d, D) = \underbrace{\frac{f_{t,d}}{\sum_{t'} f_{t',d}}}_{\text{term frequency}} \times \underbrace{\log\frac{|D|}{|\{d' \in D : t \in d'\}|}}_{\text{inverse document frequency}}$$
 
-This is fast and interpretable. The problem is that it's purely lexical — it has no notion of meaning. The words "car" and "automobile" are orthogonal vectors even though they mean the same thing. "Not good" and "bad" are distant even though they express the same sentiment. Any query about "machine learning" misses documents about "deep learning" or "neural networks" unless those exact words appear. Synonymy, polysemy, compositionality — TF-IDF breaks on all of them.
+This is fast and interpretable. The problem is that it's purely lexical -- it has no notion of meaning. The words "car" and "automobile" are orthogonal vectors even though they mean the same thing. "Not good" and "bad" are distant even though they express the same sentiment. Any query about "machine learning" misses documents about "deep learning" or "neural networks" unless those exact words appear. Synonymy, polysemy, compositionality -- TF-IDF breaks on all of them.
 
 Distributed representations (embeddings) solve this by learning a *dense* $d$-dimensional vector for each concept where the coordinates encode meaning, so similar meanings land near each other. The key insight is the **distributional hypothesis**: words that appear in similar contexts tend to have similar meanings. If you train a model to predict context from word (or word from context), the internal representations it must learn to do this successfully will encode semantic similarity as geometric proximity.
 
@@ -27,7 +27,7 @@ An embedding is a function $f: \mathcal{X} \to \mathbb{R}^d$ that maps some inpu
 
 #### [Word2Vec](https://arxiv.org/abs/1301.3781) and the skip-gram objective
 
-Word2Vec is the clearest example that makes this concrete — and it's worth working through even though modern models look nothing like it, because the intuition carries forward. The skip-gram variant trains a shallow neural network to predict context words $c$ from a center word $w$ within a window of size $k$. The training objective maximises:
+Word2Vec is the clearest example that makes this concrete -- and it's worth working through even though modern models look nothing like it, because the intuition carries forward. The skip-gram variant trains a shallow neural network to predict context words $c$ from a center word $w$ within a window of size $k$. The training objective maximises:
 
 $$\mathcal{L} = \sum_{t=1}^{T} \sum_{-k \le j \le k,\, j \ne 0} \log P(w_{t+j} \mid w_t)$$
 
@@ -43,16 +43,16 @@ $$\mathcal{L}_{\text{NS}} = \log \sigma(\mathbf{u}_c^\top \mathbf{v}_w) + \sum_{
 
 where $\sigma$ is the sigmoid function and $P_n$ is a noise distribution (typically unigram frequency raised to the 3/4 power). This replaces $O(|\mathcal{V}|)$ with $O(K)$ per update, with $K = 5$–$20$ in practice.
 
-The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic — $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ — falls out as an emergent property, not something explicitly built in. It reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space. That blew my mind when I first saw it.
+The gradients from this objective shape a 300-dimensional embedding space where words that appear in similar contexts end up near each other. The famous arithmetic -- $\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}$ -- falls out as an emergent property, not something explicitly built in. It reflects that the "royalty" direction and the "gender" direction are approximately linear in the learned space. That blew my mind when I first saw it.
 
-![Word2Vec vector arithmetic — king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://miro.medium.com/1*d0JWmF36SUey7aS8bvA-dw.jpeg)
-*The word2vec arithmetic demo — royalty minus gender plus gender-swap lands near queen. It's a side effect of the geometry, not something that was explicitly designed in.*
+![Word2Vec vector arithmetic -- king − man + woman ≈ queen emerges naturally from training on context co-occurrence, not from any explicit encoding of gender or royalty](https://miro.medium.com/1*d0JWmF36SUey7aS8bvA-dw.jpeg)
+*The word2vec arithmetic demo -- royalty minus gender plus gender-swap lands near queen. It's a side effect of the geometry, not something that was explicitly designed in.*
 
-Word2Vec is a useful mental model but the limits become obvious fast. Each word gets exactly one vector regardless of context — so "bank" (financial) and "bank" (river) share the same point in space, which is obviously wrong. And it operates at the word level with no mechanism for whole sentences.
+Word2Vec is a useful mental model but the limits become obvious fast. Each word gets exactly one vector regardless of context -- so "bank" (financial) and "bank" (river) share the same point in space, which is obviously wrong. And it operates at the word level with no mechanism for whole sentences.
 
 #### Transformers and contextual embeddings
 
-Modern embedding models are transformer-based and address both limitations. If you've read the title ["Attention is All You Need" (Vaswani et al. 2017)](https://arxiv.org/abs/1706.03762) without really digging into it — this is the part that matters. The transformer's central mechanism is **multi-head self-attention**, which lets every token's representation be influenced by every other token in the sequence. So "bank" in "river bank" ends up near "water" rather than "finance", because the context shifts the representation.
+Modern embedding models are transformer-based and address both limitations. If you've read the title ["Attention is All You Need" (Vaswani et al. 2017)](https://arxiv.org/abs/1706.03762) without really digging into it -- this is the part that matters. The transformer's central mechanism is **multi-head self-attention**, which lets every token's representation be influenced by every other token in the sequence. So "bank" in "river bank" ends up near "water" rather than "finance", because the context shifts the representation.
 
 For a single attention head with input matrix $X \in \mathbb{R}^{n \times d_\text{model}}$ (where $n$ is sequence length), the computation is:
 
@@ -68,8 +68,8 @@ With $H = 12$ heads and $d_\text{model} = 768$ (BERT-base), each head operates i
 
 The result is that each token's output representation is a weighted mixture of all tokens' value vectors, with weights determined by how "relevant" each token is to the current one. This is the fundamental fix for Word2Vec's one-vector-per-word problem: the same token gets a different representation every time depending on what surrounds it.
 
-![Transformer architecture — queries, keys and values flow through multi-head self-attention and feed-forward layers, with residual connections and layer norm at each step (Vaswani et al. 2017)](https://machinelearningmastery.com/wp-content/uploads/2021/08/attention_research_1.png)
-*The original transformer from "Attention is All You Need" — queries, keys, and values run through multi-head attention and feed-forward layers with residual connections around each. The encoder half is what most embedding models use.*
+![Transformer architecture -- queries, keys and values flow through multi-head self-attention and feed-forward layers, with residual connections and layer norm at each step (Vaswani et al. 2017)](https://machinelearningmastery.com/wp-content/uploads/2021/08/attention_research_1.png)
+*The original transformer from "Attention is All You Need" -- queries, keys, and values run through multi-head attention and feed-forward layers with residual connections around each. The encoder half is what most embedding models use.*
 
 > **Positional encoding:** transformers have no inherent notion of word order (unlike RNNs). Position is injected by adding a positional encoding $\mathbf{pe}_{pos}$ to each token embedding before the first attention layer. The original formulation uses sinusoidal functions: $\mathbf{pe}_{pos,2i} = \sin(pos / 10000^{2i/d})$, $\mathbf{pe}_{pos,2i+1} = \cos(pos / 10000^{2i/d})$. Modern models use [RoPE (Rotary Position Embedding)](https://arxiv.org/abs/2104.09864) which encodes relative rather than absolute positions and generalises better to sequences longer than those seen during training.
 
@@ -81,7 +81,7 @@ Mean pooling treats all tokens equally; the CLS token approach trains the model 
 
 #### Contrastive learning: teaching similarity
 
-Here's the part that isn't obvious at first: a pre-trained language model knows syntax and semantics, but that doesn't mean its internal similarity geometry lines up with what you want for retrieval. A GPT-style model trained on next-token prediction has representations useful for generation — not necessarily for finding similar documents. Contrastive fine-tuning is what reshapes that space specifically for similarity search, and it's why retrieval-specific models outperform general-purpose language models at this task.
+Here's the part that isn't obvious at first: a pre-trained language model knows syntax and semantics, but that doesn't mean its internal similarity geometry lines up with what you want for retrieval. A GPT-style model trained on next-token prediction has representations useful for generation -- not necessarily for finding similar documents. Contrastive fine-tuning is what reshapes that space specifically for similarity search, and it's why retrieval-specific models outperform general-purpose language models at this task.
 
 Contrastive training operates on pairs: a query $q$ and a positive $p^+$ (semantically related) and a set of negatives $\{n_j\}$ (unrelated). The standard loss is a variant of [InfoNCE (Noise Contrastive Estimation)](https://arxiv.org/abs/1807.03748):
 
@@ -99,7 +99,7 @@ The denominator sums over all non-matching samples in the batch; this is **in-ba
 
 #### The geometry of learned embedding space
 
-A few geometric properties of embedding spaces are worth internalizing — they're what actually determines how you should configure distance metrics and quantisation, and I spent longer than I'd like to admit debugging recall issues before these clicked for me.
+A few geometric properties of embedding spaces are worth internalizing -- they're what actually determines how you should configure distance metrics and quantisation, and I spent longer than I'd like to admit debugging recall issues before these clicked for me.
 
 **$\ell_2$ normalisation.** Most production embedding models output $\ell_2$-normalised vectors, each satisfying $\|\mathbf{z}\|_2 = 1$. On the unit hypersphere, cosine similarity and Euclidean distance are monotonically related:
 
@@ -117,12 +117,12 @@ where $\mathbf{z}_{[1:m_\ell]}$ is the first $m_\ell$ dimensions of the full emb
 
 > **Choosing dimensions with MRL:** a useful heuristic for selecting the truncation size $m$ is to plot Recall@10 vs $m$ on a sample of your actual query/document pairs and find the elbow point. For most English text retrieval tasks, the elbow is around 256–512 dimensions. Going below 128 usually degrades recall noticeably, while going from 1024 to 1536 often gives less than 1 point of improvement. Only you can decide what tradeoff is right given your latency budget and recall requirements.
 
-![Matryoshka Representation Learning — the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://sthalles.github.io/assets/matryoshka-representation-learning/representation-learning.png)
+![Matryoshka Representation Learning -- the first dimensions carry the most discriminative signal, so you can truncate the vector to any nested size and still get strong retrieval](https://sthalles.github.io/assets/matryoshka-representation-learning/representation-learning.png)
 *MRL nests the learning objectives: each prefix of the vector is trained to work as a standalone embedding, so you can truncate at any supported size and still get competitive recall.*
 
 ### Providers
 
-Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and Piramid handles the rest. I started with two provider types — OpenAI and local HTTP/TEI — because they're the most popular and the easiest to get running. I really want to add [Cohere](https://cohere.com/) and [Jina](https://jina.ai/) support too, but working alone on this entire project — code, SDKs, blogs, website — while juggling two research labs, a part-time job, two student orgs, and classes means I have to be ruthless about scope. More providers are coming. Both current providers implement the same `Embedder` trait:
+Embedding generation is treated as a runtime concern: you configure a provider and model at startup, and Piramid handles the rest. I started with two provider types -- OpenAI and local HTTP/TEI -- because they're the most popular and the easiest to get running. I really want to add [Cohere](https://cohere.com/) and [Jina](https://jina.ai/) support too, but working alone on this entire project -- code, SDKs, blogs, website -- while juggling two research labs, a part-time job, two student orgs, and classes means I have to be ruthless about scope. More providers are coming. Both current providers implement the same `Embedder` trait:
 
 ```rust
 #[async_trait]
@@ -207,7 +207,7 @@ Request
 ```
 
 ![Embedder Stack](../../assets/blogs/embedder_stack.png)
-This stack exists because things break in practice. I learned this the hard way — during a demo of [SparkyAI](https://github.com/ashworks1706/SparkyAI) in front of my professor, the embedding provider hit a cold start timeout and the whole system just froze. I had to fall back to a local model on the spot. After that I decided any embedding layer I build needs retry logic baked in, not bolted on.
+This stack exists because things break in practice. I learned this the hard way -- during a demo of [SparkyAI](https://github.com/ashworks1706/SparkyAI) in front of my professor, the embedding provider hit a cold start timeout and the whole system just froze. I had to fall back to a local model on the spot. After that I decided any embedding layer I build needs retry logic baked in, not bolted on.
 
 The ordering is deliberate. I put the cache *inside* the retry wrapper: if the underlying provider fails on the first attempt, the retry wrapper fires, but a subsequent cache hit will short-circuit before hitting the provider again. A cache miss falls through to the provider, and the result gets stored in the LRU on the way back up. Every layer is transparent to the caller; all three implement the same `Embedder` trait.
 
@@ -223,7 +223,7 @@ Not all errors are retried. The `is_retryable_error` function classifies errors 
 fn is_retryable_error(error: &EmbeddingError) -> bool {
     matches!(error,
         EmbeddingError::RateLimitExceeded | EmbeddingError::RequestFailed(_))
-    // AuthenticationFailed is NOT retried — retrying with a bad key is pointless
+    // AuthenticationFailed is NOT retried -- retrying with a bad key is pointless
 }
 ```
 
@@ -267,7 +267,7 @@ These are the numbers that motivate quantisation and dimensionality reduction.
 
 #### int8 scalar quantisation
 
-![int8 quantisation diagram — a float32 range mapped linearly to 256 integer buckets, with the uniform step size ε_q shown as the gap between original float value and its nearest quantised level](https://developer-blogs.nvidia.com/wp-content/uploads/2021/07/8-bit-signed-integer-quantization.png)
+![int8 quantisation diagram -- a float32 range mapped linearly to 256 integer buckets, with the uniform step size ε_q shown as the gap between original float value and its nearest quantised level](https://developer-blogs.nvidia.com/wp-content/uploads/2021/07/8-bit-signed-integer-quantization.png)
 
 Piramid supports int8 scalar quantisation, which compresses each float32 component to a signed int8 by linearly mapping the observed range:
 
@@ -281,7 +281,7 @@ For $\ell_2$-normalised embeddings, each component has range roughly $[-0.1, 0.1
 
 > **When to use quantisation:** int8 is appropriate when recall degradation is acceptable (< 1–2 pp Recall@10 drop for most datasets) and memory is the binding constraint. It is not appropriate when precision is critical: compliance retrieval, exact deduplication, or narrow similarity thresholding. For those workloads, keep full float32.
 
-I started with int8 rather than fp16 or bfloat16 because it was the simplest to implement and gives the most dramatic compression ratio for an MVP. The goal isn't to lock users into one quantization format — I want this to be fully configurable, with fp16 and bfloat16 as future options. But for getting something working that I could demo and benchmark, int8 with a 4× reduction was the obvious first step. I've focused on writing modular code so adding more quantization variants is a matter of implementing additional formats, not restructuring the whole storage layer.
+I started with int8 rather than fp16 or bfloat16 because it was the simplest to implement and gives the most dramatic compression ratio for an MVP. The goal isn't to lock users into one quantization format -- I want this to be fully configurable, with fp16 and bfloat16 as future options. But for getting something working that I could demo and benchmark, int8 with a 4× reduction was the obvious first step. I've focused on writing modular code so adding more quantization variants is a matter of implementing additional formats, not restructuring the whole storage layer.
 
 #### MRL truncation: a cleaner memory/quality tradeoff
 

@@ -1,7 +1,5 @@
 # Clients
 
-In this blog section, I will explain client side interfaces such as CLIs, APIs, and how they interact with the core components of Piramid. 
-
 ## What's covered
 
 <PostCards>

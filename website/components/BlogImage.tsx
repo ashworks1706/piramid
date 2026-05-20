@@ -150,7 +150,7 @@ export function BlogImage({ src, alt }: Props) {
             )}
           </div>
 
-          {/* Image wrapper — stop propagation so clicking the image doesn't close */}
+          {/* Image wrapper -- stop propagation so clicking the image doesn't close */}
           <div
             className="relative flex items-center justify-center"
             style={{

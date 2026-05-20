@@ -6,8 +6,7 @@ This document does not cover PowerShell.
 
 ## Prerequisites
 
-You will need Git, Rust, Node.js, and Python 3.10+.
-Install Docker if you want the containerized workflow.
+You will need Git, Rust, Node.js, Python 3.10+, and Docker if you plan to use containers.
 
 For Rust development, install the stable toolchain plus the standard formatting and linting components:
 
@@ -23,25 +22,78 @@ git clone https://github.com/ashworks1706/piramid
 cd piramid
 ```
 
-## Main Rust App
+## Rust App
 
-Use this when you want the server and CLI running from source:
+### From crates.io
+
+```bash
+cargo install piramid
+piramid init
+piramid serve --data-dir ./data
+```
+
+### From source
 
 ```bash
 cargo run -- init
 cargo run -- serve --data-dir ./data
 ```
 
-For the same checks used by CI:
+The server defaults to `http://0.0.0.0:6333`.
+Data is stored under `~/.piramid` by default; set `DATA_DIR` to override it.
+
+## Configuration
+
+Use `piramid.yaml` and environment variables when you need to tune the server.
 
 ```bash
-./scripts/check.sh
+piramid init --path piramid.yaml
+piramid serve --config piramid.yaml
 ```
 
-If you want local push protection, enable the hook once:
+Common overrides:
 
 ```bash
-git config core.hooksPath .githooks
+PORT=7000 DATA_DIR=~/piramid-data piramid serve
+CONFIG_FILE=~/piramid/piramid.yaml piramid serve
+EMBEDDING_PROVIDER=openai OPENAI_API_KEY=sk-...
+```
+
+Key environment variables:
+
+```bash
+PORT=6333
+DATA_DIR=/app/data
+CONFIG_FILE=./piramid.yaml
+
+EMBEDDING_PROVIDER=openai|local
+EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_API_KEY=sk-...
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_TIMEOUT_SECS=15
+
+DISK_MIN_FREE_BYTES=1073741824
+DISK_READONLY_ON_LOW_SPACE=true
+CACHE_MAX_BYTES=536870912
+```
+
+Minimal YAML sample:
+
+```yaml
+index:
+  type: Auto
+  metric: Cosine
+  mode: Auto
+search:
+  filter_overfetch: 10
+wal:
+  enabled: true
+  checkpoint_frequency: 1000
+memory:
+  use_mmap: true
+limits:
+  max_vectors: null
+  max_bytes: null
 ```
 
 ## Docker
@@ -76,7 +128,9 @@ npm run lint
 npm run build
 ```
 
-## Python SDK
+## SDKs
+
+### Python
 
 The Python package lives in `sdk/pip/` and uses `pyproject.toml`:
 
@@ -87,18 +141,24 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## JavaScript Package
+### JavaScript
 
 The npm package lives in `sdk/npm/`.
-If you are working on that package directly, use the same Node.js toolchain as the website and install dependencies in that folder.
+Use the same Node.js toolchain as the website and install dependencies in that folder.
 
-## Final Check
+## Development Checks
 
-Before pushing, run the repo checks that cover Rust and the website:
+Run the same checks used by CI:
 
 ```bash
 ./scripts/check.sh
 ./scripts/check-website.sh
 ```
 
-If the pre-push hook is enabled, it will run both automatically.
+If you want local push protection, enable the hook once:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+If the pre-push hook is enabled, it will run both checks automatically.

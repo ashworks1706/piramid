@@ -228,7 +228,7 @@ export function buildSearchIndex(): BlogSearchEntry[] {
     while (remaining.length > 0) {
       const match = headingRe.exec(remaining);
       if (!match) {
-        // No more headings — rest is content of whatever came before
+        // No more headings -- rest is content of whatever came before
         if (sections.length > 0) {
           sections[sections.length - 1].raw += remaining;
         }

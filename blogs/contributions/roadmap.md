@@ -14,7 +14,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **IVF Index (1.0.2)**
 
-- [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning — they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
+- [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning -- they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
 - [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
 ---
@@ -28,7 +28,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **Filter & Cache Acceleration (1.1.2)**
 
-- [ ] the collection map in AppState keeps every opened collection in memory forever with no eviction — a server that opens many collections will grow unbounded. `cache_max_bytes` config exists but nothing enforces it. needs an LRU eviction policy so idle collections can be closed and their memory (vector cache, metadata cache, mmap) released.
+- [ ] the collection map in AppState keeps every opened collection in memory forever with no eviction -- a server that opens many collections will grow unbounded. `cache_max_bytes` config exists but nothing enforces it. needs an LRU eviction policy so idle collections can be closed and their memory (vector cache, metadata cache, mmap) released.
 - [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
 - [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
 - [ ] collection preloading on startup: optionally pre-open a configured list of collections rather than waiting for the first request
@@ -66,13 +66,13 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **Quantization Refactor (1.1.0)**
 - [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
-- [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented — it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
-- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation — store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
+- [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
+- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation -- store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
 - [ ] add a quantization acceptance suite: each quantized index must report recall loss, latency gain, memory reduction, and rerank recovery against the raw-float baseline.
 
 **Index Improvements (1.1.1)**
 
-- [ ] IVF uses random centroid initialisation (first K vectors) — k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
+- [ ] IVF uses random centroid initialisation (first K vectors) -- k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
 
