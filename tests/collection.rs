@@ -1,4 +1,7 @@
-use piramid::{Collection, Document, Metric, search::SearchParams};
+use piramid::{
+    Collection, CollectionConfig, Document, MemoryConfig, Metric, search::SearchParams,
+    storage::collection::CollectionOpenOptions,
+};
 use std::fs;
 
 fn ensure_test_dir() {
@@ -125,6 +128,41 @@ fn batch_search_multi_queries() {
     let results = storage.search_batch(&queries, 2, Metric::Cosine);
     assert_eq!(results.len(), 3);
     assert!(results.iter().all(|hits| !hits.is_empty()));
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
+
+#[test]
+fn no_mmap_insert_grows_file_without_panicking() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_no_mmap_grow.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_no_mmap_grow.db.index.db",
+        ".piramid/tests/test_no_mmap_grow.db.wal.db",
+        ".piramid/tests/test_no_mmap_grow.db.wal.meta",
+        ".piramid/tests/test_no_mmap_grow.db.vecindex.db",
+        ".piramid/tests/test_no_mmap_grow.db.metadata.db",
+    ];
+    cleanup_test_files(&files);
+
+    let mut config = CollectionConfig::default();
+    config.memory = MemoryConfig::no_mmap();
+
+    let mut storage = Collection::open_with_options(
+        test_path,
+        CollectionOpenOptions { config },
+    )
+    .unwrap();
+    let vector = vec![0.25; 1_100_000];
+    let id = storage
+        .insert(Document::new(vector.clone(), "large no-mmap document".to_string()))
+        .unwrap();
+
+    let retrieved = storage.get(&id).unwrap();
+    assert_eq!(retrieved.text, "large no-mmap document");
+    assert_eq!(retrieved.get_vector().len(), vector.len());
 
     drop(storage);
     cleanup_test_files(&files);

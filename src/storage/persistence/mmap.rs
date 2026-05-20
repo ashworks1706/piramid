@@ -1,5 +1,5 @@
 // Memory-mapped file utilities
-// ensuring file size, creating memory maps, and growing memory maps as needed.used in the collection storage to manage memory-mapped file that stores the collection's data.
+// used in the collection storage to manage memory-mapped file that stores the collection's data.
 use memmap2::{MmapMut, MmapOptions};
 use std::fs::File;
 
@@ -43,12 +43,19 @@ pub fn grow_mmap_if_needed(
     file: &File,
     required_size: u64,
 ) -> Result<()> {
-
-    let current_size = mmap.as_ref().unwrap().len() as u64;
+    let current_size = mmap
+        .as_ref()
+        .map(|mmap| mmap.len() as u64)
+        .unwrap_or_else(|| file.metadata().map(|meta| meta.len()).unwrap_or(0));
     if required_size > current_size {
-        drop(mmap.take());
-        file.set_len(required_size * 2)?;
-        *mmap = Some(create_mmap(file)?);
+        let new_size = required_size.saturating_mul(2);
+        if mmap.is_some() {
+            drop(mmap.take());
+            file.set_len(new_size)?;
+            *mmap = Some(create_mmap(file)?);
+        } else {
+            file.set_len(new_size)?;
+        }
     } 
     // If the required size is within the current size, we can simply continue using the existing 
     // memory map without any changes.

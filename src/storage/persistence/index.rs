@@ -7,7 +7,6 @@ use uuid::Uuid;
 use crate::error::Result;
 
 //  maps UUID to location in mmap file
-// This is NOT the VectorIndex trait (which is for search algorithms)
 // This is just file storage metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntryPointer {

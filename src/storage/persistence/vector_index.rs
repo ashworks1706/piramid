@@ -1,4 +1,3 @@
-// Index persistence for all index types (HNSW, IVF, Flat)
 // Saves and loads index structures to disk
 
 use std::fs;
@@ -19,11 +18,6 @@ pub fn save_vector_index(collection_path: &str, index: &dyn VectorIndex) -> Resu
         crate::index::IndexType::Hnsw => {
             // Downcast to concrete type
             let hnsw_ptr = index as *const dyn VectorIndex as *const HnswIndex;
-            // this means we are assuming the caller is passing the correct type of index based on
-            // index_type() - this is a bit unsafe but allows us to avoid adding a method to get a
-            // serializable version of the index without modifying the trait    
-            // In practice, we should ensure that the caller is responsible for passing the correct
-            // type of index based on index_type() to avoid undefined behavior
             let hnsw_ref = unsafe { &*hnsw_ptr };
             SerializableIndex::Hnsw(hnsw_ref.clone())
         }
@@ -65,7 +59,9 @@ pub fn warm_file(path: &str) -> Result<()> {
 }
 // Load index from disk
 pub fn load_vector_index(collection_path: &str) -> Result<Option<Box<dyn VectorIndex>>> {
-    // To load an index from disk, we first construct the expected file path for the index based on the collection path. We check if the file exists, and if it does, we read the bytes from the file and deserialize them into a SerializableIndex enum. Finally, we convert the SerializableIndex into a Box<dyn VectorIndex> trait object and return it wrapped in Some. If the file does not exist, we return Ok(None) to indicate that there is no existing index to load.
+    // construct the expected file path for the index based on the collection path. 
+    // If the file exists, we read the bytes from the file and deserialize them into a SerializableIndex enum. convert the SerializableIndex into a Box<dyn VectorIndex> trait object and return it wrapped in Some. 
+    // If the file does not exist, we return Ok(None) to indicate that there is no existing index to load.
     let index_path = get_index_file_path(collection_path);
     
     if !Path::new(&index_path).exists() {
