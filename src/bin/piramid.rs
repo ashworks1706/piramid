@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use piramid::config::{self, AppConfig};
-use piramid::config::loader::default_data_dir;
 use piramid::cli::animation;
 use piramid::server::state::AppState;
 use piramid::{config::loader::RuntimeConfig, embeddings, server};
@@ -34,9 +33,6 @@ enum Commands {
         /// Override data dir (sets DATA_DIR)
         #[arg(long)]
         data_dir: Option<PathBuf>,
-        /// Skip the short animation
-        #[arg(long)]
-        no_anim: bool,
     },
 
     /// Generate a config file with defaults (YAML)
@@ -47,9 +43,6 @@ enum Commands {
         /// Output format (yaml or json)
         #[arg(long, value_enum, default_value_t = OutputFormat::Yaml)]
         format: OutputFormat,
-        /// Skip the short animation
-        #[arg(long)]
-        no_anim: bool,
     },
 
     ShowConfig {
@@ -68,7 +61,7 @@ enum OutputFormat {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Some(Commands::Init { path, format, no_anim: _ }) => {
+        Some(Commands::Init { path, format }) => {
             if let Err(e) = write_config_file(&path, format) {
                 eprintln!("Failed to write config: {e}");
                 std::process::exit(1);
@@ -86,8 +79,7 @@ fn main() {
         Some(Commands::Serve {
             config,
             port,
-            data_dir,
-            no_anim: _,
+            data_dir
         }) => {
             if let Some(path) = config {
                 std::env::set_var("CONFIG_FILE", path);
@@ -102,8 +94,17 @@ fn main() {
                 eprintln!("Failed to start piramid-server: {e}");
                 std::process::exit(1);
             }
+            animate();
+
         }
-        None => run_interactive(),
+        None => {
+            let mut command = Cli::command();
+            if let Err(e) = command.print_help() {
+                eprintln!("Failed to print help: {e}");
+                std::process::exit(1);
+            }
+            println!();
+        }
     }
 }
 
@@ -188,7 +189,7 @@ fn start_server_inline() -> std::io::Result<()> {
     })
 }
 
-fn animate(label: &str) {
+fn animate() {
     print!("\x1b[2J\x1b[H\x1b[?25l");
     let _ = std::io::stdout().flush();
 
@@ -201,114 +202,6 @@ fn animate(label: &str) {
         }
     }
 
-    print!("\x1b[2J\x1b[H{label} ✓\n\x1b[?25h");
+    print!("\x1b[2J\x1b[H\n\x1b[?25h");
     let _ = std::io::stdout().flush();
-}
-
-fn run_interactive() {
-    animate("Piramid");
-    println!("piramid (interactive)");
-    println!("Select an option:");
-    println!("  1) Start server");
-    println!("  2) Init config");
-    println!("  3) Show config");
-    println!("  q) Quit");
-
-    loop {
-        print!("\nChoice: ");
-        let _ = std::io::stdout().flush();
-        let choice = read_line();
-        match choice.as_str() {
-            "1" => {
-                interactive_serve();
-                break;
-            }
-            "2" => {
-                interactive_init();
-            }
-            "3" => {
-                interactive_show_config();
-            }
-            "q" | "Q" => {
-                println!("Goodbye.");
-                break;
-            }
-            _ => {
-                println!("Invalid choice, try again.");
-            }
-        }
-    }
-}
-
-fn interactive_serve() {
-    let default_dir = default_data_dir();
-    let data_dir = prompt_with_default("Data dir", &default_dir);
-    if !data_dir.is_empty() {
-        std::env::set_var("DATA_DIR", data_dir);
-    }
-    let config_path = prompt_with_default("Config file (leave blank for none)", "");
-    if !config_path.is_empty() {
-        std::env::set_var("CONFIG_FILE", config_path);
-    }
-    let port = prompt_with_default("Port (leave blank for default)", "");
-    if !port.is_empty() {
-        if let Ok(p) = port.parse::<u16>() {
-            std::env::set_var("PORT", p.to_string());
-        }
-    }
-    animate("Starting piramid-server");
-    if let Err(e) = start_server_inline() {
-        eprintln!("Failed to start piramid-server: {e}");
-    }
-}
-
-fn interactive_init() {
-    let default_path = "piramid.yaml".to_string();
-    let path = prompt_with_default("Config path", &default_path);
-    let format = prompt_with_default("Format (yaml/json)", "yaml");
-    let fmt = if format.eq_ignore_ascii_case("json") {
-        OutputFormat::Json
-    } else {
-        OutputFormat::Yaml
-    };
-    animate("Generating config");
-    if let Err(e) = write_config_file(Path::new(&path), fmt) {
-        eprintln!("Failed to write config: {e}");
-    } else {
-        println!("Wrote config to {path}");
-    }
-}
-
-fn interactive_show_config() {
-    let path = prompt_with_default("Config file (optional)", "");
-    if !path.is_empty() {
-        std::env::set_var("CONFIG_FILE", path);
-    }
-    let cfg = config::loader::load_app_config();
-    let yaml = serde_yaml::to_string(&cfg).unwrap_or_else(|_| format!("{cfg:?}"));
-    println!("{yaml}");
-}
-
-fn prompt_with_default(prompt: &str, default_val: &str) -> String {
-    if default_val.is_empty() {
-        print!("{prompt}: ");
-    } else {
-        print!("{prompt} [{default_val}]: ");
-    }
-    let _ = std::io::stdout().flush();
-    let input = read_line();
-    if input.is_empty() {
-        default_val.to_string()
-    } else {
-        input
-    }
-}
-
-fn read_line() -> String {
-    let mut buf = String::new();
-    if std::io::stdin().read_line(&mut buf).is_ok() {
-        buf.trim().to_string()
-    } else {
-        String::new()
-    }
 }
