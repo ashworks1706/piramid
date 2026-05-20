@@ -16,24 +16,6 @@
         "architecture/query"
       ]
     },
-    {
-      "label": "Operations",
-      "items": [
-        "operations",
-        "operations/maintenance",
-        "operations/logging",
-        "operations/health"
-      ]
-    },
-    {
-      "label": "Clients",
-      "items": [
-        "clients",
-        "clients/sdk",
-        "clients/cli",
-        "clients/env"
-      ]
-    },
-    { "label": "Contributions", "items": ["contributions", "contributions/roadmap"] }
+   { "label": "Contributions", "items": ["contributions", "contributions/roadmap"] }
   ]
 }
