@@ -14,17 +14,8 @@ pub trait VectorIndex: Send + Sync {
     // * vectors - All vectors in the collection (for distance calculations)
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>);
     
-    // Search for k nearest neighbors with default quality settings
     
-    // # Arguments
-    // * `query` - Query vector
-    // * `k` - Number of neighbors to return
-    // * `vectors` - All vectors in the collection
-    // 
-    // # Returns
-    // Vector of IDs sorted by similarity (most similar first)
     // Search for k nearest neighbors with custom quality settings
-
     // # Arguments
     // * query- Query vector
     // * k - Number of neighbors to return
@@ -51,6 +42,10 @@ pub trait VectorIndex: Send + Sync {
     
     // Get the index type name
     fn index_type(&self) -> IndexType;
+
+    // Convert the index into a serializable form for persistence
+    fn to_serializable(&self) -> SerializableIndex;
+    
 }
 
 // Statistics about an index

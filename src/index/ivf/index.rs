@@ -1,4 +1,3 @@
-// IVF (Inverted File Index) implementation
 // Clusters vectors using k-means, then searches only relevant clusters
 // O(√N) search complexity - much faster than brute force for large datasets
 
@@ -20,19 +19,10 @@ pub struct IvfIndex {
 }
 
 impl IvfIndex {
-    // IVF is different from HNSW
-    // It workes by clustering vectors into groups and only searching relevant clusters for a query 
-    // This is much faster than brute force for large datasets, but less accurate than HNSW 
-    // why? Because it relies on the quality of the clusters - if a query is near a cluster
-    // boundary, it may miss relevant vectors in neighboring clusters.
     // IVF is a good choice for very large datasets where search speed is critical and some loss of
     // accuracy is acceptable.
     
 
-    // In contrast, HNSW builds a hierarchical graph structure that allows for more accurate search
-    // at the cost of increased memory usage and slower insertion times.
-    // IVF is often used in combination with other techniques (like PQ) to further reduce memory
-    // usage while maintaining good search performance.
     
 
     pub fn new(config: IvfConfig) -> Self {
@@ -263,5 +253,9 @@ impl VectorIndex for IvfIndex {
     
     fn index_type(&self) -> IndexType {
         IndexType::Ivf
+    }
+
+    fn to_serializable(&self) -> crate::index::SerializableIndex {
+        crate::index::SerializableIndex::Ivf(self.clone())
     }
 }

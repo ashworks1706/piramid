@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::io::{Read, BufReader};
 use crate::error::Result;
-use crate::index::{SerializableIndex, VectorIndex, HnswIndex, IvfIndex, FlatIndex};
+use crate::index::{SerializableIndex, VectorIndex};
 
 // Get the index file path for a collection
 pub fn get_index_file_path(collection_path: &str) -> String {
@@ -13,25 +13,7 @@ pub fn get_index_file_path(collection_path: &str) -> String {
 
 // Save any index to disk
 pub fn save_vector_index(collection_path: &str, index: &dyn VectorIndex) -> Result<()> {
-    // Create the appropriate SerializableIndex variant
-    let serializable = match index.index_type() {
-        crate::index::IndexType::Hnsw => {
-            // Downcast to concrete type
-            let hnsw_ptr = index as *const dyn VectorIndex as *const HnswIndex;
-            let hnsw_ref = unsafe { &*hnsw_ptr };
-            SerializableIndex::Hnsw(hnsw_ref.clone())
-        }
-        crate::index::IndexType::Ivf => {
-            let ivf_ptr = index as *const dyn VectorIndex as *const IvfIndex;
-            let ivf_ref = unsafe { &*ivf_ptr };
-            SerializableIndex::Ivf(ivf_ref.clone())
-        }
-        crate::index::IndexType::Flat => {
-            let flat_ptr = index as *const dyn VectorIndex as *const FlatIndex;
-            let flat_ref = unsafe { &*flat_ptr };
-            SerializableIndex::Flat(flat_ref.clone())
-        }
-    };
+    let serializable = index.to_serializable();
     
     let bytes = bincode::serialize(&serializable)?;
     let index_path = get_index_file_path(collection_path);

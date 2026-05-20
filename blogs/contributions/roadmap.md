@@ -10,8 +10,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **Storage (1.0.1)**
 
-- [ ] updating a vector or its metadata writes three separate WAL log entries per operation (update + delete + insert) instead of one. this inflates the WAL unnecessarily and makes recovery replay more expensive than it needs to be.
-- [ ] index serialization uses unsafe pointer casts to convert the index trait object to a concrete type — if the wrong type is ever1 stored this is undefined behaviour. should use a safe serialization method on the index trait instead.
 - [ ] the index pointer file (`.index.db`) is fully rewritten on every single insert, update, or delete, while the ANN graph file (`.vecindex.db`) is only written at checkpoints. this inconsistency means the two files can describe different states between checkpoints — if the WAL is disabled or corrupted during that window, the ANN graph silently misses entries with no error. both files should flush together at checkpoint time only, with the WAL as the only per-mutation write.
 - [ ] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
 

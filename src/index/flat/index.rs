@@ -80,4 +80,8 @@ impl VectorIndex for FlatIndex {
     fn index_type(&self) -> IndexType {
         IndexType::Flat
     }
+
+    fn to_serializable(&self) -> crate::index::SerializableIndex {
+        crate::index::SerializableIndex::Flat(self.clone())
+    }
 }

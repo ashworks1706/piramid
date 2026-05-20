@@ -1,14 +1,14 @@
 mod config;
-mod graph;
+mod index;
 
 pub use config::{HnswConfig, HnswStats};
-pub use graph::HnswIndex;
+pub use index::HnswIndex;
 
 use uuid::Uuid;
 use std::collections::HashMap;
 use crate::index::traits::{VectorIndex, IndexStats, IndexDetails, IndexType};
 
-// Implement the VectorIndex trait for HnswIndex. 
+// we need a wrapper because HNSW has some specific parameters that affect search quality (ef_search) and we want to allow overriding them at search time without changing the index config
 impl VectorIndex for HnswIndex {
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>) {
         self.insert(id, vector, vectors);
@@ -51,5 +51,9 @@ impl VectorIndex for HnswIndex {
     
     fn index_type(&self) -> IndexType {
         IndexType::Hnsw
+    }
+
+    fn to_serializable(&self) -> crate::index::SerializableIndex {
+        crate::index::SerializableIndex::Hnsw(self.clone())
     }
 }
