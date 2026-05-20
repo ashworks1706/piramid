@@ -1,7 +1,5 @@
-# -----------------------------------------------------------------------------
 # Build Rust server
-# -----------------------------------------------------------------------------
-FROM rust:1.83-slim AS rust-builder
+FROM rust:1.85-slim AS rust-builder
 
 WORKDIR /app
 
@@ -17,9 +15,7 @@ COPY benches ./benches
 
 RUN cargo build --release --bin piramid
 
-# -----------------------------------------------------------------------------
 # Runtime
-# -----------------------------------------------------------------------------
 FROM debian:bookworm-slim
 
 WORKDIR /app
