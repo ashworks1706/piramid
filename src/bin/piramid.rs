@@ -12,9 +12,8 @@ use piramid::server::state::AppState;
 use piramid::{config::loader::RuntimeConfig, embeddings, server};
 use tokio::runtime::Runtime;
 
-/// Unified CLI for Piramid (server + setup helpers).
 #[derive(Parser)]
-#[command(author, version, about = "Piramid CLI")]
+#[command(author, version)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
