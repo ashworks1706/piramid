@@ -205,3 +205,32 @@ fn updates_write_one_wal_entry_each() {
     drop(storage);
     cleanup_test_files(&files);
 }
+
+#[test]
+fn sidecar_files_persist_at_checkpoint_only() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_checkpoint_only.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_checkpoint_only.db.index.db",
+        ".piramid/tests/test_checkpoint_only.db.wal.db",
+        ".piramid/tests/test_checkpoint_only.db.vecindex.db",
+        ".piramid/tests/test_checkpoint_only.db.metadata.db",
+        ".piramid/tests/test_checkpoint_only.db.wal.meta",
+    ];
+    cleanup_test_files(&files);
+
+    let mut storage = Collection::open(test_path).unwrap();
+    storage.insert(Document::new(vec![1.0, 2.0, 3.0], "checkpoint only".into())).unwrap();
+
+    assert!(fs::metadata(format!("{}.index.db", test_path)).is_err());
+    assert!(fs::metadata(format!("{}.vecindex.db", test_path)).is_err());
+
+    storage.checkpoint().unwrap();
+
+    assert!(fs::metadata(format!("{}.index.db", test_path)).is_ok());
+    assert!(fs::metadata(format!("{}.vecindex.db", test_path)).is_ok());
+
+    drop(storage);
+    cleanup_test_files(&files);
+}

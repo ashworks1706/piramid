@@ -80,6 +80,7 @@ fn main() {
             port,
             data_dir
         }) => {
+            animate();
             if let Some(path) = config {
                 std::env::set_var("CONFIG_FILE", path);
             }
@@ -93,7 +94,7 @@ fn main() {
                 eprintln!("Failed to start piramid-server: {e}");
                 std::process::exit(1);
             }
-            animate();
+            
 
         }
         None => {
@@ -195,7 +196,7 @@ fn animate() {
     for (i, frame) in animation::CLI_FRAMES.iter().enumerate() {
         print!("\x1b[H{frame}");
         let _ = std::io::stdout().flush();
-        thread::sleep(Duration::from_millis(60));
+        thread::sleep(Duration::from_millis(45));
         if i > 12 {
             break;
         }

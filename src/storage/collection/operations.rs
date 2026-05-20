@@ -37,15 +37,6 @@ fn append_entry(storage: &mut Collection, bytes: &[u8]) -> Result<EntryPointer> 
     Ok(EntryPointer::new(offset, bytes.len() as u32))
 }
 
-fn persist_after_update(storage: &mut Collection, save_vector_index: bool) -> Result<()> {
-    super::persistence::save_index(storage)?;
-    if save_vector_index {
-        super::persistence::save_vector_index(storage)?;
-    }
-    storage.track_operation()?;
-    Ok(())
-}
-
 fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()> {
     let limits = storage.config.limits;
 
@@ -168,8 +159,8 @@ pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     storage.persistence.wal.log(&mut wal_entry)?;
 
     let id = insert_internal(storage, entry)?;
-    super::persistence::save_index(storage)?;
-    storage.track_operation()?;
+    storage.track_operation()?
+    ;
     Ok(id)
 }
 
@@ -225,7 +216,6 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
         offset += bytes.len() as u64;
     }
 
-    super::persistence::save_index(storage)?;
     storage.track_operation()?;
 
     for (id, vec_f32) in raw_vectors {
@@ -264,8 +254,6 @@ pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
         // Rehydrate the document from the serialized bytes for the insert path.
         let doc = bincode::deserialize(&bytes)?;
         insert_internal(storage, doc)?;
-        super::persistence::save_index(storage)?;
-        super::persistence::save_vector_index(storage)?;
         storage.track_operation()?;
         Ok(id)
     } else {
@@ -280,8 +268,6 @@ pub fn delete(storage: &mut Collection, id: &Uuid) -> Result<bool> {
         storage.persistence.wal.log(&mut wal_entry)?;
 
         delete_internal(storage, id);
-        super::persistence::save_index(storage)?;
-        super::persistence::save_vector_index(storage)?;
         storage.track_operation()?;
         Ok(true)
     } else {
@@ -308,8 +294,6 @@ pub fn delete_batch(storage: &mut Collection, ids: &[Uuid]) -> Result<usize> {
     }
     
     if deleted_count > 0 {
-        super::persistence::save_index(storage)?;
-        super::persistence::save_vector_index(storage)?;
         storage.track_operation()?;
     }
     
@@ -337,7 +321,7 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
         storage.index.insert(*id, index_entry);
         storage.metadata_cache.insert(*id, metadata);
         storage.metadata.update_vector_count(storage.index.len());
-        persist_after_update(storage, false)?;
+        storage.track_operation()?;
         Ok(true)
     } else {
         Ok(false)
@@ -374,7 +358,7 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
         storage.vector_index.remove(id);
         storage.vector_index.insert(*id, &vector, &storage.vector_cache);
         storage.metadata.update_vector_count(storage.index.len());
-        persist_after_update(storage, true)?;
+        storage.track_operation()?;
         Ok(true)
     } else {
         Ok(false)
