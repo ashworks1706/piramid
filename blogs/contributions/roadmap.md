@@ -82,6 +82,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] implement GraphRAG as native option
 - [ ] add RAPTOR
 - [ ] add latent rag
+- [ ] add RAFT
 - [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
 
 **Distributed Systems**
