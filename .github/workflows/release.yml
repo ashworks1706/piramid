@@ -36,28 +36,28 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: piramid-server
-            asset_name: piramid-server-linux-amd64
+            artifact_name: piramid
+            asset_name: piramid-linux-amd64
           
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: piramid-server
-            asset_name: piramid-server-linux-arm64
+            artifact_name: piramid
+            asset_name: piramid-linux-arm64
           
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: piramid-server
-            asset_name: piramid-server-macos-amd64
+            artifact_name: piramid
+            asset_name: piramid-macos-amd64
           
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: piramid-server
-            asset_name: piramid-server-macos-arm64
+            artifact_name: piramid
+            asset_name: piramid-macos-arm64
           
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: piramid-server.exe
-            asset_name: piramid-server-windows-amd64.exe
+            artifact_name: piramid.exe
+            asset_name: piramid-windows-amd64.exe
 
     steps:
     - name: Checkout code

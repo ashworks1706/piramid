@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y \
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY benches ./benches
 
-RUN cargo build --release --bin piramid-server
+RUN cargo build --release --bin piramid
 
 # -----------------------------------------------------------------------------
 # Runtime
@@ -30,7 +31,7 @@ RUN apt-get update && apt-get install -y \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=rust-builder /app/target/release/piramid-server ./piramid-server
+COPY --from=rust-builder /app/target/release/piramid ./piramid
 
 RUN mkdir -p /app/data
 
@@ -43,5 +44,4 @@ EXPOSE 6333
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:6333/api/health || exit 1
 
-CMD ["./piramid-server"]
-
+CMD ["./piramid", "serve"]
