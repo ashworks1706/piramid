@@ -1,15 +1,18 @@
-use axum::{extract::{Path, State, Extension}, Json};
+use super::super::{
+    helpers::{json_to_metadata, metadata_to_json},
+    state::SharedState,
+    types::*,
+};
+use crate::error::{Result, ServerError};
+use crate::server::metrics::{record_lock_read, record_lock_write};
+use crate::{Document, Metric};
+use axum::{
+    extract::{Extension, Path, State},
+    Json,
+};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
-use crate::{Metric, Document};
-use crate::error::{Result, ServerError};
-use crate::server::metrics::{record_lock_read, record_lock_write};
-use super::super::{
-    state::SharedState,
-    types::*,
-    helpers::{json_to_metadata, metadata_to_json},
-};
 use tracing::info;
 
 // Embedding endpoints: embed text then reuse storage/search flows
@@ -36,8 +39,12 @@ pub async fn embed_text(
 
     state.get_or_create_collection(&collection)?;
 
-    let embedder = state.embedder.as_ref()
-        .ok_or(ServerError::ServiceUnavailable(super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string()))?;
+    let embedder = state
+        .embedder
+        .as_ref()
+        .ok_or(ServerError::ServiceUnavailable(
+            super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string(),
+        ))?;
 
     let response = match (req.text.clone(), req.texts.clone()) {
         (Some(text), None) => {
@@ -46,22 +53,24 @@ pub async fn embed_text(
             let response = embedder.embed(&text).await?;
             let embed_duration = start.elapsed();
 
-            let storage_ref = state.collections.get(&collection)
-                .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+            let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+                ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+            })?;
             let lock_start = Instant::now();
             let mut storage = storage_ref.write();
-            record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
+            record_lock_write(
+                state.latency_tracker.get(&collection).as_deref(),
+                lock_start,
+            );
 
             let metadata = json_to_metadata(req.metadata);
-            let entry = Document::with_metadata(
-                response.embedding.clone(),
-                text,
-                metadata,
-            );
+            let entry = Document::with_metadata(response.embedding.clone(), text, metadata);
 
             let id = storage.insert(entry)?;
             state.enforce_cache_budget();
-            state.embed_metrics.record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
+            state
+                .embed_metrics
+                .record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
 
             EmbedResultsResponse::Single(EmbedResponse {
                 id: id.to_string(),
@@ -71,7 +80,9 @@ pub async fn embed_text(
         }
         (None, Some(texts)) => {
             if texts.is_empty() {
-                return Err(ServerError::InvalidRequest("texts cannot be empty".to_string()).into());
+                return Err(
+                    ServerError::InvalidRequest("texts cannot be empty".to_string()).into(),
+                );
             }
             info!(collection=%collection, batch=texts.len(), "embed_batch_request");
 
@@ -94,25 +105,42 @@ pub async fn embed_text(
                 entries.push(Document::with_metadata(resp.embedding, t.clone(), md));
             }
 
-            let storage_ref = state.collections.get(&collection)
-                .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+            let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+                ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+            })?;
             let lock_start = Instant::now();
             let mut storage = storage_ref.write();
-            record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
+            record_lock_write(
+                state.latency_tracker.get(&collection).as_deref(),
+                lock_start,
+            );
 
             let insert_ids = storage.insert_batch(entries)?;
             ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
             state.enforce_cache_budget();
-            state.embed_metrics.record(1, ids.len() as u64, total_tokens as u64, start.elapsed());
+            state
+                .embed_metrics
+                .record(1, ids.len() as u64, total_tokens as u64, start.elapsed());
 
             EmbedResultsResponse::Multi(MultiEmbedResponse {
                 ids,
                 embeddings,
-                total_tokens: if total_tokens > 0 { Some(total_tokens) } else { None },
+                total_tokens: if total_tokens > 0 {
+                    Some(total_tokens)
+                } else {
+                    None
+                },
             })
         }
-        (Some(_), Some(_)) => return Err(ServerError::InvalidRequest("Provide either text or texts, not both".to_string()).into()),
-        (None, None) => return Err(ServerError::InvalidRequest("No text provided".to_string()).into()),
+        (Some(_), Some(_)) => {
+            return Err(ServerError::InvalidRequest(
+                "Provide either text or texts, not both".to_string(),
+            )
+            .into())
+        }
+        (None, None) => {
+            return Err(ServerError::InvalidRequest("No text provided".to_string()).into())
+        }
     };
 
     Ok(Json(response))
@@ -131,18 +159,26 @@ pub async fn search_by_text(
 
     state.get_or_create_collection(&collection)?;
 
-    let embedder = state.embedder.as_ref()
-        .ok_or(ServerError::ServiceUnavailable(super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string()))?;
+    let embedder = state
+        .embedder
+        .as_ref()
+        .ok_or(ServerError::ServiceUnavailable(
+            super::super::helpers::EMBEDDING_NOT_CONFIGURED.to_string(),
+        ))?;
 
     info!(collection=%collection, "search_by_text_request");
     let start = Instant::now();
     let response = embedder.embed(&req.query).await?;
     let embed_duration = start.elapsed();
-    state.embed_metrics.record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
+    state
+        .embed_metrics
+        .record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
 
     let metric = parse_metric(req.metric);
     let effective_search = crate::server::handlers::vectors::apply_search_overrides(
-        state.collections.get(&collection)
+        state
+            .collections
+            .get(&collection)
             .map(|c| c.read().config().search)
             .unwrap_or_default(),
         req.ef,
@@ -151,11 +187,15 @@ pub async fn search_by_text(
         req.preset.clone(),
     );
 
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
 
     let start = Instant::now();
     let results: Vec<HitResponse> = storage
@@ -187,13 +227,13 @@ pub async fn search_by_text(
             "slow_text_search"
         );
     }
-    
+
     // Record latency
     if let Some(tracker) = state.latency_tracker.get(&collection) {
         tracker.record_search(duration);
     }
 
-    Ok(Json(SearchResponse { 
+    Ok(Json(SearchResponse {
         results,
         latency_ms: Some(duration.as_millis() as f32),
     }))

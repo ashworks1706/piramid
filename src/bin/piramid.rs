@@ -1,4 +1,3 @@
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -6,8 +5,8 @@ use std::thread;
 use std::time::Duration;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
-use piramid::config::{self, AppConfig};
 use piramid::cli::animation;
+use piramid::config::{self, AppConfig};
 use piramid::server::state::AppState;
 use piramid::{config::loader::RuntimeConfig, embeddings, server};
 use tokio::runtime::Runtime;
@@ -78,7 +77,7 @@ fn main() {
         Some(Commands::Serve {
             config,
             port,
-            data_dir
+            data_dir,
         }) => {
             animate();
             if let Some(path) = config {
@@ -94,8 +93,6 @@ fn main() {
                 eprintln!("Failed to start piramid-server: {e}");
                 std::process::exit(1);
             }
-            
-
         }
         None => {
             let mut command = Cli::command();
@@ -123,7 +120,7 @@ fn write_config_file(path: &Path, fmt: OutputFormat) -> std::io::Result<()> {
 }
 
 fn start_server_inline() -> std::io::Result<()> {
-    let rt = Runtime::new().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let rt = Runtime::new().map_err(std::io::Error::other)?;
     rt.block_on(async {
         let RuntimeConfig {
             app: app_config,
@@ -147,7 +144,8 @@ fn start_server_inline() -> std::io::Result<()> {
                 }
                 match embeddings::providers::create_embedder(&config) {
                     Ok(embedder) => {
-                        let retry_embedder = std::sync::Arc::new(embeddings::RetryEmbedder::new(embedder));
+                        let retry_embedder =
+                            std::sync::Arc::new(embeddings::RetryEmbedder::new(embedder));
                         std::sync::Arc::new(AppState::with_embedder(
                             &data_dir,
                             app_config.clone(),
@@ -180,12 +178,12 @@ fn start_server_inline() -> std::io::Result<()> {
 
         let app = server::create_router(state);
         let addr = format!("0.0.0.0:{}", port);
-        let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::Other, format!("bind failed: {e}"))
-        })?;
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .map_err(|e| std::io::Error::other(format!("bind failed: {e}")))?;
         axum::serve(listener, app)
             .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+            .map_err(std::io::Error::other)
     })
 }
 

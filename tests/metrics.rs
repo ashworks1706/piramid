@@ -47,7 +47,12 @@ fn dot_rejects_mismatched_lengths() {
 fn metric_calculate_cosine_and_euclidean() {
     let v1 = vec![1.0, 0.0];
     let v2 = vec![0.0, 1.0];
-    assert!(Metric::Cosine.calculate(&v1, &v2, ExecutionMode::Auto).abs() < 1e-6);
+    assert!(
+        Metric::Cosine
+            .calculate(&v1, &v2, ExecutionMode::Auto)
+            .abs()
+            < 1e-6
+    );
 
     let euclid_sim = Metric::Euclidean.calculate(&v1, &v1, ExecutionMode::Auto);
     assert!((euclid_sim - 1.0).abs() < 1e-6);

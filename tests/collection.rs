@@ -1,6 +1,6 @@
 use piramid::{
-    Collection, CollectionConfig, Document, MemoryConfig, Metric, metadata, search::SearchParams,
-    storage::collection::CollectionOpenOptions,
+    metadata, search::SearchParams, storage::collection::CollectionOpenOptions, Collection,
+    CollectionConfig, Document, MemoryConfig, Metric,
 };
 use std::fs;
 
@@ -57,8 +57,12 @@ fn persistence_roundtrip() {
     let id2;
     {
         let mut storage = Collection::open(test_path).unwrap();
-        id1 = storage.insert(Document::new(vec![1.0, 2.0], "first".into())).unwrap();
-        id2 = storage.insert(Document::new(vec![3.0, 4.0], "second".into())).unwrap();
+        id1 = storage
+            .insert(Document::new(vec![1.0, 2.0], "first".into()))
+            .unwrap();
+        id2 = storage
+            .insert(Document::new(vec![3.0, 4.0], "second".into()))
+            .unwrap();
     }
 
     {
@@ -85,14 +89,16 @@ fn search_returns_results() {
     cleanup_test_files(&files);
 
     let mut storage = Collection::open(test_path).unwrap();
-    let vectors = vec![
+    let vectors = [
         vec![1.0, 0.0, 0.0],
         vec![0.0, 1.0, 0.0],
         vec![0.0, 0.0, 1.0],
         vec![0.9, 0.1, 0.0],
     ];
     for (i, vec) in vectors.iter().enumerate() {
-        storage.insert(Document::new(vec.clone(), format!("vec{}", i))).unwrap();
+        storage
+            .insert(Document::new(vec.clone(), format!("vec{}", i)))
+            .unwrap();
     }
 
     let params = SearchParams::default();
@@ -124,7 +130,11 @@ fn batch_search_multi_queries() {
             .unwrap();
     }
 
-    let queries = vec![vec![0.0, 0.0, 0.0], vec![5.0, 0.0, 0.0], vec![9.0, 0.0, 0.0]];
+    let queries = vec![
+        vec![0.0, 0.0, 0.0],
+        vec![5.0, 0.0, 0.0],
+        vec![9.0, 0.0, 0.0],
+    ];
     let results = storage.search_batch(&queries, 2, Metric::Cosine);
     assert_eq!(results.len(), 3);
     assert!(results.iter().all(|hits| !hits.is_empty()));
@@ -147,17 +157,19 @@ fn no_mmap_insert_grows_file_without_panicking() {
     ];
     cleanup_test_files(&files);
 
-    let mut config = CollectionConfig::default();
-    config.memory = MemoryConfig::no_mmap();
+    let config = CollectionConfig {
+        memory: MemoryConfig::no_mmap(),
+        ..CollectionConfig::default()
+    };
 
-    let mut storage = Collection::open_with_options(
-        test_path,
-        CollectionOpenOptions { config },
-    )
-    .unwrap();
+    let mut storage =
+        Collection::open_with_options(test_path, CollectionOpenOptions { config }).unwrap();
     let vector = vec![0.25; 1_100_000];
     let id = storage
-        .insert(Document::new(vector.clone(), "large no-mmap document".to_string()))
+        .insert(Document::new(
+            vector.clone(),
+            "large no-mmap document".to_string(),
+        ))
         .unwrap();
 
     let retrieved = storage.get(&id).unwrap();
@@ -193,14 +205,27 @@ fn updates_write_one_wal_entry_each() {
     storage
         .update_metadata(&id, metadata([("kind", "updated".into())]))
         .unwrap();
-    storage
-        .update_vector(&id, vec![3.0, 2.0, 1.0])
-        .unwrap();
+    storage.update_vector(&id, vec![3.0, 2.0, 1.0]).unwrap();
 
     let wal = fs::read_to_string(format!("{}.wal.db", test_path)).unwrap();
-    assert_eq!(wal.lines().filter(|line| line.contains("\"Insert\"" )).count(), 1);
-    assert_eq!(wal.lines().filter(|line| line.contains("\"Update\"" )).count(), 2);
-    assert_eq!(wal.lines().filter(|line| line.contains("\"Delete\"" )).count(), 0);
+    assert_eq!(
+        wal.lines()
+            .filter(|line| line.contains("\"Insert\""))
+            .count(),
+        1
+    );
+    assert_eq!(
+        wal.lines()
+            .filter(|line| line.contains("\"Update\""))
+            .count(),
+        2
+    );
+    assert_eq!(
+        wal.lines()
+            .filter(|line| line.contains("\"Delete\""))
+            .count(),
+        0
+    );
 
     drop(storage);
     cleanup_test_files(&files);
@@ -221,7 +246,9 @@ fn sidecar_files_persist_at_checkpoint_only() {
     cleanup_test_files(&files);
 
     let mut storage = Collection::open(test_path).unwrap();
-    storage.insert(Document::new(vec![1.0, 2.0, 3.0], "checkpoint only".into())).unwrap();
+    storage
+        .insert(Document::new(vec![1.0, 2.0, 3.0], "checkpoint only".into()))
+        .unwrap();
 
     assert!(fs::metadata(format!("{}.index.db", test_path)).is_err());
     assert!(fs::metadata(format!("{}.vecindex.db", test_path)).is_err());

@@ -16,9 +16,9 @@ pub fn euclidean_distance_jit(a: &[f32], b: &[f32]) -> f32 {
 
 pub fn euclidean_distance_squared_jit(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vectors must have same length");
-    
+
     let len = a.len();
-    
+
     match len {
         1536 => euclidean_squared_jit_1536(a, b),
         _ => euclidean_squared_jit_generic(a, b),
@@ -28,24 +28,23 @@ pub fn euclidean_distance_squared_jit(a: &[f32], b: &[f32]) -> f32 {
 #[inline(always)]
 fn euclidean_squared_jit_1536(a: &[f32], b: &[f32]) -> f32 {
     let mut sum_sq = 0.0;
-    
+
     let mut i = 0;
     while i < 1536 {
         let d0 = a[i] - b[i];
-        let d1 = a[i+1] - b[i+1];
-        let d2 = a[i+2] - b[i+2];
-        let d3 = a[i+3] - b[i+3];
-        let d4 = a[i+4] - b[i+4];
-        let d5 = a[i+5] - b[i+5];
-        let d6 = a[i+6] - b[i+6];
-        let d7 = a[i+7] - b[i+7];
-        
-        sum_sq += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3 +
-                  d4 * d4 + d5 * d5 + d6 * d6 + d7 * d7;
-        
+        let d1 = a[i + 1] - b[i + 1];
+        let d2 = a[i + 2] - b[i + 2];
+        let d3 = a[i + 3] - b[i + 3];
+        let d4 = a[i + 4] - b[i + 4];
+        let d5 = a[i + 5] - b[i + 5];
+        let d6 = a[i + 6] - b[i + 6];
+        let d7 = a[i + 7] - b[i + 7];
+
+        sum_sq += d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3 + d4 * d4 + d5 * d5 + d6 * d6 + d7 * d7;
+
         i += 8;
     }
-    
+
     sum_sq
 }
 

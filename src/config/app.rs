@@ -1,11 +1,10 @@
 // Main application configuration struct: all sub-configurations for the collection, index, search, quantization, memory management, WAL, parallelism, and execution mode.
 
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::{
-    CollectionConfig, SearchConfig, QuantizationConfig, MemoryConfig, WalConfig,
-        ParallelismConfig, ExecutionMode, LimitsConfig,
+    CollectionConfig, ExecutionMode, LimitsConfig, MemoryConfig, ParallelismConfig,
+    QuantizationConfig, SearchConfig, WalConfig,
 };
 use crate::index::IndexConfig;
 
@@ -38,10 +37,8 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn validate(&self) -> Result<(), String> {
-        if self.wal.enabled {
-            if self.wal.checkpoint_frequency == 0 {
-                return Err("WAL checkpoint_frequency must be > 0 when WAL is enabled".into());
-            }
+        if self.wal.enabled && self.wal.checkpoint_frequency == 0 {
+            return Err("WAL checkpoint_frequency must be > 0 when WAL is enabled".into());
         }
         if self.search.filter_overfetch == 0 {
             return Err("SEARCH filter_overfetch must be >= 1".into());
@@ -55,13 +52,13 @@ impl AppConfig {
     pub fn to_collection_config(&self) -> CollectionConfig {
         CollectionConfig {
             index: self.index.clone(),
-            search: self.search.clone(),
-            quantization: self.quantization.clone(),
-            memory: self.memory.clone(),
-            wal: self.wal.clone(),
-            parallelism: self.parallelism.clone(),
+            search: self.search,
+            quantization: self.quantization,
+            memory: self.memory,
+            wal: self.wal,
+            parallelism: self.parallelism,
             execution: self.execution,
-            limits: self.limits.clone(),
+            limits: self.limits,
         }
     }
 
@@ -72,7 +69,7 @@ impl AppConfig {
                 "flat" => IndexConfig::Flat {
                     metric: crate::metrics::Metric::Cosine,
                     mode: ExecutionMode::Auto,
-                    search: self.search.clone(),
+                    search: self.search,
                 },
                 "hnsw" => IndexConfig::Hnsw {
                     m: 16,
@@ -82,7 +79,7 @@ impl AppConfig {
                     ml: 1.0 / (16.0_f32).ln(),
                     metric: crate::metrics::Metric::Cosine,
                     mode: ExecutionMode::Auto,
-                    search: self.search.clone(),
+                    search: self.search,
                 },
                 "ivf" => IndexConfig::Ivf {
                     num_clusters: 256,
@@ -90,7 +87,7 @@ impl AppConfig {
                     max_iterations: 20,
                     metric: crate::metrics::Metric::Cosine,
                     mode: ExecutionMode::Auto,
-                    search: self.search.clone(),
+                    search: self.search,
                 },
                 _ => self.index.clone(),
             };

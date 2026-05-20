@@ -1,4 +1,4 @@
-use piramid::metrics::latency::{LatencyTracker, time_operation, time_operation_sync};
+use piramid::metrics::latency::{time_operation, time_operation_sync, LatencyTracker};
 use std::time::Duration;
 
 #[test]

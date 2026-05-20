@@ -19,8 +19,8 @@ pub struct HealthResponse {
 
 #[derive(Serialize)]
 pub struct CollectionInfo {
-    pub name: String, // Name of the collection
-    pub count: usize, // Number of vectors in the collection
+    pub name: String,              // Name of the collection
+    pub count: usize,              // Number of vectors in the collection
     pub created_at: Option<u64>, // Timestamp when the collection was created (in seconds since UNIX epoch)
     pub updated_at: Option<u64>, // Timestamp when the collection was last updated (in seconds since UNIX epoch)
     pub dimensions: Option<usize>, // Number of dimensions for vectors in this collection, if known
@@ -51,12 +51,12 @@ pub struct InsertRequest {
     pub text: Option<String>, // Optional text to associate with the vector; used for embedding generation if vector is not provided
     #[serde(default)]
     pub texts: Option<Vec<String>>, // Optional list of texts for batch insert; used for embedding generation if vectors are not provided
-    #[serde(default)]  // single metadata map (used for single insert)
+    #[serde(default)] // single metadata map (used for single insert)
     pub metadata: HashMap<String, serde_json::Value>,
-    #[serde(default)]  // per-item metadata for batch
+    #[serde(default)] // per-item metadata for batch
     pub metadata_list: Vec<HashMap<String, serde_json::Value>>,
-    #[serde(default)]  // if missing, defaults to false
-    pub normalize: bool,  // Whether to normalize the vector(s) to unit length
+    #[serde(default)] // if missing, defaults to false
+    pub normalize: bool, // Whether to normalize the vector(s) to unit length
 }
 
 // What we return after storing (single)
@@ -70,7 +70,7 @@ pub struct InsertResponse {
 #[derive(Serialize)]
 pub struct MultiInsertResponse {
     pub ids: Vec<String>, // List of IDs for the inserted vectors (UUID strings)
-    pub count: usize, // Number of vectors inserted
+    pub count: usize,     // Number of vectors inserted
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<f32>, // Optional latency for the batch insert operation in milliseconds
 }
@@ -78,7 +78,7 @@ pub struct MultiInsertResponse {
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum InsertResultsResponse {
-    Single(InsertResponse), // Response for single vector insert
+    Single(InsertResponse),     // Response for single vector insert
     Multi(MultiInsertResponse), // Response for batch vector insert
 }
 
@@ -100,7 +100,9 @@ pub struct ListVectorsQuery {
     pub offset: usize, // How many vectors to skip for pagination (default 0)
 }
 
-fn default_limit() -> usize { 100 }
+fn default_limit() -> usize {
+    100
+}
 
 // =============================================================================
 // SEARCH
@@ -113,9 +115,9 @@ pub struct SearchRequest {
     #[serde(default)]
     pub vectors: Option<Vec<Vec<f32>>>,
     #[serde(default = "default_k")]
-    pub k: usize,  // how many results to return
+    pub k: usize, // how many results to return
     #[serde(default)]
-    pub metric: Option<String>,  // "cosine", "euclidean", "dot"
+    pub metric: Option<String>, // "cosine", "euclidean", "dot"
     #[serde(default)]
     pub ef: Option<usize>,
     #[serde(default)]
@@ -126,7 +128,9 @@ pub struct SearchRequest {
     pub preset: Option<String>, // "fast", "balanced", "high"
 }
 
-fn default_k() -> usize { 10 }
+fn default_k() -> usize {
+    10
+}
 
 #[derive(Serialize)]
 pub struct HitResponse {
@@ -138,7 +142,7 @@ pub struct HitResponse {
 
 #[derive(Serialize)]
 pub struct SearchResponse {
-    pub results: Vec<HitResponse>, 
+    pub results: Vec<HitResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<f32>,
 }
@@ -232,7 +236,6 @@ pub enum EmbedResultsResponse {
     Multi(MultiEmbedResponse),
 }
 
-
 // Request to search by text query (auto-embeds)
 #[derive(Deserialize)]
 pub struct TextSearchRequest {
@@ -257,19 +260,19 @@ pub struct TextSearchRequest {
 
 #[derive(Deserialize)]
 pub struct UpsertRequest {
-    pub id: Option<String>,  // If provided, use this ID; otherwise generate new
+    pub id: Option<String>, // If provided, use this ID; otherwise generate new
     pub vector: Vec<f32>,
     pub text: String,
     #[serde(default)]
     pub metadata: HashMap<String, serde_json::Value>,
     #[serde(default)]
-    pub normalize: bool,  // Whether to normalize the vector
+    pub normalize: bool, // Whether to normalize the vector
 }
 
 #[derive(Serialize)]
 pub struct UpsertResponse {
     pub id: String,
-    pub created: bool,  // true if inserted, false if updated
+    pub created: bool, // true if inserted, false if updated
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<f32>,
 }
@@ -292,7 +295,7 @@ pub struct MetricsResponse {
 #[derive(Serialize)]
 pub struct CollectionMetrics {
     pub name: String,
-    pub vector_count: usize, 
+    pub vector_count: usize,
     pub index_type: String,
     pub memory_usage_bytes: usize, // Memory usage of the index for this collection
     pub insert_latency_ms: Option<f32>, // Average latency for insert operations in this collection
@@ -309,7 +312,7 @@ pub struct WalStats {
     pub collection: String,
     pub last_checkpoint: Option<u64>,
     pub checkpoint_age_secs: Option<u64>, // Age of the last checkpoint in seconds
-    pub wal_size_bytes: Option<u64>, // Total size of the WAL file for this collection in bytes
+    pub wal_size_bytes: Option<u64>,      // Total size of the WAL file for this collection in bytes
 }
 
 #[derive(Serialize)]
@@ -341,7 +344,9 @@ pub struct DuplicateRequest {
     pub nprobe: Option<usize>,
 }
 
-fn default_dup_threshold() -> f32 { 0.95 }
+fn default_dup_threshold() -> f32 {
+    0.95
+}
 
 #[derive(Serialize)]
 pub struct DuplicatePair {
@@ -362,8 +367,8 @@ pub struct DuplicateResponse {
 #[derive(Serialize)]
 pub struct IndexStatsResponse {
     pub index_type: String,
-    pub total_vectors: usize, // Total number of vectors indexed
-    pub memory_usage_bytes: usize, // Approximate memory usage of the index in bytes
+    pub total_vectors: usize,       // Total number of vectors indexed
+    pub memory_usage_bytes: usize,  // Approximate memory usage of the index in bytes
     pub details: serde_json::Value, // Index-specific details as a JSON value (e.g., HNSW layer sizes, IVF cluster counts)
 }
 
@@ -400,7 +405,7 @@ pub struct ConfigStatusResponse {
 
 #[derive(Serialize)]
 pub struct ConfigReloadResponse {
-    pub success: bool, 
+    pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reloaded_at: Option<u64>, // Timestamp of when the config was reloaded (in seconds since UNIX epoch)
     pub app_config: crate::config::AppConfig,

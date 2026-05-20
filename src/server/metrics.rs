@@ -1,5 +1,5 @@
-use std::time::Instant;
 use crate::metrics::LatencyTracker;
+use std::time::Instant;
 
 /// Records lock wait time if a tracker exists.
 pub fn record_lock_read(tracker: Option<&LatencyTracker>, start: Instant) {

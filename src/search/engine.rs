@@ -3,10 +3,10 @@
 
 use crate::config::ExecutionMode;
 use crate::metrics::Metric;
-use crate::search::{Hit, query::Filter, utils::sort_and_truncate};
+use crate::search::{query::Filter, utils::sort_and_truncate, Hit};
 use crate::storage::Collection;
-use uuid::Uuid;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 // Parameters for a search request.
 #[derive(Debug, Clone, Copy)]
@@ -38,11 +38,13 @@ fn search_collection_with_maps(
     metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
 ) -> Vec<Hit> {
     // 1. Determine effective search config and overfetch factor
-    let effective_search = params.search_config_override.unwrap_or(storage.config.search);
+    let effective_search = params
+        .search_config_override
+        .unwrap_or(storage.config.search);
 
     // 2. Calculate overfetch factor based on filter presence and configuration. If a filter is applied, we need to overfetch more results from the vector index to ensure that after filtering we still have enough results to return. The overfetch factor is determined by the search configuration's filter_overfetch parameter, which specifies how many times more results to fetch compared to k when a filter is applied. If no filter is present, we can just fetch k results directly.
     let base_overfetch = effective_search.filter_overfetch.max(1);
-    
+
     // If the caller provided an override for filter overfetch, use that instead of the configured value. This allows for dynamic adjustment of the overfetch factor on a per-search basis, which can be useful for certain queries or workloads where the default overfetch might not be sufficient or might be too aggressive.
     let expansion = params
         .filter_overfetch_override
@@ -50,11 +52,14 @@ fn search_collection_with_maps(
         .max(1);
 
     // 3. Perform search on the vector index with the calculated overfetch factor. If a filter is present, we multiply k by the expansion factor to fetch more results from the vector index, which increases the likelihood that after filtering we will have at least k results to return. If no filter is present, we just fetch k results directly from the vector index.
-    let search_k = if params.filter.is_some() { k.saturating_mul(expansion) } else { k };
-    
+    let search_k = if params.filter.is_some() {
+        k.saturating_mul(expansion)
+    } else {
+        k
+    };
+
     // 4. Search the vector index for nearest neighbors to the query vector. This will return a list of candidate IDs based on vector similarity. The search method of the vector index will use the effective search configuration, which may include parameters like ef for HNSW or num_probes for IVF, to control the tradeoff between search speed and accuracy. The filter and metadata parameters are passed to the search method, although they may not be used by all index types.
     let mode = params.mode;
-
 
     let neighbor_ids = storage.vector_index().search(
         query,
@@ -95,7 +100,7 @@ fn search_collection_with_maps(
 pub fn search_collection(
     storage: &Collection,
     query: &[f32],
-    k: usize, 
+    k: usize,
     metric: Metric,
     params: SearchParams<'_>,
 ) -> Vec<Hit> {
@@ -114,17 +119,21 @@ pub fn search_batch_collection(
 ) -> Vec<Vec<Hit>> {
     let vectors = storage.get_vectors();
     let metadatas = storage.metadata_view();
-    
+
     if storage.config().parallelism.parallel_search {
         use rayon::prelude::*; // If parallel search is enabled in the configuration, we use Rayon to perform the searches for each query in parallel. This can significantly speed up batch searches when there are multiple queries and the underlying hardware supports parallel execution. Each query is processed independently, and the results are collected into a vector of vectors of hits, where each inner vector corresponds to the results for a single query.
         queries
             .par_iter()
-            .map(|query| search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas))
-            .collect() 
+            .map(|query| {
+                search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas)
+            })
+            .collect()
     } else {
         queries
             .iter()
-            .map(|query| search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas))
-            .collect() 
+            .map(|query| {
+                search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas)
+            })
+            .collect()
     }
 }

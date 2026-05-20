@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 pub struct CacheConfig {
     // Enable caching
     pub enabled: bool,
-    
+
     // Maximum number of cached items
     pub max_size: usize,
-    
+
     // Time-to-live in seconds (None = no expiration)
     pub ttl_seconds: Option<u64>,
 }
@@ -34,7 +34,7 @@ impl CacheConfig {
             ttl_seconds: None,
         }
     }
-    
+
     // Set cache size
     pub fn with_size(size: usize) -> Self {
         CacheConfig {
@@ -43,7 +43,7 @@ impl CacheConfig {
             ttl_seconds: None,
         }
     }
-    
+
     // Set cache size and TTL
     pub fn with_size_and_ttl(size: usize, ttl_seconds: u64) -> Self {
         CacheConfig {

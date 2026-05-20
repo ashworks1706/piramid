@@ -1,9 +1,11 @@
-// This module defines the persistence service for the collection, which is responsible for managing the write-ahead log (WAL) and performing checkpoints to save the state of the collection to disk. 
+// This module defines the persistence service for the collection, which is responsible for managing the write-ahead log (WAL) and performing checkpoints to save the state of the collection to disk.
 
-use crate::error::Result;
-use crate::storage::persistence::{save_index as save_idx, save_vector_index as save_vec_idx, save_metadata as save_meta};
-use crate::storage::wal::Wal;
 use super::storage::Collection;
+use crate::error::Result;
+use crate::storage::persistence::{
+    save_index as save_idx, save_metadata as save_meta, save_vector_index as save_vec_idx,
+};
+use crate::storage::wal::Wal;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
@@ -12,7 +14,6 @@ pub struct PersistenceService {
     operation_count: usize, // Counter for the number of operations since the last checkpoint
     last_checkpoint_ts: Option<u64>, // Timestamp of the last checkpoint for recovery purposes
 }
-
 
 impl PersistenceService {
     pub fn new(wal: Wal) -> Self {
@@ -24,7 +25,8 @@ impl PersistenceService {
     }
 
     pub fn should_checkpoint(&mut self, cfg: &crate::config::WalConfig) -> bool {
-        if !cfg.enabled { // If WAL is not enabled, we don't need to checkpoint, so we can return false immediately. 
+        if !cfg.enabled {
+            // If WAL is not enabled, we don't need to checkpoint, so we can return false immediately.
             return false;
         }
         self.operation_count += 1;
@@ -49,7 +51,7 @@ pub fn save_index(storage: &Collection) -> Result<()> {
 }
 
 pub fn save_vector_index(storage: &Collection) -> Result<()> {
-    save_vec_idx(&storage.path, storage.vector_index.as_ref()) // We pass a reference to the vector index to the save function, which will handle serializing and writing it to disk. 
+    save_vec_idx(&storage.path, storage.vector_index.as_ref()) // We pass a reference to the vector index to the save function, which will handle serializing and writing it to disk.
 }
 
 pub fn save_metadata(storage: &Collection) -> Result<()> {
@@ -57,7 +59,7 @@ pub fn save_metadata(storage: &Collection) -> Result<()> {
 }
 
 fn wal_meta_path(path: &str) -> PathBuf {
-    PathBuf::from(format!("{}.wal.meta", path)) // The path for the WAL metadata file is constructed by appending ".wal.meta" to the base path of the collection. 
+    PathBuf::from(format!("{}.wal.meta", path)) // The path for the WAL metadata file is constructed by appending ".wal.meta" to the base path of the collection.
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -78,7 +80,9 @@ pub fn load_wal_meta(path: &str) -> Result<u64> {
 fn save_wal_meta(path: &str, last_checkpoint_seq: u64) -> Result<()> {
     let meta_path = wal_meta_path(path);
     let tmp_path = meta_path.with_extension("tmp");
-    let meta = WalMeta { last_checkpoint_seq };
+    let meta = WalMeta {
+        last_checkpoint_seq,
+    };
     fs::write(&tmp_path, serde_json::to_vec(&meta)?)?;
     fs::rename(&tmp_path, &meta_path)?;
     if let Ok(file) = fs::File::open(&meta_path) {
@@ -86,7 +90,6 @@ fn save_wal_meta(path: &str, last_checkpoint_seq: u64) -> Result<()> {
     }
     Ok(())
 }
-
 
 pub fn checkpoint(storage: &mut Collection) -> Result<()> {
     // This timestamp can be used for recovery purposes to determine the point in time at which the checkpoint was taken,
@@ -113,7 +116,7 @@ pub fn checkpoint(storage: &mut Collection) -> Result<()> {
 }
 
 pub fn flush(storage: &mut Collection) -> Result<()> {
-    // If WAL is enabled, we need to flush any pending entries to disk to ensure durability. 
+    // If WAL is enabled, we need to flush any pending entries to disk to ensure durability.
     storage.persistence.wal.flush()?;
     Ok(())
 }

@@ -1,8 +1,11 @@
-use piramid::{Filter, metadata, MetadataValue};
+use piramid::{metadata, Filter, MetadataValue};
 
 #[test]
 fn filter_matches_eq_and_in() {
-    let meta = metadata([("category", "tech".into()), ("status", MetadataValue::String("active".into()))]);
+    let meta = metadata([
+        ("category", "tech".into()),
+        ("status", MetadataValue::String("active".into())),
+    ]);
 
     assert!(Filter::new().eq("category", "tech").matches(&meta));
     assert!(!Filter::new().eq("category", "sports").matches(&meta));

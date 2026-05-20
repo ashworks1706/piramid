@@ -5,12 +5,12 @@
 // - hybrid_search: Combine vector + keyword search
 // - recommendation_search: Find similar to these, not like those
 
+pub mod engine;
+pub mod query;
 mod types;
 pub mod utils;
-pub mod query;
-pub mod engine;
 
-pub use types::Hit;
-pub use query::{Filter, FilterCondition};
-pub use engine::{SearchParams, search_collection, search_batch_collection};
 pub use crate::metrics::Metric;
+pub use engine::{search_batch_collection, search_collection, SearchParams};
+pub use query::{Filter, FilterCondition};
+pub use types::Hit;

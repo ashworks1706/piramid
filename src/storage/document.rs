@@ -11,7 +11,7 @@ use crate::quantization::QuantizedVector;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: Uuid,
-    pub vector: QuantizedVector, 
+    pub vector: QuantizedVector,
     pub text: String,
     #[serde(default)]
     pub metadata: Metadata,

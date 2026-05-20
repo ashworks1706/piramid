@@ -1,13 +1,13 @@
 // Collection CRUD operations.
 use uuid::Uuid;
 
-use crate::error::{Result, ServerError};
-use crate::storage::document::Document;
-use crate::storage::wal::WalEntry;
-use crate::storage::persistence::{EntryPointer, grow_mmap_if_needed};
-use crate::quantization::QuantizedVector;
-use crate::metadata::Metadata;
 use super::storage::Collection;
+use crate::error::{Result, ServerError};
+use crate::metadata::Metadata;
+use crate::quantization::QuantizedVector;
+use crate::storage::document::Document;
+use crate::storage::persistence::{grow_mmap_if_needed, EntryPointer};
+use crate::storage::wal::WalEntry;
 
 fn write_entry_bytes(storage: &mut Collection, offset: u64, bytes: &[u8]) -> Result<()> {
     if let Some(mmap) = storage.mmap.as_mut() {
@@ -42,7 +42,9 @@ fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()>
 
     if let Some(max_vecs) = limits.max_vectors {
         if storage.count() >= max_vecs {
-            return Err(ServerError::InvalidRequest("Collection max vectors reached".into()).into());
+            return Err(
+                ServerError::InvalidRequest("Collection max vectors reached".into()).into(),
+            );
         }
     }
 
@@ -56,24 +58,33 @@ fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()>
 
     if let Some(max_vec_bytes) = limits.max_vector_bytes {
         if entry_bytes > max_vec_bytes {
-            return Err(ServerError::InvalidRequest("Vector exceeds max allowed size".into()).into());
+            return Err(
+                ServerError::InvalidRequest("Vector exceeds max allowed size".into()).into(),
+            );
         }
     }
 
     Ok(())
 }
 
-// current + batch <= max 
-fn enforce_limits_batch(storage: &Collection, total_entries: usize, total_bytes: u64, max_entry_bytes: Option<usize>) -> Result<()> {
+// current + batch <= max
+fn enforce_limits_batch(
+    storage: &Collection,
+    total_entries: usize,
+    total_bytes: u64,
+    max_entry_bytes: Option<usize>,
+) -> Result<()> {
     let limits = storage.config.limits;
 
     if let Some(max_vecs) = limits.max_vectors {
         let current = storage.count();
         if current.saturating_add(total_entries) > max_vecs {
-            return Err(ServerError::InvalidRequest("Collection max vectors reached".into()).into());
+            return Err(
+                ServerError::InvalidRequest("Collection max vectors reached".into()).into(),
+            );
         }
     }
-    
+
     if let Some(max_bytes) = limits.max_bytes {
         let current_size = storage.data_file.metadata()?.len();
         let required = current_size.saturating_add(total_bytes);
@@ -86,7 +97,10 @@ fn enforce_limits_batch(storage: &Collection, total_entries: usize, total_bytes:
         if max_vec_bytes > 0 {
             if let Some(cfg_limit) = limits.max_vector_bytes {
                 if max_vec_bytes > cfg_limit {
-                    return Err(ServerError::InvalidRequest("Vector exceeds max allowed size".into()).into());
+                    return Err(ServerError::InvalidRequest(
+                        "Vector exceeds max allowed size".into(),
+                    )
+                    .into());
                 }
             }
         }
@@ -116,7 +130,7 @@ pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<
     let id = entry.id;
     let raw_vec = entry.get_vector();
     entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
-    let bytes = bincode::serialize(&entry)?; 
+    let bytes = bincode::serialize(&entry)?;
 
     enforce_limits_single(storage, bytes.len())?;
     let index_entry = append_entry(storage, &bytes)?;
@@ -130,10 +144,12 @@ pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<
     }
 
     storage.vector_cache.insert(id, raw_vec.clone());
-    storage.vector_index.insert(id, &raw_vec, &storage.vector_cache);
-    
+    storage
+        .vector_index
+        .insert(id, &raw_vec, &storage.vector_cache);
+
     storage.metadata.update_vector_count(storage.index.len());
-    
+
     Ok(id)
 }
 
@@ -149,8 +165,8 @@ pub fn delete_internal(storage: &mut Collection, id: &Uuid) {
 
 pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     let vector = entry.get_vector();
-    let mut wal_entry = WalEntry::Insert { 
-        id: entry.id, 
+    let mut wal_entry = WalEntry::Insert {
+        id: entry.id,
         vector,
         text: entry.text.clone(),
         metadata: entry.metadata.clone(),
@@ -159,8 +175,7 @@ pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     storage.persistence.wal.log(&mut wal_entry)?;
 
     let id = insert_internal(storage, entry)?;
-    storage.track_operation()?
-    ;
+    storage.track_operation()?;
     Ok(id)
 }
 
@@ -184,12 +199,15 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
     let mut raw_vectors: Vec<(Uuid, Vec<f32>)> = Vec::with_capacity(entries.len());
     for entry in &mut entries {
         let raw_vec = entry.get_vector();
-        entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
+        entry.vector =
+            QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
         let bytes = bincode::serialize(entry)?;
         serialized.push((entry.id, bytes));
         raw_vectors.push((entry.id, raw_vec));
     }
-    let current_offset = storage.index.values()
+    let current_offset = storage
+        .index
+        .values()
         .map(|idx| idx.offset + idx.length as u64)
         .max()
         .unwrap_or(0);
@@ -212,7 +230,7 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
         };
         storage.index.insert(*id, index_entry);
         ids.push(*id);
-        
+
         offset += bytes.len() as u64;
     }
 
@@ -224,10 +242,12 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
             crate::validation::validate_dimensions(&vec_f32, expected_dim)?;
         }
         storage.vector_cache.insert(id, vec_f32.clone());
-        storage.vector_index.insert(id, &vec_f32, &storage.vector_cache);
+        storage
+            .vector_index
+            .insert(id, &vec_f32, &storage.vector_cache);
     }
     storage.metadata.update_vector_count(storage.index.len());
-    
+
     Ok(ids)
 }
 
@@ -292,11 +312,11 @@ pub fn delete_batch(storage: &mut Collection, ids: &[Uuid]) -> Result<usize> {
             deleted_count += 1;
         }
     }
-    
+
     if deleted_count > 0 {
         storage.track_operation()?;
     }
-    
+
     Ok(deleted_count)
 }
 
@@ -356,7 +376,9 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
         storage.index.insert(*id, index_entry);
         storage.vector_cache.insert(*id, vector.clone());
         storage.vector_index.remove(id);
-        storage.vector_index.insert(*id, &vector, &storage.vector_cache);
+        storage
+            .vector_index
+            .insert(*id, &vector, &storage.vector_cache);
         storage.metadata.update_vector_count(storage.index.len());
         storage.track_operation()?;
         Ok(true)

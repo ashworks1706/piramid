@@ -1,8 +1,8 @@
-use thiserror::Error;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ServerError {

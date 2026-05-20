@@ -3,18 +3,13 @@
 use serde::{Deserialize, Serialize};
 
 // mode
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SearchMode {
     // K-nearest neighbors return top k results
+    #[default]
     KNN,
     // Range search return all within distance threshold
     Range,
-}
-
-impl Default for SearchMode {
-    fn default() -> Self {
-        SearchMode::KNN
-    }
 }
 
 // Range search parameters
@@ -22,7 +17,7 @@ impl Default for SearchMode {
 pub struct RangeSearchParams {
     // Maximum distance threshold
     pub max_distance: f32,
-    
+
     // Maximum number of results (None = unlimited)
     pub max_results: Option<usize>,
 }
@@ -34,7 +29,7 @@ impl RangeSearchParams {
             max_results: None,
         }
     }
-    
+
     pub fn with_limit(max_distance: f32, max_results: usize) -> Self {
         RangeSearchParams {
             max_distance,

@@ -1,13 +1,13 @@
-pub mod types;
-pub mod storage;
+pub mod context;
+pub mod embedding;
 pub mod index;
 pub mod server;
-pub mod embedding;
-pub mod context;
+pub mod storage;
+pub mod types;
 
-pub use types::{PiramidError, Result};
 pub use context::ErrorContext;
+pub use embedding::EmbeddingError;
+pub use index::IndexError;
 pub use server::ServerError;
 pub use storage::StorageError;
-pub use index::IndexError;
-pub use embedding::EmbeddingError;
+pub use types::{PiramidError, Result};

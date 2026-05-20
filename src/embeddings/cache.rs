@@ -47,21 +47,21 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
                 // Cache hit! Return immediately
                 return Ok(EmbeddingResponse {
                     embedding: embedding.clone(),
-                    tokens: None,  // We don't track tokens for cached results
+                    tokens: None, // We don't track tokens for cached results
                     model: self.inner.model_name().to_string(),
                 });
             }
         }
-        
+
         // Cache miss - call the underlying embedder
         let response = self.inner.embed(text).await?;
-        
+
         // Store in cache
         {
             let mut cache = self.cache.lock().unwrap();
             cache.put(text.to_string(), response.embedding.clone());
         }
-        
+
         Ok(response)
     }
 
@@ -81,8 +81,8 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
 // Cache statistics
 #[derive(Debug, Clone)]
 pub struct CacheStats {
-    pub size: usize,      // Current number of cached items
-    pub capacity: usize,  // Maximum capacity
+    pub size: usize,     // Current number of cached items
+    pub capacity: usize, // Maximum capacity
 }
 
 impl CacheStats {

@@ -150,6 +150,26 @@ cargo test
 cargo run -- serve --data-dir ./data
 ```
 
+### Local checks
+
+Install Rust with `rustup`, then add formatting/linting tools:
+
+```bash
+rustup component add rustfmt clippy
+```
+
+Run the same checks used by CI:
+
+```bash
+./scripts/check.sh
+```
+
+Enable the pre-push hook so pushes fail locally before broken formatting, clippy warnings, or tests reach GitHub:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## License
 
 [Apache 2.0 License](LICENSE)

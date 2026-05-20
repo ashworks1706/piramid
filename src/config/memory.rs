@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 pub struct MemoryConfig {
     // Maximum memory per collection in bytes (None = unlimited)
     pub max_memory_per_collection: Option<usize>,
-    
+
     // Initial mmap size in bytes
     pub initial_mmap_size: usize,
-    
+
     // Enable memory-mapped files
     pub use_mmap: bool,
 }
@@ -17,8 +17,8 @@ pub struct MemoryConfig {
 impl Default for MemoryConfig {
     fn default() -> Self {
         MemoryConfig {
-            max_memory_per_collection: None,  // Unlimited
-            initial_mmap_size: 1024 * 1024,   // 1MB
+            max_memory_per_collection: None, // Unlimited
+            initial_mmap_size: 1024 * 1024,  // 1MB
             use_mmap: true,
         }
     }
@@ -33,7 +33,7 @@ impl MemoryConfig {
             use_mmap: true,
         }
     }
-    
+
     // Set initial mmap size in MB
     pub fn with_mmap_size_mb(size_mb: usize) -> Self {
         MemoryConfig {
@@ -42,7 +42,7 @@ impl MemoryConfig {
             use_mmap: true,
         }
     }
-    
+
     // Disable memory-mapped files for regular heap allocation
     pub fn no_mmap() -> Self {
         MemoryConfig {

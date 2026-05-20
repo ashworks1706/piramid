@@ -1,17 +1,17 @@
-// wraps any Embedder implementation and adds retry logic with exponential backoff. 
+// wraps any Embedder implementation and adds retry logic with exponential backoff.
 // If an embedding request fails due to a transient error, RetryEmbedder will automatically retry the request up to a specified number of times with increasing delays between attempts.
+use crate::embeddings::{Embedder, EmbeddingError, EmbeddingResponse, EmbeddingResult};
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use crate::embeddings::{Embedder, EmbeddingResponse, EmbeddingResult, EmbeddingError};
 
 pub struct RetryEmbedder {
     inner: Arc<dyn Embedder>,
-    max_retries: u32, 
-    initial_delay_ms: u64, 
-    max_delay_ms: u64, 
-} 
+    max_retries: u32,
+    initial_delay_ms: u64,
+    max_delay_ms: u64,
+}
 
 // Configuration options for the RetryEmbedder
 #[derive(Clone, Debug)]
@@ -37,7 +37,7 @@ impl RetryEmbedder {
     pub fn new(embedder: Arc<dyn Embedder>) -> Self {
         Self::with_options(embedder, RetryConfig::default())
     }
-    
+
     pub fn with_options(embedder: Arc<dyn Embedder>, options: RetryConfig) -> Self {
         Self {
             inner: embedder,
@@ -54,18 +54,18 @@ impl Embedder for RetryEmbedder {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
         let mut attempts = 0;
         let mut delay_ms = self.initial_delay_ms;
-        
+
         // Loop to attempt embedding with retries
         loop {
             match self.inner.embed(text).await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
                     attempts += 1;
-                    
+
                     if !is_retryable_error(&e) || attempts > self.max_retries {
                         return Err(e);
                     }
-                    
+
                     tracing::warn!(
                         attempt = attempts,
                         max_retries = self.max_retries,
@@ -73,7 +73,7 @@ impl Embedder for RetryEmbedder {
                         error = %e,
                         "embedding_request_retrying"
                     );
-                    
+
                     sleep(Duration::from_millis(delay_ms)).await;
                     delay_ms = (delay_ms * 2).min(self.max_delay_ms);
                 }

@@ -1,9 +1,9 @@
 mod factory;
-pub mod openai;
-pub mod ollama;
 pub mod local;
+pub mod ollama;
+pub mod openai;
 
-pub use factory::{EmbeddingProvider, create_embedder};
-pub use openai::OpenAIEmbedder;
-pub use ollama::OllamaEmbedder;
+pub use factory::{create_embedder, EmbeddingProvider};
 pub use local::LocalEmbedder;
+pub use ollama::OllamaEmbedder;
+pub use openai::OpenAIEmbedder;

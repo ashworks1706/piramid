@@ -4,20 +4,22 @@
 // - all-minilm (384 dimensions)
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult};
 use crate::embeddings::cache::CachedEmbedder;
+use crate::embeddings::types::{
+    Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult,
+};
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const DEFAULT_CACHE_SIZE: usize = 10000;
 
 // Ollama embedding provider LRU cache
 struct OllamaEmbedderInner {
-    client: Client, 
-    model: String, 
+    client: Client,
+    model: String,
     base_url: String,
 }
 
@@ -79,7 +81,6 @@ impl OllamaEmbedderInner {
 #[async_trait]
 impl Embedder for OllamaEmbedderInner {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
-
         // request payload for the Ollama API
         let request = OllamaEmbeddingRequest {
             model: self.model.clone(),
@@ -88,8 +89,8 @@ impl Embedder for OllamaEmbedderInner {
 
         let url = format!("{}/api/embeddings", self.base_url);
 
-        //  If the request fails (e.g., network error), we return an EmbeddingError. 
-        // If the response status is not successful, we read the error message from the response and return it as an API error. 
+        //  If the request fails (e.g., network error), we return an EmbeddingError.
+        // If the response status is not successful, we read the error message from the response and return it as an API error.
         // If the response is successful, we parse the JSON response into our OllamaEmbeddingResponse struct, which contains the embedding vector.
         let response = self
             .client
@@ -107,7 +108,10 @@ impl Embedder for OllamaEmbedderInner {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            return Err(EmbeddingError::ApiError(format!("{}: {}", status, error_text)));
+            return Err(EmbeddingError::ApiError(format!(
+                "{}: {}",
+                status, error_text
+            )));
         }
 
         // JSON object that contains the embedding vector. If deserialization fails, we return an InvalidResponse error.
@@ -115,7 +119,6 @@ impl Embedder for OllamaEmbedderInner {
             .json()
             .await
             .map_err(|e| EmbeddingError::InvalidResponse(e.to_string()))?;
-
 
         Ok(EmbeddingResponse {
             embedding: api_response.embedding,

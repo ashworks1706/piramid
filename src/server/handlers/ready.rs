@@ -1,13 +1,13 @@
 // src/server/handlers/ready.rs
 // checks if the server is shutting down, gathers health info for each collection, and reports disk usage stats.
 
-use axum::{extract::State, response::Json};
-use crate::error::{Result, ServerError};
 use super::super::state::SharedState;
-use super::super::types::{ReadyzResponse, CollectionHealth};
+use super::super::types::{CollectionHealth, ReadyzResponse};
+use crate::error::{Result, ServerError};
 use crate::server::metrics::record_lock_read;
-use std::time::{SystemTime, UNIX_EPOCH};
+use axum::{extract::State, response::Json};
 use std::sync::atomic::Ordering;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // Helper function to get disk usage stats for the data directory
 fn disk_stats(path: &str) -> (Option<u64>, Option<u64>) {
@@ -29,9 +29,7 @@ fn disk_stats(path: &str) -> (Option<u64>, Option<u64>) {
     (None, None)
 }
 
-
 // GET /api/readyz - readiness + integrity snapshot
-// This endpoint is more comprehensive. 
 // -  server is in the process of shutting down (returns 503 if so)
 // -  each collection: if it's loaded, vector count, index type, last checkpoint time, checkpoint age, WAL size, schema version, and integrity status
 // - Disk usage stats for the data directory
@@ -60,7 +58,7 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
             let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
             now.checked_sub(ts)
         });
-        let wal_size_bytes = std::fs::metadata(&format!("{}.wal.db", storage.path))
+        let wal_size_bytes = std::fs::metadata(format!("{}.wal.db", storage.path))
             .map(|m| m.len())
             .ok(); // If the WAL file doesn't exist or we can't read it, we just return None for its size
 
@@ -84,7 +82,12 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
         for entry in entries.flatten() {
             if let Some(ext) = entry.path().extension() {
                 if ext == "db" {
-                    let name = entry.path().file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                    let name = entry
+                        .path()
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
                     if state.collections.contains_key(&name) {
                         continue;
                     }
@@ -108,8 +111,10 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
     let loaded_collections = state.collections.len();
     let (disk_total_bytes, disk_available_bytes) = disk_stats(&state.data_dir);
 
-    let ok = collections_health.iter().all(|c| c.integrity_ok && c.loaded);
-    
+    let ok = collections_health
+        .iter()
+        .all(|c| c.integrity_ok && c.loaded);
+
     // 3. Return the comprehensive readiness snapshot
     Ok(Json(ReadyzResponse {
         ok,

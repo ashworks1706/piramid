@@ -4,16 +4,16 @@ mod index;
 pub use config::{HnswConfig, HnswStats};
 pub use index::HnswIndex;
 
-use uuid::Uuid;
+use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex};
 use std::collections::HashMap;
-use crate::index::traits::{VectorIndex, IndexStats, IndexDetails, IndexType};
+use uuid::Uuid;
 
 // we need a wrapper because HNSW has some specific parameters that affect search quality (ef_search) and we want to allow overriding them at search time without changing the index config
 impl VectorIndex for HnswIndex {
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>) {
         self.insert(id, vector, vectors);
     }
-    
+
     // Search for nearest neighbors to the query vector with filters.
     fn search(
         &self,
@@ -28,15 +28,15 @@ impl VectorIndex for HnswIndex {
         let ef = quality.ef.unwrap_or_else(|| self.get_ef_search()).max(k);
         self.search(query, k, ef, vectors, filter, metadatas)
     }
-    
+
     fn remove(&mut self, id: &Uuid) {
         self.remove(id);
     }
-    
+
     // Get statistics about the HNSW index, including total nodes, max layer, layer sizes, average connections, and memory usage.
     fn stats(&self) -> IndexStats {
         let hnsw_stats = self.stats();
-        
+
         IndexStats {
             index_type: IndexType::Hnsw,
             total_vectors: hnsw_stats.total_nodes,
@@ -48,7 +48,7 @@ impl VectorIndex for HnswIndex {
             },
         }
     }
-    
+
     fn index_type(&self) -> IndexType {
         IndexType::Hnsw
     }

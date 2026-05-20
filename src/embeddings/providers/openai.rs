@@ -4,21 +4,23 @@
 // - text-embedding-ada-002 (1536 dimensions, legacy)
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult};
 use crate::embeddings::cache::CachedEmbedder;
+use crate::embeddings::types::{
+    Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult,
+};
 
 const DEFAULT_OPENAI_API_URL: &str = "https://api.openai.com/v1/embeddings";
 const DEFAULT_CACHE_SIZE: usize = 10000;
 
 // OpenAI embedding provider with built-in LRU cache
 struct OpenAIEmbedderInner {
-    client: Client, // HTTP requests to the OpenAI API
-    api_key: String, // OpenAI API key for authentication
-    model: String, // OpenAI model name
+    client: Client,   // HTTP requests to the OpenAI API
+    api_key: String,  // OpenAI API key for authentication
+    model: String,    // OpenAI model name
     base_url: String, // URL for the OpenAI API
 }
 
@@ -126,10 +128,9 @@ impl Embedder for OpenAIEmbedderInner {
             .await
             .map_err(|e| EmbeddingError::InvalidResponse(e.to_string()))?;
 
-        let first_embedding = api_response
-            .data
-            .first()
-            .ok_or_else(|| EmbeddingError::InvalidResponse("No embeddings in response".to_string()))?;
+        let first_embedding = api_response.data.first().ok_or_else(|| {
+            EmbeddingError::InvalidResponse("No embeddings in response".to_string())
+        })?;
 
         Ok(EmbeddingResponse {
             embedding: first_embedding.embedding.clone(),

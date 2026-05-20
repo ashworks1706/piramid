@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct SearchConfig {
     //  uses ef_search from config, or ef_construction if not set
     pub ef: Option<usize>,
-    
+
     //  uses num_probes from config
     pub nprobe: Option<usize>,
 
@@ -21,8 +21,8 @@ pub struct SearchConfig {
 impl Default for SearchConfig {
     fn default() -> Self {
         SearchConfig {
-            ef: None,      
-            nprobe: None,  
+            ef: None,
+            nprobe: None,
             filter_overfetch: default_filter_overfetch(),
         }
     }
@@ -37,12 +37,12 @@ impl SearchConfig {
             filter_overfetch: default_filter_overfetch(),
         }
     }
-    
+
     // default
     pub fn balanced() -> Self {
         SearchConfig::default()
     }
-    
+
     // lower recall, faster
     pub fn fast() -> Self {
         SearchConfig {
@@ -53,4 +53,6 @@ impl SearchConfig {
     }
 }
 
-fn default_filter_overfetch() -> usize { 10 }
+fn default_filter_overfetch() -> usize {
+    10
+}

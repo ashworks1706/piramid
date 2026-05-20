@@ -5,12 +5,14 @@ use std::collections::HashMap;
 use std::fs::File;
 use uuid::Uuid;
 
+use super::cache;
+use super::persistence::PersistenceService;
 use crate::error::Result;
 use crate::index::VectorIndex;
-use crate::storage::persistence::{EntryPointer, warm_mmap, warm_file, get_wal_path, save_vector_index};
 use crate::storage::metadata::CollectionMetadata;
-use super::persistence::PersistenceService;
-use super::cache;
+use crate::storage::persistence::{
+    get_wal_path, save_vector_index, warm_file, warm_mmap, EntryPointer,
+};
 
 pub struct Collection {
     pub(super) data_file: File,
@@ -58,7 +60,7 @@ impl Collection {
         }
         Ok(())
     }
-    
+
     pub fn metadata(&self) -> &CollectionMetadata {
         &self.metadata
     }
@@ -66,19 +68,25 @@ impl Collection {
     pub fn count(&self) -> usize {
         self.index.len()
     }
-    
+
     pub fn memory_usage_bytes(&self) -> usize {
         // Calculate memory usage by summing the sizes of the memory-mapped file, index, vector cache, metadata cache, and vector index.
         let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0); // Size of the memory-mapped file
         let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>(); // Approximate size of the index based on its capacity
 
-        let vector_cache_size = self.vector_cache.iter()
-            .map(|(_, vec)| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
+        let vector_cache_size = self
+            .vector_cache
+            .values()
+            .map(|vec| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
             .sum::<usize>(); // Size of the vector cache based on the number of entries and their lengths
-        let metadata_cache_size = self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>(); // Approximate size of the metadata cache based on its capacity
-        
-        
-        mmap_size + index_size + vector_cache_size + metadata_cache_size + self.vector_index.stats().memory_usage_bytes
+        let metadata_cache_size =
+            self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>(); // Approximate size of the metadata cache based on its capacity
+
+        mmap_size
+            + index_size
+            + vector_cache_size
+            + metadata_cache_size
+            + self.vector_index.stats().memory_usage_bytes
     }
 
     pub fn vector_index(&self) -> &dyn VectorIndex {
@@ -86,10 +94,13 @@ impl Collection {
     }
 
     pub fn cache_usage_bytes(&self) -> usize {
-        let vector_cache_size = self.vector_cache.iter()
-            .map(|(_, vec)| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
+        let vector_cache_size = self
+            .vector_cache
+            .values()
+            .map(|vec| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
             .sum::<usize>();
-        let metadata_cache_size = self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>();
+        let metadata_cache_size =
+            self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>();
         vector_cache_size + metadata_cache_size
     }
 
@@ -123,7 +134,7 @@ impl Collection {
 
     pub fn get_all(&self) -> Vec<crate::storage::document::Document> {
         let mut all_entries = Vec::new();
-        for (id, _) in &self.index {
+        for id in self.index.keys() {
             if let Some(entry) = super::operations::get(self, id) {
                 all_entries.push(entry);
             }
@@ -151,7 +162,9 @@ impl Collection {
                 let length = pointer.length as usize;
                 if offset + length <= mmap.len() {
                     let bytes = &mmap[offset..offset + length];
-                    if let Ok(entry) = bincode::deserialize::<crate::storage::document::Document>(bytes) {
+                    if let Ok(entry) =
+                        bincode::deserialize::<crate::storage::document::Document>(bytes)
+                    {
                         vectors.insert(*id, entry.get_vector());
                     }
                 }
@@ -164,7 +177,8 @@ impl Collection {
                 let mut buf = vec![0u8; pointer.length as usize];
                 file.seek(SeekFrom::Start(pointer.offset))?;
                 file.read_exact(&mut buf)?;
-                if let Ok(entry) = bincode::deserialize::<crate::storage::document::Document>(&buf) {
+                if let Ok(entry) = bincode::deserialize::<crate::storage::document::Document>(&buf)
+                {
                     vectors.insert(*id, entry.get_vector());
                 }
             }

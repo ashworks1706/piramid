@@ -10,10 +10,12 @@ pub enum QuantizationLevel {
     // 8-bit integer quantization
     Int8,
     // Product quantization block-wise min/max compression
-    Pq { subquantizers: usize },
+    Pq {
+        subquantizers: usize,
+    },
     // 4-bit integer quantization
     Int4,
-    // 16-bit float quantization 
+    // 16-bit float quantization
     Float16,
 }
 
@@ -22,7 +24,7 @@ pub enum QuantizationLevel {
 pub struct QuantizationConfig {
     // Quantization level to use
     pub level: QuantizationLevel,
-    
+
     // Whether to compress vectors on disk only (false = also in memory)
     pub disk_only: bool,
 }
@@ -44,7 +46,7 @@ impl QuantizationConfig {
             disk_only: false,
         }
     }
-    
+
     // Enable int8 quantization for disk only
     pub fn int8_disk_only() -> Self {
         QuantizationConfig {

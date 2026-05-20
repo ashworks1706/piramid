@@ -1,7 +1,9 @@
-use piramid::embeddings::{EmbeddingError, EmbeddingResponse, EmbeddingResult, EmbeddingProvider, RetryEmbedder, Embedder};
 use piramid::embeddings::retry::RetryConfig;
-use std::sync::Arc;
+use piramid::embeddings::{
+    Embedder, EmbeddingError, EmbeddingProvider, EmbeddingResponse, EmbeddingResult, RetryEmbedder,
+};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 
 struct MockEmbedder {
     calls: Arc<AtomicU32>,
@@ -80,8 +82,17 @@ async fn retry_exhausts_and_errors() {
 
 #[test]
 fn provider_from_str_roundtrip() {
-    assert_eq!(EmbeddingProvider::from_str("openai"), Some(EmbeddingProvider::OpenAI));
-    assert_eq!(EmbeddingProvider::from_str("ollama"), Some(EmbeddingProvider::Ollama));
-    assert_eq!(EmbeddingProvider::from_str("local"), Some(EmbeddingProvider::Local));
-    assert_eq!(EmbeddingProvider::from_str("unknown"), None);
+    assert_eq!(
+        "openai".parse::<EmbeddingProvider>(),
+        Ok(EmbeddingProvider::OpenAI)
+    );
+    assert_eq!(
+        "ollama".parse::<EmbeddingProvider>(),
+        Ok(EmbeddingProvider::Ollama)
+    );
+    assert_eq!(
+        "local".parse::<EmbeddingProvider>(),
+        Ok(EmbeddingProvider::Local)
+    );
+    assert!("unknown".parse::<EmbeddingProvider>().is_err());
 }

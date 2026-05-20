@@ -1,5 +1,7 @@
 use piramid::{
-    index::{FlatConfig, FlatIndex, HnswConfig, HnswIndex, IvfConfig, IvfIndex, IndexConfig, IndexType},
+    index::{
+        FlatConfig, FlatIndex, HnswConfig, HnswIndex, IndexConfig, IndexType, IvfConfig, IvfIndex,
+    },
     VectorIndex,
 };
 use std::collections::HashMap;
@@ -21,7 +23,14 @@ fn flat_index_searches() {
     idx.insert(id2, &v2, &vectors);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
-    let results = idx.search(&v1, 1, &vectors, piramid::config::SearchConfig::default(), None, &empty_meta);
+    let results = idx.search(
+        &v1,
+        1,
+        &vectors,
+        piramid::config::SearchConfig::default(),
+        None,
+        &empty_meta,
+    );
     assert_eq!(results.first(), Some(&id1));
 }
 
@@ -62,7 +71,14 @@ fn ivf_search_basic() {
     idx.insert(id2, &v2, &vectors);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
-    let results = idx.search(&v1, 1, &vectors, piramid::config::SearchConfig::default(), None, &empty_meta);
+    let results = idx.search(
+        &v1,
+        1,
+        &vectors,
+        piramid::config::SearchConfig::default(),
+        None,
+        &empty_meta,
+    );
     assert!(!results.is_empty());
 }
 

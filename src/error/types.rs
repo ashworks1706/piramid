@@ -1,7 +1,7 @@
-use thiserror::Error;
-use std::io;
-use axum::response::{IntoResponse, Response};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use std::io;
+use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, PiramidError>;
 

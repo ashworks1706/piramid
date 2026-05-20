@@ -1,29 +1,26 @@
 // Clusters vectors using k-means, then searches only relevant clusters
 // O(√N) search complexity - much faster than brute force for large datasets
 
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 
 use super::config::IvfConfig;
-use crate::index::traits::{VectorIndex, IndexStats, IndexDetails, IndexType};
+use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex};
 
 // IVF index structure
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IvfIndex {
     config: IvfConfig,
-    centroids: Vec<Vec<f32>>,                    // Cluster centroids
-    inverted_lists: Vec<Vec<Uuid>>,              // vectors[cluster_id] = [vector_ids]
-    vector_to_cluster: HashMap<Uuid, usize>,     // Track which cluster each vector belongs to
+    centroids: Vec<Vec<f32>>,                // Cluster centroids
+    inverted_lists: Vec<Vec<Uuid>>,          // vectors[cluster_id] = [vector_ids]
+    vector_to_cluster: HashMap<Uuid, usize>, // Track which cluster each vector belongs to
     dimensions: usize,
 }
 
 impl IvfIndex {
     // IVF is a good choice for very large datasets where search speed is critical and some loss of
     // accuracy is acceptable.
-    
-
-    
 
     pub fn new(config: IvfConfig) -> Self {
         IvfIndex {
@@ -34,7 +31,7 @@ impl IvfIndex {
             dimensions: 0,
         }
     }
-    
+
     // Build clusters using k-means
     pub fn build_clusters(&mut self, vectors: &HashMap<Uuid, Vec<f32>>) {
         // building clusters is an offline process that can be done periodically as new vectors are
@@ -47,99 +44,108 @@ impl IvfIndex {
         if vectors.is_empty() {
             return;
         }
-        
+
         // Get dimensions from first vector
         if let Some(v) = vectors.values().next() {
             self.dimensions = v.len();
         }
-        
+
         let num_clusters = self.config.num_clusters.min(vectors.len());
-        
+
         // Initialize centroids randomly from existing vectors
-        let vector_list: Vec<(Uuid, Vec<f32>)> = vectors.iter()
-            .map(|(id, vec)| (*id, vec.clone()))
-            .collect();
-        
-        self.centroids = vector_list.iter()
+        let vector_list: Vec<(Uuid, Vec<f32>)> =
+            vectors.iter().map(|(id, vec)| (*id, vec.clone())).collect();
+
+        self.centroids = vector_list
+            .iter()
             .take(num_clusters)
             .map(|(_, v)| v.clone())
             .collect();
-        
+
         // K-means iterations
         for _ in 0..self.config.max_iterations {
             // Assign each vector to nearest centroid
             let mut clusters: Vec<Vec<(Uuid, Vec<f32>)>> = vec![Vec::new(); num_clusters];
-            
+
             for (id, vec) in &vector_list {
                 let cluster_id = self.find_nearest_centroid(vec);
                 clusters[cluster_id].push((*id, vec.clone()));
             }
-            
+
             // Update centroids
             let mut converged = true;
             for (i, cluster) in clusters.iter().enumerate() {
                 if cluster.is_empty() {
                     continue;
                 }
-                
+
                 let new_centroid = self.compute_centroid(cluster);
-                
+
                 // Check convergence
-                let distance = self.config.metric.calculate(&self.centroids[i], &new_centroid, self.config.mode);
-                if distance < 0.99 {  // If centroids moved significantly
+                let distance = self.config.metric.calculate(
+                    &self.centroids[i],
+                    &new_centroid,
+                    self.config.mode,
+                );
+                if distance < 0.99 {
+                    // If centroids moved significantly
                     converged = false;
                 }
-                
+
                 self.centroids[i] = new_centroid;
             }
-            
+
             if converged {
                 break;
             }
         }
-        
+
         // Build inverted lists
         self.inverted_lists = vec![Vec::new(); num_clusters];
         self.vector_to_cluster.clear();
-        
+
         for (id, vec) in &vector_list {
             let cluster_id = self.find_nearest_centroid(vec);
             self.inverted_lists[cluster_id].push(*id);
             self.vector_to_cluster.insert(*id, cluster_id);
         }
     }
-    
+
     fn find_nearest_centroid(&self, vector: &[f32]) -> usize {
-        self.centroids.iter()
+        self.centroids
+            .iter()
             .enumerate()
             .map(|(i, centroid)| {
-                let score = self.config.metric.calculate(vector, centroid, self.config.mode);
+                let score = self
+                    .config
+                    .metric
+                    .calculate(vector, centroid, self.config.mode);
                 (i, score)
             })
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
             .unwrap_or(0)
     }
-    
+
     fn compute_centroid(&self, cluster: &[(Uuid, Vec<f32>)]) -> Vec<f32> {
-        // Compute mean vector for the cluster by summing all vectors and dividing by count 
+        // Compute mean vector for the cluster by summing all vectors and dividing by count
         if cluster.is_empty() {
             return vec![0.0; self.dimensions];
         }
-        
+
         let mut centroid = vec![0.0; self.dimensions];
-        
+
         for (_, vec) in cluster {
             for (i, &val) in vec.iter().enumerate() {
                 centroid[i] += val;
             }
         }
-        
+
         let count = cluster.len() as f32;
         for val in &mut centroid {
             *val /= count;
         }
-        
+
         centroid
     }
 }
@@ -154,18 +160,17 @@ impl VectorIndex for IvfIndex {
             }
             return;
         }
-        
+
         let cluster_id = self.find_nearest_centroid(vector);
-        
+
         // Add to inverted list
-        if cluster_id < self.inverted_lists.len() {
-            if !self.inverted_lists[cluster_id].contains(&id) {
-                self.inverted_lists[cluster_id].push(id);
-                self.vector_to_cluster.insert(id, cluster_id);
-            }
+        if cluster_id < self.inverted_lists.len() && !self.inverted_lists[cluster_id].contains(&id)
+        {
+            self.inverted_lists[cluster_id].push(id);
+            self.vector_to_cluster.insert(id, cluster_id);
         }
     }
-    
+
     fn search(
         &self,
         query: &[f32],
@@ -177,34 +182,41 @@ impl VectorIndex for IvfIndex {
     ) -> Vec<Uuid> {
         if self.centroids.is_empty() {
             // No clusters yet - fallback to brute force
-            let mut distances: Vec<(Uuid, f32)> = vectors.iter()
+            let mut distances: Vec<(Uuid, f32)> = vectors
+                .iter()
                 .map(|(id, vec)| {
                     let score = self.config.metric.calculate(query, vec, self.config.mode);
                     (*id, score)
                 })
                 .collect();
-            
+
             distances.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             return distances.iter().take(k).map(|(id, _)| *id).collect();
         }
-        
+
         // Find nearest centroids
-        let mut centroid_distances: Vec<(usize, f32)> = self.centroids.iter()
+        let mut centroid_distances: Vec<(usize, f32)> = self
+            .centroids
+            .iter()
             .enumerate()
             .map(|(i, centroid)| {
-                let score = self.config.metric.calculate(query, centroid, self.config.mode);
+                let score = self
+                    .config
+                    .metric
+                    .calculate(query, centroid, self.config.mode);
                 (i, score)
             })
             .collect();
-        
-        centroid_distances.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
+        centroid_distances
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
         // Use quality.nprobe if provided, otherwise use configured num_probes
         let nprobe = quality.nprobe.unwrap_or(self.config.num_probes);
-        
+
         // Search top nprobe clusters
         let mut candidates: Vec<(Uuid, f32)> = Vec::new();
-        
+
         for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
             if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
                 for id in vector_ids {
@@ -215,12 +227,12 @@ impl VectorIndex for IvfIndex {
                 }
             }
         }
-        
+
         // Sort and return top k
         candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         candidates.iter().take(k).map(|(id, _)| *id).collect()
     }
-    
+
     fn remove(&mut self, id: &Uuid) {
         if let Some(cluster_id) = self.vector_to_cluster.remove(id) {
             if let Some(list) = self.inverted_lists.get_mut(cluster_id) {
@@ -228,17 +240,19 @@ impl VectorIndex for IvfIndex {
             }
         }
     }
-    
+
     fn stats(&self) -> IndexStats {
-        let vectors_per_cluster = self.inverted_lists.iter()
-            .map(|list| list.len())
-            .collect();
-        
-        let memory_usage = 
-            self.centroids.len() * self.dimensions * std::mem::size_of::<f32>() +
-            self.vector_to_cluster.len() * (std::mem::size_of::<Uuid>() + std::mem::size_of::<usize>()) +
-            self.inverted_lists.iter().map(|l| l.len() * std::mem::size_of::<Uuid>()).sum::<usize>();
-        
+        let vectors_per_cluster = self.inverted_lists.iter().map(|list| list.len()).collect();
+
+        let memory_usage = self.centroids.len() * self.dimensions * std::mem::size_of::<f32>()
+            + self.vector_to_cluster.len()
+                * (std::mem::size_of::<Uuid>() + std::mem::size_of::<usize>())
+            + self
+                .inverted_lists
+                .iter()
+                .map(|l| l.len() * std::mem::size_of::<Uuid>())
+                .sum::<usize>();
+
         IndexStats {
             index_type: IndexType::Ivf,
             total_vectors: self.vector_to_cluster.len(),
@@ -250,7 +264,7 @@ impl VectorIndex for IvfIndex {
             },
         }
     }
-    
+
     fn index_type(&self) -> IndexType {
         IndexType::Ivf
     }

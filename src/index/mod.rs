@@ -1,16 +1,16 @@
 // Supports: HNSW, Flat, IVF
 
-mod traits;
-mod selector;
-pub mod hnsw;
 pub mod flat;
+pub mod hnsw;
 pub mod ivf;
+mod selector;
+mod traits;
 
 // Re-export trait and types
-pub use traits::{VectorIndex, IndexStats, IndexDetails, IndexType, SerializableIndex};
 pub use selector::IndexConfig;
+pub use traits::{IndexDetails, IndexStats, IndexType, SerializableIndex, VectorIndex};
 
 // Re-export index implementations
-pub use hnsw::{HnswIndex, HnswConfig, HnswStats};
-pub use flat::{FlatIndex, FlatConfig};
-pub use ivf::{IvfIndex, IvfConfig};
+pub use flat::{FlatConfig, FlatIndex};
+pub use hnsw::{HnswConfig, HnswIndex, HnswStats};
+pub use ivf::{IvfConfig, IvfIndex};

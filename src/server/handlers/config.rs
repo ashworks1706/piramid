@@ -1,11 +1,11 @@
 use axum::{extract::State, response::Json};
 use std::sync::atomic::Ordering;
 
-use crate::error::{Result, ServerError};
 use super::super::{
     state::SharedState,
-    types::{ConfigStatusResponse, ConfigReloadResponse},
+    types::{ConfigReloadResponse, ConfigStatusResponse},
 };
+use crate::error::{Result, ServerError};
 
 // GET /api/config - return current effective config
 pub async fn config_status(State(state): State<SharedState>) -> Result<Json<ConfigStatusResponse>> {

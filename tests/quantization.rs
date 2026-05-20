@@ -36,7 +36,10 @@ fn quantization_negative_values() {
 #[test]
 fn quantization_pq_roundtrip() {
     let original: Vec<f32> = (0..32).map(|i| i as f32 * 0.1).collect();
-    let pq = QuantizedVector::from_f32_with_config(&original, &piramid::config::QuantizationConfig::pq(4));
+    let pq = QuantizedVector::from_f32_with_config(
+        &original,
+        &piramid::config::QuantizationConfig::pq(4),
+    );
     let restored = pq.to_f32();
     assert_eq!(restored.len(), original.len());
 }

@@ -1,7 +1,9 @@
 //!  defines the data structures used for handling range search requests and responses in the API.
 use serde::Deserialize;
 
-fn default_k() -> usize { 10 }
+fn default_k() -> usize {
+    10
+}
 
 #[derive(Deserialize)]
 pub struct RangeSearchRequest {

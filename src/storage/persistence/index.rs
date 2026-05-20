@@ -1,7 +1,7 @@
 // Index utilities for vector storage
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::error::Result;
@@ -10,8 +10,8 @@ use crate::error::Result;
 // This is just file storage metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntryPointer {
-    pub offset: u64,      // byte offset in file
-    pub length: u32,      // size of serialized entry
+    pub offset: u64, // byte offset in file
+    pub length: u32, // size of serialized entry
 }
 
 impl EntryPointer {
@@ -29,7 +29,7 @@ pub fn save_index(path: &str, index: &HashMap<Uuid, EntryPointer>) -> Result<()>
 
 pub fn load_index(path: &str) -> Result<HashMap<Uuid, EntryPointer>> {
     let index_path = format!("{}.index.db", path);
-    
+
     if let Ok(mut index_file) = std::fs::File::open(&index_path) {
         use std::io::Read;
         let mut index_data = Vec::new();

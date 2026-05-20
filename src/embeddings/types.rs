@@ -11,16 +11,16 @@ pub type EmbeddingResult<T> = Result<T, EmbeddingError>;
 pub struct EmbeddingConfig {
     // Provider type (openai, ollama, etc.)
     pub provider: String,
-    
+
     // Model name
     pub model: String,
-    
+
     // API key for providers that require it
     pub api_key: Option<String>,
-    
+
     // Base URL for self-hosted or custom endpoints
     pub base_url: Option<String>,
-    
+
     // Additional options
     #[serde(default)]
     pub options: serde_json::Value,
@@ -47,10 +47,10 @@ impl Default for EmbeddingConfig {
 pub struct EmbeddingResponse {
     // The embedding vector
     pub embedding: Vec<f32>,
-    
+
     // Number of tokens used if reported by provider
     pub tokens: Option<u32>,
-    
+
     // Model that generated the embedding
     pub model: String,
 }
@@ -67,6 +67,6 @@ pub trait Embedder: Send + Sync {
 
     fn model_name(&self) -> &str;
 
-    // Get the expected dimension of embeddings 
+    // Get the expected dimension of embeddings
     fn dimensions(&self) -> Option<usize>;
 }

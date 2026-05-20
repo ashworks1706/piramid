@@ -1,4 +1,4 @@
-use axum::{http::Request, response::Response, middleware::Next, body::Body};
+use axum::{body::Body, http::Request, middleware::Next, response::Response};
 use uuid::Uuid;
 
 /// Request ID stored in request extensions.
@@ -11,6 +11,7 @@ pub async fn assign_request_id(mut req: Request<Body>, next: Next) -> Response {
     req.extensions_mut().insert(RequestId(req_id.clone()));
 
     let mut res = next.run(req).await;
-    res.headers_mut().insert("x-request-id", req_id.parse().unwrap());
+    res.headers_mut()
+        .insert("x-request-id", req_id.parse().unwrap());
     res
 }

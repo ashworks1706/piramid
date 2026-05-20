@@ -1,18 +1,18 @@
-//  a unified configuration interface for different types of vector indices (Flat, HNSW, IVF). 
-use serde::{Serialize, Deserialize};
-use crate::metrics::Metric;
+//  a unified configuration interface for different types of vector indices (Flat, HNSW, IVF).
 use crate::config::ExecutionMode;
 use crate::config::SearchConfig;
+use crate::metrics::Metric;
+use serde::{Deserialize, Serialize};
 
-use super::traits::{VectorIndex, IndexType};
-use super::{FlatIndex, FlatConfig, HnswIndex, HnswConfig, IvfIndex, IvfConfig};
+use super::traits::{IndexType, VectorIndex};
+use super::{FlatConfig, FlatIndex, HnswConfig, HnswIndex, IvfConfig, IvfIndex};
 
 // Unified index configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum IndexConfig {
     // Auto-select based on size (default)
-    Auto { 
+    Auto {
         metric: Metric,
         #[serde(default)]
         mode: ExecutionMode,
@@ -20,7 +20,7 @@ pub enum IndexConfig {
         search: SearchConfig,
     },
     // Flat index (brute force)
-    Flat { 
+    Flat {
         metric: Metric,
         #[serde(default)]
         mode: ExecutionMode,
@@ -33,7 +33,7 @@ pub enum IndexConfig {
         m_max: usize,
         ef_construction: usize,
         #[serde(default)]
-        ef_search: usize, 
+        ef_search: usize,
         ml: f32,
         metric: Metric,
         #[serde(default)]
@@ -56,7 +56,7 @@ pub enum IndexConfig {
 
 impl Default for IndexConfig {
     fn default() -> Self {
-        IndexConfig::Auto { 
+        IndexConfig::Auto {
             metric: Metric::Cosine,
             mode: ExecutionMode::default(),
             search: SearchConfig::default(),
@@ -83,11 +83,11 @@ impl IndexConfig {
             IndexConfig::Ivf { .. } => IndexType::Ivf,
         }
     }
-    
+
     // Create an index based on configuration and size
     pub fn create_index(&self, num_vectors: usize) -> Box<dyn VectorIndex> {
         let index_type = self.select_type(num_vectors);
-        
+
         match index_type {
             IndexType::Flat => {
                 // we use the metric and mode from the config, but the rest of the parameters are not needed for a flat index.
@@ -96,17 +96,28 @@ impl IndexConfig {
             }
             IndexType::Hnsw => {
                 let config = match self {
-                    IndexConfig::Hnsw { m, m_max, ef_construction, ef_search, ml, metric, mode, .. } => {
-                        HnswConfig {
-                            m: *m,
-                            m_max: *m_max,
-                            ef_construction: *ef_construction,
-                            ef_search: if *ef_search == 0 { *ef_construction } else { *ef_search },
-                            ml: *ml,
-                            metric: *metric,
-                            mode: *mode,
-                        }
-                    }
+                    IndexConfig::Hnsw {
+                        m,
+                        m_max,
+                        ef_construction,
+                        ef_search,
+                        ml,
+                        metric,
+                        mode,
+                        ..
+                    } => HnswConfig {
+                        m: *m,
+                        m_max: *m_max,
+                        ef_construction: *ef_construction,
+                        ef_search: if *ef_search == 0 {
+                            *ef_construction
+                        } else {
+                            *ef_search
+                        },
+                        ml: *ml,
+                        metric: *metric,
+                        mode: *mode,
+                    },
                     _ => {
                         //  we use default HNSW parameters but apply the metric and mode from the config. The ef_search parameter defaults to the same value as ef_construction if not explicitly set
                         let (metric, mode) = self.get_metric_and_simd();
@@ -125,15 +136,20 @@ impl IndexConfig {
             }
             IndexType::Ivf => {
                 let config = match self {
-                    IndexConfig::Ivf { num_clusters, num_probes, max_iterations, metric, mode, .. } => {
-                        IvfConfig {
-                            num_clusters: *num_clusters,
-                            num_probes: *num_probes,
-                            max_iterations: *max_iterations,
-                            metric: *metric,
-                            mode: *mode,
-                        }
-                    }
+                    IndexConfig::Ivf {
+                        num_clusters,
+                        num_probes,
+                        max_iterations,
+                        metric,
+                        mode,
+                        ..
+                    } => IvfConfig {
+                        num_clusters: *num_clusters,
+                        num_probes: *num_probes,
+                        max_iterations: *max_iterations,
+                        metric: *metric,
+                        mode: *mode,
+                    },
                     _ => {
                         // we use the auto-configure method to determine the number of clusters and probes based on the number of vectors, while applying the metric and mode from the config. configured dynamically based on the dataset size while still respecting user preferences for the distance metric and execution mode.
                         let (metric, mode) = self.get_metric_and_simd();
@@ -147,7 +163,7 @@ impl IndexConfig {
             }
         }
     }
-    
+
     #[allow(dead_code)]
     fn get_metric(&self) -> Metric {
         match self {
@@ -157,7 +173,7 @@ impl IndexConfig {
             IndexConfig::Ivf { metric, .. } => *metric,
         }
     }
-    
+
     fn get_metric_and_simd(&self) -> (Metric, ExecutionMode) {
         match self {
             IndexConfig::Auto { metric, mode, .. } => (*metric, *mode),
@@ -169,10 +185,10 @@ impl IndexConfig {
 
     pub fn search_config(&self) -> SearchConfig {
         match self {
-            IndexConfig::Auto { search, .. } => search.clone(),
-            IndexConfig::Flat { search, .. } => search.clone(),
-            IndexConfig::Hnsw { search, .. } => search.clone(),
-            IndexConfig::Ivf { search, .. } => search.clone(),
+            IndexConfig::Auto { search, .. } => *search,
+            IndexConfig::Flat { search, .. } => *search,
+            IndexConfig::Hnsw { search, .. } => *search,
+            IndexConfig::Ivf { search, .. } => *search,
         }
     }
 }

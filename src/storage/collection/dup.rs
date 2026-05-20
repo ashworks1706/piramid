@@ -1,11 +1,11 @@
 // a simple duplicate detection algorithm for a collection of vectors.
 
-use uuid::Uuid;
 use std::collections::HashSet;
+use uuid::Uuid;
 
-use crate::metrics::Metric;
-use crate::error::Result;
 use super::storage::Collection;
+use crate::error::Result;
+use crate::metrics::Metric;
 
 #[derive(Debug)]
 pub struct DuplicateHit {
@@ -16,8 +16,8 @@ pub struct DuplicateHit {
 
 // finds pairs of vectors in the collection that are similar according to the given metric and threshold.
 pub fn find_duplicates(
-    collection: &Collection, // collection to search for duplicates.
-    metric: Metric, // similarity metric to use for comparing vectors.
+    collection: &Collection,        // collection to search for duplicates.
+    metric: Metric,                 // similarity metric to use for comparing vectors.
     threshold: f32, // minimum similarity score for two vectors to be considered duplicates.
     limit: Option<usize>, // optional limit on the number of duplicate pairs to return.
     k_override: Option<usize>, // optional override for the number of nearest neighbors to consider when searching for duplicates.
@@ -50,32 +50,39 @@ pub fn find_duplicates(
             Some(v) => v,
             None => continue,
         };
-        let neighbors = collection.vector_index().search(
-            vec,
-            neighbor_k,
-            vectors,
-            search_cfg,
-            None,
-            metadatas,
-        );
+        let neighbors = collection
+            .vector_index()
+            .search(vec, neighbor_k, vectors, search_cfg, None, metadatas);
         for neighbor_id in neighbors {
             if neighbor_id == *id {
                 continue;
             }
-            let (a, b) = if id < &neighbor_id { (*id, neighbor_id) } else { (neighbor_id, *id) };
+            let (a, b) = if id < &neighbor_id {
+                (*id, neighbor_id)
+            } else {
+                (neighbor_id, *id)
+            };
             if !seen.insert((a, b)) {
                 continue;
             }
             if let (Some(va), Some(vb)) = (vectors.get(&a), vectors.get(&b)) {
                 let score = metric.calculate(va, vb, mode);
                 if score >= threshold {
-                    pairs.push(DuplicateHit { id_a: a, id_b: b, score });
+                    pairs.push(DuplicateHit {
+                        id_a: a,
+                        id_b: b,
+                        score,
+                    });
                 }
             }
         }
     }
 
-    pairs.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    pairs.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     if let Some(max) = limit {
         pairs.truncate(max);
     }

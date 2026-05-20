@@ -1,14 +1,15 @@
 // Compaction logic for collections, including rewriting live documents and rebuilding indexes.
-//  takes a mutable reference to a `Collection` and performs compaction by creating a new temporary file, copying live documents to it, rebuilding the index and vector index, and then replacing the original file with the compacted version. 
-use crate::error::Result;
-use crate::storage::document::Document;
-use crate::storage::persistence::{save_index, save_vector_index, save_metadata, create_mmap, ensure_file_size};
+//  takes a mutable reference to a `Collection` and performs compaction by creating a new temporary file, copying live documents to it, rebuilding the index and vector index, and then replacing the original file with the compacted version.
 use super::storage::Collection;
+use crate::error::Result;
 use crate::storage::collection::operations;
+use crate::storage::document::Document;
+use crate::storage::persistence::{
+    create_mmap, ensure_file_size, save_index, save_metadata, save_vector_index,
+};
 
 /// Compact a collection by rewriting live documents into a fresh file and rebuilding indexes.
 pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
-
     // 1. Get all live documents and their count before compaction
     let original_entries = collection.index.len();
     let docs: Vec<Document> = collection.get_all();
@@ -29,7 +30,6 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
         None
     };
 
-
     // 3. Clear existing indexes and caches in preparation for rebuilding
     // Reset indexes and caches
     collection.index.clear();
@@ -42,7 +42,6 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     for doc in docs {
         operations::insert_internal(collection, doc)?;
     }
-
 
     // 4. Save the new index, vector index, and metadata to disk after compaction
     save_index(&collection.path, &collection.index)?;

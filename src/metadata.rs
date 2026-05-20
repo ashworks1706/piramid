@@ -6,12 +6,12 @@ use std::collections::HashMap;
 // Rust enums with data: each variant can hold different types!
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MetadataValue {
-    String(String),              // holds a String
-    Integer(i64),                // holds an i64
+    String(String), // holds a String
+    Integer(i64),   // holds an i64
     Float(f64),
     Boolean(bool),
-    Array(Vec<MetadataValue>),   // recursive! can hold array of values
-    Null,                        // no data
+    Array(Vec<MetadataValue>), // recursive! can hold array of values
+    Null,                      // no data
 }
 
 impl MetadataValue {
@@ -19,14 +19,14 @@ impl MetadataValue {
     // Return Option<T> because it might not be that type
     pub fn as_string(&self) -> Option<&str> {
         match self {
-            MetadataValue::String(s) => Some(s),  // return reference to inner string
-            _ => None,                             // _ matches anything else
+            MetadataValue::String(s) => Some(s), // return reference to inner string
+            _ => None,                           // _ matches anything else
         }
     }
 
     pub fn as_integer(&self) -> Option<i64> {
         match self {
-            MetadataValue::Integer(i) => Some(*i),  // *i dereferences to copy the i64
+            MetadataValue::Integer(i) => Some(*i), // *i dereferences to copy the i64
             _ => None,
         }
     }
@@ -56,7 +56,7 @@ impl From<String> for MetadataValue {
 
 impl From<&str> for MetadataValue {
     fn from(s: &str) -> Self {
-        MetadataValue::String(s.to_string())  // &str -> String (allocates)
+        MetadataValue::String(s.to_string()) // &str -> String (allocates)
     }
 }
 
@@ -68,7 +68,7 @@ impl From<i64> for MetadataValue {
 
 impl From<i32> for MetadataValue {
     fn from(i: i32) -> Self {
-        MetadataValue::Integer(i as i64)  // `as` for numeric conversions
+        MetadataValue::Integer(i as i64) // `as` for numeric conversions
     }
 }
 
@@ -95,7 +95,8 @@ pub type Metadata = HashMap<String, MetadataValue>;
 // Helper to create metadata inline
 //  `const N: usize` is a const generic - array size known at compile time
 pub fn metadata<const N: usize>(pairs: [(&str, MetadataValue); N]) -> Metadata {
-    pairs.into_iter()                          // consume array into iterator
-        .map(|(k, v)| (k.to_string(), v))      // convert &str keys to String
-        .collect()                              // collect into HashMap
+    pairs
+        .into_iter() // consume array into iterator
+        .map(|(k, v)| (k.to_string(), v)) // convert &str keys to String
+        .collect() // collect into HashMap
 }

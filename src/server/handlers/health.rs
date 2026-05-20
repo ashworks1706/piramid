@@ -1,9 +1,12 @@
-use axum::{http::StatusCode, response::Json};
-use super::super::{state::SharedState, types::{HealthResponse, MetricsResponse, CollectionMetrics, EmbeddingMetricsResponse}};
-use axum::extract::State;
+use super::super::{
+    state::SharedState,
+    types::{CollectionMetrics, EmbeddingMetricsResponse, HealthResponse, MetricsResponse},
+};
 use crate::error::Result;
-use crate::server::types::WalStats;
 use crate::server::metrics::record_lock_read;
+use crate::server::types::WalStats;
+use axum::extract::State;
+use axum::{http::StatusCode, response::Json};
 
 // GET /api/health - simple liveness check
 pub async fn health() -> Json<HealthResponse> {
@@ -26,19 +29,22 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
     let mut collection_metrics = Vec::new();
     let mut wal_stats = Vec::new();
     let mut total_vectors = 0;
-    
+
     for item in state.collections.iter() {
         let collection_name = item.key().clone();
         let storage_ref = item.value();
-        
+
         // Use a read lock with timeout
         let lock_start = std::time::Instant::now();
         let storage = storage_ref.read();
-        record_lock_read(state.latency_tracker.get(&collection_name).as_deref(), lock_start);
+        record_lock_read(
+            state.latency_tracker.get(&collection_name).as_deref(),
+            lock_start,
+        );
         let count = storage.count();
         let index_type = storage.vector_index().index_type().to_string();
         let memory_usage_bytes = storage.memory_usage_bytes();
-        
+
         // Get latency stats for this collection
         let (insert_latency_ms, search_latency_ms, lock_read_ms, lock_write_ms) =
             if let Some(tracker) = state.latency_tracker.get(&collection_name) {
@@ -54,10 +60,18 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
 
         total_vectors += count;
         let (search_overfetch, hnsw_ef_search, ivf_nprobe) = match &storage.config.index {
-            crate::index::IndexConfig::Auto { search, .. } => (Some(search.filter_overfetch), None, None),
-            crate::index::IndexConfig::Flat { search, .. } => (Some(search.filter_overfetch), None, None),
-            crate::index::IndexConfig::Hnsw { ef_search, search, .. } => (Some(search.filter_overfetch), Some(*ef_search), None),
-            crate::index::IndexConfig::Ivf { num_probes, search, .. } => (Some(search.filter_overfetch), None, Some(*num_probes)),
+            crate::index::IndexConfig::Auto { search, .. } => {
+                (Some(search.filter_overfetch), None, None)
+            }
+            crate::index::IndexConfig::Flat { search, .. } => {
+                (Some(search.filter_overfetch), None, None)
+            }
+            crate::index::IndexConfig::Hnsw {
+                ef_search, search, ..
+            } => (Some(search.filter_overfetch), Some(*ef_search), None),
+            crate::index::IndexConfig::Ivf {
+                num_probes, search, ..
+            } => (Some(search.filter_overfetch), None, Some(*num_probes)),
         };
 
         collection_metrics.push(CollectionMetrics {
@@ -74,7 +88,7 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
             ivf_nprobe,
         });
 
-        let wal_size = std::fs::metadata(&format!("{}.wal.db", storage.path))
+        let wal_size = std::fs::metadata(format!("{}.wal.db", storage.path))
             .map(|m| m.len())
             .ok();
         let checkpoint_age_secs = storage.persistence.last_checkpoint().and_then(|ts| {
@@ -90,7 +104,7 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
             checkpoint_age_secs,
             wal_size_bytes: wal_size,
         });
-    } 
+    }
 
     let embed_metrics = state.embed_metrics.snapshot();
     let embed_metrics_response = EmbeddingMetricsResponse {
@@ -99,7 +113,7 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
         total_tokens: embed_metrics.total_tokens,
         avg_latency_ms: embed_metrics.avg_latency_ms,
     };
-    
+
     Ok(Json(MetricsResponse {
         total_collections: state.collections.len(),
         total_vectors,

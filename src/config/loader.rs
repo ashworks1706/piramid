@@ -18,11 +18,7 @@ pub struct RuntimeConfig {
 
 /// Load configuration from file, then apply environment overrides.
 pub fn load_app_config() -> AppConfig {
-    let mut cfg = if let Some(file_cfg) = load_from_file() {
-        file_cfg
-    } else {
-        AppConfig::default()
-    };
+    let mut cfg = load_from_file().unwrap_or_default();
 
     // Apply environment overrides
     cfg.apply_env_overrides();
@@ -86,7 +82,7 @@ pub fn load_runtime_config() -> RuntimeConfig {
             api_key: embedding_api_key,
             base_url: embedding_base_url,
             options: serde_json::json!({}),
-             timeout: embedding_timeout,
+            timeout: embedding_timeout,
         }
     });
 

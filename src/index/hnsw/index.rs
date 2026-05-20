@@ -1,13 +1,13 @@
-use uuid::Uuid;
-use std::collections::{HashMap, HashSet, BinaryHeap};
-use std::cmp::Ordering;
 use crate::metrics::Metric;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
+use uuid::Uuid;
 
 use super::config::{HnswConfig, HnswStats};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct HnswNode{
+struct HnswNode {
     // connections[layer] = Vec of neighbor IDs at that layer
     // Layer 0 is at index 0
     connections: Vec<Vec<Uuid>>,
@@ -19,6 +19,12 @@ struct HnswNode{
 struct SearchCandidate {
     id: Uuid,
     distance: f32,
+}
+
+struct SearchContext<'a> {
+    vectors: &'a HashMap<Uuid, Vec<f32>>,
+    filter: Option<&'a crate::search::query::Filter>,
+    metadatas: &'a HashMap<Uuid, crate::metadata::Metadata>,
 }
 impl PartialEq for SearchCandidate {
     fn eq(&self, other: &Self) -> bool {
@@ -37,22 +43,25 @@ impl PartialOrd for SearchCandidate {
 impl Ord for SearchCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // For max heap, reverse ordering so closest (smallest distance) comes first
-        other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal) 
+        other
+            .distance
+            .partial_cmp(&self.distance)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
 // Main HNSW index structure
 #[derive(Clone, Serialize, Deserialize)]
-pub struct HnswIndex{
+pub struct HnswIndex {
     config: HnswConfig,
     nodes: HashMap<Uuid, HnswNode>,
     max_level: isize,
     start_node: Option<Uuid>,
 }
 
-impl HnswIndex{
-    pub fn new(config: HnswConfig) -> Self{
-        HnswIndex{
+impl HnswIndex {
+    pub fn new(config: HnswConfig) -> Self {
+        HnswIndex {
             config,
             nodes: HashMap::new(),
             max_level: -1,
@@ -71,26 +80,31 @@ impl HnswIndex{
     }
     // higher layers have exponentially fewer nodes, so we want to assign layers
     // to new nodes in a way that reflects this distribution
-    fn random_layer(&self) -> usize{
-        // exponential decay probability 
+    fn random_layer(&self) -> usize {
+        // exponential decay probability
         // floor(-ln(uniform_random) * ml)
         let r: f32 = rand::random();
         (-r.ln() * self.config.ml).floor() as usize // this basically gives us a layer based on exponential decay
     }
 
     // Insert a node with access to vector storage for distance calculations
-    pub fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>){
+    pub fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>) {
         let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
+        let search_context = SearchContext {
+            vectors,
+            filter: None,
+            metadatas: &empty_meta,
+        };
         // in hnsw, we add nodes one at a time, connecting them to existing nodes
         // first, we need to create the node and determine its level
-        // determine the layer for the new node 
+        // determine the layer for the new node
         let layer = self.random_layer(); // this gives us a layer based on exponential decay
 
-        // if first node, make it entry point and return 
-        if self.start_node.is_none(){
+        // if first node, make it entry point and return
+        if self.start_node.is_none() {
             self.start_node = Some(id); // set entry point
             self.max_level = layer as isize; // this makes sure max_level is always the highest level
-            let node = HnswNode{ 
+            let node = HnswNode {
                 connections: vec![Vec::new(); layer + 1], // this creates empty connections for each layer
                 tombstone: false,
             }; // create the node
@@ -102,30 +116,35 @@ impl HnswIndex{
         // we do this by greedy search
         // start from the highest layer of the current entry point
         let mut current_entry = vec![self.start_node.unwrap()];
-        
+
         // Search from top layer down to target layer (layer + 1)
         for lc in ((layer as isize + 1)..=self.max_level).rev() {
-            current_entry = self.search_layer(vector, &current_entry, 1, lc as usize, vectors, None, &empty_meta);
+            current_entry =
+                self.search_layer(vector, &current_entry, 1, lc as usize, &search_context);
         }
 
         // Insert and connect at each layer from target down to 0
         // (keep pending connections to avoid partial writes before pruning).
         let mut pending_connections = vec![Vec::new(); layer + 1];
-        for lc in (0..=layer).rev() { // 0..=layer means we go from layer down to 0 since we are
-                                      // doing rev()
+        for lc in (0..=layer).rev() {
+            // 0..=layer means we go from layer down to 0 since we are
+            // doing rev()
             // Search for ef_construction nearest neighbors at this layer
-            current_entry = self.search_layer( // ef_construction means we want to find this many neighbors
+            current_entry = self.search_layer(
+                // ef_construction means we want to find this many neighbors
                 vector,
                 &current_entry,
                 self.config.ef_construction,
                 lc,
-                vectors,
-                None,
-                &empty_meta,
+                &search_context,
             );
 
             // Select M best neighbors (or M_max for layer 0)
-            let m = if lc == 0 { self.config.m_max } else { self.config.m };
+            let m = if lc == 0 {
+                self.config.m_max
+            } else {
+                self.config.m
+            };
             let neighbors = self.select_neighbors(&current_entry, m, vectors, vector);
 
             // Add bidirectional connections
@@ -139,7 +158,8 @@ impl HnswIndex{
                 }
 
                 // Add edge from neighbor to new node
-                if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) { // get mutable reference to neighbor why?
+                if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) {
+                    // get mutable reference to neighbor why?
                     // because we want to modify it's connections
                     if lc < neighbor.connections.len() {
                         neighbor.connections[lc].push(id);
@@ -150,14 +170,14 @@ impl HnswIndex{
                             // Clone the connections and neighbor vector to avoid borrow issues
                             let neighbor_connections = neighbor.connections[lc].clone();
                             let neighbor_vec = vectors.get(&neighbor_id).unwrap().clone();
-                            
+
                             let pruned = self.select_neighbors(
                                 &neighbor_connections,
                                 m,
                                 vectors,
-                                &neighbor_vec
+                                &neighbor_vec,
                             );
-                            
+
                             if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) {
                                 if lc < neighbor.connections.len() {
                                     neighbor.connections[lc] = pruned;
@@ -170,7 +190,7 @@ impl HnswIndex{
         }
 
         // Create and insert the new node
-        let new_node = HnswNode{
+        let new_node = HnswNode {
             connections: pending_connections,
             tombstone: false,
         };
@@ -202,14 +222,20 @@ impl HnswIndex{
         let ep = self.start_node.unwrap();
         let mut current_nearest = vec![ep];
 
+        let search_context = SearchContext {
+            vectors,
+            filter,
+            metadatas,
+        };
+
         // Search from top layer down to layer 1
         for lc in (1..=self.max_level as usize).rev() {
-            current_nearest = self.search_layer(query, &current_nearest, 1, lc, vectors, filter, metadatas);
+            current_nearest = self.search_layer(query, &current_nearest, 1, lc, &search_context);
         }
 
         // Search layer 0 with ef
-        current_nearest = self.search_layer(query, &current_nearest, ef.max(k), 0, vectors, filter, metadatas);
-        
+        current_nearest = self.search_layer(query, &current_nearest, ef.max(k), 0, &search_context);
+
         // Return top k
         let mut filtered: Vec<Uuid> = current_nearest
             .into_iter()
@@ -226,9 +252,7 @@ impl HnswIndex{
         entry_points: &[Uuid],
         num_closest: usize,
         level: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
-        filter: Option<&crate::search::query::Filter>,
-        metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
+        context: &SearchContext<'_>,
     ) -> Vec<Uuid> {
         let mut visited = HashSet::new();
         let mut candidates = BinaryHeap::new();
@@ -236,18 +260,24 @@ impl HnswIndex{
 
         // Initialize with entry points
         for &ep in entry_points {
-            if let Some(ep_vector) = vectors.get(&ep) {
-                if let Some(f) = filter {
-                    if let Some(md) = metadatas.get(&ep) {
+            if let Some(ep_vector) = context.vectors.get(&ep) {
+                if let Some(f) = context.filter {
+                    if let Some(md) = context.metadatas.get(&ep) {
                         if !f.matches(md) {
                             continue;
                         }
                     }
                 }
                 let dist = self.distance(query, ep_vector);
-                candidates.push(SearchCandidate { id: ep, distance: dist });
+                candidates.push(SearchCandidate {
+                    id: ep,
+                    distance: dist,
+                });
                 if !self.is_tombstone(&ep) {
-                    nearest.push(SearchCandidate { id: ep, distance: dist });
+                    nearest.push(SearchCandidate {
+                        id: ep,
+                        distance: dist,
+                    });
                 }
                 visited.insert(ep);
             }
@@ -267,12 +297,13 @@ impl HnswIndex{
             if let Some(node) = self.nodes.get(&candidate.id) {
                 if level < node.connections.len() {
                     for &neighbor_id in &node.connections[level] {
-                        if visited.insert(neighbor_id) { // only proceed if not visited
+                        if visited.insert(neighbor_id) {
+                            // only proceed if not visited
                             // we need to calculate distance to this neighbor and decide if it should be added to candidates and nearest
-                            if let Some(neighbor_vector) = vectors.get(&neighbor_id) { 
+                            if let Some(neighbor_vector) = context.vectors.get(&neighbor_id) {
                                 // apply filter if provided
-                                if let Some(f) = filter {
-                                    if let Some(md) = metadatas.get(&neighbor_id) {
+                                if let Some(f) = context.filter {
+                                    if let Some(md) = context.metadatas.get(&neighbor_id) {
                                         if !f.matches(md) {
                                             continue;
                                         }
@@ -280,19 +311,28 @@ impl HnswIndex{
                                 }
                                 let dist = self.distance(query, neighbor_vector);
                                 let neighbor_dead = self.is_tombstone(&neighbor_id);
-                                
+
                                 // If this neighbor is closer than the furthest in nearest, add it
                                 if dist < furthest_distance || nearest.len() < num_closest {
-                                    candidates.push(SearchCandidate { id: neighbor_id, distance: dist });
+                                    candidates.push(SearchCandidate {
+                                        id: neighbor_id,
+                                        distance: dist,
+                                    });
                                     if !neighbor_dead {
-                                        nearest.push(SearchCandidate { id: neighbor_id, distance: dist });
-                                        
+                                        nearest.push(SearchCandidate {
+                                            id: neighbor_id,
+                                            distance: dist,
+                                        });
+
                                         if nearest.len() > num_closest {
                                             nearest.pop(); // remove furthest
                                         }
-                                        
+
                                         // Update furthest distance
-                                        furthest_distance = nearest.peek().map(|c| c.distance).unwrap_or(f32::INFINITY);
+                                        furthest_distance = nearest
+                                            .peek()
+                                            .map(|c| c.distance)
+                                            .unwrap_or(f32::INFINITY);
                                     }
                                 }
                             }
@@ -304,10 +344,14 @@ impl HnswIndex{
 
         // Convert heap to sorted vector (closest first)
         let mut result: Vec<_> = nearest.into_iter().collect();
-        result.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(Ordering::Equal)); // sort
-                                                                                               // ascending
-                                                                                               // by
-                                                                                               // distance
+        result.sort_by(|a, b| {
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(Ordering::Equal)
+        }); // sort
+            // ascending
+            // by
+            // distance
         result.into_iter().map(|c| c.id).collect() // return only IDs
     }
 
@@ -373,11 +417,13 @@ impl HnswIndex{
 
         // Update entry point if needed
         if self.start_node == Some(*id) {
-            self.start_node = self.nodes
+            self.start_node = self
+                .nodes
                 .iter()
                 .find(|(_, n)| !n.tombstone)
                 .map(|(k, _)| *k);
-            self.max_level = self.nodes
+            self.max_level = self
+                .nodes
                 .values()
                 .filter(|n| !n.tombstone)
                 .map(|n| n.connections.len() as isize - 1)
@@ -393,8 +439,6 @@ impl HnswIndex{
         let mut layer_sizes = vec![0; (self.max_level + 1) as usize];
         let mut total_connections = 0;
 
-
-
         for node in self.nodes.values() {
             if node.tombstone {
                 tombstones += 1;
@@ -409,9 +453,18 @@ impl HnswIndex{
             }
         }
 
-        // calculate memory usage bytes 
-        let memory_usage_bytes = self.nodes.len() * std::mem::size_of::<(Uuid, HnswNode)>() + 
-                                 self.nodes.values().map(|n| n.connections.iter().map(|c| c.len() * std::mem::size_of::<Uuid>()).sum::<usize>()).sum::<usize>();
+        // calculate memory usage bytes
+        let memory_usage_bytes = self.nodes.len() * std::mem::size_of::<(Uuid, HnswNode)>()
+            + self
+                .nodes
+                .values()
+                .map(|n| {
+                    n.connections
+                        .iter()
+                        .map(|c| c.len() * std::mem::size_of::<Uuid>())
+                        .sum::<usize>()
+                })
+                .sum::<usize>();
 
         HnswStats {
             total_nodes,
@@ -426,10 +479,9 @@ impl HnswIndex{
             },
         }
     }
-    
+
     // Get configured ef_search parameter
     pub fn get_ef_search(&self) -> usize {
         self.config.ef_search
     }
 }
-

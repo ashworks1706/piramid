@@ -1,6 +1,6 @@
 // Collection metadata tracking (created_at, updated_at, dimensions)
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -8,9 +8,9 @@ pub struct CollectionMetadata {
     #[serde(default = "default_schema_version")]
     pub schema_version: u32,
     pub name: String,
-    pub created_at: u64,      // Unix timestamp (seconds)
-    pub updated_at: u64,      
-    pub dimensions: Option<usize>,  
+    pub created_at: u64, // Unix timestamp (seconds)
+    pub updated_at: u64,
+    pub dimensions: Option<usize>,
     pub vector_count: usize,
 }
 
@@ -26,7 +26,7 @@ impl CollectionMetadata {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         Self {
             schema_version: SCHEMA_VERSION,
             name,
@@ -36,26 +36,26 @@ impl CollectionMetadata {
             vector_count: 0,
         }
     }
-    
+
     pub fn with_dimensions(name: String, dimensions: usize) -> Self {
         let mut meta = Self::new(name);
         meta.dimensions = Some(dimensions);
         meta
     }
-    
+
     pub fn touch(&mut self) {
         self.updated_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
     }
-    
+
     pub fn set_dimensions(&mut self, dimensions: usize) {
         if self.dimensions.is_none() {
             self.dimensions = Some(dimensions);
         }
     }
-    
+
     pub fn update_vector_count(&mut self, count: usize) {
         self.vector_count = count;
         self.touch();

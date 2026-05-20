@@ -1,11 +1,12 @@
 // Provider factory and utilities
 
+use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResult};
-use super::openai::OpenAIEmbedder;
-use super::ollama::OllamaEmbedder;
 use super::local::LocalEmbedder;
+use super::ollama::OllamaEmbedder;
+use super::openai::OpenAIEmbedder;
+use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResult};
 
 // Enum of supported embedding providers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,16 +17,6 @@ pub enum EmbeddingProvider {
 }
 
 impl EmbeddingProvider {
-    // Parse provider from string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "openai" => Some(Self::OpenAI),
-            "ollama" => Some(Self::Ollama),
-            "local" => Some(Self::Local),
-            _ => None,
-        }
-    }
-
     // Get provider name
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -36,10 +27,23 @@ impl EmbeddingProvider {
     }
 }
 
+impl FromStr for EmbeddingProvider {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "openai" => Ok(Self::OpenAI),
+            "ollama" => Ok(Self::Ollama),
+            "local" => Ok(Self::Local),
+            _ => Err(()),
+        }
+    }
+}
+
 // Create an embedder from configuration
 // Determine which embedding provider to use based on the configuration
 pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embedder>> {
-    let provider = EmbeddingProvider::from_str(&config.provider).ok_or_else(|| {
+    let provider = config.provider.parse::<EmbeddingProvider>().map_err(|_| {
         EmbeddingError::ConfigError(format!("Unknown provider: {}", config.provider))
     })?;
 

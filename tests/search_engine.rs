@@ -1,4 +1,4 @@
-use piramid::{Collection, Document, Metric, Filter, SearchParams, metadata};
+use piramid::{metadata, Collection, Document, Filter, Metric, SearchParams};
 use std::fs;
 
 fn cleanup(path: &str) {
@@ -8,7 +8,7 @@ fn cleanup(path: &str) {
         format!("{}.vecindex.db", path),
         format!("{}.metadata.db", path),
     ];
-    for p in std::iter::once(path.to_string()).chain(sidecars.into_iter()) {
+    for p in std::iter::once(path.to_string()).chain(sidecars) {
         let _ = fs::remove_file(p);
     }
 }
@@ -43,8 +43,13 @@ fn search_respects_filter() {
             search_config_override: None,
         };
 
-        let results =
-            piramid::search::engine::search_collection(&storage, &[1.0, 0.0, 0.0], 5, Metric::Cosine, params);
+        let results = piramid::search::engine::search_collection(
+            &storage,
+            &[1.0, 0.0, 0.0],
+            5,
+            Metric::Cosine,
+            params,
+        );
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].text, "rust doc");
     }

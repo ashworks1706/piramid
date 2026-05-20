@@ -4,8 +4,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
-use crate::error::Result;
 use super::entry::WalEntry;
+use crate::error::Result;
 // The WAL file starts with a header line containing the version number, followed by one JSON-serialized entry per line. Each entry includes a sequence number (seq) that is assigned when the entry is logged. The replay method reads the WAL file and returns all entries with a sequence number greater than a specified minimum sequence number (min_seq). The log method appends a new entry to the WAL file, automatically assigning it the next sequence number. The checkpoint method logs a special checkpoint entry that can be used to indicate a consistent state of the collection, allowing older entries to be safely discarded after checkpointing. The rotate method allows for rotating the WAL file by closing the current one and starting a new, empty file, which is typically done after checkpointing to prevent the WAL from growing indefinitely.
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct WalHeader {
@@ -23,10 +23,7 @@ pub struct Wal {
 impl Wal {
     /// Create a WAL writer starting at the provided sequence.
     pub fn new(path: PathBuf, next_seq: u64) -> Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?;
+        let file = OpenOptions::new().create(true).append(true).open(&path)?;
         let mut wal = Wal {
             file: Some(BufWriter::new(file)),
             path,
@@ -35,7 +32,7 @@ impl Wal {
         wal.ensure_header()?;
         Ok(wal)
     }
-    
+
     /// Disabled WAL (noop) with a sequence counter for compatibility.
     pub fn disabled(path: PathBuf, next_seq: u64) -> Result<Self> {
         Ok(Wal {
@@ -43,18 +40,18 @@ impl Wal {
             path,
             next_seq,
         })
-    }  
+    }
 
     /// Replay entries with seq greater than `min_seq`.
     pub fn replay(&self, min_seq: u64) -> Result<Vec<WalEntry>> {
         if self.file.is_none() {
             return Ok(Vec::new());
         }
-        
+
         let file = File::open(&self.path)?;
         let reader = BufReader::new(file);
         let mut entries = Vec::new();
-        
+
         for line in reader.lines() {
             let line = line?;
             if line.is_empty() {
@@ -82,7 +79,7 @@ impl Wal {
             }
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -110,7 +107,7 @@ impl Wal {
         self.log(&mut entry)?;
         Ok(())
     }
-    
+
     // Rotate the WAL file by closing the current one and starting a new, empty file. This is typically done after a checkpoint to prevent the WAL from growing indefinitely and to allow old entries to be safely discarded.
     pub fn rotate(&mut self) -> Result<()> {
         if self.file.is_none() {
@@ -129,7 +126,7 @@ impl Wal {
         self.ensure_header()?;
         Ok(())
     }
-    
+
     pub fn flush(&mut self) -> Result<()> {
         if let Some(file) = &mut self.file {
             file.flush()?;
@@ -145,7 +142,9 @@ impl Wal {
         let metadata = std::fs::metadata(&self.path)?;
         if metadata.len() == 0 {
             if let Some(writer) = &mut self.file {
-                let header = WalHeader { version: WAL_VERSION };
+                let header = WalHeader {
+                    version: WAL_VERSION,
+                };
                 let json = serde_json::to_string(&header)?;
                 writeln!(writer, "{}", json)?;
                 writer.flush()?;

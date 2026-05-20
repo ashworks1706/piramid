@@ -1,28 +1,20 @@
-mod storage;
-mod operations;
 mod builder;
 mod cache;
+mod compact;
+mod dup;
+mod operations;
 mod persistence;
 mod search;
-mod dup;
-mod compact;
+mod storage;
 
-pub use storage::Collection;
 pub use builder::CollectionBuilder;
 pub use compact::{compact, CompactStats};
 pub use dup::{find_duplicates, DuplicateHit};
+pub use storage::Collection;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CollectionOpenOptions {
     pub config: crate::config::CollectionConfig,
-}
-
-impl Default for CollectionOpenOptions {
-    fn default() -> Self {
-        Self {
-            config: crate::config::CollectionConfig::default(),
-        }
-    }
 }
 //  allows users to directly pass a CollectionConfig when opening a collection, and it will be automatically converted into the appropriate open options
 impl From<crate::config::CollectionConfig> for CollectionOpenOptions {
@@ -31,13 +23,13 @@ impl From<crate::config::CollectionConfig> for CollectionOpenOptions {
     }
 }
 
-use uuid::Uuid;
 use crate::error::Result;
 use crate::metadata::Metadata;
 use crate::metrics::Metric;
 use crate::search::Hit;
 use crate::storage::document::Document;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 // Public API implementation
 impl Collection {
@@ -60,7 +52,7 @@ impl Collection {
     pub fn insert_batch(&mut self, entries: Vec<Document>) -> Result<Vec<Uuid>> {
         operations::insert_batch(self, entries)
     }
-    
+
     pub fn upsert(&mut self, entry: Document) -> Result<Uuid> {
         operations::upsert(self, entry)
     }
@@ -73,16 +65,21 @@ impl Collection {
         operations::delete_batch(self, ids)
     }
 
-    
     pub fn update_metadata(&mut self, id: &Uuid, metadata: Metadata) -> Result<bool> {
         operations::update_metadata(self, id, metadata)
     }
-    
+
     pub fn update_vector(&mut self, id: &Uuid, vector: Vec<f32>) -> Result<bool> {
         operations::update_vector(self, id, vector)
     }
 
-    pub fn search(&self, query: &[f32], k: usize, metric: Metric, params: crate::search::SearchParams) -> Vec<Hit> {
+    pub fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        metric: Metric,
+        params: crate::search::SearchParams,
+    ) -> Vec<Hit> {
         search::search(self, query, k, metric, params)
     }
 

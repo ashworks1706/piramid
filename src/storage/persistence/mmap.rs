@@ -13,7 +13,7 @@ pub fn ensure_file_size(file: &File, min_size: u64) -> Result<()> {
     Ok(())
 }
 
-// Create a mutable memory map for the given file. The file must already be of sufficient size to accommodate the memory map. 
+// Create a mutable memory map for the given file. The file must already be of sufficient size to accommodate the memory map.
 pub fn create_mmap(file: &File) -> Result<MmapMut> {
     unsafe { Ok(MmapOptions::new().map_mut(file)?) }
 }
@@ -56,8 +56,8 @@ pub fn grow_mmap_if_needed(
         } else {
             file.set_len(new_size)?;
         }
-    } 
-    // If the required size is within the current size, we can simply continue using the existing 
+    }
+    // If the required size is within the current size, we can simply continue using the existing
     // memory map without any changes.
     Ok(())
 }

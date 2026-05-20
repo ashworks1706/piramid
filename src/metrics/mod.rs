@@ -1,16 +1,14 @@
-
-
 pub mod cosine;
-pub mod euclidean;
 pub mod dot;
-pub mod latency;
 pub mod embed;
+pub mod euclidean;
+pub mod latency;
 
 pub use cosine::cosine_similarity;
-pub use euclidean::{euclidean_distance, euclidean_distance_squared};
 pub use dot::dot_product;
-pub use latency::{LatencyTracker, time_operation, time_operation_sync};
 pub use embed::{EmbedMetrics, EmbedMetricsSnapshot};
+pub use euclidean::{euclidean_distance, euclidean_distance_squared};
+pub use latency::{time_operation, time_operation_sync, LatencyTracker};
 
 use crate::config::ExecutionMode;
 

@@ -1,6 +1,6 @@
 use piramid::embeddings::{CachedEmbedder, Embedder, EmbeddingResponse, EmbeddingResult};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 struct MockEmbedder {
     call_count: Arc<AtomicUsize>,
@@ -33,7 +33,9 @@ impl Embedder for MockEmbedder {
 #[tokio::test]
 async fn cache_hits_and_eviction() {
     let call_count = Arc::new(AtomicUsize::new(0));
-    let mock = MockEmbedder { call_count: call_count.clone() };
+    let mock = MockEmbedder {
+        call_count: call_count.clone(),
+    };
     let cached = CachedEmbedder::new(mock, 2);
 
     cached.embed("hello").await.unwrap();

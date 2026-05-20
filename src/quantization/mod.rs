@@ -110,7 +110,7 @@ impl ProductQuantizedVector {
 
         let dim = vector.len();
         let subquantizers = subquantizers.max(1).min(dim);
-        let block_len = (dim + subquantizers - 1) / subquantizers;
+        let block_len = dim.div_ceil(subquantizers);
 
         let mut codes = Vec::with_capacity(dim);
         let mut block_mins = Vec::with_capacity(subquantizers);
@@ -123,10 +123,11 @@ impl ProductQuantizedVector {
             }
             let end = (start + block_len).min(dim);
             let slice = &vector[start..end];
-            let (block_min, block_max) = slice.iter().fold(
-                (f32::INFINITY, f32::NEG_INFINITY),
-                |(lo, hi), &v| (lo.min(v), hi.max(v)),
-            );
+            let (block_min, block_max) = slice
+                .iter()
+                .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &v| {
+                    (lo.min(v), hi.max(v))
+                });
             block_mins.push(block_min);
             block_maxs.push(block_max);
 
@@ -153,7 +154,7 @@ impl ProductQuantizedVector {
         }
 
         let mut values = Vec::with_capacity(self.dim);
-        let block_len = (self.dim + self.subquantizers - 1) / self.subquantizers;
+        let block_len = self.dim.div_ceil(self.subquantizers);
         let mut idx = 0;
 
         for block_idx in 0..self.subquantizers {
@@ -162,8 +163,7 @@ impl ProductQuantizedVector {
                 break;
             }
             let end = (start + block_len).min(self.dim);
-            let range =
-                (self.block_maxs[block_idx] - self.block_mins[block_idx]).max(f32::EPSILON);
+            let range = (self.block_maxs[block_idx] - self.block_mins[block_idx]).max(f32::EPSILON);
 
             for _ in start..end {
                 let code = self.codes.get(idx).copied().unwrap_or(0);
@@ -238,18 +238,14 @@ impl QuantizedVector {
                 max: self.max,
             }
             .to_f32(),
-            QuantizationKind::Pq => self
-                .pq
-                .as_ref()
-                .map(|pq| pq.to_f32())
-                .unwrap_or_else(|| {
-                    ScalarQuantizedVector {
-                        values: self.values.clone(),
-                        min: self.min,
-                        max: self.max,
-                    }
-                    .to_f32()
-                }),
+            QuantizationKind::Pq => self.pq.as_ref().map(|pq| pq.to_f32()).unwrap_or_else(|| {
+                ScalarQuantizedVector {
+                    values: self.values.clone(),
+                    min: self.min,
+                    max: self.max,
+                }
+                .to_f32()
+            }),
         }
     }
 

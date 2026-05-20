@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::{Metadata, MetadataValue};
+use std::collections::HashMap;
 
 // Common error messages
 pub const COLLECTION_NOT_FOUND: &str = "Collection not found";
@@ -9,7 +9,7 @@ pub const EMBEDDING_NOT_CONFIGURED: &str = "Embedding service not configured";
 // Convert JSON values to internal Metadata type
 pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Metadata {
     let mut metadata = Metadata::new();
-    
+
     for (k, v) in json {
         let value = match v {
             serde_json::Value::String(s) => MetadataValue::String(s),
@@ -28,7 +28,7 @@ pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Metadata {
         };
         metadata.insert(k, value);
     }
-    
+
     metadata
 }
 
@@ -43,15 +43,17 @@ pub fn metadata_to_json(metadata: &Metadata) -> HashMap<String, serde_json::Valu
                 MetadataValue::Float(f) => serde_json::json!(*f),
                 MetadataValue::Boolean(b) => serde_json::Value::Bool(*b),
                 MetadataValue::Null => serde_json::Value::Null,
-                MetadataValue::Array(arr) => {
-                    serde_json::Value::Array(arr.iter().map(|item| match item {
-                        MetadataValue::String(s) => serde_json::Value::String(s.clone()),
-                        MetadataValue::Integer(i) => serde_json::json!(*i),
-                        MetadataValue::Float(f) => serde_json::json!(*f),
-                        MetadataValue::Boolean(b) => serde_json::Value::Bool(*b),
-                        _ => serde_json::Value::Null,
-                    }).collect())
-                }
+                MetadataValue::Array(arr) => serde_json::Value::Array(
+                    arr.iter()
+                        .map(|item| match item {
+                            MetadataValue::String(s) => serde_json::Value::String(s.clone()),
+                            MetadataValue::Integer(i) => serde_json::json!(*i),
+                            MetadataValue::Float(f) => serde_json::json!(*f),
+                            MetadataValue::Boolean(b) => serde_json::Value::Bool(*b),
+                            _ => serde_json::Value::Null,
+                        })
+                        .collect(),
+                ),
             };
             (k.clone(), json_val)
         })

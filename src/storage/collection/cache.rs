@@ -6,10 +6,12 @@ pub fn rebuild(collection: &mut Collection) {
     // Clear the existing caches before rebuilding to ensure that we start with a clean state.
     collection.vector_cache.clear();
     collection.metadata_cache.clear();
-    for (id, _) in &collection.index {
+    for id in collection.index.keys() {
         if let Some(entry) = operations::get(collection, id) {
             collection.vector_cache.insert(*id, entry.get_vector());
-            collection.metadata_cache.insert(*id, entry.metadata.clone());
+            collection
+                .metadata_cache
+                .insert(*id, entry.metadata.clone());
         }
     }
 }
@@ -20,7 +22,7 @@ pub fn ensure_consistent(collection: &mut Collection) {
         rebuild(collection);
         return;
     }
-    for (id, _) in &collection.index {
+    for id in collection.index.keys() {
         if !collection.vector_cache.contains_key(id) {
             rebuild(collection);
             break;

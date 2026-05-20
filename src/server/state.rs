@@ -1,14 +1,17 @@
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
-use parking_lot::RwLock;
 use dashmap::DashMap;
+use parking_lot::RwLock;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::runtime::Handle;
 
-use crate::Collection;
-use crate::storage::collection::CollectionOpenOptions;
-use crate::embeddings::Embedder;
-use crate::metrics::{LatencyTracker, EmbedMetrics};
-use crate::error::{Result, ServerError};
 use crate::config::AppConfig;
+use crate::embeddings::Embedder;
+use crate::error::{Result, ServerError};
+use crate::metrics::{EmbedMetrics, LatencyTracker};
+use crate::storage::collection::CollectionOpenOptions;
+use crate::Collection;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -24,7 +27,7 @@ pub struct RebuildJobStatus {
     pub status: RebuildState, // Current status of the rebuild job (Running, Completed, Failed)
     pub started_at: u64, // Timestamp when the rebuild job started (in seconds since UNIX epoch)
     pub finished_at: Option<u64>, // Optional timestamp when the rebuild job finished (in seconds since UNIX epoch)
-    pub error: Option<String>, // Optional error message if the rebuild job failed
+    pub error: Option<String>,    // Optional error message if the rebuild job failed
     pub elapsed_ms: Option<u128>, // Optional elapsed time for the rebuild job in milliseconds
 }
 
@@ -37,11 +40,11 @@ pub struct AppState {
     pub data_dir: String, // Base directory for collection files, e.g. "./data"
     pub embedder: Option<Arc<dyn Embedder>>, // Optional embedder, if configured. Wrapped in Arc for shared ownership.
     pub shutting_down: Arc<AtomicBool>, // Flag to indicate server is shutting down, used to reject new requests gracefully
-    pub read_only: Arc<AtomicBool>, // Flag for disk-pressure read-only mode
-    pub latency_tracker: Arc<DashMap<String, LatencyTracker>>,  // Per-collection latency tracking
+    pub read_only: Arc<AtomicBool>,     // Flag for disk-pressure read-only mode
+    pub latency_tracker: Arc<DashMap<String, LatencyTracker>>, // Per-collection latency tracking
     pub embed_metrics: Arc<EmbedMetrics>,
     pub app_config: Arc<RwLock<AppConfig>>, // Global config accessible to handlers, protected by RwLock for dynamic updates
-    pub slow_query_ms: u128, // Threshold for logging slow queries in ms
+    pub slow_query_ms: u128,                // Threshold for logging slow queries in ms
     pub rebuild_jobs: Arc<DashMap<String, RebuildJobStatus>>, // Track index rebuild jobs by collection name
     pub config_last_reload: Arc<AtomicU64>, // Timestamp of last config reload for cache invalidation
     pub disk_min_free_bytes: Option<u64>,
@@ -59,7 +62,7 @@ impl AppState {
         cache_max_bytes: Option<u64>,
     ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
-        
+
         Self {
             collections: DashMap::new(),
             data_dir: data_dir.to_string(),
@@ -94,7 +97,7 @@ impl AppState {
         cache_max_bytes: Option<u64>,
     ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
-        
+
         Self {
             collections: DashMap::new(),
             data_dir: data_dir.to_string(),
@@ -120,7 +123,6 @@ impl AppState {
 
     // Lazily load or create a collection
     pub fn get_or_create_collection(&self, name: &str) -> Result<()> {
-
         if self.shutting_down.load(Ordering::Relaxed) {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
@@ -134,9 +136,10 @@ impl AppState {
             )?;
             let handle = Arc::new(RwLock::new(storage));
             self.collections.insert(name.to_string(), handle.clone());
-            
+
             // Create latency tracker for this collection
-            self.latency_tracker.insert(name.to_string(), LatencyTracker::new());
+            self.latency_tracker
+                .insert(name.to_string(), LatencyTracker::new());
 
             // Warm caches in the background to avoid first-request latency.
             let warm_handle = handle.clone();
@@ -147,7 +150,7 @@ impl AppState {
                 });
             }
         }
-        
+
         Ok(())
     }
 
@@ -178,7 +181,7 @@ impl AppState {
     pub fn current_config(&self) -> AppConfig {
         self.app_config.read().clone()
     }
-    
+
     pub fn initiate_shutdown(&self) {
         self.shutting_down.store(true, Ordering::Relaxed);
     }
@@ -203,16 +206,22 @@ impl AppState {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
         if self.read_only.load(Ordering::Relaxed) {
-            return Err(ServerError::ServiceUnavailable("Server is in read-only mode due to low disk space".into()).into());
+            return Err(ServerError::ServiceUnavailable(
+                "Server is in read-only mode due to low disk space".into(),
+            )
+            .into());
         }
         if let Some(min_free) = self.disk_min_free_bytes {
             if let Some(free) = self.disk_free_bytes() {
                 if free < min_free {
                     if self.disk_readonly_on_low_space {
                         self.read_only.store(true, Ordering::Relaxed);
-                        return Err(ServerError::ServiceUnavailable("Low disk space; write operations disabled".into()).into());
+                        return Err(ServerError::ServiceUnavailable(
+                            "Low disk space; write operations disabled".into(),
+                        )
+                        .into());
                     } else {
-                        tracing::warn!(free_bytes=free, min_free=min_free, "disk_space_low");
+                        tracing::warn!(free_bytes = free, min_free = min_free, "disk_space_low");
                     }
                 }
             }
@@ -232,7 +241,11 @@ impl AppState {
             total = total.saturating_add(guard.cache_usage_bytes() as u64);
         }
         if total > max_bytes {
-            tracing::warn!(total_cache_bytes=total, max_bytes=max_bytes, "cache_budget_exceeded_clearing");
+            tracing::warn!(
+                total_cache_bytes = total,
+                max_bytes = max_bytes,
+                "cache_budget_exceeded_clearing"
+            );
             for mut entry in self.collections.iter_mut() {
                 let storage = entry.value_mut();
                 let mut guard = storage.write();

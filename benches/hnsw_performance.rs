@@ -1,12 +1,13 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use piramid::{HnswConfig, HnswIndex};
-use uuid::Uuid;
+use piramid::{HnswConfig, HnswIndex, Metadata};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 fn hnsw_insert_search_bench(c: &mut Criterion) {
     let config = HnswConfig::default();
     let mut index = HnswIndex::new(config);
     let mut vectors = HashMap::new();
+    let metadatas: HashMap<Uuid, Metadata> = HashMap::new();
 
     // Seed a small set of vectors
     for i in 0..1_000 {
@@ -20,7 +21,7 @@ fn hnsw_insert_search_bench(c: &mut Criterion) {
 
     c.bench_function("hnsw_search_1k", |b| {
         b.iter(|| {
-            let _ = index.search(&query, 10, 200, &vectors);
+            let _ = index.search(&query, 10, 200, &vectors, None, &metadatas);
         })
     });
 }

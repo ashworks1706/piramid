@@ -1,11 +1,13 @@
-// Local embedding provider implementation 
+// Local embedding provider implementation
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::embeddings::types::{Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult};
 use crate::embeddings::cache::CachedEmbedder;
+use crate::embeddings::types::{
+    Embedder, EmbeddingConfig, EmbeddingError, EmbeddingResponse, EmbeddingResult,
+};
 
 /// Expects a POST to base_url with a JSON body containing model and input.
 struct LocalEmbedderInner {
@@ -29,10 +31,9 @@ impl LocalEmbedder {
 
 impl LocalEmbedderInner {
     fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
-        let base_url = config
-            .base_url
-            .clone()
-            .ok_or_else(|| EmbeddingError::ConfigError("LOCAL provider requires base_url".into()))?;
+        let base_url = config.base_url.clone().ok_or_else(|| {
+            EmbeddingError::ConfigError("LOCAL provider requires base_url".into())
+        })?;
 
         let client = if let Some(timeout_secs) = config.timeout {
             Client::builder()
@@ -69,14 +70,14 @@ struct LocalEmbeddingResponse {
 struct LocalEmbeddingData {
     embedding: Vec<f32>,
     #[serde(default)]
-    #[allow(dead_code)] 
+    #[allow(dead_code)]
     index: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default)]
 struct LocalUsage {
     #[serde(default)]
-    #[allow(dead_code)] 
+    #[allow(dead_code)]
     prompt_tokens: u32,
     #[serde(default)]
     total_tokens: u32,
@@ -85,7 +86,6 @@ struct LocalUsage {
 #[async_trait]
 impl Embedder for LocalEmbedderInner {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
-
         // Construct the request body
         let req = LocalEmbeddingRequest {
             model: self.model.clone(),
@@ -106,7 +106,10 @@ impl Embedder for LocalEmbedderInner {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(EmbeddingError::ApiError(format!("{}: {}", status, error_text)));
+            return Err(EmbeddingError::ApiError(format!(
+                "{}: {}",
+                status, error_text
+            )));
         }
         // Parse the JSON response
         let api_resp: LocalEmbeddingResponse = response

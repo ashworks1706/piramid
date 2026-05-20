@@ -19,7 +19,7 @@ pub enum ParallelismMode {
 pub struct ParallelismConfig {
     // Thread pool mode
     pub mode: ParallelismMode,
-    
+
     // Enable parallel search (when applicable)
     pub parallel_search: bool,
 }
@@ -34,14 +34,14 @@ impl Default for ParallelismConfig {
 }
 
 impl ParallelismConfig {
-    // Single-threaded mode 
+    // Single-threaded mode
     pub fn single_threaded() -> Self {
         ParallelismConfig {
             mode: ParallelismMode::SingleThreaded,
             parallel_search: false,
         }
     }
-    
+
     //  fixed number of threads
     pub fn fixed(num_threads: usize) -> Self {
         ParallelismConfig {
@@ -49,7 +49,7 @@ impl ParallelismConfig {
             parallel_search: true,
         }
     }
-    
+
     // the number of threads to use
     pub fn num_threads(&self) -> usize {
         match self.mode {

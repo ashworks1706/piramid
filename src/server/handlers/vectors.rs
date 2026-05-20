@@ -1,26 +1,33 @@
-use axum::{extract::{Path, Query, State, Extension}, Json};
-use uuid::Uuid;
-use std::sync::atomic::Ordering;
-use std::time::Instant;
-use std::collections::HashMap;
-use crate::{Metric, Document};
-use crate::error::{Result, ServerError};
-use crate::validation;
-use crate::server::metrics::{record_lock_read, record_lock_write};
-use crate::server::types::range::RangeSearchRequest;
-use tracing::info;
 use super::super::{
+    helpers::{json_to_metadata, metadata_to_json},
     state::SharedState,
     types::*,
-    helpers::{json_to_metadata, metadata_to_json},
 };
+use crate::error::{Result, ServerError};
+use crate::server::metrics::{record_lock_read, record_lock_write};
+use crate::server::types::range::RangeSearchRequest;
+use crate::validation;
+use crate::{Document, Metric};
+use axum::{
+    extract::{Extension, Path, Query, State},
+    Json,
+};
+use std::collections::HashMap;
+use std::sync::atomic::Ordering;
+use std::time::Instant;
+use tracing::info;
+use uuid::Uuid;
 
 const MAX_BATCH_SIZE: usize = 10_000;
 
 fn build_single_entry(mut req: InsertRequest) -> Result<Document> {
-    let text = req.text.clone().ok_or_else(|| ServerError::InvalidRequest("text is required for single insert".to_string()))?;
+    let text = req.text.clone().ok_or_else(|| {
+        ServerError::InvalidRequest("text is required for single insert".to_string())
+    })?;
     validation::validate_text(&text)?;
-    let vector = req.vector.take().ok_or_else(|| ServerError::InvalidRequest("vector is required for single insert".to_string()))?;
+    let vector = req.vector.take().ok_or_else(|| {
+        ServerError::InvalidRequest("vector is required for single insert".to_string())
+    })?;
     validation::validate_vector(&vector)?;
     let mut vec_to_store = vector;
     if req.normalize {
@@ -31,18 +38,27 @@ fn build_single_entry(mut req: InsertRequest) -> Result<Document> {
 }
 
 fn build_batch_entries(mut req: InsertRequest) -> Result<Vec<Document>> {
-    let vectors = req.vectors.take().ok_or_else(|| ServerError::InvalidRequest("vectors are required for batch insert".to_string()))?;
-    let texts = req.texts.clone().ok_or_else(|| ServerError::InvalidRequest("texts are required for batch insert".to_string()))?;
+    let vectors = req.vectors.take().ok_or_else(|| {
+        ServerError::InvalidRequest("vectors are required for batch insert".to_string())
+    })?;
+    let texts = req.texts.clone().ok_or_else(|| {
+        ServerError::InvalidRequest("texts are required for batch insert".to_string())
+    })?;
     validation::validate_batch_size(vectors.len(), MAX_BATCH_SIZE, "Insert")?;
     if vectors.len() != texts.len() {
-        return Err(ServerError::InvalidRequest("vectors and texts length mismatch".to_string()).into());
+        return Err(
+            ServerError::InvalidRequest("vectors and texts length mismatch".to_string()).into(),
+        );
     }
     validation::validate_vectors(&vectors)?;
     for t in &texts {
         validation::validate_text(t)?;
     }
     let vectors = if req.normalize {
-        vectors.iter().map(|v| validation::normalize_vector(v)).collect()
+        vectors
+            .iter()
+            .map(|v| validation::normalize_vector(v))
+            .collect()
     } else {
         vectors
     };
@@ -54,11 +70,7 @@ fn build_batch_entries(mut req: InsertRequest) -> Result<Vec<Document>> {
         } else {
             json_to_metadata(HashMap::new())
         };
-        let entry = Document::with_metadata(
-            vector,
-            texts[idx].clone(),
-            md,
-        );
+        let entry = Document::with_metadata(vector, texts[idx].clone(), md);
         entries.push(entry);
     }
     Ok(entries)
@@ -73,7 +85,13 @@ fn parse_metric(s: Option<String>) -> Metric {
     }
 }
 
-pub(crate) fn apply_search_overrides(base: crate::config::SearchConfig, req_ef: Option<usize>, req_nprobe: Option<usize>, req_overfetch: Option<usize>, preset: Option<String>) -> crate::config::SearchConfig {
+pub(crate) fn apply_search_overrides(
+    base: crate::config::SearchConfig,
+    req_ef: Option<usize>,
+    req_nprobe: Option<usize>,
+    req_overfetch: Option<usize>,
+    preset: Option<String>,
+) -> crate::config::SearchConfig {
     let mut cfg = base;
     // Apply preset first
     if let Some(p) = preset {
@@ -122,28 +140,32 @@ pub async fn insert_vector(
         batch=req.vectors.as_ref().map(|v| v.len()),
         "insert_request"
     );
-    
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
-    
+    record_lock_write(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
+
     let response = match (req.vector.take(), req.vectors.take()) {
         (Some(vector), None) => {
             req.vector = Some(vector);
             let entry = build_single_entry(req)?;
-            
+
             let start = Instant::now();
             let id = storage.insert(entry)?;
             let duration = start.elapsed();
-            
+
             if let Some(tracker) = state.latency_tracker.get(&collection) {
                 tracker.record_insert(duration);
             }
             state.enforce_cache_budget();
-            
-            InsertResultsResponse::Single(InsertResponse { 
+
+            InsertResultsResponse::Single(InsertResponse {
                 id: id.to_string(),
                 latency_ms: Some(duration.as_millis() as f32),
             })
@@ -162,16 +184,23 @@ pub async fn insert_vector(
             }
             state.enforce_cache_budget();
 
-            InsertResultsResponse::Multi(MultiInsertResponse { 
+            InsertResultsResponse::Multi(MultiInsertResponse {
                 ids: ids.into_iter().map(|id| id.to_string()).collect(),
                 count: texts_len,
                 latency_ms: Some(duration.as_millis() as f32),
             })
         }
-        (Some(_), Some(_)) => return Err(ServerError::InvalidRequest("Provide either vector or vectors, not both".to_string()).into()),
-        (None, None) => return Err(ServerError::InvalidRequest("No vectors provided".to_string()).into()),
+        (Some(_), Some(_)) => {
+            return Err(ServerError::InvalidRequest(
+                "Provide either vector or vectors, not both".to_string(),
+            )
+            .into())
+        }
+        (None, None) => {
+            return Err(ServerError::InvalidRequest("No vectors provided".to_string()).into())
+        }
     };
-    
+
     Ok(Json(response))
 }
 
@@ -185,19 +214,24 @@ pub async fn get_vector(
     }
 
     state.get_or_create_collection(&collection)?;
-    
+
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
-    
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
-    
-    let entry = storage.get(&uuid)
-        .ok_or(ServerError::NotFound(super::super::helpers::VECTOR_NOT_FOUND.to_string()))?;
-    
+    record_lock_read(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
+
+    let entry = storage.get(&uuid).ok_or(ServerError::NotFound(
+        super::super::helpers::VECTOR_NOT_FOUND.to_string(),
+    ))?;
+
     Ok(Json(VectorResponse {
         id: entry.id.to_string(),
         vector: entry.get_vector(),
@@ -217,14 +251,19 @@ pub async fn list_vectors(
     }
 
     state.get_or_create_collection(&collection)?;
-    
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
-    
-    let vectors: Vec<VectorResponse> = storage.get_all()
+    record_lock_read(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
+
+    let vectors: Vec<VectorResponse> = storage
+        .get_all()
         .into_iter()
         .skip(params.offset)
         .take(params.limit)
@@ -235,7 +274,7 @@ pub async fn list_vectors(
             metadata: metadata_to_json(&e.metadata),
         })
         .collect();
-    
+
     Ok(Json(vectors))
 }
 
@@ -250,24 +289,25 @@ pub async fn delete_vector(
     state.ensure_write_allowed()?;
 
     state.get_or_create_collection(&collection)?;
-    
+
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
-    
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let mut storage = storage_ref.write();
-    
+
     let start = Instant::now();
     let deleted = storage.delete(&uuid)?;
     let duration = start.elapsed();
-    
+
     // Record latency
     if let Some(tracker) = state.latency_tracker.get(&collection) {
         tracker.record_delete(duration);
     }
-    
-    Ok(Json(DeleteResultsResponse::Single(DeleteResponse { 
+
+    Ok(Json(DeleteResultsResponse::Single(DeleteResponse {
         deleted,
         latency_ms: Some(duration.as_millis() as f32),
     })))
@@ -289,11 +329,15 @@ pub async fn delete_vectors(
 
     state.get_or_create_collection(&collection)?;
 
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
+    record_lock_write(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
 
     let mut uuids = Vec::with_capacity(req.ids.len());
     for id_str in &req.ids {
@@ -310,7 +354,7 @@ pub async fn delete_vectors(
         tracker.record_delete(duration);
     }
 
-    Ok(Json(DeleteResultsResponse::Multi(MultiDeleteResponse { 
+    Ok(Json(DeleteResultsResponse::Multi(MultiDeleteResponse {
         deleted_count,
         latency_ms: Some(duration.as_millis() as f32),
     })))
@@ -323,7 +367,6 @@ pub async fn search_vectors(
     Extension(request_id): Extension<crate::server::request_id::RequestId>,
     Json(req): Json<SearchRequest>,
 ) -> Result<Json<SearchResultsResponse>> {
-
     // 1. Check if server is shutting down and reject new search requests if so, to allow for graceful shutdown without accepting new work.
     if state.shutting_down.load(Ordering::Relaxed) {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
@@ -333,15 +376,28 @@ pub async fn search_vectors(
     validation::validate_collection_name(&collection)?;
 
     state.get_or_create_collection(&collection)?;
-    
+
     // 3. Acquire a read lock on the collection's storage to ensure thread-safe access while performing the search operation, and record the time taken to acquire the lock for latency tracking purposes.
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
     // 4. Parse the similarity metric and apply any search configuration overrides based on the request parameters, such as ef, nprobe, overfetch, or preset, to determine the effective search configuration that will be used for the search operation.
-    let SearchRequest { vector, vectors, k, metric, ef, nprobe, overfetch, preset } = req;
+    let SearchRequest {
+        vector,
+        vectors,
+        k,
+        metric,
+        ef,
+        nprobe,
+        overfetch,
+        preset,
+    } = req;
     let metric = parse_metric(metric);
     let effective_search = apply_search_overrides(
         storage.config().search,
@@ -378,12 +434,11 @@ pub async fn search_vectors(
                     "slow_search"
                 );
             }
-            
+
             // 4. Record the latency of the search operation using the latency tracker associated with the collection, if available, to monitor and analyze search performance over time.
             if let Some(tracker) = state.latency_tracker.get(&collection) {
                 tracker.record_search(duration);
             }
-
 
             // 5. Map the search results into the appropriate response format, including the ID, score, text, and metadata for each hit, and include the latency of the search operation in the response to provide insights into the performance of the search.
 
@@ -396,9 +451,9 @@ pub async fn search_vectors(
                     metadata: metadata_to_json(&r.metadata),
                 })
                 .collect();
-            
+
             // 6. Return the search results in a structured response format, including the list of hits and the latency of the search operation, to provide the client with the relevant information about the search results and the performance of the search.
-            SearchResultsResponse::Single(SearchResponse { 
+            SearchResultsResponse::Single(SearchResponse {
                 results: search_results,
                 latency_ms: Some(duration.as_millis() as f32),
             })
@@ -417,13 +472,8 @@ pub async fn search_vectors(
                 filter_overfetch_override: overfetch,
                 search_config_override: Some(effective_search),
             };
-            let batch_results = crate::search::search_batch_collection(
-                &storage,
-                &queries,
-                k,
-                metric,
-                params,
-            );
+            let batch_results =
+                crate::search::search_batch_collection(&storage, &queries, k, metric, params);
             let duration = start.elapsed();
             // 3. If the batch search takes longer than a configured threshold, log a warning for slow batch queries, including the collection name, request ID, and elapsed time in milliseconds to help identify and analyze performance issues with batch searches.
             if duration.as_millis() > state.slow_query_ms {
@@ -438,7 +488,6 @@ pub async fn search_vectors(
             if let Some(tracker) = state.latency_tracker.get(&collection) {
                 tracker.record_search(duration);
             }
-
 
             // 4. Map the batch search results into the appropriate response format, where each search vector's results are represented as a list of hits with their ID, score, text, and metadata. Include the latency of the batch search operation in the response to provide insights into the performance of the batch search.
             let response_results: Vec<Vec<HitResponse>> = batch_results
@@ -458,19 +507,24 @@ pub async fn search_vectors(
 
             // 5. Return the batch search results in a structured response format, where each entry corresponds to the results for a specific search vector, along with the latency of the batch search operation, to provide the client with comprehensive information about the batch search results and the performance of the batch search.
 
-            SearchResultsResponse::Multi(MultiSearchResponse { 
+            SearchResultsResponse::Multi(MultiSearchResponse {
                 results: response_results,
                 latency_ms: Some(duration.as_millis() as f32),
             })
         }
         (Some(_), Some(_)) => {
-            return Err(ServerError::InvalidRequest("Provide either vector or vectors, not both".to_string()).into());
+            return Err(ServerError::InvalidRequest(
+                "Provide either vector or vectors, not both".to_string(),
+            )
+            .into());
         }
         (None, None) => {
-            return Err(ServerError::InvalidRequest("No search vector(s) provided".to_string()).into());
+            return Err(
+                ServerError::InvalidRequest("No search vector(s) provided".to_string()).into(),
+            );
         }
     };
-    
+
     Ok(Json(response))
 }
 
@@ -490,20 +544,24 @@ pub async fn upsert_vector(
     validation::validate_collection_name(&collection)?;
     validation::validate_text(&req.text)?;
     validation::validate_vector(&req.vector)?;
-    
+
     // Normalize if requested
     if req.normalize {
         req.vector = validation::normalize_vector(&req.vector);
     }
 
     state.get_or_create_collection(&collection)?;
-    
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.latency_tracker.get(&collection).as_deref(), lock_start);
-    
+    record_lock_write(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
+
     // Check if entry exists
     let id = if let Some(id_str) = req.id {
         Uuid::parse_str(&id_str)
@@ -511,17 +569,17 @@ pub async fn upsert_vector(
     } else {
         Uuid::new_v4()
     };
-    
+
     let exists = storage.get(&id).is_some();
-    
+
     let metadata = json_to_metadata(req.metadata);
     let mut entry = Document::with_metadata(req.vector, req.text, metadata);
     entry.id = id;
-    
+
     let start = Instant::now();
     storage.upsert(entry)?;
     let duration = start.elapsed();
-    
+
     // Record latency (treat as insert or update)
     if let Some(tracker) = state.latency_tracker.get(&collection) {
         if exists {
@@ -537,8 +595,8 @@ pub async fn upsert_vector(
         created=!exists,
         "upsert_request"
     );
-    
-    Ok(Json(UpsertResponse { 
+
+    Ok(Json(UpsertResponse {
         id: id.to_string(),
         created: !exists,
         latency_ms: Some(duration.as_millis() as f32),
@@ -561,11 +619,15 @@ pub async fn range_search_vectors(
 
     state.get_or_create_collection(&collection)?;
 
-    let storage_ref = state.collections.get(&collection)
-        .ok_or_else(|| ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string()))?;
+    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
+        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
+    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.latency_tracker.get(&collection).as_deref(),
+        lock_start,
+    );
 
     let metric = parse_metric(req.metric);
     let effective_search = apply_search_overrides(
