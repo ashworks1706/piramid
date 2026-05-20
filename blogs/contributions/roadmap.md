@@ -27,12 +27,9 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
-- [ ] Implement Logical Namespacing to allow multiple users to share one Collection/Index without cross-talk or performance degradation.
 - [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
 - [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
-- [ ] add Annoy
 - [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
-- [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
 
 **GPU backend:**
 
@@ -60,8 +57,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] IVF uses random centroid initialisation (first K vectors) — k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
-- [ ] background index maintenance: online HNSW compaction, tombstone cleanup, IVF cluster rebalancing without blocking reads
-- [ ] circuit breaker for embedding API failures with fallback behaviour
 
 
 ### Transformer Inference Patch 
@@ -79,6 +74,19 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] learnable gating mechanism to balance attention between internal context and external memory
 - [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable
 - [ ] cross attention with database vectors as keyvalues with query from transformer 
+
+### RAG Features
+
+**Variations**
+
+- [ ] implement GraphRAG as native option
+- [ ] add RAPTOR
+- [ ] add latent rag
+- [ ] Implement Cross-Encoders: A tiny built-in ML model to re-score the final top 10 results (provide options : Colbert, etc)
+
+**Distributed Systems**
+
+- [ ] add options for managing across different systems
 
 ---
 
@@ -138,22 +146,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 ### Operations & Reliability (1.1.9)
 
 - [ ] set up benchmarks for latency, index strategies, memory usage across collection sizes
-- [ ] refactor codebase for better modularity; expand unit and integration test coverage
-- [ ] robust CI/CD pipeline covering all critical paths
-- [ ] keep documentation and blogs in sync with code changes
-
----
-
-### Later
-
-### Schema, Filters & Clients
-
-**Clients & SDK (1.1.8)**
-
-- [ ] Python client SDK + docs
-- [ ] easy API reference for SDKs (Rust via MkDocs / Mintlify)
-- [ ] collection aliases and rename
-- [ ] allow moving collection between directories and setting DIR paths customization
 
 ---
 
@@ -165,15 +157,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] document rust sdk with examples, link blogs from /blogs
 
 
-**Transactions & Consistency**
-
-- [ ] atomic batch operations (all-or-nothing insert/delete sets)
-- [ ] rollback on failure
-- [ ] idempotency keys + request deduplication
-- [ ] snapshot API (copy-on-write) + point-in-time recovery
-- [ ] incremental backups and database migrations
-
 **Platform**
 
-- [ ] API versioning in URLs or headers; backward compatibility strategy; deprecation warnings
-- [ ] email/webhook alerts for errors, disk pressure, memory, slow queries, index corruption
+- [ ] add python pypi
