@@ -3,4 +3,3 @@ set -eu
 
 ./scripts/check.sh
 ./scripts/check-website.sh
-./scripts/check-website.sh
