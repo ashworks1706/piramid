@@ -21,7 +21,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ### GPU Acceleration patch
 
-**Introduce GPUBackend trait:**
+**Introduce Custom GPU Kernels trait:**
 
 - [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
@@ -132,24 +132,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ---
 
-### RAG Features
-
-**Variations**
-
-- [ ] implement GraphRAG as native option, but keep it as a memory-building/retrieval strategy rather than the core identity of Piramid.
-- [ ] add RAPTOR as an optional hierarchical summarization/indexing strategy.
-- [ ] add latent rag experiments behind a feature flag until they beat normal hybrid retrieval in evals.
-- [ ] add RAFT-style dataset generation/fine-tuning workflows as an optional training pipeline, not as a requirement for basic Piramid usage.
-- [ ] Implement Cross-Encoders: a tiny built-in ML model to re-score the final top 10 results (provide options: ColBERT-style late interaction, small cross-encoder, or external reranker).
-- [ ] add citations/source-span tracking as a first-class response primitive; every answer path should be able to explain which records influenced it.
-- [ ] add RAG evals: retrieval recall, answer faithfulness, citation correctness, latency, memory, and cost per query.
-
-**Distributed Systems**
-
-- [ ] add options for managing across different systems, but only after single-node consumer hardware profiles are reliable and benchmarked.
-
----
-
 ### Transformer Inference Patch
 
 **Introduce Transformer:**
@@ -161,6 +143,39 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] add an OpenAI-compatible chat/completions surface so Piramid can be used as a drop-in local RAG inference server.
 - [ ] add a baseline mode that uses normal prompt-RAG: retrieve, rerank, pack context, stream answer. this is the baseline every fusion experiment must beat.
 - [ ] add inference benchmarks against external local runtimes (Ollama/llama.cpp-style OpenAI-compatible servers) so Piramid does not accidentally spend months rebuilding a worse inference engine.
+
+---
+
+### Distributed Systems & Inference Patch
+
+**Distributed Runtime:**
+
+- [ ] add a node runtime abstraction with stable node IDs, advertised capabilities, heartbeat state, and graceful shutdown semantics.
+- [ ] add cluster membership for small trusted deployments first: static config, explicit join/leave, health checks, and no automatic rebalancing until failure semantics are tested.
+- [ ] define placement policies for consumer hardware: CPU-only node, integrated GPU node, discrete GPU node, storage-heavy node, and mixed laptop/home-server profiles.
+- [ ] add request routing that chooses local execution by default and only crosses the network when the latency budget justifies it.
+
+**Distributed Search & Storage:**
+
+- [ ] shard collections by vector ID or partition key, with deterministic routing and a clear single-node fallback path.
+- [ ] add replicated read-only shards for hot collections before adding distributed writes; correctness should not depend on consensus in the first version.
+- [ ] add fan-out search across shards with top-k merge, timeout budgets, partial-result reporting, and per-shard latency attribution.
+- [ ] add snapshot shipping and mmap-friendly shard loading so a second node can serve a collection without rebuilding the index from scratch.
+
+**Distributed Inference:**
+
+- [ ] add model placement metadata: model name, quantization, context length, KV-cache capacity, backend, GPU memory, and supported batch sizes.
+- [ ] add distributed inference routing for prompt-RAG first: retrieve locally or remotely, pack context, send to the best available inference node, and stream tokens back.
+- [ ] add continuous batching across clients on each inference node, but keep admission control explicit so one long generation cannot starve short RAG queries.
+- [ ] add KV-cache locality policies so follow-up chat turns route to the node that already owns the session cache when possible.
+- [ ] prototype tensor/pipeline parallel inference only after single-node inference is benchmarked; reject it unless it beats simpler model replication on consumer networks.
+
+**Reliability & Observability:**
+
+- [ ] add distributed tracing across retrieve, rerank, context-pack, inference-prefill, inference-decode, and response-stream phases.
+- [ ] expose cluster metrics: node health, shard ownership, queue depth, GPU memory, KV-cache usage, network fan-out time, and partial-result rates.
+- [ ] add failure-mode tests for node loss, slow shard, stale replica, interrupted stream, duplicated request, and model-node overload.
+- [ ] document the distributed-system boundary clearly: Piramid should scale from single binary to small trusted clusters before attempting internet-scale database semantics.
 
 ---
 
@@ -176,6 +191,20 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] cross attention with database vectors as keyvalues with query from transformer.
 - [ ] add ablations for retrieval frequency: per-request, per-chunk, per-layer, and per-token. per-token retrieval should be rejected unless it proves latency-safe on consumer hardware.
 - [ ] document dead ends from RETRO/REALM/RAG/kNN-LM-style systems so Piramid does not repeat expensive research paths without evidence.
+
+---
+
+### RAG Features
+
+**Variations**
+
+- [ ] implement GraphRAG as native option, but keep it as a memory-building/retrieval strategy rather than the core identity of Piramid.
+- [ ] add RAPTOR as an optional hierarchical summarization/indexing strategy.
+- [ ] add latent rag experiments behind a feature flag until they beat normal hybrid retrieval in evals.
+- [ ] add RAFT-style dataset generation/fine-tuning workflows as an optional training pipeline, not as a requirement for basic Piramid usage.
+- [ ] Implement Cross-Encoders: a tiny built-in ML model to re-score the final top 10 results (provide options: ColBERT-style late interaction, small cross-encoder, or external reranker).
+- [ ] add citations/source-span tracking as a first-class response primitive; every answer path should be able to explain which records influenced it.
+- [ ] add RAG evals: retrieval recall, answer faithfulness, citation correctness, latency, memory, and cost per query.
 
 ---
 
