@@ -143,10 +143,11 @@ pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<
         crate::validation::validate_dimensions(&raw_vec, expected_dim)?;
     }
 
-    storage.vector_cache.insert(id, raw_vec.clone());
+    storage.cache.put_vector(id, raw_vec.clone());
+    storage.cache.put_metadata(id, entry.metadata.clone());
     storage
         .vector_index
-        .insert(id, &raw_vec, &storage.vector_cache);
+        .insert(id, &raw_vec, storage.cache.vectors());
 
     storage.metadata.update_vector_count(storage.index.len());
 
@@ -157,8 +158,9 @@ pub fn delete_internal(storage: &mut Collection, id: &Uuid) {
     storage.index.remove(id);
     storage.vector_index.remove(id);
     if storage.vector_index.index_type() != crate::index::IndexType::Hnsw {
-        storage.vector_cache.remove(id);
-        storage.metadata_cache.remove(id);
+        storage.cache.remove(id, true);
+    } else {
+        storage.cache.remove(id, false);
     }
     storage.metadata.update_vector_count(storage.index.len());
 }
@@ -241,10 +243,13 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
         if let Some(expected_dim) = storage.metadata.dimensions {
             crate::validation::validate_dimensions(&vec_f32, expected_dim)?;
         }
-        storage.vector_cache.insert(id, vec_f32.clone());
+        if let Some(entry) = get(storage, &id) {
+            storage.cache.put_metadata(id, entry.metadata.clone());
+        }
+        storage.cache.put_vector(id, vec_f32.clone());
         storage
             .vector_index
-            .insert(id, &vec_f32, &storage.vector_cache);
+            .insert(id, &vec_f32, storage.cache.vectors());
     }
     storage.metadata.update_vector_count(storage.index.len());
 
@@ -339,7 +344,7 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
         enforce_limits_single(storage, bytes.len())?;
         let index_entry = append_entry(storage, &bytes)?;
         storage.index.insert(*id, index_entry);
-        storage.metadata_cache.insert(*id, metadata);
+        storage.cache.put_metadata(*id, metadata);
         storage.metadata.update_vector_count(storage.index.len());
         storage.track_operation()?;
         Ok(true)
@@ -374,11 +379,12 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
 
         let index_entry = append_entry(storage, &bytes)?;
         storage.index.insert(*id, index_entry);
-        storage.vector_cache.insert(*id, vector.clone());
+        storage.cache.put_vector(*id, vector.clone());
+        storage.cache.put_metadata(*id, entry.metadata.clone());
         storage.vector_index.remove(id);
         storage
             .vector_index
-            .insert(*id, &vector, &storage.vector_cache);
+            .insert(*id, &vector, storage.cache.vectors());
         storage.metadata.update_vector_count(storage.index.len());
         storage.track_operation()?;
         Ok(true)

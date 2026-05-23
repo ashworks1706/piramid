@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use uuid::Uuid;
 
+use super::cache::CacheManager;
 use super::persistence::{load_wal_meta, PersistenceService};
 use super::{storage::Collection, CollectionOpenOptions};
 use crate::error::Result;
@@ -108,8 +109,7 @@ impl CollectionBuilder {
                 mmap,
                 index,
                 vector_index,
-                vector_cache: HashMap::new(),
-                metadata_cache: HashMap::new(),
+                cache: CacheManager::new(config.cache),
                 config: config.clone(),
                 metadata,
                 path: path.to_string(),
@@ -142,8 +142,7 @@ impl CollectionBuilder {
             mmap,
             index,
             vector_index,
-            vector_cache: HashMap::new(),
-            metadata_cache: HashMap::new(),
+            cache: CacheManager::new(config.cache),
             config,
             metadata,
             path: path.to_string(),

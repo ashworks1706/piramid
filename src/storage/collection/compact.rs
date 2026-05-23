@@ -34,8 +34,7 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     // Reset indexes and caches
     collection.index.clear();
     collection.vector_index = collection.config.index.create_index(0);
-    collection.vector_cache.clear();
-    collection.metadata_cache.clear();
+    collection.clear_caches_for_rebuild();
     collection.metadata.update_vector_count(0);
 
     // Reinsert all documents

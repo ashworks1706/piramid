@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    CollectionConfig, ExecutionMode, LimitsConfig, MemoryConfig, ParallelismConfig,
+    CacheConfig, CollectionConfig, ExecutionMode, LimitsConfig, MemoryConfig, ParallelismConfig,
     QuantizationConfig, SearchConfig, WalConfig,
 };
 use crate::index::IndexConfig;
@@ -18,6 +18,8 @@ pub struct AppConfig {
     pub execution: ExecutionMode,
     pub search: SearchConfig,
     pub limits: LimitsConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
 }
 
 impl Default for AppConfig {
@@ -31,6 +33,7 @@ impl Default for AppConfig {
             execution: ExecutionMode::Auto,
             search: SearchConfig::default(),
             limits: LimitsConfig::default(),
+            cache: CacheConfig::default(),
         }
     }
 }
@@ -59,6 +62,7 @@ impl AppConfig {
             parallelism: self.parallelism,
             execution: self.execution,
             limits: self.limits,
+            cache: self.cache,
         }
     }
 
@@ -158,6 +162,25 @@ impl AppConfig {
         if let Ok(val) = std::env::var("LIMIT_MAX_VECTOR_BYTES") {
             if let Ok(v) = val.parse::<usize>() {
                 self.limits.max_vector_bytes = Some(v);
+            }
+        }
+
+        if let Ok(val) = std::env::var("CACHE_ENABLED") {
+            self.cache.enabled = val == "1" || val.eq_ignore_ascii_case("true");
+        }
+        if let Ok(val) = std::env::var("CACHE_MAX_SIZE") {
+            if let Ok(v) = val.parse::<usize>() {
+                self.cache.max_size = v;
+            }
+        }
+        if let Ok(val) = std::env::var("CACHE_TTL_SECONDS") {
+            if let Ok(v) = val.parse::<u64>() {
+                self.cache.ttl_seconds = Some(v);
+            }
+        }
+        if let Ok(val) = std::env::var("CACHE_MAX_BYTES") {
+            if let Ok(v) = val.parse::<u64>() {
+                self.cache.max_bytes = Some(v);
             }
         }
     }

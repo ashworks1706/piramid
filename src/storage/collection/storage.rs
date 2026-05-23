@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use uuid::Uuid;
 
-use super::cache;
+use super::cache::{self, CacheManager};
 use super::persistence::PersistenceService;
 use crate::error::Result;
 use crate::index::VectorIndex;
@@ -19,8 +19,7 @@ pub struct Collection {
     pub(super) mmap: Option<MmapMut>,
     pub(super) index: HashMap<Uuid, EntryPointer>,
     pub(super) vector_index: Box<dyn VectorIndex>,
-    pub(super) vector_cache: HashMap<Uuid, Vec<f32>>,
-    pub(super) metadata_cache: HashMap<Uuid, crate::metadata::Metadata>,
+    pub(super) cache: CacheManager,
     pub config: crate::config::CollectionConfig,
     pub metadata: CollectionMetadata,
     pub path: String,
@@ -74,19 +73,7 @@ impl Collection {
         let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0); // Size of the memory-mapped file
         let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>(); // Approximate size of the index based on its capacity
 
-        let vector_cache_size = self
-            .vector_cache
-            .values()
-            .map(|vec| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
-            .sum::<usize>(); // Size of the vector cache based on the number of entries and their lengths
-        let metadata_cache_size =
-            self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>(); // Approximate size of the metadata cache based on its capacity
-
-        mmap_size
-            + index_size
-            + vector_cache_size
-            + metadata_cache_size
-            + self.vector_index.stats().memory_usage_bytes
+        mmap_size + index_size + self.cache.memory_usage_bytes() + self.vector_index.stats().memory_usage_bytes
     }
 
     pub fn vector_index(&self) -> &dyn VectorIndex {
@@ -94,19 +81,19 @@ impl Collection {
     }
 
     pub fn cache_usage_bytes(&self) -> usize {
-        let vector_cache_size = self
-            .vector_cache
-            .values()
-            .map(|vec| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
-            .sum::<usize>();
-        let metadata_cache_size =
-            self.metadata_cache.len() * std::mem::size_of::<(Uuid, crate::metadata::Metadata)>();
-        vector_cache_size + metadata_cache_size
+        self.cache.memory_usage_bytes()
     }
 
-    pub fn clear_caches(&mut self) {
-        self.vector_cache.clear();
-        self.metadata_cache.clear();
+    pub fn metadata_cache_usage_bytes(&self) -> usize {
+        self.cache.metadata_usage_bytes()
+    }
+
+    pub fn clear_metadata_cache(&mut self) -> usize {
+        self.cache.clear_metadata()
+    }
+
+    pub fn clear_caches_for_rebuild(&mut self) {
+        self.cache.clear_all();
     }
 
     /// Fault frequently used files into the page cache to reduce cold-start latency.
@@ -121,11 +108,11 @@ impl Collection {
     }
 
     pub fn vectors_view(&self) -> &HashMap<Uuid, Vec<f32>> {
-        &self.vector_cache
+        self.cache.vectors()
     }
 
     pub fn metadata_view(&self) -> &HashMap<Uuid, crate::metadata::Metadata> {
-        &self.metadata_cache
+        self.cache.metadata()
     }
 
     pub fn config(&self) -> &crate::config::CollectionConfig {

@@ -13,7 +13,6 @@ pub struct RuntimeConfig {
     pub embedding: Option<crate::embeddings::EmbeddingConfig>,
     pub disk_min_free_bytes: Option<u64>,
     pub disk_readonly_on_low_space: bool,
-    pub cache_max_bytes: Option<u64>,
 }
 
 /// Load configuration from file, then apply environment overrides.
@@ -61,10 +60,6 @@ pub fn load_runtime_config() -> RuntimeConfig {
     let disk_readonly_on_low_space = env::var("DISK_READONLY_ON_LOW_SPACE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(true);
-    let cache_max_bytes = env::var("CACHE_MAX_BYTES")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok());
-
     let embedding = embedding_provider.map(|provider| {
         let model = embedding_model.unwrap_or_else(|| {
             if provider == "openai" {
@@ -94,7 +89,6 @@ pub fn load_runtime_config() -> RuntimeConfig {
         embedding,
         disk_min_free_bytes,
         disk_readonly_on_low_space,
-        cache_max_bytes,
     }
 }
 

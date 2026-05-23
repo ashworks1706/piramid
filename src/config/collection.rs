@@ -36,6 +36,10 @@ pub struct CollectionConfig {
     // Limits configuration
     #[serde(default)]
     pub limits: LimitsConfig,
+
+    // Cache configuration
+    #[serde(default)]
+    pub cache: CacheConfig,
 }
 
 impl Default for CollectionConfig {
@@ -49,6 +53,7 @@ impl Default for CollectionConfig {
             parallelism: ParallelismConfig::default(),
             execution: ExecutionMode::Auto,
             limits: LimitsConfig::default(),
+            cache: CacheConfig::default(),
         }
     }
 }

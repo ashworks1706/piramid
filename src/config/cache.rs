@@ -13,6 +13,10 @@ pub struct CacheConfig {
 
     // Time-to-live in seconds (None = no expiration)
     pub ttl_seconds: Option<u64>,
+
+    // Maximum total collection cache bytes across loaded collections (None = unlimited)
+    #[serde(default)]
+    pub max_bytes: Option<u64>,
 }
 
 impl Default for CacheConfig {
@@ -21,6 +25,7 @@ impl Default for CacheConfig {
             enabled: true,
             max_size: 10_000,
             ttl_seconds: None,
+            max_bytes: None,
         }
     }
 }
@@ -32,6 +37,7 @@ impl CacheConfig {
             enabled: false,
             max_size: 0,
             ttl_seconds: None,
+            max_bytes: Some(0),
         }
     }
 
@@ -41,6 +47,7 @@ impl CacheConfig {
             enabled: true,
             max_size: size,
             ttl_seconds: None,
+            max_bytes: None,
         }
     }
 
@@ -50,6 +57,12 @@ impl CacheConfig {
             enabled: true,
             max_size: size,
             ttl_seconds: Some(ttl_seconds),
+            max_bytes: None,
         }
+    }
+
+    pub fn with_max_bytes(mut self, max_bytes: u64) -> Self {
+        self.max_bytes = Some(max_bytes);
+        self
     }
 }
