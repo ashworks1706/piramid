@@ -130,7 +130,6 @@ fn start_server_inline() -> std::io::Result<()> {
             embedding: embedding_config,
             disk_min_free_bytes,
             disk_readonly_on_low_space,
-            cache_max_bytes,
         } = piramid::config::loader::load_runtime_config();
 
         let state = match embedding_config.clone() {
@@ -153,7 +152,6 @@ fn start_server_inline() -> std::io::Result<()> {
                             retry_embedder,
                             disk_min_free_bytes,
                             disk_readonly_on_low_space,
-                            cache_max_bytes,
                         ))
                     }
                     Err(_) => std::sync::Arc::new(AppState::new(
@@ -162,7 +160,6 @@ fn start_server_inline() -> std::io::Result<()> {
                         slow_query_ms,
                         disk_min_free_bytes,
                         disk_readonly_on_low_space,
-                        cache_max_bytes,
                     )),
                 }
             }
@@ -172,7 +169,6 @@ fn start_server_inline() -> std::io::Result<()> {
                 slow_query_ms,
                 disk_min_free_bytes,
                 disk_readonly_on_low_space,
-                cache_max_bytes,
             )),
         };
 

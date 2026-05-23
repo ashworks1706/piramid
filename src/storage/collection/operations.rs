@@ -198,14 +198,15 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
     }
 
     let mut serialized: Vec<(Uuid, Vec<u8>)> = Vec::with_capacity(entries.len());
-    let mut raw_vectors: Vec<(Uuid, Vec<f32>)> = Vec::with_capacity(entries.len());
+    let mut raw_vectors: Vec<(Uuid, Vec<f32>, Metadata)> = Vec::with_capacity(entries.len());
     for entry in &mut entries {
         let raw_vec = entry.get_vector();
+        let metadata = entry.metadata.clone();
         entry.vector =
             QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
         let bytes = bincode::serialize(entry)?;
         serialized.push((entry.id, bytes));
-        raw_vectors.push((entry.id, raw_vec));
+        raw_vectors.push((entry.id, raw_vec, metadata));
     }
     let current_offset = storage
         .index
@@ -238,14 +239,12 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
 
     storage.track_operation()?;
 
-    for (id, vec_f32) in raw_vectors {
+    for (id, vec_f32, metadata) in raw_vectors {
         storage.metadata.set_dimensions(vec_f32.len());
         if let Some(expected_dim) = storage.metadata.dimensions {
             crate::validation::validate_dimensions(&vec_f32, expected_dim)?;
         }
-        if let Some(entry) = get(storage, &id) {
-            storage.cache.put_metadata(id, entry.metadata.clone());
-        }
+        storage.cache.put_metadata(id, metadata);
         storage.cache.put_vector(id, vec_f32.clone());
         storage
             .vector_index

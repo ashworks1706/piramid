@@ -26,7 +26,6 @@ fn test_state(data_dir: &str) -> Arc<AppState> {
         500,
         None,
         true,
-        None,
     ))
 }
 

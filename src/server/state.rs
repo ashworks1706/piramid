@@ -46,7 +46,6 @@ pub struct AppState {
     pub config_last_reload: Arc<AtomicU64>, // Timestamp of last config reload for cache invalidation
     pub disk_min_free_bytes: Option<u64>,
     pub disk_readonly_on_low_space: bool,
-    pub cache_max_bytes: Option<u64>,
 }
 
 impl AppState {
@@ -56,7 +55,6 @@ impl AppState {
         slow_query_ms: u128,
         disk_min_free_bytes: Option<u64>,
         disk_readonly_on_low_space: bool,
-        cache_max_bytes: Option<u64>,
     ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
         let app_config = Arc::new(RwLock::new(app_config));
@@ -80,7 +78,6 @@ impl AppState {
             )),
             disk_min_free_bytes,
             disk_readonly_on_low_space,
-            cache_max_bytes,
         }
     }
 
@@ -91,7 +88,6 @@ impl AppState {
         embedder: Arc<dyn Embedder>,
         disk_min_free_bytes: Option<u64>,
         disk_readonly_on_low_space: bool,
-        cache_max_bytes: Option<u64>,
     ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
         let app_config = Arc::new(RwLock::new(app_config));
@@ -114,7 +110,6 @@ impl AppState {
             )),
             disk_min_free_bytes,
             disk_readonly_on_low_space,
-            cache_max_bytes,
         }
     }
 
@@ -208,24 +203,46 @@ impl AppState {
     }
 
     pub fn enforce_cache_budget(&self) {
-        let max_bytes = match self.cache_max_bytes {
+        let cache_config = self.current_config().cache;
+        if !cache_config.enabled {
+            return;
+        }
+
+        let max_bytes = match cache_config.max_bytes {
             Some(v) => v,
             None => return,
         };
         let mut total: u64 = 0;
-        for (_, storage) in self.registry.loaded_collections() {
+        let mut collections = Vec::new();
+        for (name, storage) in self.registry.loaded_collections() {
             let guard = storage.read();
-            total = total.saturating_add(guard.cache_usage_bytes() as u64);
+            let cache_bytes = guard.cache_usage_bytes();
+            let metadata_bytes = guard.metadata_cache_usage_bytes();
+            total = total.saturating_add(cache_bytes as u64);
+            collections.push((name, storage.clone(), metadata_bytes));
         }
+
         if total > max_bytes {
             tracing::warn!(
                 total_cache_bytes = total,
                 max_bytes = max_bytes,
-                "cache_budget_exceeded_clearing"
+                "cache_budget_exceeded_evicting_metadata"
             );
-            for (_, storage) in self.registry.loaded_collections() {
+
+            collections.sort_by(|a, b| b.2.cmp(&a.2));
+            for (name, storage, metadata_bytes) in collections {
+                if total <= max_bytes || metadata_bytes == 0 {
+                    break;
+                }
                 let mut guard = storage.write();
-                guard.clear_caches();
+                let freed = guard.clear_metadata_cache() as u64;
+                total = total.saturating_sub(freed);
+                tracing::debug!(
+                    collection = name,
+                    freed_cache_bytes = freed,
+                    total_cache_bytes = total,
+                    "metadata_cache_evicted"
+                );
             }
         }
     }
