@@ -7,9 +7,7 @@ use super::record_store::RecordStore;
 use crate::error::Result;
 use crate::index::VectorIndex;
 use crate::storage::metadata::CollectionMetadata;
-use crate::storage::persistence::{
-    get_wal_path, save_vector_index, warm_file, EntryPointer,
-};
+use crate::storage::persistence::{get_wal_path, save_vector_index, warm_file, EntryPointer};
 
 pub struct Collection {
     pub(super) record_store: RecordStore,

@@ -85,7 +85,12 @@ impl RecordStore {
         self.mmap
             .as_ref()
             .map(|mmap| mmap.len())
-            .unwrap_or_else(|| self.data_file.metadata().map(|meta| meta.len() as usize).unwrap_or(0))
+            .unwrap_or_else(|| {
+                self.data_file
+                    .metadata()
+                    .map(|meta| meta.len() as usize)
+                    .unwrap_or(0)
+            })
     }
 
     pub fn warm_page_cache(&self) {

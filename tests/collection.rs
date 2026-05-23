@@ -306,3 +306,79 @@ fn metadata_cache_is_bounded_without_evicting_vectors() {
     drop(storage);
     cleanup_test_files(&files);
 }
+
+#[test]
+fn append_cursor_survives_reopen_and_preserves_existing_records() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_append_cursor_reopen.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_append_cursor_reopen.db.index.db",
+        ".piramid/tests/test_append_cursor_reopen.db.wal.db",
+        ".piramid/tests/test_append_cursor_reopen.db.vecindex.db",
+        ".piramid/tests/test_append_cursor_reopen.db.metadata.db",
+        ".piramid/tests/test_append_cursor_reopen.db.wal.meta",
+    ];
+    cleanup_test_files(&files);
+
+    let first_id = {
+        let mut storage = Collection::open(test_path).unwrap();
+        let first_id = storage
+            .insert(Document::new(vec![1.0, 0.0, 0.0], "first".to_string()))
+            .unwrap();
+        storage.checkpoint().unwrap();
+        first_id
+    };
+
+    let second_id = {
+        let mut storage = Collection::open(test_path).unwrap();
+        storage
+            .insert(Document::new(vec![0.0, 1.0, 0.0], "second".to_string()))
+            .unwrap()
+    };
+
+    let storage = Collection::open(test_path).unwrap();
+    assert_eq!(storage.count(), 2);
+    assert_eq!(storage.get(&first_id).unwrap().text, "first");
+    assert_eq!(storage.get(&second_id).unwrap().text, "second");
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
+
+#[test]
+fn compaction_rewrites_live_records_through_temp_record_store() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_record_store_compact.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_record_store_compact.db.index.db",
+        ".piramid/tests/test_record_store_compact.db.wal.db",
+        ".piramid/tests/test_record_store_compact.db.vecindex.db",
+        ".piramid/tests/test_record_store_compact.db.metadata.db",
+        ".piramid/tests/test_record_store_compact.db.wal.meta",
+        ".piramid/tests/test_record_store_compact.db.compact",
+    ];
+    cleanup_test_files(&files);
+
+    let mut storage = Collection::open(test_path).unwrap();
+    let keep_id = storage
+        .insert(Document::new(vec![1.0, 0.0, 0.0], "keep".to_string()))
+        .unwrap();
+    let delete_id = storage
+        .insert(Document::new(vec![0.0, 1.0, 0.0], "delete".to_string()))
+        .unwrap();
+    storage.delete(&delete_id).unwrap();
+
+    let stats = piramid::storage::collection::compact(&mut storage).unwrap();
+
+    assert_eq!(stats.original_entries, 1);
+    assert_eq!(stats.compacted_entries, 1);
+    assert_eq!(storage.count(), 1);
+    assert_eq!(storage.get(&keep_id).unwrap().text, "keep");
+    assert!(storage.get(&delete_id).is_none());
+    assert!(fs::metadata(format!("{}.compact", test_path)).is_err());
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
