@@ -133,7 +133,7 @@ pub async fn insert_vector(
     // Validate inputs
     validation::validate_collection_name(&collection)?;
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_or_create_collection(&collection)?;
     info!(
         collection=%collection,
         single=req.vector.is_some(),
@@ -141,15 +141,9 @@ pub async fn insert_vector(
         "insert_request"
     );
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let response = match (req.vector.take(), req.vectors.take()) {
         (Some(vector), None) => {
@@ -160,7 +154,7 @@ pub async fn insert_vector(
             let id = storage.insert(entry)?;
             let duration = start.elapsed();
 
-            if let Some(tracker) = state.latency_tracker.get(&collection) {
+            if let Some(tracker) = state.registry.tracker(&collection) {
                 tracker.record_insert(duration);
             }
             state.enforce_cache_budget();
@@ -179,7 +173,7 @@ pub async fn insert_vector(
             let ids: Vec<Uuid> = storage.insert_batch(entries)?;
             let duration = start.elapsed();
 
-            if let Some(tracker) = state.latency_tracker.get(&collection) {
+            if let Some(tracker) = state.registry.tracker(&collection) {
                 tracker.record_insert(duration);
             }
             state.enforce_cache_budget();
@@ -213,20 +207,14 @@ pub async fn get_vector(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let entry = storage.get(&uuid).ok_or(ServerError::NotFound(
         super::super::helpers::VECTOR_NOT_FOUND.to_string(),
@@ -250,17 +238,11 @@ pub async fn list_vectors(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let vectors: Vec<VectorResponse> = storage
         .get_all()
@@ -288,14 +270,11 @@ pub async fn delete_vector(
     }
     state.ensure_write_allowed()?;
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let mut storage = storage_ref.write();
 
     let start = Instant::now();
@@ -303,7 +282,7 @@ pub async fn delete_vector(
     let duration = start.elapsed();
 
     // Record latency
-    if let Some(tracker) = state.latency_tracker.get(&collection) {
+    if let Some(tracker) = state.registry.tracker(&collection) {
         tracker.record_delete(duration);
     }
 
@@ -327,17 +306,11 @@ pub async fn delete_vectors(
     validation::validate_collection_name(&collection)?;
     validation::validate_batch_size(req.ids.len(), MAX_BATCH_SIZE, "Delete")?;
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let mut uuids = Vec::with_capacity(req.ids.len());
     for id_str in &req.ids {
@@ -350,7 +323,7 @@ pub async fn delete_vectors(
     let deleted_count = storage.delete_batch(&uuids)?;
     let duration = start.elapsed();
 
-    if let Some(tracker) = state.latency_tracker.get(&collection) {
+    if let Some(tracker) = state.registry.tracker(&collection) {
         tracker.record_delete(duration);
     }
 
@@ -375,18 +348,12 @@ pub async fn search_vectors(
     // 2. Validate the collection name and search vectors in the request to ensure they meet the required formats and constraints before proceeding with the search operation.
     validation::validate_collection_name(&collection)?;
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
     // 3. Acquire a read lock on the collection's storage to ensure thread-safe access while performing the search operation, and record the time taken to acquire the lock for latency tracking purposes.
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
     // 4. Parse the similarity metric and apply any search configuration overrides based on the request parameters, such as ef, nprobe, overfetch, or preset, to determine the effective search configuration that will be used for the search operation.
     let SearchRequest {
         vector,
@@ -436,7 +403,7 @@ pub async fn search_vectors(
             }
 
             // 4. Record the latency of the search operation using the latency tracker associated with the collection, if available, to monitor and analyze search performance over time.
-            if let Some(tracker) = state.latency_tracker.get(&collection) {
+            if let Some(tracker) = state.registry.tracker(&collection) {
                 tracker.record_search(duration);
             }
 
@@ -485,7 +452,7 @@ pub async fn search_vectors(
                 );
             }
 
-            if let Some(tracker) = state.latency_tracker.get(&collection) {
+            if let Some(tracker) = state.registry.tracker(&collection) {
                 tracker.record_search(duration);
             }
 
@@ -538,7 +505,6 @@ pub async fn upsert_vector(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
     state.ensure_write_allowed()?;
-    state.ensure_write_allowed()?;
 
     // Validate inputs
     validation::validate_collection_name(&collection)?;
@@ -550,17 +516,11 @@ pub async fn upsert_vector(
         req.vector = validation::normalize_vector(&req.vector);
     }
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_or_create_collection(&collection)?;
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
 
     // Check if entry exists
     let id = if let Some(id_str) = req.id {
@@ -581,7 +541,7 @@ pub async fn upsert_vector(
     let duration = start.elapsed();
 
     // Record latency (treat as insert or update)
-    if let Some(tracker) = state.latency_tracker.get(&collection) {
+    if let Some(tracker) = state.registry.tracker(&collection) {
         if exists {
             tracker.record_update(duration);
         } else {
@@ -617,17 +577,11 @@ pub async fn range_search_vectors(
     validation::validate_collection_name(&collection)?;
     validation::validate_vector(&req.vector)?;
 
-    state.get_or_create_collection(&collection)?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
-    let storage_ref = state.collections.get(&collection).ok_or_else(|| {
-        ServerError::NotFound(super::super::helpers::COLLECTION_NOT_FOUND.to_string())
-    })?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let metric = parse_metric(req.metric);
     let effective_search = apply_search_overrides(

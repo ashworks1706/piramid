@@ -22,16 +22,13 @@ pub async fn list_collections(
     }
 
     let mut infos = Vec::new();
-    for entry in state.collections.iter() {
+    for (name, storage_ref) in state.registry.loaded_collections() {
         let lock_start = std::time::Instant::now();
-        let storage = entry.value().read();
-        record_lock_read(
-            state.latency_tracker.get(entry.key()).as_deref(),
-            lock_start,
-        );
+        let storage = storage_ref.read();
+        record_lock_read(state.registry.tracker(&name).as_deref(), lock_start);
         let meta = storage.metadata();
         infos.push(CollectionInfo {
-            name: entry.key().clone(),
+            name,
             count: storage.count(),
             created_at: Some(meta.created_at),
             updated_at: Some(meta.updated_at),
@@ -54,15 +51,10 @@ pub async fn create_collection(
     // Validate collection name
     validation::validate_collection_name(&req.name)?;
 
-    state.get_or_create_collection(&req.name)?;
-
-    let storage_ref = state
-        .collections
-        .get(&req.name)
-        .ok_or_else(|| ServerError::Internal("Collection not found after creation".into()))?;
+    let storage_ref = state.get_or_create_collection(&req.name)?;
     let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.latency_tracker.get(&req.name).as_deref(), lock_start);
+    record_lock_read(state.registry.tracker(&req.name).as_deref(), lock_start);
     let meta = storage.metadata();
 
     Ok(Json(CollectionInfo {
@@ -83,18 +75,10 @@ pub async fn get_collection(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
-
-    let storage_ref = state
-        .collections
-        .get(&collection)
-        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
     let meta = storage.metadata();
 
     Ok(Json(CollectionInfo {
@@ -115,7 +99,7 @@ pub async fn delete_collection(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    let existed = state.collections.remove(&collection).is_some();
+    let existed = state.registry.remove(&collection).is_some();
 
     if existed {
         let path = format!("{}/{}.db", state.data_dir, collection);
@@ -137,18 +121,10 @@ pub async fn collection_count(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
-
-    let storage_ref = state
-        .collections
-        .get(&collection)
-        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
     let count = storage.count();
 
     Ok(Json(CountResponse { count }))
@@ -163,18 +139,10 @@ pub async fn index_stats(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
-
-    let storage_ref = state
-        .collections
-        .get(&collection)
-        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let stats = storage.vector_index().stats();
 
@@ -195,12 +163,7 @@ pub async fn rebuild_index(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
-
-    let storage_ref = state
-        .collections
-        .get(&collection)
-        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
     let started_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -280,18 +243,10 @@ pub async fn find_duplicates(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
-
-    let storage_ref = state
-        .collections
-        .get(&collection)
-        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = std::time::Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(
-        state.latency_tracker.get(&collection).as_deref(),
-        lock_start,
-    );
+    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
 
     let metric = match req.metric.as_deref() {
         Some("euclidean") => Metric::Euclidean,
@@ -329,12 +284,7 @@ pub async fn compact_collection(
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
 
-    state.get_or_create_collection(&collection)?;
-
-    let storage_ref = state
-        .collections
-        .get(&collection)
-        .ok_or_else(|| ServerError::NotFound("Collection not found".into()))?;
+    let storage_ref = state.get_existing_collection(&collection)?;
 
     let mut storage = storage_ref.write();
     let start = Instant::now();
