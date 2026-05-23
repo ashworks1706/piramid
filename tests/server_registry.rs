@@ -5,6 +5,7 @@ use axum::{
 use piramid::{
     config::AppConfig,
     error::PiramidError,
+    metadata,
     server::{
         handlers::{collections, vectors},
         types::{InsertRequest, InsertResultsResponse, ListVectorsQuery},
@@ -20,9 +21,14 @@ fn cleanup_dir(path: &str) {
 
 fn test_state(data_dir: &str) -> Arc<AppState> {
     cleanup_dir(data_dir);
+    test_state_with_config(data_dir, AppConfig::default())
+}
+
+fn test_state_with_config(data_dir: &str, app_config: AppConfig) -> Arc<AppState> {
+    cleanup_dir(data_dir);
     Arc::new(AppState::new(
         data_dir,
-        AppConfig::default(),
+        app_config,
         500,
         None,
         true,
@@ -61,6 +67,49 @@ async fn read_endpoints_do_not_create_missing_collections() {
 
     assert_eq!(state.registry.len(), 0);
     assert!(!std::path::Path::new(&format!("{data_dir}/missing.db")).exists());
+
+    cleanup_dir(data_dir);
+}
+
+#[tokio::test]
+async fn cache_budget_evicts_metadata_without_dropping_vectors() {
+    let data_dir = ".piramid/tests/server_registry_cache_budget";
+    let mut app_config = AppConfig::default();
+    app_config.cache.max_bytes = Some(1);
+    let state = test_state_with_config(data_dir, app_config);
+    let collection = state
+        .registry
+        .get_or_create("docs")
+        .expect("create collection");
+
+    {
+        let mut storage = collection.write();
+        storage
+            .insert(Document::with_metadata(
+                vec![1.0, 0.0, 0.0],
+                "first".to_string(),
+                metadata([("kind", "a".into())]),
+            ))
+            .unwrap();
+        storage
+            .insert(Document::with_metadata(
+                vec![0.0, 1.0, 0.0],
+                "second".to_string(),
+                metadata([("kind", "b".into())]),
+            ))
+            .unwrap();
+        assert_eq!(storage.get_vectors().len(), 2);
+        assert_eq!(storage.metadata_view().len(), 2);
+    }
+
+    state.enforce_cache_budget();
+
+    {
+        let storage = collection.read();
+        assert_eq!(storage.get_vectors().len(), 2);
+        assert_eq!(storage.metadata_view().len(), 0);
+        assert_eq!(storage.count(), 2);
+    }
 
     cleanup_dir(data_dir);
 }

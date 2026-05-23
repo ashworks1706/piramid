@@ -1,6 +1,6 @@
 use piramid::{
-    metadata, search::SearchParams, storage::collection::CollectionOpenOptions, Collection,
-    CollectionConfig, Document, MemoryConfig, Metric,
+    metadata, search::SearchParams, storage::collection::CollectionOpenOptions, CacheConfig,
+    Collection, CollectionConfig, Document, MemoryConfig, Metric,
 };
 use std::fs;
 
@@ -257,6 +257,51 @@ fn sidecar_files_persist_at_checkpoint_only() {
 
     assert!(fs::metadata(format!("{}.index.db", test_path)).is_ok());
     assert!(fs::metadata(format!("{}.vecindex.db", test_path)).is_ok());
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
+
+#[test]
+fn metadata_cache_is_bounded_without_evicting_vectors() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_cache_manager_bounds.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_cache_manager_bounds.db.index.db",
+        ".piramid/tests/test_cache_manager_bounds.db.wal.db",
+        ".piramid/tests/test_cache_manager_bounds.db.vecindex.db",
+        ".piramid/tests/test_cache_manager_bounds.db.metadata.db",
+        ".piramid/tests/test_cache_manager_bounds.db.wal.meta",
+    ];
+    cleanup_test_files(&files);
+
+    let config = CollectionConfig {
+        cache: CacheConfig::with_size(1),
+        ..CollectionConfig::default()
+    };
+    let mut storage =
+        Collection::open_with_options(test_path, CollectionOpenOptions { config }).unwrap();
+
+    let id_a = storage
+        .insert(Document::with_metadata(
+            vec![1.0, 0.0, 0.0],
+            "first".to_string(),
+            metadata([("kind", "a".into())]),
+        ))
+        .unwrap();
+    let id_b = storage
+        .insert(Document::with_metadata(
+            vec![0.0, 1.0, 0.0],
+            "second".to_string(),
+            metadata([("kind", "b".into())]),
+        ))
+        .unwrap();
+
+    assert_eq!(storage.get_vectors().len(), 2);
+    assert_eq!(storage.metadata_view().len(), 1);
+    assert!(storage.get_vectors().contains_key(&id_a));
+    assert!(storage.get_vectors().contains_key(&id_b));
 
     drop(storage);
     cleanup_test_files(&files);

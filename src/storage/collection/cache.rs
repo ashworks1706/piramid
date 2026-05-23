@@ -39,6 +39,7 @@ impl CacheManager {
         if !self.config.enabled {
             return;
         }
+        self.metadata_order.retain(|cached_id| cached_id != &id);
         self.metadata.insert(id, metadata);
         self.metadata_order.push_back(id);
         self.enforce_item_limit();
@@ -49,6 +50,7 @@ impl CacheManager {
             self.vectors.remove(id);
         }
         self.metadata.remove(id);
+        self.metadata_order.retain(|cached_id| cached_id != id);
     }
 
     pub fn clear_all(&mut self) {
@@ -69,15 +71,20 @@ impl CacheManager {
     }
 
     pub fn metadata_usage_bytes(&self) -> usize {
-        self.metadata.len() * std::mem::size_of::<(Uuid, Metadata)>()
+        self.metadata
+            .iter()
+            .map(|(id, metadata)| {
+                std::mem::size_of_val(id)
+                    + metadata
+                        .iter()
+                        .map(|(key, value)| key.capacity() + metadata_value_usage_bytes(value))
+                        .sum::<usize>()
+            })
+            .sum()
     }
 
     pub fn vector_len(&self) -> usize {
         self.vectors.len()
-    }
-
-    pub fn metadata_contains(&self, id: &Uuid) -> bool {
-        self.metadata.contains_key(id)
     }
 
     pub fn vector_contains(&self, id: &Uuid) -> bool {
@@ -109,6 +116,23 @@ impl CacheManager {
     }
 }
 
+fn metadata_value_usage_bytes(value: &crate::metadata::MetadataValue) -> usize {
+    match value {
+        crate::metadata::MetadataValue::String(value) => value.capacity(),
+        crate::metadata::MetadataValue::Integer(_)
+        | crate::metadata::MetadataValue::Float(_)
+        | crate::metadata::MetadataValue::Boolean(_)
+        | crate::metadata::MetadataValue::Null => std::mem::size_of_val(value),
+        crate::metadata::MetadataValue::Array(values) => {
+            values.capacity() * std::mem::size_of::<crate::metadata::MetadataValue>()
+                + values
+                    .iter()
+                    .map(metadata_value_usage_bytes)
+                    .sum::<usize>()
+        }
+    }
+}
+
 pub fn rebuild(collection: &mut Collection) {
     let mut cache = CacheManager::new(collection.config.cache);
     for id in collection.index.keys() {
@@ -128,10 +152,6 @@ pub fn ensure_consistent(collection: &mut Collection) {
 
     for id in collection.index.keys() {
         if !collection.cache.vector_contains(id) {
-            rebuild(collection);
-            break;
-        }
-        if collection.config.cache.enabled && !collection.cache.metadata_contains(id) {
             rebuild(collection);
             break;
         }

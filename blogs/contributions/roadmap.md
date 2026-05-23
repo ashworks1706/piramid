@@ -8,20 +8,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ### Architecture Refactor patch
 
-**Collection Registry**
-
-- [x] introduce `CollectionRegistry` as the only owner of loaded collection handles, replacing direct `AppState.collections` access in handlers.
-- [x] split collection lookup into `get_existing` for read paths and `get_or_create` for write/create paths so GET/search endpoints cannot silently create empty collections.
-- [x] move collection path construction, latency tracker creation, page-cache warming, and future collection eviction policy behind the registry.
-- [x] add tests proving read endpoints return 404 for missing collections while create/write endpoints still create collections intentionally.
-
-**Cache Manager**
-
-- [ ] extract `CacheManager` from `Collection` so vector cache, metadata cache, embedding cache, and future query cache share one cache ownership model.
-- [ ] replace raw `vector_cache` and `metadata_cache` maps with explicit cache methods: get vector, put vector, remove vector, get metadata, put metadata, clear, memory usage.
-- [ ] make cache budget enforcement policy-based instead of clearing every collection cache when `cache_max_bytes` is exceeded.
-- [ ] wire `CacheConfig` into `AppConfig` and collection/runtime config so cache behavior is not controlled only by ad-hoc env fields.
-
 **Record Store**
 
 - [ ] extract `RecordStore` from `Collection` to own data file, optional mmap, document codec, entry pointers, append cursor, and file growth.
