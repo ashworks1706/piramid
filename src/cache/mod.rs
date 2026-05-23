@@ -1,11 +1,10 @@
 use std::collections::{HashMap, VecDeque};
+
 use uuid::Uuid;
 
 use crate::config::CacheConfig;
 use crate::index::VectorReader;
-use crate::metadata::Metadata;
-use crate::storage::collection::operations;
-use crate::storage::collection::storage::Collection;
+use crate::metadata::{Metadata, MetadataValue};
 
 pub struct CacheManager {
     config: CacheConfig,
@@ -95,7 +94,7 @@ impl CacheManager {
     fn vector_usage_bytes(&self) -> usize {
         self.vectors
             .values()
-            .map(|vec| std::mem::size_of::<Uuid>() + vec.len() * std::mem::size_of::<f32>())
+            .map(|vector| std::mem::size_of::<Uuid>() + vector.len() * std::mem::size_of::<f32>())
             .sum()
     }
 
@@ -135,41 +134,16 @@ impl VectorReader for CacheManager {
     }
 }
 
-fn metadata_value_usage_bytes(value: &crate::metadata::MetadataValue) -> usize {
+fn metadata_value_usage_bytes(value: &MetadataValue) -> usize {
     match value {
-        crate::metadata::MetadataValue::String(value) => value.capacity(),
-        crate::metadata::MetadataValue::Integer(_)
-        | crate::metadata::MetadataValue::Float(_)
-        | crate::metadata::MetadataValue::Boolean(_)
-        | crate::metadata::MetadataValue::Null => std::mem::size_of_val(value),
-        crate::metadata::MetadataValue::Array(values) => {
-            values.capacity() * std::mem::size_of::<crate::metadata::MetadataValue>()
+        MetadataValue::String(value) => value.capacity(),
+        MetadataValue::Integer(_)
+        | MetadataValue::Float(_)
+        | MetadataValue::Boolean(_)
+        | MetadataValue::Null => std::mem::size_of_val(value),
+        MetadataValue::Array(values) => {
+            values.capacity() * std::mem::size_of::<MetadataValue>()
                 + values.iter().map(metadata_value_usage_bytes).sum::<usize>()
-        }
-    }
-}
-
-pub fn rebuild(collection: &mut Collection) {
-    let mut cache = CacheManager::new(collection.config.cache);
-    for id in collection.index.keys() {
-        if let Some(entry) = operations::get(collection, id) {
-            cache.put_vector(*id, entry.get_vector());
-            cache.put_metadata(*id, entry.metadata.clone());
-        }
-    }
-    collection.cache = cache;
-}
-
-pub fn ensure_consistent(collection: &mut Collection) {
-    if collection.cache.vector_len() != collection.index.len() {
-        rebuild(collection);
-        return;
-    }
-
-    for id in collection.index.keys() {
-        if !collection.cache.vector_contains(id) {
-            rebuild(collection);
-            break;
         }
     }
 }

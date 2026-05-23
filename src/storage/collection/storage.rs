@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use super::cache::{self, CacheManager};
+use super::cache_maintenance;
 use super::persistence::PersistenceService;
 use super::record_store::RecordStore;
+use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::{HashMapVectorReader, VectorIndex, VectorReader};
 use crate::storage::metadata::CollectionMetadata;
@@ -129,12 +130,12 @@ impl Collection {
     }
 
     pub(super) fn rebuild_vector_cache(&mut self) {
-        cache::rebuild(self);
+        cache_maintenance::rebuild(self);
     }
 
     // If cache and index diverge (e.g., after crash), rebuild to ensure consistency.
     pub fn ensure_cache_consistency(&mut self) {
-        cache::ensure_consistent(self);
+        cache_maintenance::ensure_consistent(self);
     }
 
     /// Rebuild the vector index from on-disk data and persist it.

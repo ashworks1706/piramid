@@ -1,7 +1,9 @@
 // ## Crate organization
 
+pub mod cache;
 pub mod cli;
 pub mod collections;
+pub mod compute;
 pub mod config;
 pub mod embeddings;
 pub mod error;

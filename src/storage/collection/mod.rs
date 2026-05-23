@@ -1,5 +1,5 @@
 mod builder;
-mod cache;
+mod cache_maintenance;
 mod compact;
 mod dup;
 mod operations;

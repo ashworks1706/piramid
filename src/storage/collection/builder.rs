@@ -2,10 +2,10 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use super::cache::CacheManager;
 use super::persistence::{load_wal_meta, PersistenceService};
 use super::record_store::RecordStore;
 use super::{storage::Collection, CollectionOpenOptions};
+use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::HashMapVectorReader;
 use crate::quantization::QuantizedVector;

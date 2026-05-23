@@ -12,8 +12,8 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 - [ ] keep `storage/` focused on record store, WAL, mmap, persistence formats, checksums, recovery, and file growth.
 - [ ] keep `index/` focused on vector index implementations, index configs, index persistence, and index-specific query knobs.
-- [ ] add `compute/` or `kernels/` for CPU/GPU distance kernels, backend dispatch, batching, SIMD/JIT/GPU implementations, and benchmark gates.
-- [ ] add `cache/` for shared cache policy, memory budgeting, eviction strategy, query/result caches, embedding cache, and future KV-cache accounting.
+- [x] add `compute/` or `kernels/` for CPU/GPU distance kernels, backend dispatch, batching, SIMD/JIT/GPU implementations, and benchmark gates.
+- [x] add `cache/` for shared cache policy, memory budgeting, eviction strategy, query/result caches, embedding cache, and future KV-cache accounting.
 - [ ] add `inference/` for model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs.
 - [ ] add `cluster/` for distributed membership, node capability discovery, shard ownership, replication policy, fan-out routing, and partial-result handling.
 
