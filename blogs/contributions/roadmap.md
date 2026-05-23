@@ -21,6 +21,12 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ### GPU Acceleration patch
 
+**GPU backend:**
+
+- [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
+- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
+- [ ] keep CPU as the correctness baseline for every GPU path; GPU acceleration should never change result ordering outside documented approximation tolerances.
+
 **Introduce Custom GPU Kernels trait:**
 
 - [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
@@ -29,12 +35,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
 - [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
 - [ ] add a CPU/GPU backend benchmark harness that reports p50/p95/p99 latency, recall@k, memory usage, and index build time on consumer hardware presets.
-
-**GPU backend:**
-
-- [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
-- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
-- [ ] keep CPU as the correctness baseline for every GPU path; GPU acceleration should never change result ordering outside documented approximation tolerances.
 
 **Safetensors / precision compatibility:**
 
