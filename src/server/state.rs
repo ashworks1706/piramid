@@ -4,14 +4,12 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tokio::runtime::Handle;
 
 use crate::config::AppConfig;
 use crate::embeddings::Embedder;
 use crate::error::{Result, ServerError};
-use crate::metrics::{EmbedMetrics, LatencyTracker};
-use crate::storage::collection::CollectionOpenOptions;
-use crate::Collection;
+use crate::metrics::EmbedMetrics;
+use crate::server::registry::{CollectionHandle, CollectionRegistry};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -36,12 +34,11 @@ pub struct RebuildJobStatus {
 // DashMap allows concurrent access to different collections without blocking.
 // Holds config + optional embedder so handlers can access without reloading.
 pub struct AppState {
-    pub collections: DashMap<String, Arc<RwLock<Collection>>>, // Map of collection name to its storage handle. Wrapped in Arc<RwLock> for shared mutable access across threads.
+    pub registry: CollectionRegistry,
     pub data_dir: String, // Base directory for collection files, e.g. "./data"
     pub embedder: Option<Arc<dyn Embedder>>, // Optional embedder, if configured. Wrapped in Arc for shared ownership.
     pub shutting_down: Arc<AtomicBool>, // Flag to indicate server is shutting down, used to reject new requests gracefully
     pub read_only: Arc<AtomicBool>,     // Flag for disk-pressure read-only mode
-    pub latency_tracker: Arc<DashMap<String, LatencyTracker>>, // Per-collection latency tracking
     pub embed_metrics: Arc<EmbedMetrics>,
     pub app_config: Arc<RwLock<AppConfig>>, // Global config accessible to handlers, protected by RwLock for dynamic updates
     pub slow_query_ms: u128,                // Threshold for logging slow queries in ms
@@ -62,16 +59,16 @@ impl AppState {
         cache_max_bytes: Option<u64>,
     ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
+        let app_config = Arc::new(RwLock::new(app_config));
 
         Self {
-            collections: DashMap::new(),
+            registry: CollectionRegistry::new(data_dir.to_string(), app_config.clone()),
             data_dir: data_dir.to_string(),
             embedder: None,
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
-            latency_tracker: Arc::new(DashMap::new()),
             embed_metrics: Arc::new(EmbedMetrics::default()),
-            app_config: Arc::new(RwLock::new(app_config)),
+            app_config,
             slow_query_ms,
             rebuild_jobs: Arc::new(DashMap::new()),
             // Initialize to current time; updated on each config reload
@@ -97,16 +94,16 @@ impl AppState {
         cache_max_bytes: Option<u64>,
     ) -> Self {
         std::fs::create_dir_all(data_dir).ok();
+        let app_config = Arc::new(RwLock::new(app_config));
 
         Self {
-            collections: DashMap::new(),
+            registry: CollectionRegistry::new(data_dir.to_string(), app_config.clone()),
             data_dir: data_dir.to_string(),
             embedder: Some(embedder),
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
-            latency_tracker: Arc::new(DashMap::new()),
             embed_metrics: Arc::new(EmbedMetrics::default()),
-            app_config: Arc::new(RwLock::new(app_config)),
+            app_config,
             slow_query_ms,
             rebuild_jobs: Arc::new(DashMap::new()),
             config_last_reload: Arc::new(AtomicU64::new(
@@ -121,42 +118,23 @@ impl AppState {
         }
     }
 
-    // Lazily load or create a collection
-    pub fn get_or_create_collection(&self, name: &str) -> Result<()> {
+    pub fn get_existing_collection(&self, name: &str) -> Result<CollectionHandle> {
         if self.shutting_down.load(Ordering::Relaxed) {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
+        self.registry.get_existing(name)
+    }
 
-        if !self.collections.contains_key(name) {
-            let path = format!("{}/{}.db", self.data_dir, name);
-            let cfg = { self.app_config.read().clone() };
-            let storage = Collection::open_with_options(
-                &path,
-                CollectionOpenOptions::from(cfg.to_collection_config()),
-            )?;
-            let handle = Arc::new(RwLock::new(storage));
-            self.collections.insert(name.to_string(), handle.clone());
-
-            // Create latency tracker for this collection
-            self.latency_tracker
-                .insert(name.to_string(), LatencyTracker::new());
-
-            // Warm caches in the background to avoid first-request latency.
-            let warm_handle = handle.clone();
-            if let Ok(rt) = Handle::try_current() {
-                rt.spawn_blocking(move || {
-                    let guard = warm_handle.read();
-                    guard.warm_page_cache();
-                });
-            }
+    // Lazily load or create a collection
+    pub fn get_or_create_collection(&self, name: &str) -> Result<CollectionHandle> {
+        if self.shutting_down.load(Ordering::Relaxed) {
+            return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
-
-        Ok(())
+        self.registry.get_or_create(name)
     }
 
     pub fn checkpoint_all(&self) -> Result<()> {
-        for mut entry in self.collections.iter_mut() {
-            let storage = entry.value_mut();
+        for (_, storage) in self.registry.loaded_collections() {
             let mut storage_guard = storage.write();
             storage_guard.checkpoint()?;
             storage_guard.flush()?;
@@ -235,8 +213,7 @@ impl AppState {
             None => return,
         };
         let mut total: u64 = 0;
-        for entry in self.collections.iter() {
-            let storage = entry.value();
+        for (_, storage) in self.registry.loaded_collections() {
             let guard = storage.read();
             total = total.saturating_add(guard.cache_usage_bytes() as u64);
         }
@@ -246,8 +223,7 @@ impl AppState {
                 max_bytes = max_bytes,
                 "cache_budget_exceeded_clearing"
             );
-            for mut entry in self.collections.iter_mut() {
-                let storage = entry.value_mut();
+            for (_, storage) in self.registry.loaded_collections() {
                 let mut guard = storage.write();
                 guard.clear_caches();
             }

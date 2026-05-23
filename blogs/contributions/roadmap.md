@@ -6,6 +6,45 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ---
 
+### Architecture Refactor patch
+
+**Collection Registry**
+
+- [ ] introduce `CollectionRegistry` as the only owner of loaded collection handles, replacing direct `AppState.collections` access in handlers.
+- [ ] split collection lookup into `get_existing` for read paths and `get_or_create` for write/create paths so GET/search endpoints cannot silently create empty collections.
+- [ ] move collection path construction, latency tracker creation, page-cache warming, and future collection eviction policy behind the registry.
+- [ ] add tests proving read endpoints return 404 for missing collections while create/write endpoints still create collections intentionally.
+
+**Cache Manager**
+
+- [ ] extract `CacheManager` from `Collection` so vector cache, metadata cache, embedding cache, and future query cache share one cache ownership model.
+- [ ] replace raw `vector_cache` and `metadata_cache` maps with explicit cache methods: get vector, put vector, remove vector, get metadata, put metadata, clear, memory usage.
+- [ ] make cache budget enforcement policy-based instead of clearing every collection cache when `cache_max_bytes` is exceeded.
+- [ ] wire `CacheConfig` into `AppConfig` and collection/runtime config so cache behavior is not controlled only by ad-hoc env fields.
+
+**Record Store**
+
+- [ ] extract `RecordStore` from `Collection` to own data file, optional mmap, document codec, entry pointers, append cursor, and file growth.
+- [ ] replace write-offset scans with an append cursor that is loaded from metadata/index on open and updated on every append.
+- [ ] centralize document serialization/deserialization in the record store so CRUD, rebuild, compaction, and WAL replay do not duplicate bincode/mmap/file-read logic.
+- [ ] make compaction produce a new `RecordStore` state atomically, then swap it into the collection with rebuilt pointers and indexes.
+
+**Vector Reader**
+
+- [ ] introduce a `VectorReader` trait for vector access by ID and iteration over live vectors, with mmap-backed and cache-backed implementations.
+- [ ] change `VectorIndex::insert` and `VectorIndex::search` to depend on `VectorReader` instead of `HashMap<Uuid, Vec<f32>>`.
+- [ ] keep `HashMap` adapter only for tests and simple in-memory benchmarks.
+- [ ] use the `VectorReader` boundary as the future integration point for quantized traversal, GPU distance kernels, and distributed/sharded vector access.
+
+**API Services**
+
+- [ ] split server request/response DTOs into endpoint-scoped modules instead of one large `server/types.rs` file.
+- [ ] move handler orchestration into service modules: collection service, vector service, search service, embedding service, and admin/job service.
+- [ ] centralize repeated handler logic for shutdown checks, write guards, collection locking, latency recording, metric parsing, and search override application.
+- [ ] keep `server/handlers` thin: parse request, call service, map service result into HTTP response.
+
+---
+
 ### Bug Fixes patch
 
 **Storage (1.0.1)**
