@@ -1,332 +1,78 @@
-use super::super::{
-    state::{RebuildJobStatus, RebuildState, SharedState},
-    types::*,
-};
-use crate::error::{Result, ServerError};
-use crate::metrics::Metric;
-use crate::server::metrics::record_lock_read;
-use crate::validation;
 use axum::{
     extract::{Path, State},
     response::Json,
 };
-use std::sync::atomic::Ordering;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-// GET /api/collections - list all loaded collections
+use crate::error::Result;
+use crate::server::{state::SharedState, types::*};
+use crate::services::collection;
+
 pub async fn list_collections(
     State(state): State<SharedState>,
 ) -> Result<Json<CollectionsResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let mut infos = Vec::new();
-    for (name, storage_ref) in state.registry.loaded_collections() {
-        let lock_start = std::time::Instant::now();
-        let storage = storage_ref.read();
-        record_lock_read(state.registry.tracker(&name).as_deref(), lock_start);
-        let meta = storage.metadata();
-        infos.push(CollectionInfo {
-            name,
-            count: storage.count(),
-            created_at: Some(meta.created_at),
-            updated_at: Some(meta.updated_at),
-            dimensions: meta.dimensions,
-        });
-    }
-
-    Ok(Json(CollectionsResponse { collections: infos }))
+    collection::list_collections(&state).map(Json)
 }
 
-// POST /api/collections - create a new collection
 pub async fn create_collection(
     State(state): State<SharedState>,
     Json(req): Json<CreateCollectionRequest>,
 ) -> Result<Json<CollectionInfo>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    // Validate collection name
-    validation::validate_collection_name(&req.name)?;
-
-    let storage_ref = state.get_or_create_collection(&req.name)?;
-    let lock_start = std::time::Instant::now();
-    let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&req.name).as_deref(), lock_start);
-    let meta = storage.metadata();
-
-    Ok(Json(CollectionInfo {
-        name: req.name,
-        count: storage.count(),
-        created_at: Some(meta.created_at),
-        updated_at: Some(meta.updated_at),
-        dimensions: meta.dimensions,
-    }))
+    collection::create_collection(&state, req).map(Json)
 }
 
-// GET /api/collections/:name - get info about one collection
 pub async fn get_collection(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<CollectionInfo>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let storage_ref = state.get_existing_collection(&collection)?;
-    let lock_start = std::time::Instant::now();
-    let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
-    let meta = storage.metadata();
-
-    Ok(Json(CollectionInfo {
-        name: collection,
-        count: storage.count(),
-        created_at: Some(meta.created_at),
-        updated_at: Some(meta.updated_at),
-        dimensions: meta.dimensions,
-    }))
+    collection::get_collection(&state, collection).map(Json)
 }
 
-// DELETE /api/collections/:name - remove a collection
 pub async fn delete_collection(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<DeleteResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let existed = state.registry.remove(&collection).is_some();
-
-    if existed {
-        let path = format!("{}/{}.db", state.data_dir, collection);
-        std::fs::remove_file(&path).ok();
-    }
-
-    Ok(Json(DeleteResponse {
-        deleted: existed,
-        latency_ms: None, // Collection deletion is a filesystem operation
-    }))
+    collection::delete_collection(&state, collection).map(Json)
 }
 
-// GET /api/collections/:name/count - just the count
 pub async fn collection_count(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<CountResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let storage_ref = state.get_existing_collection(&collection)?;
-    let lock_start = std::time::Instant::now();
-    let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
-    let count = storage.count();
-
-    Ok(Json(CountResponse { count }))
+    collection::collection_count(&state, collection).map(Json)
 }
 
-// GET /api/collections/:name/index/stats - get index statistics
 pub async fn index_stats(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<IndexStatsResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let storage_ref = state.get_existing_collection(&collection)?;
-    let lock_start = std::time::Instant::now();
-    let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
-
-    let stats = storage.vector_index().stats();
-
-    Ok(Json(IndexStatsResponse {
-        index_type: stats.index_type.to_string(),
-        total_vectors: stats.total_vectors,
-        memory_usage_bytes: stats.memory_usage_bytes,
-        details: serde_json::to_value(&stats.details).unwrap_or(serde_json::json!({})),
-    }))
+    collection::index_stats(&state, collection).map(Json)
 }
 
-// POST /api/collections/:name/index/rebuild - trigger index rebuild
 pub async fn rebuild_index(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<RebuildIndexResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let storage_ref = state.get_existing_collection(&collection)?;
-
-    let started_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    state.rebuild_jobs.insert(
-        collection.clone(),
-        RebuildJobStatus {
-            status: RebuildState::Running,
-            started_at,
-            finished_at: None,
-            error: None,
-            elapsed_ms: None,
-        },
-    );
-
-    // Run rebuild in background to avoid blocking the request.
-    let collection_name = collection.clone();
-    let storage_ref_clone = storage_ref.clone();
-    let jobs = state.rebuild_jobs.clone();
-
-    tokio::task::spawn_blocking(move || {
-        let mut storage = storage_ref_clone.write();
-        let start = Instant::now();
-        if let Err(e) = storage.rebuild_index() {
-            tracing::error!(collection=%collection_name, error=%e, "index_rebuild_failed");
-            let finished = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            jobs.insert(
-                collection_name.clone(),
-                RebuildJobStatus {
-                    status: RebuildState::Failed,
-                    started_at,
-                    finished_at: Some(finished),
-                    error: Some(e.to_string()),
-                    elapsed_ms: Some(start.elapsed().as_millis()),
-                },
-            );
-        } else {
-            tracing::info!(
-                collection=%collection_name,
-                elapsed_ms = start.elapsed().as_millis(),
-                "index_rebuild_complete"
-            );
-            let finished = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            jobs.insert(
-                collection_name.clone(),
-                RebuildJobStatus {
-                    status: RebuildState::Completed,
-                    started_at,
-                    finished_at: Some(finished),
-                    error: None,
-                    elapsed_ms: Some(start.elapsed().as_millis()),
-                },
-            );
-        }
-    });
-
-    Ok(Json(RebuildIndexResponse {
-        success: true,
-        latency_ms: None,
-    }))
+    collection::rebuild_index(&state, collection).map(Json)
 }
 
-// POST /api/collections/:collection/duplicates - find near-duplicate vectors
 pub async fn find_duplicates(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
     Json(req): Json<DuplicateRequest>,
 ) -> Result<Json<DuplicateResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let storage_ref = state.get_existing_collection(&collection)?;
-    let lock_start = std::time::Instant::now();
-    let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
-
-    let metric = match req.metric.as_deref() {
-        Some("euclidean") => Metric::Euclidean,
-        Some("dot") | Some("dot_product") => Metric::DotProduct,
-        _ => Metric::Cosine,
-    };
-    let hits = crate::storage::collection::find_duplicates(
-        &storage,
-        metric,
-        req.threshold,
-        req.limit,
-        req.k,
-        req.ef,
-        req.nprobe,
-    )?;
-
-    let pairs = hits
-        .into_iter()
-        .map(|h| DuplicatePair {
-            id_a: h.id_a.to_string(),
-            id_b: h.id_b.to_string(),
-            score: h.score,
-        })
-        .collect();
-
-    Ok(Json(DuplicateResponse { pairs }))
+    collection::find_duplicates(&state, collection, req).map(Json)
 }
 
-// POST /api/collections/:collection/compact - compact and reclaim space
 pub async fn compact_collection(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<RebuildIndexResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    let storage_ref = state.get_existing_collection(&collection)?;
-
-    let mut storage = storage_ref.write();
-    let start = Instant::now();
-    let stats = crate::storage::collection::compact(&mut storage)?;
-    let duration = start.elapsed();
-    tracing::info!(
-        collection=%collection,
-        original=stats.original_entries,
-        compacted=stats.compacted_entries,
-        elapsed_ms=duration.as_millis(),
-        "collection_compacted"
-    );
-
-    Ok(Json(RebuildIndexResponse {
-        success: true,
-        latency_ms: Some(duration.as_millis() as f32),
-    }))
+    collection::compact_collection(&state, collection).map(Json)
 }
 
-// GET /api/collections/:name/index/rebuild/status - check rebuild status
 pub async fn rebuild_index_status(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
 ) -> Result<Json<RebuildIndexStatusResponse>> {
-    if state.shutting_down.load(Ordering::Relaxed) {
-        return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
-    }
-
-    if let Some(job) = state.rebuild_jobs.get(&collection) {
-        let status_str = match job.status {
-            RebuildState::Running => "running",
-            RebuildState::Completed => "completed",
-            RebuildState::Failed => "failed",
-        };
-        Ok(Json(RebuildIndexStatusResponse {
-            status: status_str.to_string(),
-            started_at: Some(job.started_at),
-            finished_at: job.finished_at,
-            elapsed_ms: job.elapsed_ms.map(|ms| ms as f32),
-            error: job.error.clone(),
-        }))
-    } else {
-        Err(ServerError::NotFound("No rebuild job found for this collection".into()).into())
-    }
+    collection::rebuild_index_status(&state, collection).map(Json)
 }

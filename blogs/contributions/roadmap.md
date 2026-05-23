@@ -11,7 +11,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 **Module Boundaries**
 
 - [ ] keep `server/` as HTTP transport only: routing, request extraction, response mapping, middleware, and transport-specific errors.
-- [ ] add `services/` for collection, vector, search, embedding, admin/job, and future chat orchestration so handlers do not own business logic.
+- [x] add `services/` for collection, vector, search, embedding, admin/job, and future chat orchestration so handlers do not own business logic.
 - [ ] keep `storage/` focused on record store, WAL, mmap, persistence formats, checksums, recovery, and file growth.
 - [ ] add `collections/` for collection domain state, collection registry, lifecycle policy, loaded-handle ownership, and collection-level coordination.
 - [ ] keep `index/` focused on vector index implementations, index configs, index persistence, and index-specific query knobs.
@@ -41,9 +41,9 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 **API Services**
 
 - [ ] split server request/response DTOs into endpoint-scoped modules instead of one large `server/types.rs` file.
-- [ ] move handler orchestration into service modules: collection service, vector service, search service, embedding service, and admin/job service.
-- [ ] centralize repeated handler logic for shutdown checks, write guards, collection locking, latency recording, metric parsing, and search override application.
-- [ ] keep `server/handlers` thin: parse request, call service, map service result into HTTP response.
+- [x] move handler orchestration into service modules: collection service, vector service, search service, embedding service, and admin/job service.
+- [x] centralize repeated handler logic for shutdown checks, write guards, collection locking, latency recording, metric parsing, and search override application.
+- [x] keep `server/handlers` thin: parse request, call service, map service result into HTTP response.
 
 ---
 

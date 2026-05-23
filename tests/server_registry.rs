@@ -26,13 +26,7 @@ fn test_state(data_dir: &str) -> Arc<AppState> {
 
 fn test_state_with_config(data_dir: &str, app_config: AppConfig) -> Arc<AppState> {
     cleanup_dir(data_dir);
-    Arc::new(AppState::new(
-        data_dir,
-        app_config,
-        500,
-        None,
-        true,
-    ))
+    Arc::new(AppState::new(data_dir, app_config, 500, None, true))
 }
 
 fn assert_not_found<T>(result: piramid::Result<T>) {
@@ -161,10 +155,9 @@ async fn read_endpoint_loads_existing_collection_from_disk() {
         collection.checkpoint().expect("checkpoint collection");
     }
 
-    let response =
-        collections::get_collection(State(state.clone()), Path("docs".to_string()))
-            .await
-            .expect("existing collection should load");
+    let response = collections::get_collection(State(state.clone()), Path("docs".to_string()))
+        .await
+        .expect("existing collection should load");
 
     assert_eq!(response.0.name, "docs");
     assert_eq!(response.0.count, 1);

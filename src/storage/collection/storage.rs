@@ -73,7 +73,10 @@ impl Collection {
         let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0); // Size of the memory-mapped file
         let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>(); // Approximate size of the index based on its capacity
 
-        mmap_size + index_size + self.cache.memory_usage_bytes() + self.vector_index.stats().memory_usage_bytes
+        mmap_size
+            + index_size
+            + self.cache.memory_usage_bytes()
+            + self.vector_index.stats().memory_usage_bytes
     }
 
     pub fn vector_index(&self) -> &dyn VectorIndex {

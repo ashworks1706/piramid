@@ -10,6 +10,7 @@ pub mod metrics;
 pub mod quantization;
 pub mod search;
 pub mod server;
+pub mod services;
 pub mod storage;
 pub mod validation;
 

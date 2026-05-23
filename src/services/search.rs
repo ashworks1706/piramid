@@ -1,7 +1,7 @@
 use crate::config::SearchConfig;
 use crate::metrics::Metric;
-use crate::server::{helpers::metadata_to_json, types::HitResponse};
 use crate::search::Hit;
+use crate::server::{helpers::metadata_to_json, types::HitResponse};
 
 pub fn parse_metric(metric: Option<String>) -> Metric {
     match metric.as_deref() {

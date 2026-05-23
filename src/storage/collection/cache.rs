@@ -125,10 +125,7 @@ fn metadata_value_usage_bytes(value: &crate::metadata::MetadataValue) -> usize {
         | crate::metadata::MetadataValue::Null => std::mem::size_of_val(value),
         crate::metadata::MetadataValue::Array(values) => {
             values.capacity() * std::mem::size_of::<crate::metadata::MetadataValue>()
-                + values
-                    .iter()
-                    .map(metadata_value_usage_bytes)
-                    .sum::<usize>()
+                + values.iter().map(metadata_value_usage_bytes).sum::<usize>()
         }
     }
 }

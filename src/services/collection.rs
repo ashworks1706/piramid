@@ -8,7 +8,10 @@ use crate::server::types::*;
 use crate::validation;
 
 fn ensure_available(state: &SharedState) -> Result<()> {
-    if state.shutting_down.load(std::sync::atomic::Ordering::Relaxed) {
+    if state
+        .shutting_down
+        .load(std::sync::atomic::Ordering::Relaxed)
+    {
         return Err(ServerError::ServiceUnavailable("Server is shutting down".to_string()).into());
     }
     Ok(())
@@ -179,7 +182,11 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
     })
 }
 
-pub fn find_duplicates(state: &SharedState, collection: String, req: DuplicateRequest) -> Result<DuplicateResponse> {
+pub fn find_duplicates(
+    state: &SharedState,
+    collection: String,
+    req: DuplicateRequest,
+) -> Result<DuplicateResponse> {
     ensure_available(state)?;
 
     let storage_ref = state.get_existing_collection(&collection)?;
