@@ -7,6 +7,7 @@ use super::persistence::{load_wal_meta, PersistenceService};
 use super::record_store::RecordStore;
 use super::{storage::Collection, CollectionOpenOptions};
 use crate::error::Result;
+use crate::index::HashMapVectorReader;
 use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
 use crate::storage::metadata::CollectionMetadata;
@@ -194,8 +195,9 @@ impl CollectionBuilder {
 
         // Once we have all the vectors loaded from the existing data, we can insert them into the vector index. This will rebuild the vector index so that it is in sync with the existing data in the collection.
 
+        let reader = HashMapVectorReader::new(&vectors);
         for (id, vector) in &vectors {
-            vector_index.insert(*id, vector, &vectors);
+            vector_index.insert(*id, vector, &reader);
         }
     }
 }

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::config::FlatConfig;
-use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex};
+use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex, VectorReader};
 
 // Stores nothing except config, vectors are in main storage
 #[derive(Clone, Serialize, Deserialize)]
@@ -25,7 +25,7 @@ impl FlatIndex {
     }
 }
 impl VectorIndex for FlatIndex {
-    fn insert(&mut self, id: Uuid, _vector: &[f32], _vectors: &HashMap<Uuid, Vec<f32>>) {
+    fn insert(&mut self, id: Uuid, _vector: &[f32], _vectors: &dyn VectorReader) {
         // Just track the ID - no indexing structure needed
         if !self.vector_ids.contains(&id) {
             self.vector_ids.push(id);
@@ -37,7 +37,7 @@ impl VectorIndex for FlatIndex {
         &self,
         query: &[f32],
         k: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
+        vectors: &dyn VectorReader,
         _quality: crate::config::SearchConfig,
         _filter: Option<&crate::search::query::Filter>,
         _metadatas: &HashMap<Uuid, crate::metadata::Metadata>,

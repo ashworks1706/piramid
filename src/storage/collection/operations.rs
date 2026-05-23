@@ -4,6 +4,7 @@ use uuid::Uuid;
 use super::record_store::RecordStore;
 use super::storage::Collection;
 use crate::error::{Result, ServerError};
+use crate::index::HashMapVectorReader;
 use crate::metadata::Metadata;
 use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
@@ -105,9 +106,8 @@ pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<
 
     storage.cache.put_vector(id, raw_vec.clone());
     storage.cache.put_metadata(id, entry.metadata.clone());
-    storage
-        .vector_index
-        .insert(id, &raw_vec, storage.cache.vectors());
+    let vectors = HashMapVectorReader::new(storage.cache.vectors());
+    storage.vector_index.insert(id, &raw_vec, &vectors);
 
     storage.metadata.update_vector_count(storage.index.len());
 
@@ -187,9 +187,8 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
         }
         storage.cache.put_metadata(id, metadata);
         storage.cache.put_vector(id, vec_f32.clone());
-        storage
-            .vector_index
-            .insert(id, &vec_f32, storage.cache.vectors());
+        let vectors = HashMapVectorReader::new(storage.cache.vectors());
+        storage.vector_index.insert(id, &vec_f32, &vectors);
     }
     storage.metadata.update_vector_count(storage.index.len());
 
@@ -321,9 +320,8 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
         storage.cache.put_vector(*id, vector.clone());
         storage.cache.put_metadata(*id, entry.metadata.clone());
         storage.vector_index.remove(id);
-        storage
-            .vector_index
-            .insert(*id, &vector, storage.cache.vectors());
+        let vectors = HashMapVectorReader::new(storage.cache.vectors());
+        storage.vector_index.insert(*id, &vector, &vectors);
         storage.metadata.update_vector_count(storage.index.len());
         storage.track_operation()?;
         Ok(true)

@@ -2,6 +2,7 @@
 // Wraps vector index search + scoring and optional metadata filtering.
 
 use crate::config::ExecutionMode;
+use crate::index::HashMapVectorReader;
 use crate::metrics::Metric;
 use crate::search::{query::Filter, utils::sort_and_truncate, Hit};
 use crate::storage::Collection;
@@ -60,11 +61,12 @@ fn search_collection_with_maps(
 
     // 4. Search the vector index for nearest neighbors to the query vector. This will return a list of candidate IDs based on vector similarity. The search method of the vector index will use the effective search configuration, which may include parameters like ef for HNSW or num_probes for IVF, to control the tradeoff between search speed and accuracy. The filter and metadata parameters are passed to the search method, although they may not be used by all index types.
     let mode = params.mode;
+    let vector_reader = HashMapVectorReader::new(vectors);
 
     let neighbor_ids = storage.vector_index().search(
         query,
         search_k,
-        vectors,
+        &vector_reader,
         effective_search,
         params.filter,
         metadatas,

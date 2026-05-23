@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::config::IvfConfig;
-use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex};
+use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex, VectorReader};
 
 // IVF index structure
 #[derive(Clone, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ impl IvfIndex {
     }
 
     // Build clusters using k-means
-    pub fn build_clusters(&mut self, vectors: &HashMap<Uuid, Vec<f32>>) {
+    pub fn build_clusters(&mut self, vectors: &dyn VectorReader) {
         // building clusters is an offline process that can be done periodically as new vectors are
         // added
         // on high level, it works by:
@@ -45,16 +45,15 @@ impl IvfIndex {
             return;
         }
 
-        // Get dimensions from first vector
-        if let Some(v) = vectors.values().next() {
-            self.dimensions = v.len();
+        let vector_list: Vec<(Uuid, Vec<f32>)> = vectors
+            .iter()
+            .map(|(id, vector)| (id, vector.to_vec()))
+            .collect();
+        if let Some((_, vector)) = vector_list.first() {
+            self.dimensions = vector.len();
         }
 
-        let num_clusters = self.config.num_clusters.min(vectors.len());
-
-        // Initialize centroids randomly from existing vectors
-        let vector_list: Vec<(Uuid, Vec<f32>)> =
-            vectors.iter().map(|(id, vec)| (*id, vec.clone())).collect();
+        let num_clusters = self.config.num_clusters.min(vector_list.len());
 
         self.centroids = vector_list
             .iter()
@@ -151,7 +150,7 @@ impl IvfIndex {
 }
 
 impl VectorIndex for IvfIndex {
-    fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>) {
+    fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) {
         // For online insertion, find nearest centroid and add to that cluster
         if self.centroids.is_empty() {
             // First insertion - need to build clusters
@@ -175,7 +174,7 @@ impl VectorIndex for IvfIndex {
         &self,
         query: &[f32],
         k: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
+        vectors: &dyn VectorReader,
         quality: crate::config::SearchConfig,
         _filter: Option<&crate::search::query::Filter>,
         _metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
@@ -184,9 +183,12 @@ impl VectorIndex for IvfIndex {
             // No clusters yet - fallback to brute force
             let mut distances: Vec<(Uuid, f32)> = vectors
                 .iter()
-                .map(|(id, vec)| {
-                    let score = self.config.metric.calculate(query, vec, self.config.mode);
-                    (*id, score)
+                .map(|(id, vector)| {
+                    let score = self
+                        .config
+                        .metric
+                        .calculate(query, vector, self.config.mode);
+                    (id, score)
                 })
                 .collect();
 
@@ -220,8 +222,11 @@ impl VectorIndex for IvfIndex {
         for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
             if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
                 for id in vector_ids {
-                    if let Some(vec) = vectors.get(id) {
-                        let score = self.config.metric.calculate(query, vec, self.config.mode);
+                    if let Some(vector) = vectors.get(id) {
+                        let score = self
+                            .config
+                            .metric
+                            .calculate(query, vector, self.config.mode);
                         candidates.push((*id, score));
                     }
                 }

@@ -5,6 +5,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use uuid::Uuid;
 
 use super::config::{HnswConfig, HnswStats};
+use crate::index::VectorReader;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct HnswNode {
@@ -22,7 +23,7 @@ struct SearchCandidate {
 }
 
 struct SearchContext<'a> {
-    vectors: &'a HashMap<Uuid, Vec<f32>>,
+    vectors: &'a dyn VectorReader,
     filter: Option<&'a crate::search::query::Filter>,
     metadatas: &'a HashMap<Uuid, crate::metadata::Metadata>,
 }
@@ -88,7 +89,7 @@ impl HnswIndex {
     }
 
     // Insert a node with access to vector storage for distance calculations
-    pub fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>) {
+    pub fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) {
         let empty_meta: HashMap<Uuid, crate::metadata::Metadata> = HashMap::new();
         let search_context = SearchContext {
             vectors,
@@ -169,7 +170,7 @@ impl HnswIndex {
                         if neighbor.connections[lc].len() > m {
                             // Clone the connections and neighbor vector to avoid borrow issues
                             let neighbor_connections = neighbor.connections[lc].clone();
-                            let neighbor_vec = vectors.get(&neighbor_id).unwrap().clone();
+                            let neighbor_vec = vectors.get(&neighbor_id).unwrap().to_vec();
 
                             let pruned = self.select_neighbors(
                                 &neighbor_connections,
@@ -211,7 +212,7 @@ impl HnswIndex {
         query: &[f32],
         k: usize,
         ef: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
+        vectors: &dyn VectorReader,
         filter: Option<&crate::search::query::Filter>,
         metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
     ) -> Vec<Uuid> {
@@ -360,7 +361,7 @@ impl HnswIndex {
         &self,
         candidates: &[Uuid],
         m: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
+        vectors: &dyn VectorReader,
         query: &[f32],
     ) -> Vec<Uuid> {
         if candidates.len() <= m {

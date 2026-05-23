@@ -4,13 +4,13 @@ mod index;
 pub use config::{HnswConfig, HnswStats};
 pub use index::HnswIndex;
 
-use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex};
+use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex, VectorReader};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 // we need a wrapper because HNSW has some specific parameters that affect search quality (ef_search) and we want to allow overriding them at search time without changing the index config
 impl VectorIndex for HnswIndex {
-    fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>) {
+    fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) {
         self.insert(id, vector, vectors);
     }
 
@@ -19,7 +19,7 @@ impl VectorIndex for HnswIndex {
         &self,
         query: &[f32],
         k: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
+        vectors: &dyn VectorReader,
         quality: crate::config::SearchConfig,
         filter: Option<&crate::search::query::Filter>,
         metadatas: &HashMap<Uuid, crate::metadata::Metadata>,

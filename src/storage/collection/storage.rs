@@ -5,7 +5,7 @@ use super::cache::{self, CacheManager};
 use super::persistence::PersistenceService;
 use super::record_store::RecordStore;
 use crate::error::Result;
-use crate::index::VectorIndex;
+use crate::index::{HashMapVectorReader, VectorIndex};
 use crate::storage::metadata::CollectionMetadata;
 use crate::storage::persistence::{get_wal_path, save_vector_index, warm_file, EntryPointer};
 
@@ -146,8 +146,9 @@ impl Collection {
 
         // Build fresh index
         let mut new_index = self.config.index.create_index(self.index.len());
+        let reader = HashMapVectorReader::new(&vectors);
         for (id, vec) in &vectors {
-            new_index.insert(*id, vec, &vectors);
+            new_index.insert(*id, vec, &reader);
         }
 
         // Swap and persist

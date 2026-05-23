@@ -48,6 +48,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **GPU backend:**
 
+- [ ] create definite GPU struct and traits
 - [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
 - [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
 - [ ] keep CPU as the correctness baseline for every GPU path; GPU acceleration should never change result ordering outside documented approximation tolerances.
@@ -70,15 +71,17 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into memory on startup.
 - [ ] **Batched Retrieval Dispatch:** Group multiple search requests into a single compute batch.
 
+**Quantization Refactor (1.1.0)**
+- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
+- [ ] the quantization module already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
+- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation -- store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
+- [ ] add a quantization acceptance suite: each quantized index must report recall loss, latency gain, memory reduction, and rerank recovery against the raw-float baseline.
+
 ---
 
 ### Index Quality patch
 
-**Quantization Refactor (1.1.0)**
-- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
-- [ ] the quantization module (`src/quantization/`) already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
-- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation -- store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
-- [ ] add a quantization acceptance suite: each quantized index must report recall loss, latency gain, memory reduction, and rerank recovery against the raw-float baseline.
+
 
 **Index Improvements (1.1.1)**
 

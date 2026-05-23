@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use super::record_store::RecordStore;
 use super::storage::Collection;
 use crate::error::Result;
+use crate::index::HashMapVectorReader;
 use crate::storage::document::Document;
 use crate::storage::persistence::{save_index, save_metadata, save_vector_index};
 
@@ -31,7 +32,8 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
         new_metadata.set_dimensions(vector.len());
         new_index.insert(id, pointer);
         new_vectors.insert(id, vector.clone());
-        new_vector_index.insert(id, &vector, &new_vectors);
+        let reader = HashMapVectorReader::new(&new_vectors);
+        new_vector_index.insert(id, &vector, &reader);
     }
     new_metadata.update_vector_count(new_index.len());
 
