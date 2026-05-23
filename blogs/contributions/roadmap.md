@@ -10,10 +10,10 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **Collection Registry**
 
-- [ ] introduce `CollectionRegistry` as the only owner of loaded collection handles, replacing direct `AppState.collections` access in handlers.
-- [ ] split collection lookup into `get_existing` for read paths and `get_or_create` for write/create paths so GET/search endpoints cannot silently create empty collections.
-- [ ] move collection path construction, latency tracker creation, page-cache warming, and future collection eviction policy behind the registry.
-- [ ] add tests proving read endpoints return 404 for missing collections while create/write endpoints still create collections intentionally.
+- [x] introduce `CollectionRegistry` as the only owner of loaded collection handles, replacing direct `AppState.collections` access in handlers.
+- [x] split collection lookup into `get_existing` for read paths and `get_or_create` for write/create paths so GET/search endpoints cannot silently create empty collections.
+- [x] move collection path construction, latency tracker creation, page-cache warming, and future collection eviction policy behind the registry.
+- [x] add tests proving read endpoints return 404 for missing collections while create/write endpoints still create collections intentionally.
 
 **Cache Manager**
 
