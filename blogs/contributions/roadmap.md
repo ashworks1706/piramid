@@ -38,12 +38,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] keep `HashMap` adapter only for tests and simple in-memory benchmarks.
 - [ ] use the `VectorReader` boundary as the future integration point for quantized traversal, GPU distance kernels, and distributed/sharded vector access.
 
-**API Services**
-
-- [ ] split server request/response DTOs into endpoint-scoped modules instead of one large `server/types.rs` file.
-- [x] move handler orchestration into service modules: collection service, vector service, search service, embedding service, and admin/job service.
-- [x] centralize repeated handler logic for shutdown checks, write guards, collection locking, latency recording, metric parsing, and search override application.
-- [x] keep `server/handlers` thin: parse request, call service, map service result into HTTP response.
 
 ---
 
