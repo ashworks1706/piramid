@@ -21,13 +21,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ### Architecture Refactor patch
 
-**Record Store**
-
-- [x] extract `RecordStore` from `Collection` to own data file, optional mmap, document codec, append cursor, and file growth.
-- [x] replace write-offset scans with an append cursor that is loaded from metadata/index on open and updated on every append.
-- [x] centralize document serialization/deserialization in the record store so CRUD, rebuild, compaction, and WAL replay do not duplicate bincode/mmap/file-read logic.
-- [x] make compaction produce a new `RecordStore` state atomically, then swap it into the collection with rebuilt pointers and indexes.
-
 **Vector Reader**
 
 - [ ] introduce a `VectorReader` trait for vector access by ID and iteration over live vectors, with mmap-backed and cache-backed implementations.

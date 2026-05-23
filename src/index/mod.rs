@@ -8,7 +8,10 @@ mod traits;
 
 // Re-export trait and types
 pub use selector::IndexConfig;
-pub use traits::{IndexDetails, IndexStats, IndexType, SerializableIndex, VectorIndex};
+pub use traits::{
+    HashMapVectorReader, IndexDetails, IndexStats, IndexType, SerializableIndex, VectorIndex,
+    VectorReader,
+};
 
 // Re-export index implementations
 pub use flat::{FlatConfig, FlatIndex};

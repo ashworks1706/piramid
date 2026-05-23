@@ -5,6 +5,40 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+pub trait VectorReader {
+    fn get(&self, id: &Uuid) -> Option<&[f32]>;
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Uuid, &'a [f32])> + 'a>;
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+pub struct HashMapVectorReader<'a> {
+    vectors: &'a HashMap<Uuid, Vec<f32>>,
+}
+
+impl<'a> HashMapVectorReader<'a> {
+    pub fn new(vectors: &'a HashMap<Uuid, Vec<f32>>) -> Self {
+        Self { vectors }
+    }
+}
+
+impl VectorReader for HashMapVectorReader<'_> {
+    fn get(&self, id: &Uuid) -> Option<&[f32]> {
+        self.vectors.get(id).map(Vec::as_slice)
+    }
+
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Uuid, &'a [f32])> + 'a> {
+        Box::new(self.vectors.iter().map(|(id, vector)| (*id, vector.as_slice())))
+    }
+
+    fn len(&self) -> usize {
+        self.vectors.len()
+    }
+}
+
 pub trait VectorIndex: Send + Sync {
     // Insert a vector into the index
 
@@ -12,7 +46,7 @@ pub trait VectorIndex: Send + Sync {
     // * id - Unique identifier for the vector
     // * vector - The vector to index
     // * vectors - All vectors in the collection (for distance calculations)
-    fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &HashMap<Uuid, Vec<f32>>);
+    fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader);
 
     // Search for k nearest neighbors with custom quality settings
     // # Arguments
@@ -27,7 +61,7 @@ pub trait VectorIndex: Send + Sync {
         &self,
         query: &[f32],
         k: usize,
-        vectors: &HashMap<Uuid, Vec<f32>>,
+        vectors: &dyn VectorReader,
         quality: SearchConfig,
         filter: Option<&crate::search::query::Filter>,
         metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
