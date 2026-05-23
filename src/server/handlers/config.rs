@@ -1,10 +1,8 @@
 use axum::{extract::State, response::Json};
 
 use crate::error::Result;
-use crate::server::{
-    state::SharedState,
-    types::{ConfigReloadResponse, ConfigStatusResponse},
-};
+use crate::runtime::SharedState;
+use crate::server::types::{ConfigReloadResponse, ConfigStatusResponse};
 use crate::services::admin;
 
 pub async fn config_status(State(state): State<SharedState>) -> Result<Json<ConfigStatusResponse>> {

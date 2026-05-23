@@ -7,7 +7,7 @@ use std::time::Duration;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use piramid::cli::animation;
 use piramid::config::{self, AppConfig};
-use piramid::server::state::AppState;
+use piramid::runtime::AppState;
 use piramid::{config::loader::RuntimeConfig, embeddings, server};
 use tokio::runtime::Runtime;
 

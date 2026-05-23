@@ -6,10 +6,10 @@ use piramid::{
     config::AppConfig,
     error::PiramidError,
     metadata,
+    runtime::AppState,
     server::{
         handlers::{collections, vectors},
         types::{InsertRequest, InsertResultsResponse, ListVectorsQuery},
-        AppState,
     },
     Collection, Document,
 };

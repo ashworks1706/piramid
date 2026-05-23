@@ -1,9 +1,9 @@
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::error::{Result, ServerError};
+use crate::metrics::record_lock_read;
 use crate::metrics::Metric;
-use crate::server::metrics::record_lock_read;
-use crate::server::state::{RebuildJobStatus, RebuildState, SharedState};
+use crate::runtime::{RebuildJobStatus, RebuildState, SharedState};
 use crate::server::types::*;
 use crate::validation;
 

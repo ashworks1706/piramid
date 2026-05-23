@@ -9,6 +9,7 @@ pub mod index;
 pub mod metadata;
 pub mod metrics;
 pub mod quantization;
+pub mod runtime;
 pub mod search;
 pub mod server;
 pub mod services;

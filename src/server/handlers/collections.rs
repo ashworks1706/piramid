@@ -4,7 +4,8 @@ use axum::{
 };
 
 use crate::error::Result;
-use crate::server::{state::SharedState, types::*};
+use crate::runtime::SharedState;
+use crate::server::types::*;
 use crate::services::collection;
 
 pub async fn list_collections(

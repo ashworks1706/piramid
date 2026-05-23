@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{Result, ServerError};
-use crate::server::metrics::record_lock_read;
-use crate::server::state::SharedState;
+use crate::metrics::record_lock_read;
+use crate::runtime::SharedState;
 use crate::server::types::*;
 
 fn ensure_available(state: &SharedState) -> Result<()> {

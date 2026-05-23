@@ -1,7 +1,7 @@
 use axum::{extract::State, http::StatusCode, response::Json};
 
 use crate::error::Result;
-use crate::server::state::SharedState;
+use crate::runtime::SharedState;
 use crate::server::types::{HealthResponse, MetricsResponse};
 use crate::services::admin;
 

@@ -13,7 +13,7 @@ use tracing::Level;
 
 use super::handlers;
 use super::request_id::assign_request_id;
-use super::state::SharedState;
+use crate::runtime::SharedState;
 
 fn api_router(state: SharedState) -> Router<SharedState> {
     Router::new()

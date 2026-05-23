@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::error::{Result, ServerError};
+use crate::metrics::{record_lock_read, record_lock_write};
+use crate::runtime::SharedState;
 use crate::server::helpers::{json_to_metadata, EMBEDDING_NOT_CONFIGURED};
-use crate::server::metrics::{record_lock_read, record_lock_write};
 use crate::server::request_id::RequestId;
-use crate::server::state::SharedState;
 use crate::server::types::*;
 use crate::services::search::{apply_search_overrides, hit_to_response, parse_metric};
 use crate::Document;
