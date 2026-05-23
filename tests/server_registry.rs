@@ -10,6 +10,7 @@ use piramid::{
         types::{InsertRequest, InsertResultsResponse, ListVectorsQuery},
         AppState,
     },
+    Collection, Document,
 };
 use std::{collections::HashMap, fs, sync::Arc};
 
@@ -93,6 +94,33 @@ async fn insert_endpoint_creates_collection_intentionally() {
 
     assert_eq!(state.registry.len(), 1);
     assert!(std::path::Path::new(&format!("{data_dir}/docs.db")).exists());
+
+    cleanup_dir(data_dir);
+}
+
+#[tokio::test]
+async fn read_endpoint_loads_existing_collection_from_disk() {
+    let data_dir = ".piramid/tests/server_registry_existing_disk";
+    let collection_path = format!("{data_dir}/docs.db");
+    let state = test_state(data_dir);
+    fs::create_dir_all(data_dir).expect("create test data dir");
+
+    {
+        let mut collection = Collection::open(&collection_path).expect("create collection");
+        collection
+            .insert(Document::new(vec![1.0, 0.0, 0.0], "stored doc".to_string()))
+            .expect("insert document");
+        collection.checkpoint().expect("checkpoint collection");
+    }
+
+    let response =
+        collections::get_collection(State(state.clone()), Path("docs".to_string()))
+            .await
+            .expect("existing collection should load");
+
+    assert_eq!(response.0.name, "docs");
+    assert_eq!(response.0.count, 1);
+    assert_eq!(state.registry.len(), 1);
 
     cleanup_dir(data_dir);
 }

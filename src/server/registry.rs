@@ -29,10 +29,16 @@ impl CollectionRegistry {
     }
 
     pub fn get_existing(&self, name: &str) -> Result<CollectionHandle> {
-        self.collections
-            .get(name)
-            .map(|entry| entry.value().clone())
-            .ok_or_else(|| ServerError::NotFound("Collection not found".into()).into())
+        if let Some(existing) = self.collections.get(name) {
+            return Ok(existing.value().clone());
+        }
+
+        let path = self.collection_path(name);
+        if !std::path::Path::new(&path).exists() {
+            return Err(ServerError::NotFound("Collection not found".into()).into());
+        }
+
+        self.open_and_register(name, &path)
     }
 
     pub fn get_or_create(&self, name: &str) -> Result<CollectionHandle> {
@@ -41,9 +47,13 @@ impl CollectionRegistry {
         }
 
         let path = self.collection_path(name);
+        self.open_and_register(name, &path)
+    }
+
+    fn open_and_register(&self, name: &str, path: &str) -> Result<CollectionHandle> {
         let cfg = { self.app_config.read().clone() };
         let storage = Collection::open_with_options(
-            &path,
+            path,
             CollectionOpenOptions::from(cfg.to_collection_config()),
         )?;
         let handle = Arc::new(RwLock::new(storage));
