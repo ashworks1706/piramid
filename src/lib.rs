@@ -1,6 +1,7 @@
 // ## Crate organization
 
 pub mod cli;
+pub mod collections;
 pub mod config;
 pub mod embeddings;
 pub mod error;

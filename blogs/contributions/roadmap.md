@@ -13,7 +13,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] keep `server/` as HTTP transport only: routing, request extraction, response mapping, middleware, and transport-specific errors.
 - [x] add `services/` for collection, vector, search, embedding, admin/job, and future chat orchestration so handlers do not own business logic.
 - [ ] keep `storage/` focused on record store, WAL, mmap, persistence formats, checksums, recovery, and file growth.
-- [ ] add `collections/` for collection domain state, collection registry, lifecycle policy, loaded-handle ownership, and collection-level coordination.
+- [x] add `collections/` for collection domain state, collection registry, lifecycle policy, loaded-handle ownership, and collection-level coordination.
 - [ ] keep `index/` focused on vector index implementations, index configs, index persistence, and index-specific query knobs.
 - [ ] add `compute/` or `kernels/` for CPU/GPU distance kernels, backend dispatch, batching, SIMD/JIT/GPU implementations, and benchmark gates.
 - [ ] add `cache/` for shared cache policy, memory budgeting, eviction strategy, query/result caches, embedding cache, and future KV-cache accounting.

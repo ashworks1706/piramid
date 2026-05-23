@@ -2,16 +2,16 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
+    atomic::{AtomicU64, Ordering as AtomicOrdering},
     Arc,
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::collections::{CollectionHandle, CollectionRegistry};
 use crate::config::AppConfig;
 use crate::embeddings::Embedder;
 use crate::error::{Result, ServerError};
 use crate::metrics::EmbedMetrics;
-use crate::server::registry::{CollectionHandle, CollectionRegistry};
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RebuildState {
