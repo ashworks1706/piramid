@@ -20,8 +20,8 @@ pub use config::*;
 pub use embeddings::{EmbeddingConfig, EmbeddingError, EmbeddingProvider};
 pub use error::{ErrorContext, PiramidError, Result};
 pub use index::{
-    FlatConfig, FlatIndex, HnswConfig, HnswIndex, IndexConfig, IndexStats, IndexType, IvfConfig,
-    IvfIndex, VectorIndex,
+    FlatConfig, FlatIndex, HashMapVectorReader, HnswConfig, HnswIndex, IndexConfig, IndexStats,
+    IndexType, IvfConfig, IvfIndex, VectorIndex, VectorReader,
 };
 pub use metadata::{metadata, Metadata, MetadataValue};
 pub use metrics::Metric;

@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
 use crate::config::CacheConfig;
+use crate::index::VectorReader;
 use crate::metadata::Metadata;
 use crate::storage::collection::operations;
 use crate::storage::collection::storage::Collection;
@@ -113,6 +114,24 @@ impl CacheManager {
                 None => break,
             }
         }
+    }
+}
+
+impl VectorReader for CacheManager {
+    fn get(&self, id: &Uuid) -> Option<&[f32]> {
+        self.vectors.get(id).map(Vec::as_slice)
+    }
+
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Uuid, &'a [f32])> + 'a> {
+        Box::new(
+            self.vectors
+                .iter()
+                .map(|(id, vector)| (*id, vector.as_slice())),
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.vectors.len()
     }
 }
 

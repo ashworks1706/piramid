@@ -17,17 +17,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] add `inference/` for model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs.
 - [ ] add `cluster/` for distributed membership, node capability discovery, shard ownership, replication policy, fan-out routing, and partial-result handling.
 
----
-
-### Architecture Refactor patch
-
-**Vector Reader**
-
-- [ ] introduce a `VectorReader` trait for vector access by ID and iteration over live vectors, with mmap-backed and cache-backed implementations.
-- [ ] change `VectorIndex::insert` and `VectorIndex::search` to depend on `VectorReader` instead of `HashMap<Uuid, Vec<f32>>`.
-- [ ] keep `HashMap` adapter only for tests and simple in-memory benchmarks.
-- [ ] use the `VectorReader` boundary as the future integration point for quantized traversal, GPU distance kernels, and distributed/sharded vector access.
-
 
 ---
 
@@ -35,7 +24,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **Storage (1.0.1)**
 
-- [ ] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
+- [x] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
 
 **IVF Index (1.0.2)**
 

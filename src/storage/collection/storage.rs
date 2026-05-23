@@ -5,7 +5,7 @@ use super::cache::{self, CacheManager};
 use super::persistence::PersistenceService;
 use super::record_store::RecordStore;
 use crate::error::Result;
-use crate::index::{HashMapVectorReader, VectorIndex};
+use crate::index::{HashMapVectorReader, VectorIndex, VectorReader};
 use crate::storage::metadata::CollectionMetadata;
 use crate::storage::persistence::{get_wal_path, save_vector_index, warm_file, EntryPointer};
 
@@ -104,6 +104,10 @@ impl Collection {
 
     pub fn vectors_view(&self) -> &HashMap<Uuid, Vec<f32>> {
         self.cache.vectors()
+    }
+
+    pub fn vector_reader(&self) -> &dyn VectorReader {
+        &self.cache
     }
 
     pub fn metadata_view(&self) -> &HashMap<Uuid, crate::metadata::Metadata> {

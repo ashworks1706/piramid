@@ -31,7 +31,11 @@ impl VectorReader for HashMapVectorReader<'_> {
     }
 
     fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Uuid, &'a [f32])> + 'a> {
-        Box::new(self.vectors.iter().map(|(id, vector)| (*id, vector.as_slice())))
+        Box::new(
+            self.vectors
+                .iter()
+                .map(|(id, vector)| (*id, vector.as_slice())),
+        )
     }
 
     fn len(&self) -> usize {

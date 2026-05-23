@@ -2,7 +2,6 @@
 // Wraps vector index search + scoring and optional metadata filtering.
 
 use crate::config::ExecutionMode;
-use crate::index::HashMapVectorReader;
 use crate::metrics::Metric;
 use crate::search::{query::Filter, utils::sort_and_truncate, Hit};
 use crate::storage::Collection;
@@ -35,7 +34,6 @@ fn search_collection_with_maps(
     k: usize,
     metric: Metric,
     params: SearchParams<'_>,
-    vectors: &HashMap<Uuid, Vec<f32>>,
     metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
 ) -> Vec<Hit> {
     // 1. Determine effective search config and overfetch factor
@@ -61,12 +59,10 @@ fn search_collection_with_maps(
 
     // 4. Search the vector index for nearest neighbors to the query vector. This will return a list of candidate IDs based on vector similarity. The search method of the vector index will use the effective search configuration, which may include parameters like ef for HNSW or num_probes for IVF, to control the tradeoff between search speed and accuracy. The filter and metadata parameters are passed to the search method, although they may not be used by all index types.
     let mode = params.mode;
-    let vector_reader = HashMapVectorReader::new(vectors);
-
     let neighbor_ids = storage.vector_index().search(
         query,
         search_k,
-        &vector_reader,
+        storage.vector_reader(),
         effective_search,
         params.filter,
         metadatas,
@@ -107,9 +103,8 @@ pub fn search_collection(
     params: SearchParams<'_>,
 ) -> Vec<Hit> {
     // Get vectors and metadatas from storage to pass to the search function. This allows us to perform the search using the vector index while also having access to the metadata for filtering and constructing the Hit objects. The search_collection_with_maps function is then called with these maps to perform the actual search and return the results.
-    let vectors = storage.get_vectors();
     let metadatas = storage.metadata_view();
-    search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas)
+    search_collection_with_maps(storage, query, k, metric, params, metadatas)
 }
 
 pub fn search_batch_collection(
@@ -119,23 +114,18 @@ pub fn search_batch_collection(
     metric: Metric,
     params: SearchParams<'_>,
 ) -> Vec<Vec<Hit>> {
-    let vectors = storage.get_vectors();
     let metadatas = storage.metadata_view();
 
     if storage.config().parallelism.parallel_search {
         use rayon::prelude::*; // If parallel search is enabled in the configuration, we use Rayon to perform the searches for each query in parallel. This can significantly speed up batch searches when there are multiple queries and the underlying hardware supports parallel execution. Each query is processed independently, and the results are collected into a vector of vectors of hits, where each inner vector corresponds to the results for a single query.
         queries
             .par_iter()
-            .map(|query| {
-                search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas)
-            })
+            .map(|query| search_collection_with_maps(storage, query, k, metric, params, metadatas))
             .collect()
     } else {
         queries
             .iter()
-            .map(|query| {
-                search_collection_with_maps(storage, query, k, metric, params, vectors, metadatas)
-            })
+            .map(|query| search_collection_with_maps(storage, query, k, metric, params, metadatas))
             .collect()
     }
 }
