@@ -4,9 +4,7 @@ use super::storage::Collection;
 use crate::error::Result;
 use crate::storage::collection::operations;
 use crate::storage::document::Document;
-use crate::storage::persistence::{
-    create_mmap, ensure_file_size, save_index, save_metadata, save_vector_index,
-};
+use crate::storage::persistence::{save_index, save_metadata, save_vector_index};
 
 /// Compact a collection by rewriting live documents into a fresh file and rebuilding indexes.
 pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
@@ -14,21 +12,7 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     let original_entries = collection.index.len();
     let docs: Vec<Document> = collection.get_all();
 
-    // Reset file
-    drop(collection.mmap.take());
-    let initial_size = if collection.config.memory.use_mmap {
-        collection.config.memory.initial_mmap_size as u64
-    } else {
-        1024 * 1024
-    };
-    // 2. Truncate the existing data file and prepare for rewriting
-    collection.data_file.set_len(0)?;
-    ensure_file_size(&collection.data_file, initial_size)?;
-    collection.mmap = if collection.config.memory.use_mmap {
-        Some(create_mmap(&collection.data_file)?)
-    } else {
-        None
-    };
+    collection.record_store.reset(&collection.config)?;
 
     // 3. Clear existing indexes and caches in preparation for rebuilding
     // Reset indexes and caches

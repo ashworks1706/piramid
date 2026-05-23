@@ -1,18 +1,16 @@
 // Collection builder and initialization
 use std::collections::HashMap;
-use std::fs::OpenOptions;
 use uuid::Uuid;
 
 use super::cache::CacheManager;
 use super::persistence::{load_wal_meta, PersistenceService};
+use super::record_store::RecordStore;
 use super::{storage::Collection, CollectionOpenOptions};
 use crate::error::Result;
 use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
 use crate::storage::metadata::CollectionMetadata;
-use crate::storage::persistence::{
-    create_mmap, ensure_file_size, get_wal_path, load_index, load_metadata, load_vector_index,
-};
+use crate::storage::persistence::{get_wal_path, load_index, load_metadata, load_vector_index};
 use crate::storage::wal::{Wal, WalEntry};
 
 pub struct CollectionBuilder;
@@ -31,31 +29,9 @@ impl CollectionBuilder {
             .unwrap_or("unknown")
             .to_string();
 
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(path)?;
-
-        // Ensure the file is at least the initial size to avoid mmap issues
-        let initial_size = if config.memory.use_mmap {
-            config.memory.initial_mmap_size as u64
-        } else {
-            1024 * 1024
-        };
-
-        ensure_file_size(&file, initial_size)?;
-
-        // Create memory map if enabled
-        let mmap = if config.memory.use_mmap {
-            Some(create_mmap(&file)?)
-        } else {
-            None
-        };
-
         // Load existing index and metadata if they exist
         let index = load_index(path)?;
+        let record_store = RecordStore::open(path, &config, &index)?;
 
         // If metadata exists, update vector count based on loaded index
         let metadata = match load_metadata(path)? {
@@ -68,7 +44,9 @@ impl CollectionBuilder {
         };
 
         // Load or create vector index
-        let mut vector_index = match load_vector_index(path)? {
+        let loaded_vector_index = load_vector_index(path)?;
+        let vector_index_missing = loaded_vector_index.is_none();
+        let mut vector_index = match loaded_vector_index {
             Some(loaded_index) => loaded_index,
             None => config.index.create_index(index.len()),
         };
@@ -105,8 +83,7 @@ impl CollectionBuilder {
 
         if !wal_entries.is_empty() {
             let mut temp_storage = Collection {
-                data_file: file,
-                mmap,
+                record_store,
                 index,
                 vector_index,
                 cache: CacheManager::new(config.cache),
@@ -130,16 +107,13 @@ impl CollectionBuilder {
         }
 
         // If the index is not empty but the vector index is missing, we need to rebuild the vector index from the existing data
-        if !index.is_empty() && load_vector_index(path)?.is_none() {
-            if let Some(ref mmap_ref) = mmap {
-                Self::rebuild_vector_index(&mut vector_index, &index, mmap_ref);
-            }
+        if !index.is_empty() && vector_index_missing {
+            Self::rebuild_vector_index(&mut vector_index, &index, &record_store);
         }
 
         // Finally, create the collection instance with the loaded index, metadata, and vector index
         let mut collection = Collection {
-            data_file: file,
-            mmap,
+            record_store,
             index,
             vector_index,
             cache: CacheManager::new(config.cache),
@@ -208,18 +182,13 @@ impl CollectionBuilder {
     fn rebuild_vector_index(
         vector_index: &mut Box<dyn crate::index::VectorIndex>,
         index: &HashMap<Uuid, crate::storage::persistence::EntryPointer>,
-        mmap_ref: &memmap2::MmapMut,
+        record_store: &RecordStore,
     ) {
         // If the vector index is missing but we have an existing index, we need to rebuild the vector index from the existing data. We read each entry from the memory-mapped file based on the offsets and lengths in the index, deserialize it into a Document, and then insert it into the vector index.
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
         for (id, idx_entry) in index {
-            let offset = idx_entry.offset as usize;
-            let length = idx_entry.length as usize;
-            if offset + length <= mmap_ref.len() {
-                let bytes = &mmap_ref[offset..offset + length];
-                if let Ok(entry) = bincode::deserialize::<Document>(bytes) {
-                    vectors.insert(*id, entry.get_vector());
-                }
+            if let Some(entry) = record_store.read_document(idx_entry) {
+                vectors.insert(*id, entry.get_vector());
             }
         }
 

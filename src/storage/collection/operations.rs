@@ -1,41 +1,13 @@
 // Collection CRUD operations.
 use uuid::Uuid;
 
+use super::record_store::RecordStore;
 use super::storage::Collection;
 use crate::error::{Result, ServerError};
 use crate::metadata::Metadata;
 use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
-use crate::storage::persistence::{grow_mmap_if_needed, EntryPointer};
 use crate::storage::wal::WalEntry;
-
-fn write_entry_bytes(storage: &mut Collection, offset: u64, bytes: &[u8]) -> Result<()> {
-    if let Some(mmap) = storage.mmap.as_mut() {
-        let start = offset as usize;
-        let end = start + bytes.len();
-        mmap[start..end].copy_from_slice(bytes);
-    } else {
-        use std::io::{Seek, SeekFrom, Write};
-        storage.data_file.seek(SeekFrom::Start(offset))?;
-        storage.data_file.write_all(bytes)?;
-    }
-    Ok(())
-}
-
-fn append_entry(storage: &mut Collection, bytes: &[u8]) -> Result<EntryPointer> {
-    let offset = storage
-        .index
-        .values()
-        .map(|idx| idx.offset + idx.length as u64)
-        .max()
-        .unwrap_or(0);
-
-    let required_size = offset + bytes.len() as u64;
-    grow_mmap_if_needed(&mut storage.mmap, &storage.data_file, required_size)?;
-    write_entry_bytes(storage, offset, bytes)?;
-
-    Ok(EntryPointer::new(offset, bytes.len() as u32))
-}
 
 fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()> {
     let limits = storage.config.limits;
@@ -49,7 +21,7 @@ fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()>
     }
 
     if let Some(max_bytes) = limits.max_bytes {
-        let current_size = storage.data_file.metadata()?.len();
+        let current_size = storage.record_store.used_bytes();
         let required = current_size.saturating_add(entry_bytes as u64);
         if required > max_bytes {
             return Err(ServerError::InvalidRequest("Collection max size reached".into()).into());
@@ -86,7 +58,7 @@ fn enforce_limits_batch(
     }
 
     if let Some(max_bytes) = limits.max_bytes {
-        let current_size = storage.data_file.metadata()?.len();
+        let current_size = storage.record_store.used_bytes();
         let required = current_size.saturating_add(total_bytes);
         if required > max_bytes {
             return Err(ServerError::InvalidRequest("Collection max size reached".into()).into());
@@ -111,29 +83,17 @@ fn enforce_limits_batch(
 
 pub fn get(storage: &Collection, id: &Uuid) -> Option<Document> {
     let index_entry = storage.index.get(id)?;
-    let offset = index_entry.offset as usize;
-    let length = index_entry.length as usize;
-    if let Some(mmap) = storage.mmap.as_ref() {
-        let bytes = &mmap[offset..offset + length];
-        bincode::deserialize(bytes).ok()
-    } else {
-        use std::io::{Read, Seek, SeekFrom};
-        let mut file = storage.data_file.try_clone().ok()?;
-        let mut buf = vec![0u8; length];
-        file.seek(SeekFrom::Start(index_entry.offset)).ok()?;
-        file.read_exact(&mut buf).ok()?;
-        bincode::deserialize(&buf).ok()
-    }
+    storage.record_store.read_document(index_entry)
 }
 
 pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
     let id = entry.id;
     let raw_vec = entry.get_vector();
     entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
-    let bytes = bincode::serialize(&entry)?;
+    let bytes = RecordStore::encode_document(&entry)?;
 
     enforce_limits_single(storage, bytes.len())?;
-    let index_entry = append_entry(storage, &bytes)?;
+    let index_entry = storage.record_store.append(&bytes)?;
     storage.index.insert(id, index_entry.clone());
 
     storage.metadata.set_dimensions(raw_vec.len());
@@ -204,37 +164,18 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
         let metadata = entry.metadata.clone();
         entry.vector =
             QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
-        let bytes = bincode::serialize(entry)?;
+        let bytes = RecordStore::encode_document(entry)?;
         serialized.push((entry.id, bytes));
         raw_vectors.push((entry.id, raw_vec, metadata));
     }
-    let current_offset = storage
-        .index
-        .values()
-        .map(|idx| idx.offset + idx.length as u64)
-        .max()
-        .unwrap_or(0);
-
     let total_bytes: u64 = serialized.iter().map(|(_, b)| b.len() as u64).sum();
     let max_entry_bytes = serialized.iter().map(|(_, b)| b.len()).max();
     enforce_limits_batch(storage, serialized.len(), total_bytes, max_entry_bytes)?;
-    let required_size = current_offset + total_bytes;
+    let pointers = storage.record_store.append_batch(&serialized)?;
 
-    grow_mmap_if_needed(&mut storage.mmap, &storage.data_file, required_size)?;
-
-    let mut offset = current_offset;
-
-    for (id, bytes) in &serialized {
-        write_entry_bytes(storage, offset, bytes)?;
-
-        let index_entry = EntryPointer {
-            offset,
-            length: bytes.len() as u32,
-        };
-        storage.index.insert(*id, index_entry);
+    for ((id, _), pointer) in serialized.iter().zip(pointers) {
+        storage.index.insert(*id, pointer);
         ids.push(*id);
-
-        offset += bytes.len() as u64;
     }
 
     storage.track_operation()?;
@@ -259,7 +200,7 @@ pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
     let id = entry.id;
     let raw_vec = entry.get_vector();
     entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
-    let bytes = bincode::serialize(&entry)?;
+    let bytes = RecordStore::encode_document(&entry)?;
 
     let existing = storage.index.contains_key(&id);
     if existing {
@@ -276,8 +217,7 @@ pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
 
         delete_internal(storage, &id);
         // Rehydrate the document from the serialized bytes for the insert path.
-        let doc = bincode::deserialize(&bytes)?;
-        insert_internal(storage, doc)?;
+        insert_internal(storage, entry)?;
         storage.track_operation()?;
         Ok(id)
     } else {
@@ -338,10 +278,10 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
 
         let mut entry = entry;
         entry.metadata = metadata.clone();
-        let bytes = bincode::serialize(&entry)?;
+        let bytes = RecordStore::encode_document(&entry)?;
 
         enforce_limits_single(storage, bytes.len())?;
-        let index_entry = append_entry(storage, &bytes)?;
+        let index_entry = storage.record_store.append(&bytes)?;
         storage.index.insert(*id, index_entry);
         storage.cache.put_metadata(*id, metadata);
         storage.metadata.update_vector_count(storage.index.len());
@@ -373,10 +313,10 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
             storage.metadata.set_dimensions(vector.len());
         }
 
-        let bytes = bincode::serialize(&entry)?;
+        let bytes = RecordStore::encode_document(&entry)?;
         enforce_limits_single(storage, bytes.len())?;
 
-        let index_entry = append_entry(storage, &bytes)?;
+        let index_entry = storage.record_store.append(&bytes)?;
         storage.index.insert(*id, index_entry);
         storage.cache.put_vector(*id, vector.clone());
         storage.cache.put_metadata(*id, entry.metadata.clone());

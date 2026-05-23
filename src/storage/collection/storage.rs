@@ -1,22 +1,18 @@
-// Core Collection storage structure
-// Manages the memory-mapped file, in-memory index, vector index, and caches for vectors and metadata.
-use memmap2::MmapMut;
 use std::collections::HashMap;
-use std::fs::File;
 use uuid::Uuid;
 
 use super::cache::{self, CacheManager};
 use super::persistence::PersistenceService;
+use super::record_store::RecordStore;
 use crate::error::Result;
 use crate::index::VectorIndex;
 use crate::storage::metadata::CollectionMetadata;
 use crate::storage::persistence::{
-    get_wal_path, save_vector_index, warm_file, warm_mmap, EntryPointer,
+    get_wal_path, save_vector_index, warm_file, EntryPointer,
 };
 
 pub struct Collection {
-    pub(super) data_file: File,
-    pub(super) mmap: Option<MmapMut>,
+    pub(super) record_store: RecordStore,
     pub(super) index: HashMap<Uuid, EntryPointer>,
     pub(super) vector_index: Box<dyn VectorIndex>,
     pub(super) cache: CacheManager,
@@ -70,7 +66,7 @@ impl Collection {
 
     pub fn memory_usage_bytes(&self) -> usize {
         // Calculate memory usage by summing the sizes of the memory-mapped file, index, vector cache, metadata cache, and vector index.
-        let mmap_size = self.mmap.as_ref().map(|m| m.len()).unwrap_or(0); // Size of the memory-mapped file
+        let mmap_size = self.record_store.mapped_len();
         let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>(); // Approximate size of the index based on its capacity
 
         mmap_size
@@ -101,9 +97,7 @@ impl Collection {
 
     /// Fault frequently used files into the page cache to reduce cold-start latency.
     pub fn warm_page_cache(&self) {
-        if let Some(mmap) = self.mmap.as_ref() {
-            warm_mmap(mmap);
-        }
+        self.record_store.warm_page_cache();
         let base = self.path.clone();
         let _ = warm_file(&format!("{}.vecindex.db", base));
         let _ = warm_file(&format!("{}.index.db", base));
@@ -146,31 +140,9 @@ impl Collection {
         // Collect all vectors from storage
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
 
-        if let Some(mmap) = self.mmap.as_ref() {
-            for (id, pointer) in &self.index {
-                let offset = pointer.offset as usize;
-                let length = pointer.length as usize;
-                if offset + length <= mmap.len() {
-                    let bytes = &mmap[offset..offset + length];
-                    if let Ok(entry) =
-                        bincode::deserialize::<crate::storage::document::Document>(bytes)
-                    {
-                        vectors.insert(*id, entry.get_vector());
-                    }
-                }
-            }
-        } else {
-            // Fallback: read directly from file if mmap disabled.
-            use std::io::{Read, Seek, SeekFrom};
-            let mut file = self.data_file.try_clone()?;
-            for (id, pointer) in &self.index {
-                let mut buf = vec![0u8; pointer.length as usize];
-                file.seek(SeekFrom::Start(pointer.offset))?;
-                file.read_exact(&mut buf)?;
-                if let Ok(entry) = bincode::deserialize::<crate::storage::document::Document>(&buf)
-                {
-                    vectors.insert(*id, entry.get_vector());
-                }
+        for (id, pointer) in &self.index {
+            if let Some(entry) = self.record_store.read_document(pointer) {
+                vectors.insert(*id, entry.get_vector());
             }
         }
 

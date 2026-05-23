@@ -10,7 +10,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 **Module Boundaries**
 
-- [x] keep `server/` as HTTP transport only: routing, request extraction, response mapping, middleware, and transport-specific errors.
 - [ ] keep `storage/` focused on record store, WAL, mmap, persistence formats, checksums, recovery, and file growth.
 - [ ] keep `index/` focused on vector index implementations, index configs, index persistence, and index-specific query knobs.
 - [ ] add `compute/` or `kernels/` for CPU/GPU distance kernels, backend dispatch, batching, SIMD/JIT/GPU implementations, and benchmark gates.

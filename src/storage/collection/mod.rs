@@ -4,6 +4,7 @@ mod compact;
 mod dup;
 mod operations;
 mod persistence;
+mod record_store;
 mod search;
 mod storage;
 
