@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use super::storage::Collection;
 use crate::error::Result;
+use crate::index::HashMapVectorReader;
 use crate::metrics::Metric;
 
 #[derive(Debug)]
@@ -28,6 +29,7 @@ pub fn find_duplicates(
     let vectors = collection.vectors_view();
     let metadatas = collection.metadata_view();
     let ids: Vec<Uuid> = vectors.keys().cloned().collect();
+    let vector_reader = HashMapVectorReader::new(vectors);
     let mode = collection.config.execution;
     let mut search_cfg = collection.config.search;
     if let Some(ef) = ef_override {
@@ -52,7 +54,7 @@ pub fn find_duplicates(
         };
         let neighbors = collection
             .vector_index()
-            .search(vec, neighbor_k, vectors, search_cfg, None, metadatas);
+            .search(vec, neighbor_k, &vector_reader, search_cfg, None, metadatas);
         for neighbor_id in neighbors {
             if neighbor_id == *id {
                 continue;
