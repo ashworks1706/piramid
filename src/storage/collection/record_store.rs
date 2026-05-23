@@ -77,19 +77,6 @@ impl RecordStore {
         bincode::deserialize(&bytes).ok()
     }
 
-    pub fn reset(&mut self, config: &CollectionConfig) -> Result<()> {
-        drop(self.mmap.take());
-        self.data_file.set_len(0)?;
-        ensure_file_size(&self.data_file, initial_size(config))?;
-        self.mmap = if config.memory.use_mmap {
-            Some(create_mmap(&self.data_file)?)
-        } else {
-            None
-        };
-        self.append_cursor = 0;
-        Ok(())
-    }
-
     pub fn used_bytes(&self) -> u64 {
         self.append_cursor
     }
@@ -105,6 +92,14 @@ impl RecordStore {
         if let Some(mmap) = self.mmap.as_ref() {
             warm_mmap(mmap);
         }
+    }
+
+    pub fn sync(&self) -> Result<()> {
+        if let Some(mmap) = self.mmap.as_ref() {
+            mmap.flush()?;
+        }
+        self.data_file.sync_all()?;
+        Ok(())
     }
 
     fn read_bytes(&self, pointer: &EntryPointer) -> Result<Vec<u8>> {
