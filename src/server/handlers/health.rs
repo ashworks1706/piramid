@@ -30,24 +30,18 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
     let mut wal_stats = Vec::new();
     let mut total_vectors = 0;
 
-    for item in state.collections.iter() {
-        let collection_name = item.key().clone();
-        let storage_ref = item.value();
-
+    for (collection_name, storage_ref) in state.registry.loaded_collections() {
         // Use a read lock with timeout
         let lock_start = std::time::Instant::now();
         let storage = storage_ref.read();
-        record_lock_read(
-            state.latency_tracker.get(&collection_name).as_deref(),
-            lock_start,
-        );
+        record_lock_read(state.registry.tracker(&collection_name).as_deref(), lock_start);
         let count = storage.count();
         let index_type = storage.vector_index().index_type().to_string();
         let memory_usage_bytes = storage.memory_usage_bytes();
 
         // Get latency stats for this collection
         let (insert_latency_ms, search_latency_ms, lock_read_ms, lock_write_ms) =
-            if let Some(tracker) = state.latency_tracker.get(&collection_name) {
+            if let Some(tracker) = state.registry.tracker(&collection_name) {
                 (
                     tracker.avg_insert_latency_ms(),
                     tracker.avg_search_latency_ms(),
@@ -115,7 +109,7 @@ pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsRes
     };
 
     Ok(Json(MetricsResponse {
-        total_collections: state.collections.len(),
+        total_collections: state.registry.len(),
         total_vectors,
         collections: collection_metrics,
         app_config: state.current_config(),

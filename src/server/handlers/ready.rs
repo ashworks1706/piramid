@@ -43,11 +43,10 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
     let mut total_vectors = 0usize;
 
     // 2. Gather health info for each loaded collection
-    for entry in state.collections.iter() {
-        let name = entry.key().clone();
+    for (name, storage_ref) in state.registry.loaded_collections() {
         let lock_start = std::time::Instant::now();
-        let storage = entry.value().read();
-        record_lock_read(state.latency_tracker.get(&name).as_deref(), lock_start); // Record how long we waited to acquire the read lock for this collection
+        let storage = storage_ref.read();
+        record_lock_read(state.registry.tracker(&name).as_deref(), lock_start); // Record how long we waited to acquire the read lock for this collection
 
         let count = storage.count();
         total_vectors += count;
@@ -88,7 +87,7 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_string();
-                    if state.collections.contains_key(&name) {
+                    if state.registry.contains_loaded(&name) {
                         continue;
                     }
                     collections_health.push(CollectionHealth {
@@ -108,7 +107,7 @@ pub async fn readyz(State(state): State<SharedState>) -> Result<Json<ReadyzRespo
         }
     }
 
-    let loaded_collections = state.collections.len();
+    let loaded_collections = state.registry.len();
     let (disk_total_bytes, disk_available_bytes) = disk_stats(&state.data_dir);
 
     let ok = collections_health
