@@ -54,8 +54,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ### Index Quality patch
 
-
-
 **Index Improvements (1.1.1)**
 
 - [ ] IVF uses random centroid initialisation (first K vectors) -- k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
@@ -63,6 +61,51 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
 
 ---
+
+### Transformer Inference Patch
+
+**Introduce Transformer:**
+- [ ] add support for running small transformer models, but scope the first version to correctness and integration rather than competing with llama.cpp/vLLM kernels.
+- [ ] add kvcaching, batching and async support to the transformer inference module.
+- [ ] add paged attention support for long contexts.
+- [ ] add support for quantization.
+- [ ] add streaming api.
+- [ ] add an OpenAI-compatible chat/completions surface so Piramid can be used as a drop-in local RAG inference server.
+- [ ] add a baseline mode that uses normal prompt-RAG: retrieve, rerank, pack context, stream answer. this is the baseline every fusion experiment must beat.
+- [ ] add inference benchmarks against external local runtimes (Ollama/llama.cpp-style OpenAI-compatible servers) so Piramid does not accidentally spend months rebuilding a worse inference engine.
+
+---
+
+### Transformer x Database Attention Fusion Patch
+
+- [ ] write the fusion spec first: define which space database memory lives in (embedding space, residual stream space, per-layer K/V space, or learned adapter space). do not assume ordinary embedding vectors are valid transformer keys/values.
+- [ ] add a kill-test benchmark before transformer surgery: hybrid retrieval + rerank + prompt injection must be the baseline, and fusion must beat it on answer quality, latency, and memory on the same hardware.
+- [ ] implement model-aware memory records: raw text, metadata, dense vector, sparse/BM25 terms, source spans, and optional per-model memory tensors.
+- [ ] prototype learned adapters that map retrieved chunks/vectors into model-usable memory tokens or K/V-like states without changing the base model.
+- [ ] only after adapters beat prompt-RAG, modify transformer blocks with configurable key/value projection heads for database vectors.
+- [ ] learnable gating mechanism to balance attention between internal context and external memory.
+- [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable.
+- [ ] cross attention with database vectors as keyvalues with query from transformer.
+- [ ] add ablations for retrieval frequency: per-request, per-chunk, per-layer, and per-token. per-token retrieval should be rejected unless it proves latency-safe on consumer hardware.
+- [ ] document dead ends from RETRO/REALM/RAG/kNN-LM-style systems so Piramid does not repeat expensive research paths without evidence.
+
+
+---
+
+### RAG Features
+
+**Variations**
+
+- [ ] implement GraphRAG as native option, but keep it as a memory-building/retrieval strategy rather than the core identity of Piramid.
+- [ ] add RAPTOR as an optional hierarchical summarization/indexing strategy.
+- [ ] add latent rag experiments behind a feature flag until they beat normal hybrid retrieval in evals.
+- [ ] add RAFT-style dataset generation/fine-tuning workflows as an optional training pipeline, not as a requirement for basic Piramid usage.
+- [ ] Implement Cross-Encoders: a tiny built-in ML model to re-score the final top 10 results (provide options: ColBERT-style late interaction, small cross-encoder, or external reranker).
+- [ ] add citations/source-span tracking as a first-class response primitive; every answer path should be able to explain which records influenced it.
+- [ ] add RAG evals: retrieval recall, answer faithfulness, citation correctness, latency, memory, and cost per query.
+
+---
+
 
 ### Searching patch
 
@@ -133,20 +176,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ---
 
-### Transformer Inference Patch
-
-**Introduce Transformer:**
-- [ ] add support for running small transformer models, but scope the first version to correctness and integration rather than competing with llama.cpp/vLLM kernels.
-- [ ] add kvcaching, batching and async support to the transformer inference module.
-- [ ] add paged attention support for long contexts.
-- [ ] add support for quantization.
-- [ ] add streaming api.
-- [ ] add an OpenAI-compatible chat/completions surface so Piramid can be used as a drop-in local RAG inference server.
-- [ ] add a baseline mode that uses normal prompt-RAG: retrieve, rerank, pack context, stream answer. this is the baseline every fusion experiment must beat.
-- [ ] add inference benchmarks against external local runtimes (Ollama/llama.cpp-style OpenAI-compatible servers) so Piramid does not accidentally spend months rebuilding a worse inference engine.
-
----
-
 ### Distributed Systems & Inference Patch
 
 **Distributed Runtime:**
@@ -177,35 +206,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] expose cluster metrics: node health, shard ownership, queue depth, GPU memory, KV-cache usage, network fan-out time, and partial-result rates.
 - [ ] add failure-mode tests for node loss, slow shard, stale replica, interrupted stream, duplicated request, and model-node overload.
 - [ ] document the distributed-system boundary clearly: Piramid should scale from single binary to small trusted clusters before attempting internet-scale database semantics.
-
----
-
-### Transformer x Database Attention Fusion Patch
-
-- [ ] write the fusion spec first: define which space database memory lives in (embedding space, residual stream space, per-layer K/V space, or learned adapter space). do not assume ordinary embedding vectors are valid transformer keys/values.
-- [ ] add a kill-test benchmark before transformer surgery: hybrid retrieval + rerank + prompt injection must be the baseline, and fusion must beat it on answer quality, latency, and memory on the same hardware.
-- [ ] implement model-aware memory records: raw text, metadata, dense vector, sparse/BM25 terms, source spans, and optional per-model memory tensors.
-- [ ] prototype learned adapters that map retrieved chunks/vectors into model-usable memory tokens or K/V-like states without changing the base model.
-- [ ] only after adapters beat prompt-RAG, modify transformer blocks with configurable key/value projection heads for database vectors.
-- [ ] learnable gating mechanism to balance attention between internal context and external memory.
-- [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable.
-- [ ] cross attention with database vectors as keyvalues with query from transformer.
-- [ ] add ablations for retrieval frequency: per-request, per-chunk, per-layer, and per-token. per-token retrieval should be rejected unless it proves latency-safe on consumer hardware.
-- [ ] document dead ends from RETRO/REALM/RAG/kNN-LM-style systems so Piramid does not repeat expensive research paths without evidence.
-
----
-
-### RAG Features
-
-**Variations**
-
-- [ ] implement GraphRAG as native option, but keep it as a memory-building/retrieval strategy rather than the core identity of Piramid.
-- [ ] add RAPTOR as an optional hierarchical summarization/indexing strategy.
-- [ ] add latent rag experiments behind a feature flag until they beat normal hybrid retrieval in evals.
-- [ ] add RAFT-style dataset generation/fine-tuning workflows as an optional training pipeline, not as a requirement for basic Piramid usage.
-- [ ] Implement Cross-Encoders: a tiny built-in ML model to re-score the final top 10 results (provide options: ColBERT-style late interaction, small cross-encoder, or external reranker).
-- [ ] add citations/source-span tracking as a first-class response primitive; every answer path should be able to explain which records influenced it.
-- [ ] add RAG evals: retrieval recall, answer faithfulness, citation correctness, latency, memory, and cost per query.
 
 ---
 
