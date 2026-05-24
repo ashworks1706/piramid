@@ -6,7 +6,7 @@ This guide explains how the Piramid codebase is organized and how the main runti
 
 The current system is centered around vector storage, retrieval, metadata filtering, embedding ingestion, durability, and HTTP APIs. The longer-term direction is to make the same database memory usable by local inference and small trusted clusters without turning the server into a pile of unrelated subsystems.
 
-The crate is organized around layers:
+The first diagram is a dependency view. Arrows mean "uses" or "calls into"; they do not mean the lower box should be nested inside the upper folder.
 
 ```mermaid
 flowchart TD
@@ -22,7 +22,7 @@ flowchart TD
     Storage[storage<br/>records, WAL, mmap]
     Embeddings[embeddings<br/>embedding providers]
     Metrics[metrics<br/>observability]
-    Config[config<br/>runtime config]
+    Config[config<br/>shared config]
 
     Client --> Server
     Server --> Services
@@ -40,7 +40,43 @@ flowchart TD
     Runtime --> Metrics
 ```
 
-HTTP stays in `server/`, orchestration stays in `services/`, domain behavior stays in `collections/`, and persistence details stay in `storage/`.
+For example, `runtime/` uses `config/` and `metrics/`, but those modules are not owned by `runtime/`. They stay top-level because config and observability are shared by multiple layers.
+
+The folder ownership view is different. At the crate level, most folders are peers with clear responsibilities:
+
+```mermaid
+flowchart TD
+    Src[src/]
+
+    Src --> Bin[src/bin/piramid.rs<br/>binary entrypoint]
+    Src --> Cli[cli/<br/>CLI commands]
+    Src --> Server[server/<br/>HTTP transport]
+    Src --> Services[services/<br/>use cases]
+    Src --> Runtime[runtime/<br/>app state]
+    Src --> Collections[collections/<br/>domain layer]
+    Src --> Storage[storage/<br/>persistence primitives]
+    Src --> Search[search/<br/>query execution]
+    Src --> Index[index/<br/>ANN indexes]
+    Src --> Compute[compute/<br/>distance kernels]
+    Src --> Cache[cache/<br/>cache policy]
+    Src --> Embeddings[embeddings/<br/>embedding providers]
+    Src --> Metrics[metrics/<br/>observability]
+    Src --> Config[config/<br/>shared configuration]
+    Src --> Quantization[quantization/<br/>precision and compression]
+    Src --> Inference[inference/<br/>future local inference]
+    Src --> Cluster[cluster/<br/>future distributed systems]
+    Src --> Error[error/<br/>error categories]
+    Src --> Metadata[metadata.rs<br/>metadata values]
+    Src --> Validation[validation.rs<br/>input validation]
+
+    Collections --> CollectionOps[collections/operations/<br/>read, write, metadata, limits]
+    Storage --> Wal[storage/wal/<br/>write-ahead log]
+    Storage --> Persistence[storage/persistence/<br/>sidecar and mmap helpers]
+    Server --> Types[server/types/<br/>API DTOs]
+    Server --> Handlers[server/handlers/<br/>HTTP handlers]
+```
+
+Top-level folders should not be collapsed just because one layer depends on another. Move code based on ownership, not only on call direction.
 
 ## Directory Map
 
@@ -71,7 +107,7 @@ This layer is server-wide. Anything that belongs to a single collection should u
 Important pieces:
 
 - `collection.rs` defines the collection domain object.
-- `registry.rs` defines `CollectionManager`, which opens and tracks loaded collections.
+- `manager.rs` defines `CollectionManager`, which opens and tracks loaded collections.
 - `operations/` contains read, write, metadata, and limit enforcement internals.
 - `checkpoint.rs` defines `CheckpointManager`, which owns WAL/checkpoint bookkeeping at the collection level.
 - `compact.rs` rewrites live records into a compacted store.

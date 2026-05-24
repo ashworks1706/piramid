@@ -99,7 +99,7 @@ pub fn insert_vector(
     state.ensure_write_allowed()?;
     validation::validate_collection_name(&collection)?;
 
-    let storage_ref = state.get_or_create_collection(&collection)?;
+    let collection_handle = state.get_or_create_collection(&collection)?;
     tracing::info!(
         collection=%collection,
         single=req.vector.is_some(),
@@ -108,7 +108,7 @@ pub fn insert_vector(
     );
 
     let lock_start = Instant::now();
-    let mut storage = storage_ref.write();
+    let mut collection_guard = collection_handle.write();
     record_lock_write(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
@@ -119,7 +119,7 @@ pub fn insert_vector(
             req.vector = Some(vector);
             let entry = build_single_entry(req)?;
             let start = Instant::now();
-            let id = storage.insert(entry)?;
+            let id = collection_guard.insert(entry)?;
             let duration = start.elapsed();
 
             if let Some(tracker) = state.collection_manager.tracker(&collection) {
@@ -137,7 +137,7 @@ pub fn insert_vector(
             let count = req.texts.as_ref().map(|texts| texts.len()).unwrap_or(0);
             let entries = build_batch_entries(req)?;
             let start = Instant::now();
-            let ids = storage.insert_batch(entries)?;
+            let ids = collection_guard.insert_batch(entries)?;
             let duration = start.elapsed();
 
             if let Some(tracker) = state.collection_manager.tracker(&collection) {
@@ -168,18 +168,18 @@ pub fn insert_vector(
 pub fn get_vector(state: &SharedState, collection: String, id: String) -> Result<VectorResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
 
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
-    let entry = storage
+    let entry = collection_guard
         .get(&uuid)
         .ok_or(ServerError::NotFound(VECTOR_NOT_FOUND.to_string()))?;
     Ok(VectorResponse {
@@ -197,15 +197,15 @@ pub fn list_vectors(
 ) -> Result<Vec<VectorResponse>> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
-    Ok(storage
+    Ok(collection_guard
         .get_all()
         .into_iter()
         .skip(params.offset)
@@ -227,19 +227,19 @@ pub fn delete_vector(
     ensure_available(state)?;
     state.ensure_write_allowed()?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?;
 
     let lock_start = Instant::now();
-    let mut storage = storage_ref.write();
+    let mut collection_guard = collection_handle.write();
     record_lock_write(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
     let start = Instant::now();
-    let deleted = storage.delete(&uuid)?;
+    let deleted = collection_guard.delete(&uuid)?;
     let duration = start.elapsed();
 
     if let Some(tracker) = state.collection_manager.tracker(&collection) {
@@ -262,7 +262,7 @@ pub fn delete_vectors(
     validation::validate_collection_name(&collection)?;
     validation::validate_batch_size(req.ids.len(), MAX_BATCH_SIZE, "Delete")?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let mut uuids = Vec::with_capacity(req.ids.len());
     for id in &req.ids {
         let uuid = Uuid::parse_str(id)
@@ -271,14 +271,14 @@ pub fn delete_vectors(
     }
 
     let lock_start = Instant::now();
-    let mut storage = storage_ref.write();
+    let mut collection_guard = collection_handle.write();
     record_lock_write(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
     let start = Instant::now();
-    let deleted_count = storage.delete_batch(&uuids)?;
+    let deleted_count = collection_guard.delete_batch(&uuids)?;
     let duration = start.elapsed();
 
     if let Some(tracker) = state.collection_manager.tracker(&collection) {
@@ -300,9 +300,9 @@ pub fn search_vectors(
     ensure_available(state)?;
     validation::validate_collection_name(&collection)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
@@ -319,19 +319,24 @@ pub fn search_vectors(
         preset,
     } = req;
     let metric = parse_metric(metric);
-    let effective_search =
-        apply_search_overrides(storage.config().search, ef, nprobe, overfetch, preset);
+    let effective_search = apply_search_overrides(
+        collection_guard.config().search,
+        ef,
+        nprobe,
+        overfetch,
+        preset,
+    );
 
     match (vector, vectors) {
         (Some(vector), None) => {
             validation::validate_vector(&vector)?;
             let start = Instant::now();
-            let results = storage.search(
+            let results = collection_guard.search(
                 &vector,
                 k,
                 metric,
                 crate::SearchParams {
-                    mode: storage.config().execution,
+                    mode: collection_guard.config().execution,
                     filter: None,
                     filter_overfetch_override: overfetch,
                     search_config_override: Some(effective_search),
@@ -361,13 +366,18 @@ pub fn search_vectors(
 
             let start = Instant::now();
             let params = crate::SearchParams {
-                mode: storage.config().execution,
+                mode: collection_guard.config().execution,
                 filter: None,
                 filter_overfetch_override: overfetch,
                 search_config_override: Some(effective_search),
             };
-            let batch_results =
-                crate::search::search_batch_collection(&storage, &queries, k, metric, params);
+            let batch_results = crate::search::search_batch_collection(
+                &collection_guard,
+                &queries,
+                k,
+                metric,
+                params,
+            );
             let duration = start.elapsed();
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
@@ -414,9 +424,9 @@ pub fn upsert_vector(
         req.vector = validation::normalize_vector(&req.vector);
     }
 
-    let storage_ref = state.get_or_create_collection(&collection)?;
+    let collection_handle = state.get_or_create_collection(&collection)?;
     let lock_start = Instant::now();
-    let mut storage = storage_ref.write();
+    let mut collection_guard = collection_handle.write();
     record_lock_write(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
@@ -427,12 +437,12 @@ pub fn upsert_vector(
     } else {
         Uuid::new_v4()
     };
-    let exists = storage.get(&id).is_some();
+    let exists = collection_guard.get(&id).is_some();
     let mut entry = Document::with_metadata(req.vector, req.text, json_to_metadata(req.metadata));
     entry.id = id;
 
     let start = Instant::now();
-    storage.upsert(entry)?;
+    collection_guard.upsert(entry)?;
     let duration = start.elapsed();
 
     if let Some(tracker) = state.collection_manager.tracker(&collection) {
@@ -467,9 +477,9 @@ pub fn range_search_vectors(
     validation::validate_collection_name(&collection)?;
     validation::validate_vector(&req.vector)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
@@ -477,19 +487,19 @@ pub fn range_search_vectors(
 
     let metric = parse_metric(req.metric);
     let effective_search = apply_search_overrides(
-        storage.config().search,
+        collection_guard.config().search,
         req.ef,
         req.nprobe,
         req.overfetch,
         req.preset,
     );
     let start = Instant::now();
-    let mut results = storage.search(
+    let mut results = collection_guard.search(
         &req.vector,
         req.k,
         metric,
         crate::SearchParams {
-            mode: storage.config().execution,
+            mode: collection_guard.config().execution,
             filter: None,
             filter_overfetch_override: req.overfetch,
             search_config_override: Some(effective_search),

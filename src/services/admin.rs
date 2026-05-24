@@ -57,9 +57,9 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
     let mut wal_stats = Vec::new();
     let mut total_vectors = 0;
 
-    for (collection_name, storage_ref) in state.collection_manager.loaded_collections() {
+    for (collection_name, collection_handle) in state.collection_manager.loaded_collections() {
         let lock_start = std::time::Instant::now();
-        let storage = storage_ref.read();
+        let collection_guard = collection_handle.read();
         record_lock_read(
             state
                 .collection_manager
@@ -67,9 +67,9 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
                 .as_deref(),
             lock_start,
         );
-        let count = storage.count();
-        let index_type = storage.vector_index().index_type().to_string();
-        let memory_usage_bytes = storage.memory_usage_bytes();
+        let count = collection_guard.count();
+        let index_type = collection_guard.vector_index().index_type().to_string();
+        let memory_usage_bytes = collection_guard.memory_usage_bytes();
         let (insert_latency_ms, search_latency_ms, lock_read_ms, lock_write_ms) =
             if let Some(tracker) = state.collection_manager.tracker(&collection_name) {
                 (
@@ -83,7 +83,7 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             };
 
         total_vectors += count;
-        let (search_overfetch, hnsw_ef_search, ivf_nprobe) = match &storage.config.index {
+        let (search_overfetch, hnsw_ef_search, ivf_nprobe) = match &collection_guard.config.index {
             crate::index::IndexConfig::Auto { search, .. } => {
                 (Some(search.filter_overfetch), None, None)
             }
@@ -112,16 +112,20 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             ivf_nprobe,
         });
 
-        let wal_size = std::fs::metadata(format!("{}.wal.db", storage.path))
+        let wal_size = std::fs::metadata(format!("{}.wal.db", collection_guard.path))
             .map(|metadata| metadata.len())
             .ok();
-        let checkpoint_age_secs = storage.checkpoint.last_checkpoint().and_then(|timestamp| {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
-            now.checked_sub(timestamp)
-        });
+        let checkpoint_age_secs =
+            collection_guard
+                .checkpoint
+                .last_checkpoint()
+                .and_then(|timestamp| {
+                    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
+                    now.checked_sub(timestamp)
+                });
         wal_stats.push(WalStats {
-            collection: storage.path.clone(),
-            last_checkpoint: storage.checkpoint.last_checkpoint(),
+            collection: collection_guard.path.clone(),
+            last_checkpoint: collection_guard.checkpoint.last_checkpoint(),
             checkpoint_age_secs,
             wal_size_bytes: wal_size,
         });
@@ -149,22 +153,22 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     let mut collections = Vec::new();
     let mut total_vectors = 0usize;
 
-    for (name, storage_ref) in state.collection_manager.loaded_collections() {
+    for (name, collection_handle) in state.collection_manager.loaded_collections() {
         let lock_start = std::time::Instant::now();
-        let storage = storage_ref.read();
+        let collection_guard = collection_handle.read();
         record_lock_read(
             state.collection_manager.tracker(&name).as_deref(),
             lock_start,
         );
 
-        let count = storage.count();
+        let count = collection_guard.count();
         total_vectors += count;
-        let last_checkpoint = storage.checkpoint.last_checkpoint();
+        let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
         let checkpoint_age_secs = last_checkpoint.and_then(|timestamp| {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
             now.checked_sub(timestamp)
         });
-        let wal_size_bytes = std::fs::metadata(format!("{}.wal.db", storage.path))
+        let wal_size_bytes = std::fs::metadata(format!("{}.wal.db", collection_guard.path))
             .map(|metadata| metadata.len())
             .ok();
 
@@ -172,11 +176,11 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             name,
             loaded: true,
             count: Some(count),
-            index_type: Some(storage.vector_index().index_type().to_string()),
+            index_type: Some(collection_guard.vector_index().index_type().to_string()),
             last_checkpoint,
             checkpoint_age_secs,
             wal_size_bytes,
-            schema_version: Some(storage.metadata.schema_version),
+            schema_version: Some(collection_guard.metadata.schema_version),
             integrity_ok: true,
             error: None,
         });

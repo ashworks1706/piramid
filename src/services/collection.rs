@@ -17,11 +17,11 @@ fn ensure_available(state: &SharedState) -> Result<()> {
     Ok(())
 }
 
-fn collection_info(name: String, storage: &crate::Collection) -> CollectionInfo {
-    let meta = storage.metadata();
+fn collection_info(name: String, collection: &crate::Collection) -> CollectionInfo {
+    let meta = collection.metadata();
     CollectionInfo {
         name,
-        count: storage.count(),
+        count: collection.count(),
         created_at: Some(meta.created_at),
         updated_at: Some(meta.updated_at),
         dimensions: meta.dimensions,
@@ -32,14 +32,14 @@ pub fn list_collections(state: &SharedState) -> Result<CollectionsResponse> {
     ensure_available(state)?;
 
     let mut collections = Vec::new();
-    for (name, storage_ref) in state.collection_manager.loaded_collections() {
+    for (name, collection_handle) in state.collection_manager.loaded_collections() {
         let lock_start = Instant::now();
-        let storage = storage_ref.read();
+        let collection_guard = collection_handle.read();
         record_lock_read(
             state.collection_manager.tracker(&name).as_deref(),
             lock_start,
         );
-        collections.push(collection_info(name, &storage));
+        collections.push(collection_info(name, &collection_guard));
     }
 
     Ok(CollectionsResponse { collections })
@@ -52,27 +52,27 @@ pub fn create_collection(
     ensure_available(state)?;
     validation::validate_collection_name(&req.name)?;
 
-    let storage_ref = state.get_or_create_collection(&req.name)?;
+    let collection_handle = state.get_or_create_collection(&req.name)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&req.name).as_deref(),
         lock_start,
     );
-    Ok(collection_info(req.name, &storage))
+    Ok(collection_info(req.name, &collection_guard))
 }
 
 pub fn get_collection(state: &SharedState, collection: String) -> Result<CollectionInfo> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
-    Ok(collection_info(collection, &storage))
+    Ok(collection_info(collection, &collection_guard))
 }
 
 pub fn delete_collection(state: &SharedState, collection: String) -> Result<DeleteResponse> {
@@ -93,31 +93,31 @@ pub fn delete_collection(state: &SharedState, collection: String) -> Result<Dele
 pub fn collection_count(state: &SharedState, collection: String) -> Result<CountResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
     Ok(CountResponse {
-        count: storage.count(),
+        count: collection_guard.count(),
     })
 }
 
 pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStatsResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
-    let stats = storage.vector_index().stats();
+    let stats = collection_guard.vector_index().stats();
     Ok(IndexStatsResponse {
         index_type: stats.index_type.to_string(),
         total_vectors: stats.total_vectors,
@@ -129,7 +129,7 @@ pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStats
 pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildIndexResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let started_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -146,13 +146,13 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
     );
 
     let collection_name = collection.clone();
-    let storage_ref_clone = storage_ref.clone();
+    let collection_handle_clone = collection_handle.clone();
     let jobs = state.rebuild_jobs.clone();
 
     tokio::task::spawn_blocking(move || {
-        let mut storage = storage_ref_clone.write();
+        let mut collection_guard = collection_handle_clone.write();
         let start = Instant::now();
-        if let Err(e) = storage.rebuild_index() {
+        if let Err(e) = collection_guard.rebuild_index() {
             tracing::error!(collection=%collection_name, error=%e, "index_rebuild_failed");
             let finished = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -204,9 +204,9 @@ pub fn find_duplicates(
 ) -> Result<DuplicateResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
@@ -218,7 +218,7 @@ pub fn find_duplicates(
         _ => Metric::Cosine,
     };
     let hits = crate::collections::find_duplicates(
-        &storage,
+        &collection_guard,
         metric,
         req.threshold,
         req.limit,
@@ -242,10 +242,10 @@ pub fn find_duplicates(
 pub fn compact_collection(state: &SharedState, collection: String) -> Result<RebuildIndexResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
-    let mut storage = storage_ref.write();
+    let collection_handle = state.get_existing_collection(&collection)?;
+    let mut collection_guard = collection_handle.write();
     let start = Instant::now();
-    let stats = crate::collections::compact(&mut storage)?;
+    let stats = crate::collections::compact(&mut collection_guard)?;
     let duration = start.elapsed();
     tracing::info!(
         collection=%collection,

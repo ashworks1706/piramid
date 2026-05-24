@@ -28,7 +28,7 @@ pub async fn embed_text(
     ensure_available(state)?;
     state.ensure_write_allowed()?;
 
-    let storage_ref = state.get_or_create_collection(&collection)?;
+    let collection_handle = state.get_or_create_collection(&collection)?;
     let embedder = state
         .embedder
         .as_ref()
@@ -44,7 +44,7 @@ pub async fn embed_text(
             let embed_duration = start.elapsed();
 
             let lock_start = Instant::now();
-            let mut storage = storage_ref.write();
+            let mut collection_guard = collection_handle.write();
             record_lock_write(
                 state.collection_manager.tracker(&collection).as_deref(),
                 lock_start,
@@ -55,7 +55,7 @@ pub async fn embed_text(
                 text,
                 json_to_metadata(req.metadata),
             );
-            let id = storage.insert(entry)?;
+            let id = collection_guard.insert(entry)?;
             state.enforce_cache_budget();
             state
                 .embed_metrics
@@ -99,13 +99,13 @@ pub async fn embed_text(
             }
 
             let lock_start = Instant::now();
-            let mut storage = storage_ref.write();
+            let mut collection_guard = collection_handle.write();
             record_lock_write(
                 state.collection_manager.tracker(&collection).as_deref(),
                 lock_start,
             );
 
-            let insert_ids = storage.insert_batch(entries)?;
+            let insert_ids = collection_guard.insert_batch(entries)?;
             ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
             state.enforce_cache_budget();
             state
@@ -138,7 +138,7 @@ pub async fn search_by_text(
 ) -> Result<SearchResponse> {
     ensure_available(state)?;
 
-    let storage_ref = state.get_existing_collection(&collection)?;
+    let collection_handle = state.get_existing_collection(&collection)?;
     let embedder = state
         .embedder
         .as_ref()
@@ -156,8 +156,8 @@ pub async fn search_by_text(
 
     let metric = parse_metric(req.metric);
     let base_search = {
-        let storage = storage_ref.read();
-        storage.config().search
+        let collection_guard = collection_handle.read();
+        collection_guard.config().search
     };
     let effective_search = apply_search_overrides(
         base_search,
@@ -168,19 +168,19 @@ pub async fn search_by_text(
     );
 
     let lock_start = Instant::now();
-    let storage = storage_ref.read();
+    let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
 
     let start = Instant::now();
-    let results = storage.search(
+    let results = collection_guard.search(
         &response.embedding,
         req.k,
         metric,
         crate::SearchParams {
-            mode: storage.config().execution,
+            mode: collection_guard.config().execution,
             filter: None,
             filter_overfetch_override: req.overfetch,
             search_config_override: Some(effective_search),

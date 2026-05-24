@@ -33,7 +33,7 @@ https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
 ### Architecture
 
-Piramid is organized as layered Rust modules so transport, orchestration, collection behavior, indexing, and persistence stay separate.
+Piramid is organized as layered Rust modules so transport, orchestration, collection behavior, indexing, and persistence stay separate. This diagram shows dependency flow, not folder nesting.
 
 ```mermaid
 flowchart TD
@@ -112,4 +112,3 @@ Health and metrics: `/healthz`, `/readyz`, `/api/metrics`.
 ## License
 
 [Apache 2.0 License](LICENSE)
-

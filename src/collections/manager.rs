@@ -52,11 +52,11 @@ impl CollectionManager {
 
     fn open_and_register(&self, name: &str, path: &str) -> Result<CollectionHandle> {
         let cfg = { self.app_config.read().clone() };
-        let storage = Collection::open_with_options(
+        let collection = Collection::open_with_options(
             path,
             CollectionOpenOptions::from(cfg.to_collection_config()),
         )?;
-        let handle = Arc::new(RwLock::new(storage));
+        let handle = Arc::new(RwLock::new(collection));
 
         self.collections.insert(name.to_string(), handle.clone());
         self.latency_trackers

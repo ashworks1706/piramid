@@ -83,7 +83,7 @@ impl CollectionBuilder {
         // why? Because we need to ensure that the collection state is consistent with the WAL entries before we can checkpoint and clear the WAL. By applying the WAL entries to a temporary collection, we can bring it up to date with all the changes recorded in the WAL, and then checkpoint that state to persist it. This way, we ensure that no changes are lost and that the collection is in sync with the WAL before we clear it.
 
         if !wal_entries.is_empty() {
-            let mut temp_storage = Collection {
+            let mut recovered_collection = Collection {
                 record_store,
                 index,
                 vector_index,
@@ -95,16 +95,16 @@ impl CollectionBuilder {
             };
 
             // Replay WAL entries to bring the collection up to date
-            Self::replay_wal(&mut temp_storage, wal_entries)?;
+            Self::replay_wal(&mut recovered_collection, wal_entries)?;
 
             // After replaying, rebuild the vector cache to ensure it's in sync with the index
-            temp_storage.rebuild_vector_cache();
+            recovered_collection.rebuild_vector_cache();
 
             // Checkpoint the collection to persist the changes from the WAL replay, which will also clear the WAL
-            super::checkpoint::checkpoint(&mut temp_storage)?;
+            super::checkpoint::checkpoint(&mut recovered_collection)?;
 
             // After checkpointing, we can use the updated collection as our main collection instance
-            return Ok(temp_storage);
+            return Ok(recovered_collection);
         }
 
         // If the index is not empty but the vector index is missing, we need to rebuild the vector index from the existing data
@@ -128,7 +128,7 @@ impl CollectionBuilder {
         Ok(collection)
     }
 
-    fn replay_wal(storage: &mut Collection, entries: Vec<WalEntry>) -> Result<()> {
+    fn replay_wal(collection: &mut Collection, entries: Vec<WalEntry>) -> Result<()> {
         // Apply each WAL entry to the collection. Inserts and updates will add or modify entries, while deletes will remove them.
         for entry in entries {
             match entry {
@@ -144,12 +144,12 @@ impl CollectionBuilder {
                         id,
                         vector: QuantizedVector::from_f32_with_config(
                             &vector,
-                            &storage.config.quantization,
+                            &collection.config.quantization,
                         ),
                         text,
                         metadata,
                     };
-                    let _ = super::operations::insert_internal(storage, vec_entry);
+                    let _ = super::operations::insert_internal(collection, vec_entry);
                 }
 
                 WalEntry::Update {
@@ -159,20 +159,20 @@ impl CollectionBuilder {
                     metadata,
                     ..
                 } => {
-                    super::operations::delete_internal(storage, &id);
+                    super::operations::delete_internal(collection, &id);
                     let vec_entry = Document {
                         id,
                         vector: QuantizedVector::from_f32_with_config(
                             &vector,
-                            &storage.config.quantization,
+                            &collection.config.quantization,
                         ),
                         text,
                         metadata,
                     };
-                    let _ = super::operations::insert_internal(storage, vec_entry);
+                    let _ = super::operations::insert_internal(collection, vec_entry);
                 }
                 WalEntry::Delete { id, .. } => {
-                    super::operations::delete_internal(storage, &id);
+                    super::operations::delete_internal(collection, &id);
                 }
                 WalEntry::Checkpoint { .. } => {}
             }
