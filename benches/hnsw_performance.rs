@@ -9,8 +9,7 @@ fn hnsw_insert_search_bench(c: &mut Criterion) {
     let mut vectors = HashMap::new();
     let metadatas: HashMap<Uuid, Metadata> = HashMap::new();
 
-    // Seed a small set of vectors
-    for i in 0..1_000 {
+    for i in 0..1_0000 {
         let id = Uuid::new_v4();
         let vec = vec![i as f32, (i * 2) as f32, (i * 3) as f32];
         vectors.insert(id, vec.clone());
@@ -20,7 +19,7 @@ fn hnsw_insert_search_bench(c: &mut Criterion) {
 
     let query = vec![10.0, 20.0, 30.0];
 
-    c.bench_function("hnsw_search_1k", |b| {
+    c.bench_function("hnsw_search_10k", |b| {
         b.iter(|| {
             let reader = HashMapVectorReader::new(&vectors);
             let _ = index.search(&query, 10, 200, &reader, None, &metadatas);

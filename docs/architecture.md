@@ -82,27 +82,25 @@ Top-level folders should not be collapsed just because one layer depends on anot
 
 ### `server/`
 
-`server/` is the HTTP transport layer. It owns routes, handlers, request helpers, request IDs, and API DTOs.
+HTTP transport. This is where routes, handlers, request helpers, request IDs, and API DTOs live.
 
-Handlers should stay thin. Their job is to extract request data, call the matching service function, and serialize the response. They should not perform collection mutation, search planning, WAL handling, cache policy, or index logic.
+Handlers should stay thin: parse request data, call a service, and serialize the response. They should not mutate collections, plan searches, manage WAL, or own cache/index logic.
 
 ### `services/`
 
-`services/` is the application layer. It coordinates user-facing operations such as collection lifecycle operations, vector insert, update, delete, and search operations, embedding requests, admin, metrics, health, and readiness logic.
+Application orchestration. This layer coordinates user-facing operations: collection lifecycle, vector writes, search, embedding requests, admin views, health checks, and readiness checks.
 
 Services know about runtime state and domain objects. They should not know about low-level file formats or mmap implementation details.
 
 ### `runtime/`
 
-`runtime/` owns shared application state.
+Shared application state. `AppState` holds the active config, shutdown/read-only flags, optional embedder, rebuild job tracking, cache-budget enforcement, and the `CollectionManager`.
 
-`AppState` contains the active config, shutdown/read-only flags, optional embedder, rebuild job tracking, cache-budget enforcement, and the `CollectionManager`.
-
-This layer is server-wide. Anything that belongs to a single collection should usually live in `collections/`, not `runtime/`.
+This layer is server-wide. Anything that belongs to one collection should usually live in `collections/`.
 
 ### `collections/`
 
-`collections/` is the collection domain layer. It owns the `Collection` object and operations around one or many collections.
+Collection domain logic. This is where the `Collection` object and collection-level behavior live.
 
 Important pieces:
 
@@ -118,59 +116,72 @@ This layer is allowed to orchestrate storage, index, cache, and search together 
 
 ### `storage/`
 
-`storage/` is the low-level persistence layer. It owns `RecordStore`, document serialization boundaries, collection metadata sidecars, WAL files and WAL entries, mmap/file growth helpers, index and vector-index persistence helpers
+Low-level persistence. This layer owns:
+
+- `RecordStore`
+- document serialization boundaries
+- collection metadata sidecars
+- WAL files and WAL entries
+- mmap and file-growth helpers
+- index and vector-index persistence helpers
 
 Storage should not decide API behavior, search semantics, or collection lifecycle policy. It should provide safe persistence primitives for the domain layer to use.
 
 ### `index/`
 
-`index/` owns vector index implementations and index abstractions. The key interfaces are `VectorIndex` and `VectorReader`. Index implementations should focus on graph/list/index traversal and index-specific persistence stats. They should not own collection storage or HTTP behavior.
+Vector index implementations and index abstractions.
 
-Current index families include:
+Current index families:
 
 - Flat
 - HNSW
 - IVF
 
-
+The key interfaces are `VectorIndex` and `VectorReader`. Index implementations should focus on traversal, index-specific settings, and index stats. They should not own collection storage or HTTP behavior.
 
 ### `compute/`
 
-`compute/` owns distance and similarity kernels. Current kernels cover cosine, dot product, and Euclidean distance, with scalar, SIMD, parallel, binary, and JIT-style variants where available. This layer exists because distance math is shared by indexes, search, clustering, quantization experiments, and future GPU backends.
+Distance and similarity kernels. This includes cosine, dot product, and Euclidean distance, with scalar, SIMD, parallel, binary, and JIT-style variants where available.
+
+This layer is separate because distance math is shared by indexes, search, clustering, quantization experiments, and future GPU backends.
 
 ### `cache/`
 
-`cache/` owns cache state and cache policy. The main type is `CacheManager`, which currently manages vector and metadata caches and implements `VectorReader` for index/search paths. 
+Cache state and cache policy. `CacheManager` currently manages vector and metadata caches and implements `VectorReader` for index/search paths.
 
-Over time, this boundary is the right place for cache budgeting, eviction policy, query-result caches, embedding-cache coordination, and future KV-cache accounting.
+This boundary is also the future home for cache budgeting, eviction policy, query-result caches, embedding-cache coordination, and KV-cache accounting.
 
 ### `search/`
 
-`search/` owns query execution behavior. Search can call indexes and compute kernels, but should not own persistence or collection lifecycle behavior. It handles filter evaluation, score calculation, sorting and truncation, batch search helpers, search request parameters and query types.
+Query execution. Search handles filter evaluation, score calculation, sorting and truncation, batch search helpers, search request parameters, and query types.
+
+Search can call indexes and compute kernels, but it should not own persistence or collection lifecycle behavior.
 
 ### `embeddings/`
 
-`embeddings/` owns embedding providers and provider-level behavior. Current responsibilities include provider selection, OpenAI/local/Ollama-style adapters, caching, retries, and embedding response types. This is separate from `inference/` because embeddings are already a concrete ingestion feature, while local text generation is still a future boundary.
+Embedding providers and provider-level behavior. This includes provider selection, OpenAI/local/Ollama-style adapters, caching, retries, and embedding response types.
+
+This is separate from `inference/` because embeddings are already a concrete ingestion feature, while local text generation is still a future boundary.
 
 ### `metrics/`
 
-`metrics/` is observability. It tracks latency, lock timing, embedding metrics, and exposes the current scoring metric facade used by search. The distance math itself lives in `compute/`; telemetry and reporting live here.
+Observability. This layer tracks latency, lock timing, and embedding metrics. Distance math lives in `compute/`; telemetry and reporting live here.
 
 ### `config/`
 
-`config/` owns app and collection configuration. It covers execution mode, memory settings, search settings, WAL settings, storage settings, limits, cache config, and quantization config.
+Shared configuration. This covers app config, collection config, execution mode, memory settings, search settings, WAL settings, storage settings, limits, cache config, and quantization config.
 
 ### `quantization/`
 
-`quantization/` owns vector precision and compression logic. It stays independent because quantization can affect storage format, index traversal, reranking, export formats, and eventually inference memory.
+Vector precision and compression logic. This stays independent because quantization can affect storage format, index traversal, reranking, export formats, and eventually inference memory.
 
 ### `inference/`
 
-`inference/` is a scaffold boundary for future local inference. Future model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs should live here instead of leaking into `server/`, `services/`, or `collections/`.
+Scaffold boundary for future local inference. Model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs should live here when they land.
 
 ### `cluster/`
 
-`cluster/` is a scaffold boundary for future distributed systems work. Future membership, node capability discovery, shard ownership, replication, fan-out routing, and partial-result handling should live here.
+Scaffold boundary for future distributed systems work. Membership, node capability discovery, shard ownership, replication, fan-out routing, and partial-result handling should live here when they land.
 
 ### Cross-cutting modules
 
