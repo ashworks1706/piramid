@@ -14,6 +14,7 @@
 <p align="center">
   <a href="#overview">Overview</a> •
   <a href="#usage">Usage</a> •
+  <a href="docs/architecture.md">Architecture</a> •
   <a href="docs/setup.md">Setup</a> •
   <a href="https://piramiddb.com/blogs/contributions">Contributing</a>
 </p>
@@ -27,6 +28,39 @@ Piramid is an all-in-one single binary solution for scalable vector database and
 - WAL + checkpoints; mmap-backed storage with caches
 - Embeddings: OpenAI and local HTTP (Ollama/TEI-style), caching and retries
 - Limits and disk/memory guards; tracing + metrics/health endpoints
+
+### Architecture
+
+Piramid is organized as layered Rust modules so transport, orchestration, collection behavior, indexing, and persistence stay separate.
+
+```mermaid
+flowchart TD
+    Client[Client / SDK / CLI]
+    Server[server<br/>HTTP transport]
+    Services[services<br/>use-case orchestration]
+    Runtime[runtime<br/>shared state]
+    Collections[collections<br/>domain layer]
+    Search[search<br/>query execution]
+    Index[index<br/>ANN indexes]
+    Compute[compute<br/>distance kernels]
+    Cache[cache<br/>cache policy]
+    Storage[storage<br/>records, WAL, mmap]
+    Embeddings[embeddings<br/>providers]
+
+    Client --> Server --> Services
+    Services --> Runtime
+    Services --> Collections
+    Services --> Embeddings
+    Collections --> Search
+    Collections --> Index
+    Collections --> Cache
+    Collections --> Storage
+    Search --> Index
+    Search --> Compute
+    Index --> Compute
+```
+
+For the full codebase guide, see [docs/architecture.md](docs/architecture.md).
 
 https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
@@ -78,5 +112,4 @@ Health and metrics: `/healthz`, `/readyz`, `/api/metrics`.
 ## License
 
 [Apache 2.0 License](LICENSE)
-
 
