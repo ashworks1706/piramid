@@ -1,6 +1,8 @@
 use piramid::{
-    metadata, search::SearchParams, storage::collection::CollectionOpenOptions, CacheConfig,
-    Collection, CollectionConfig, Document, MemoryConfig, Metric,
+    collections::{compact, CollectionOpenOptions},
+    metadata,
+    search::SearchParams,
+    CacheConfig, Collection, CollectionConfig, Document, MemoryConfig, Metric,
 };
 use std::fs;
 
@@ -370,7 +372,7 @@ fn compaction_rewrites_live_records_through_temp_record_store() {
         .unwrap();
     storage.delete(&delete_id).unwrap();
 
-    let stats = piramid::storage::collection::compact(&mut storage).unwrap();
+    let stats = compact(&mut storage).unwrap();
 
     assert_eq!(stats.original_entries, 1);
     assert_eq!(stats.compacted_entries, 1);

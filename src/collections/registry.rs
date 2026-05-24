@@ -79,6 +79,10 @@ impl CollectionRegistry {
         self.collections.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.collections.is_empty()
+    }
+
     pub fn loaded_collections(&self) -> Vec<(String, CollectionHandle)> {
         self.collections
             .iter()

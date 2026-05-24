@@ -229,7 +229,7 @@ impl AppState {
                 "cache_budget_exceeded_evicting_metadata"
             );
 
-            collections.sort_by(|a, b| b.2.cmp(&a.2));
+            collections.sort_by_key(|collection| std::cmp::Reverse(collection.2));
             for (name, storage, metadata_bytes) in collections {
                 if total <= max_bytes || metadata_bytes == 0 {
                     break;

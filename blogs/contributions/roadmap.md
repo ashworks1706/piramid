@@ -4,15 +4,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 Piramid's north star is a consumer-hardware inference database: start as a reliable single-binary RAG database, it is making mutable database memory usable by transformer inference without copying every retrieved chunk into the prompt.
 
----
-
-### Target Architecture patch
-
-**Module Boundaries**
-
-- [ ] add `inference/` for model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs. scaffold exists; keep unchecked until real inference code lands behind it.
-- [ ] add `cluster/` for distributed membership, node capability discovery, shard ownership, replication policy, fan-out routing, and partial-result handling. scaffold exists; keep unchecked until real cluster code lands behind it.
-
 
 ---
 
