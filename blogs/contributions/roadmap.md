@@ -52,16 +52,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ---
 
-### Index Quality patch
-
-**Index Improvements (1.1.1)**
-
-- [ ] IVF uses random centroid initialisation (first K vectors) -- k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
-- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
-- [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
-
----
-
 ### Transformer Inference Patch
 
 **Introduce Transformer:**
@@ -104,6 +94,22 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] add citations/source-span tracking as a first-class response primitive; every answer path should be able to explain which records influenced it.
 - [ ] add RAG evals: retrieval recall, answer faithfulness, citation correctness, latency, memory, and cost per query.
 
+**Query Features (1.1.3)**
+
+- [ ] query result caching (LRU, TTL-based)
+- [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
+- [ ] add a query planner that can choose dense ANN, sparse/BM25, metadata prefilter, hybrid fusion, rerank, or flat scan based on selectivity and latency budget.
+- [ ] add result attribution metadata so downstream inference can trace each answer token/span back to retrieved records.
+
+**Search API Extensions (1.1.7)**
+
+- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
+- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
+- [ ] metadata-only search (no vector similarity)
+- [ ] recommendation API (similar to these IDs, not those)
+- [ ] add `/query` and `/chat`-oriented APIs that combine retrieval, reranking, context packing, citations, and optional local inference in one request.
+- [ ] add context-packing policies: max tokens, diversity, source caps, recency weighting, metadata constraints, and citation-preserving chunk joins.
+
 ---
 
 
@@ -122,13 +128,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] collection preloading on startup: optionally pre-open a configured list of collections rather than waiting for the first request
 - [ ] add sparse/BM25 indexes alongside dense vectors; vector-only retrieval is not strong enough for production RAG.
 
-**Query Features (1.1.3)**
-
-- [ ] query result caching (LRU, TTL-based)
-- [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
-- [ ] add a query planner that can choose dense ANN, sparse/BM25, metadata prefilter, hybrid fusion, rerank, or flat scan based on selectivity and latency budget.
-- [ ] add result attribution metadata so downstream inference can trace each answer token/span back to retrieved records.
-
 **Metadata Filters**
 
 - [ ] metadata indexing for fast pre-filtering
@@ -139,14 +138,12 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] vector count per metadata filter
 - [ ] complex boolean filters (AND/OR/NOT combinations)
 
-**Search API Extensions (1.1.7)**
+**Index Improvements (1.1.1)**
 
-- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
-- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
-- [ ] metadata-only search (no vector similarity)
-- [ ] recommendation API (similar to these IDs, not those)
-- [ ] add `/query` and `/chat`-oriented APIs that combine retrieval, reranking, context packing, citations, and optional local inference in one request.
-- [ ] add context-packing policies: max tokens, diversity, source caps, recency weighting, metadata constraints, and citation-preserving chunk joins.
+- [ ] IVF uses random centroid initialisation (first K vectors) -- k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
+- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
+- [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
+
 
 ---
 
