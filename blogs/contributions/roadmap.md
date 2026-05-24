@@ -18,9 +18,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ### Bug Fixes patch
 
-**Storage (1.0.1)**
-
-- [x] finding the next write offset scans every existing entry on every insert to find the maximum. this should just be a counter that increments as vectors are added.
 
 **IVF Index (1.0.2)**
 
