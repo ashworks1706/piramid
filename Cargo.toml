@@ -1,9 +1,32 @@
 [package]
 name = "piramid"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
-description = "Vector database for agentic applications."
+description = "All-in-one binary for distributed model inference, retrieval, and vector search."
 license = "Apache-2.0"
+repository = "https://github.com/ashworks1706/piramid"
+homepage = "https://piramiddb.com"
+documentation = "https://piramiddb.com"
+readme = "README.md"
+keywords = ["vector-database", "rag", "embeddings", "search", "inference"]
+categories = ["database-implementations", "command-line-utilities"]
+exclude = [
+    ".dockerignore",
+    ".github/",
+    ".githooks/",
+    "assets/blogs/",
+    "blogs/",
+    "dashboard/",
+    "docker-compose*.yml",
+    "Dockerfile",
+    "docs/",
+    "piramid.yaml",
+    "release-notes/",
+    "scripts/",
+    "sdk/",
+    "website/",
+    "Cargo.toml.orig",
+]
 default-run = "piramid"
 
 [lib]

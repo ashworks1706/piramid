@@ -17,6 +17,12 @@ RUN cargo build --release --bin piramid
 # Runtime
 FROM debian:bookworm-slim
 
+LABEL org.opencontainers.image.title="Piramid" \
+      org.opencontainers.image.description="All-in-one binary for distributed model inference, retrieval, and vector search." \
+      org.opencontainers.image.source="https://github.com/ashworks1706/piramid" \
+      org.opencontainers.image.url="https://piramiddb.com" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 WORKDIR /app
 
 # Install runtime dependencies
