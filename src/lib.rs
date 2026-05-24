@@ -2,12 +2,14 @@
 
 pub mod cache;
 pub mod cli;
+pub mod cluster;
 pub mod collections;
 pub mod compute;
 pub mod config;
 pub mod embeddings;
 pub mod error;
 pub mod index;
+pub mod inference;
 pub mod metadata;
 pub mod metrics;
 pub mod quantization;

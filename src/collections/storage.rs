@@ -3,12 +3,12 @@ use uuid::Uuid;
 
 use super::cache_maintenance;
 use super::persistence::PersistenceService;
-use super::record_store::RecordStore;
 use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::{HashMapVectorReader, VectorIndex, VectorReader};
 use crate::storage::metadata::CollectionMetadata;
 use crate::storage::persistence::{get_wal_path, save_vector_index, warm_file, EntryPointer};
+use crate::storage::record_store::RecordStore;
 
 pub struct Collection {
     pub(super) record_store: RecordStore,

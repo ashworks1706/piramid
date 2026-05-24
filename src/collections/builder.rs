@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::persistence::{load_wal_meta, PersistenceService};
-use super::record_store::RecordStore;
 use super::{storage::Collection, CollectionOpenOptions};
 use crate::cache::CacheManager;
 use crate::error::Result;
@@ -12,6 +11,7 @@ use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
 use crate::storage::metadata::CollectionMetadata;
 use crate::storage::persistence::{get_wal_path, load_index, load_metadata, load_vector_index};
+use crate::storage::record_store::RecordStore;
 use crate::storage::wal::{Wal, WalEntry};
 
 pub struct CollectionBuilder;

@@ -3,10 +3,10 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 
+use crate::collections::CollectionOpenOptions;
 use crate::config::AppConfig;
 use crate::error::{Result, ServerError};
 use crate::metrics::LatencyTracker;
-use crate::storage::collection::CollectionOpenOptions;
 use crate::Collection;
 
 pub type CollectionHandle = Arc<RwLock<Collection>>;

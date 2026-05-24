@@ -1,6 +1,7 @@
 use crate::metrics::Metric;
 use crate::search::Hit;
-use crate::storage::Collection;
+
+use super::Collection;
 
 pub fn search(
     collection: &Collection,

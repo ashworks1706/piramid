@@ -1,12 +1,12 @@
 // Collection CRUD operations.
 use uuid::Uuid;
 
-use super::record_store::RecordStore;
 use super::storage::Collection;
 use crate::error::{Result, ServerError};
 use crate::metadata::Metadata;
 use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
+use crate::storage::record_store::RecordStore;
 use crate::storage::wal::WalEntry;
 
 fn enforce_limits_single(storage: &Collection, entry_bytes: usize) -> Result<()> {

@@ -199,7 +199,7 @@ pub fn find_duplicates(
         Some("dot") | Some("dot_product") => Metric::DotProduct,
         _ => Metric::Cosine,
     };
-    let hits = crate::storage::collection::find_duplicates(
+    let hits = crate::collections::find_duplicates(
         &storage,
         metric,
         req.threshold,
@@ -227,7 +227,7 @@ pub fn compact_collection(state: &SharedState, collection: String) -> Result<Reb
     let storage_ref = state.get_existing_collection(&collection)?;
     let mut storage = storage_ref.write();
     let start = Instant::now();
-    let stats = crate::storage::collection::compact(&mut storage)?;
+    let stats = crate::collections::compact(&mut storage)?;
     let duration = start.elapsed();
     tracing::info!(
         collection=%collection,

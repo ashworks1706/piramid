@@ -1,10 +1,10 @@
 // Unified search engine for collections.
 // Wraps vector index search + scoring and optional metadata filtering.
 
+use crate::collections::Collection;
 use crate::config::ExecutionMode;
 use crate::metrics::Metric;
 use crate::search::{query::Filter, utils::sort_and_truncate, Hit};
-use crate::storage::Collection;
 use std::collections::HashMap;
 use uuid::Uuid;
 
