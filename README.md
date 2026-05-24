@@ -23,12 +23,6 @@
 
 Piramid is an all-in-one single binary solution for scalable vector database and transformer inference tuned for low-latency agentic workloads written in Rust. It's core goal is to cut traditional two-roundtrip latency to one by serving agents and knowledge on one platform.
 
-- Single binary (`piramid`) with CLI + server
-- Search engines: HNSW, IVF, flat; filters and metadata
-- WAL + checkpoints; mmap-backed storage with caches
-- Embeddings: OpenAI and local HTTP (Ollama/TEI-style), caching and retries
-- Limits and disk/memory guards; tracing + metrics/health endpoints
-
 https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
 ### Architecture
