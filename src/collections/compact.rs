@@ -2,7 +2,7 @@
 //  takes a mutable reference to a `Collection` and performs compaction by creating a new temporary file, copying live documents to it, rebuilding the index and vector index, and then replacing the original file with the compacted version.
 use std::collections::HashMap;
 
-use super::storage::Collection;
+use super::collection::Collection;
 use crate::error::Result;
 use crate::index::HashMapVectorReader;
 use crate::storage::document::Document;

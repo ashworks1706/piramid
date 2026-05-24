@@ -1,18 +1,18 @@
 mod builder;
 mod cache_maintenance;
+mod checkpoint;
+mod collection;
 mod compact;
 mod dup;
 mod operations;
-mod persistence;
 pub mod registry;
 mod search;
-mod storage;
 
 pub use builder::CollectionBuilder;
+pub use collection::Collection;
 pub use compact::{compact, CompactStats};
 pub use dup::{find_duplicates, DuplicateHit};
 pub use registry::{CollectionHandle, CollectionRegistry};
-pub use storage::Collection;
 
 #[derive(Clone, Default)]
 pub struct CollectionOpenOptions {
@@ -93,10 +93,10 @@ impl Collection {
     }
 
     pub fn checkpoint(&mut self) -> Result<()> {
-        persistence::checkpoint(self)
+        checkpoint::checkpoint(self)
     }
 
     pub fn flush(&mut self) -> Result<()> {
-        persistence::flush(self)
+        checkpoint::flush(self)
     }
 }

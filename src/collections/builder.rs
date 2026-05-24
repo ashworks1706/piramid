@@ -2,8 +2,9 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use super::persistence::{load_wal_meta, PersistenceService};
-use super::{storage::Collection, CollectionOpenOptions};
+use super::checkpoint::{load_wal_meta, PersistenceService};
+use super::collection::Collection;
+use super::CollectionOpenOptions;
 use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::HashMapVectorReader;
@@ -101,7 +102,7 @@ impl CollectionBuilder {
             temp_storage.rebuild_vector_cache();
 
             // Checkpoint the collection to persist the changes from the WAL replay, which will also clear the WAL
-            super::persistence::checkpoint(&mut temp_storage)?;
+            super::checkpoint::checkpoint(&mut temp_storage)?;
 
             // After checkpointing, we can use the updated collection as our main collection instance
             return Ok(temp_storage);

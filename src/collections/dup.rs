@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use uuid::Uuid;
 
-use super::storage::Collection;
+use super::collection::Collection;
 use crate::error::Result;
 use crate::metrics::Metric;
 

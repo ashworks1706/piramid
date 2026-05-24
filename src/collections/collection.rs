@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::cache_maintenance;
-use super::persistence::PersistenceService;
+use super::checkpoint::PersistenceService;
 use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::{HashMapVectorReader, VectorIndex, VectorReader};
@@ -49,7 +49,7 @@ impl Collection {
         };
 
         if self.persistence.should_checkpoint(&self.config.wal) || interval_due {
-            super::persistence::checkpoint(self)?;
+            super::checkpoint::checkpoint(self)?;
             self.persistence.reset_counter();
         }
         Ok(())

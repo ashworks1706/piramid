@@ -1,7 +1,7 @@
 use crate::cache::CacheManager;
 
+use super::collection::Collection;
 use super::operations;
-use super::storage::Collection;
 
 pub fn rebuild(collection: &mut Collection) {
     let mut cache = CacheManager::new(collection.config.cache);

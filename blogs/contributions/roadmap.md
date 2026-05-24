@@ -7,6 +7,26 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 
 ---
 
+### Target Architecture patch
+
+**Module Boundaries**
+
+- [x] keep `storage/` focused on record store, WAL, mmap, persistence formats, checksums, recovery, and file growth.
+- [x] keep `index/` focused on vector index implementations, index configs, index persistence, and index-specific query knobs.
+- [x] add `compute/` or `kernels/` for CPU/GPU distance kernels, backend dispatch, batching, SIMD/JIT/GPU implementations, and benchmark gates.
+- [x] add `cache/` for shared cache policy, memory budgeting, eviction strategy, query/result caches, embedding cache, and future KV-cache accounting.
+- [ ] add `inference/` for model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs. scaffold exists; keep unchecked until real inference code lands behind it.
+- [ ] add `cluster/` for distributed membership, node capability discovery, shard ownership, replication policy, fan-out routing, and partial-result handling. scaffold exists; keep unchecked until real cluster code lands behind it.
+
+**Organization Cleanup**
+
+- [x] rename `src/collections/storage.rs` to `src/collections/collection.rs` because it defines the collection domain object, not storage.
+- [x] split `src/collections/operations.rs` into clearer read/write/metadata modules once the current boundary refactor is stable.
+- [x] rename collection-level persistence orchestration to `src/collections/checkpoint.rs`; keep low-level file-format work in `storage/`.
+- [x] keep compatibility reexports under `storage::collection` temporarily, but use `collections::*` internally.
+
+---
+
 ### Bug Fixes patch
 
 

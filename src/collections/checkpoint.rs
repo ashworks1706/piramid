@@ -1,6 +1,6 @@
 // This module defines the persistence service for the collection, which is responsible for managing the write-ahead log (WAL) and performing checkpoints to save the state of the collection to disk.
 
-use super::storage::Collection;
+use super::collection::Collection;
 use crate::error::Result;
 use crate::storage::persistence::{
     save_index as save_idx, save_metadata as save_meta, save_vector_index as save_vec_idx,
