@@ -46,9 +46,6 @@ impl CheckpointManager {
     }
 }
 
-#[deprecated(note = "use CheckpointManager")]
-pub type PersistenceService = CheckpointManager;
-
 pub fn save_index(storage: &Collection) -> Result<()> {
     save_idx(&storage.path, &storage.index)
 }

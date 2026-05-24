@@ -107,6 +107,3 @@ impl CollectionManager {
         }
     }
 }
-
-#[deprecated(note = "use CollectionManager")]
-pub type CollectionRegistry = CollectionManager;

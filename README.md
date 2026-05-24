@@ -29,6 +29,8 @@ Piramid is an all-in-one single binary solution for scalable vector database and
 - Embeddings: OpenAI and local HTTP (Ollama/TEI-style), caching and retries
 - Limits and disk/memory guards; tracing + metrics/health endpoints
 
+https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
+
 ### Architecture
 
 Piramid is organized as layered Rust modules so transport, orchestration, collection behavior, indexing, and persistence stay separate.
@@ -61,8 +63,6 @@ flowchart TD
 ```
 
 For the full codebase guide, see [docs/architecture.md](docs/architecture.md).
-
-https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
 ## Get Started
 

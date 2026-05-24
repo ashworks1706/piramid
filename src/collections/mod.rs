@@ -4,20 +4,16 @@ mod checkpoint;
 mod collection;
 mod compact;
 mod dup;
+mod manager;
 mod operations;
-pub mod registry;
 mod search;
 
 pub use builder::CollectionBuilder;
 pub use checkpoint::CheckpointManager;
-#[allow(deprecated)]
-pub use checkpoint::PersistenceService;
 pub use collection::Collection;
 pub use compact::{compact, CompactStats};
 pub use dup::{find_duplicates, DuplicateHit};
-#[allow(deprecated)]
-pub use registry::CollectionRegistry;
-pub use registry::{CollectionHandle, CollectionManager};
+pub use manager::{CollectionHandle, CollectionManager};
 
 #[derive(Clone, Default)]
 pub struct CollectionOpenOptions {
