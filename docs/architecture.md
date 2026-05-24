@@ -1,11 +1,10 @@
 # Architecture Guide
 
 This guide explains how the Piramid codebase is organized and how the main runtime paths fit together.
-It is intentionally written at the system-boundary level. Function names and file placement can change, but these boundaries should stay stable unless the architecture itself changes.
 
 ## Big Picture
 
-Piramid is a single-binary inference database. The current system is centered around vector storage, retrieval, metadata filtering, embedding ingestion, durability, and HTTP APIs. The longer-term direction is to make the same database memory usable by local inference and small trusted clusters without turning the server into a pile of unrelated subsystems.
+The current system is centered around vector storage, retrieval, metadata filtering, embedding ingestion, durability, and HTTP APIs. The longer-term direction is to make the same database memory usable by local inference and small trusted clusters without turning the server into a pile of unrelated subsystems.
 
 The crate is organized around layers:
 
@@ -41,7 +40,7 @@ flowchart TD
     Runtime --> Metrics
 ```
 
-The rule of thumb is simple: HTTP stays in `server/`, orchestration stays in `services/`, domain behavior stays in `collections/`, and persistence details stay in `storage/`.
+HTTP stays in `server/`, orchestration stays in `services/`, domain behavior stays in `collections/`, and persistence details stay in `storage/`.
 
 ## Directory Map
 
@@ -53,12 +52,7 @@ Handlers should stay thin. Their job is to extract request data, call the matchi
 
 ### `services/`
 
-`services/` is the application layer. It coordinates user-facing operations such as:
-
-- collection lifecycle operations
-- vector insert, update, delete, and search operations
-- embedding requests
-- admin, metrics, health, and readiness logic
+`services/` is the application layer. It coordinates user-facing operations such as collection lifecycle operations, vector insert, update, delete, and search operations, embedding requests, admin, metrics, health, and readiness logic.
 
 Services know about runtime state and domain objects. They should not know about low-level file formats or mmap implementation details.
 
@@ -88,22 +82,13 @@ This layer is allowed to orchestrate storage, index, cache, and search together 
 
 ### `storage/`
 
-`storage/` is the low-level persistence layer.
-
-It owns:
-
-- `RecordStore`
-- document serialization boundaries
-- collection metadata sidecars
-- WAL files and WAL entries
-- mmap/file growth helpers
-- index and vector-index persistence helpers
+`storage/` is the low-level persistence layer. It owns `RecordStore`, document serialization boundaries, collection metadata sidecars, WAL files and WAL entries, mmap/file growth helpers, index and vector-index persistence helpers
 
 Storage should not decide API behavior, search semantics, or collection lifecycle policy. It should provide safe persistence primitives for the domain layer to use.
 
 ### `index/`
 
-`index/` owns vector index implementations and index abstractions.
+`index/` owns vector index implementations and index abstractions. The key interfaces are `VectorIndex` and `VectorReader`. Index implementations should focus on graph/list/index traversal and index-specific persistence stats. They should not own collection storage or HTTP behavior.
 
 Current index families include:
 
@@ -111,75 +96,45 @@ Current index families include:
 - HNSW
 - IVF
 
-The key interfaces are `VectorIndex` and `VectorReader`. Index implementations should focus on graph/list/index traversal and index-specific persistence stats. They should not own collection storage or HTTP behavior.
+
 
 ### `compute/`
 
-`compute/` owns distance and similarity kernels.
-
-Current kernels cover cosine, dot product, and Euclidean distance, with scalar, SIMD, parallel, binary, and JIT-style variants where available.
-
-This layer exists because distance math is shared by indexes, search, clustering, quantization experiments, and future GPU backends.
+`compute/` owns distance and similarity kernels. Current kernels cover cosine, dot product, and Euclidean distance, with scalar, SIMD, parallel, binary, and JIT-style variants where available. This layer exists because distance math is shared by indexes, search, clustering, quantization experiments, and future GPU backends.
 
 ### `cache/`
 
-`cache/` owns cache state and cache policy.
-
-The main type is `CacheManager`, which currently manages vector and metadata caches and implements `VectorReader` for index/search paths.
+`cache/` owns cache state and cache policy. The main type is `CacheManager`, which currently manages vector and metadata caches and implements `VectorReader` for index/search paths. 
 
 Over time, this boundary is the right place for cache budgeting, eviction policy, query-result caches, embedding-cache coordination, and future KV-cache accounting.
 
 ### `search/`
 
-`search/` owns query execution behavior.
-
-It handles:
-
-- filter evaluation
-- score calculation
-- sorting and truncation
-- batch search helpers
-- search request parameters and query types
-
-Search can call indexes and compute kernels, but should not own persistence or collection lifecycle behavior.
+`search/` owns query execution behavior. Search can call indexes and compute kernels, but should not own persistence or collection lifecycle behavior. It handles filter evaluation, score calculation, sorting and truncation, batch search helpers, search request parameters and query types.
 
 ### `embeddings/`
 
-`embeddings/` owns embedding providers and provider-level behavior.
-
-Current responsibilities include provider selection, OpenAI/local/Ollama-style adapters, caching, retries, and embedding response types.
-
-This is separate from `inference/` because embeddings are already a concrete ingestion feature, while local text generation is still a future boundary.
+`embeddings/` owns embedding providers and provider-level behavior. Current responsibilities include provider selection, OpenAI/local/Ollama-style adapters, caching, retries, and embedding response types. This is separate from `inference/` because embeddings are already a concrete ingestion feature, while local text generation is still a future boundary.
 
 ### `metrics/`
 
-`metrics/` is observability.
-
-It tracks latency, lock timing, embedding metrics, and exposes the current scoring metric facade used by search. The distance math itself lives in `compute/`; telemetry and reporting live here.
+`metrics/` is observability. It tracks latency, lock timing, embedding metrics, and exposes the current scoring metric facade used by search. The distance math itself lives in `compute/`; telemetry and reporting live here.
 
 ### `config/`
 
-`config/` owns app and collection configuration.
-
-It covers execution mode, memory settings, search settings, WAL settings, storage settings, limits, cache config, and quantization config.
+`config/` owns app and collection configuration. It covers execution mode, memory settings, search settings, WAL settings, storage settings, limits, cache config, and quantization config.
 
 ### `quantization/`
 
-`quantization/` owns vector precision and compression logic.
-
-It stays independent because quantization can affect storage format, index traversal, reranking, export formats, and eventually inference memory.
+`quantization/` owns vector precision and compression logic. It stays independent because quantization can affect storage format, index traversal, reranking, export formats, and eventually inference memory.
 
 ### `inference/`
 
-`inference/` is a scaffold boundary for future local inference.
-
-Future model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs should live here instead of leaking into `server/`, `services/`, or `collections/`.
+`inference/` is a scaffold boundary for future local inference. Future model placement, local inference adapters, batching, streaming, KV-cache ownership, and OpenAI-compatible inference APIs should live here instead of leaking into `server/`, `services/`, or `collections/`.
 
 ### `cluster/`
 
-`cluster/` is a scaffold boundary for future distributed systems work.
-
-Future membership, node capability discovery, shard ownership, replication, fan-out routing, and partial-result handling should live here.
+`cluster/` is a scaffold boundary for future distributed systems work. Future membership, node capability discovery, shard ownership, replication, fan-out routing, and partial-result handling should live here.
 
 ### Cross-cutting modules
 
@@ -229,7 +184,7 @@ The main design goal is to keep conversion boundaries explicit:
 
 ## Write Path
 
-Vector writes go through the collection domain layer.
+Vector writes go through the collection domain layer. At a high level, the source of truth is the record store plus persistence sidecars. The cache and vector index are acceleration structures that must remain rebuildable from stored records.
 
 ```mermaid
 flowchart TD
@@ -246,11 +201,11 @@ flowchart TD
     A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
-At a high level, the source of truth is the record store plus persistence sidecars. The cache and vector index are acceleration structures that must remain rebuildable from stored records.
 
 ## Search Path
 
-Search combines collection configuration, index traversal, compute kernels, and optional filtering.
+Search combines collection configuration, index traversal, compute kernels, and optional filtering. `VectorReader` is the important boundary here. Indexes should not require ownership of a collection's internal vector map. They should ask for vectors through the reader interface so the backing source can evolve from cache-backed reads to mmap-backed or quantized readers later.
+
 
 ```mermaid
 flowchart TD
@@ -266,11 +221,11 @@ flowchart TD
     A --> B --> C --> D --> E --> F --> G --> H
 ```
 
-`VectorReader` is the important boundary here. Indexes should not require ownership of a collection's internal vector map. They should ask for vectors through the reader interface so the backing source can evolve from cache-backed reads to mmap-backed or quantized readers later.
 
 ## Durability and Recovery
 
-Piramid uses WAL plus checkpoints.
+Piramid uses WAL plus checkpoints. `CheckpointManager` owns collection-level checkpoint bookkeeping and WAL rotation. Low-level file serialization helpers remain in `storage/`. On open, the collection builder loads existing sidecars, opens the record store, initializes the WAL, and replays entries when needed. After replay, the collection can checkpoint to persist the recovered state.
+
 
 ```mermaid
 flowchart LR
@@ -288,9 +243,6 @@ flowchart LR
     Replay --> Record
 ```
 
-`CheckpointManager` owns collection-level checkpoint bookkeeping and WAL rotation. Low-level file serialization helpers remain in `storage/`.
-
-On open, the collection builder loads existing sidecars, opens the record store, initializes the WAL, and replays entries when needed. After replay, the collection can checkpoint to persist the recovered state.
 
 ## Manager Types
 
@@ -300,16 +252,9 @@ The codebase uses manager naming where a type owns lifecycle or policy for anoth
 - `CollectionManager` owns loaded collection handles and collection opening.
 - `CheckpointManager` owns WAL/checkpoint bookkeeping for a collection.
 
-Older names may exist as deprecated compatibility aliases, but new internal code should use the manager names.
-
 ## Future Boundaries
 
-Two boundaries exist before full implementations:
-
-- `inference/`
-- `cluster/`
-
-These should stay empty or minimal until there is real code to move into them. When those systems land, they should integrate through services and runtime state rather than bypassing the existing layers.
+Two boundaries exist before full implementations: `inference/`, `cluster/`. These should stay empty or minimal until there is real code to move into them. When those systems land, they should integrate through services and runtime state rather than bypassing the existing layers.
 
 Expected direction:
 
