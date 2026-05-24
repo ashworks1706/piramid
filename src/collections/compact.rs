@@ -53,7 +53,7 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     save_vector_index(&collection.path, collection.vector_index())?;
     save_metadata(&collection.path, &collection.metadata)?;
     // Rotate WAL to drop old entries after compaction
-    let _ = collection.persistence.wal.rotate();
+    let _ = collection.checkpoint.wal.rotate();
 
     Ok(CompactStats {
         original_entries,

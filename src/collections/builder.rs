@@ -2,7 +2,7 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use super::checkpoint::{load_wal_meta, PersistenceService};
+use super::checkpoint::{load_wal_meta, CheckpointManager};
 use super::collection::Collection;
 use super::CollectionOpenOptions;
 use crate::cache::CacheManager;
@@ -63,19 +63,18 @@ impl CollectionBuilder {
 
         let wal_path = get_wal_path(path);
 
-        // Initialize WAL and persistence service
+        // Initialize WAL and checkpoint manager
         let wal = if config.wal.enabled {
             Wal::new(wal_path.into(), next_seq)?
         } else {
             Wal::disabled(wal_path.into(), next_seq)?
         };
 
-        // Create persistence service which will handle WAL replay and checkpointing
-        let persistence = PersistenceService::new(wal);
+        let checkpoint = CheckpointManager::new(wal);
 
         // If WAL is enabled, replay entries from the WAL starting from the minimum sequence number
         let wal_entries = if config.wal.enabled {
-            persistence.wal.replay(min_seq)?
+            checkpoint.wal.replay(min_seq)?
         } else {
             Vec::new()
         };
@@ -92,7 +91,7 @@ impl CollectionBuilder {
                 config: config.clone(),
                 metadata,
                 path: path.to_string(),
-                persistence,
+                checkpoint,
             };
 
             // Replay WAL entries to bring the collection up to date
@@ -122,7 +121,7 @@ impl CollectionBuilder {
             config,
             metadata,
             path: path.to_string(),
-            persistence,
+            checkpoint,
         };
 
         collection.rebuild_vector_cache();

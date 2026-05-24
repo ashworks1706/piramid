@@ -1,4 +1,4 @@
-// This module defines the persistence service for the collection, which is responsible for managing the write-ahead log (WAL) and performing checkpoints to save the state of the collection to disk.
+// Collection checkpoint manager. Owns WAL state and collection-level checkpoint bookkeeping.
 
 use super::collection::Collection;
 use crate::error::Result;
@@ -9,13 +9,13 @@ use crate::storage::wal::Wal;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
-pub struct PersistenceService {
+pub struct CheckpointManager {
     pub wal: Wal, // The write-ahead log instance for managing durability and recovery
     operation_count: usize, // Counter for the number of operations since the last checkpoint
     last_checkpoint_ts: Option<u64>, // Timestamp of the last checkpoint for recovery purposes
 }
 
-impl PersistenceService {
+impl CheckpointManager {
     pub fn new(wal: Wal) -> Self {
         Self {
             wal,
@@ -45,6 +45,9 @@ impl PersistenceService {
         self.last_checkpoint_ts
     }
 }
+
+#[deprecated(note = "use CheckpointManager")]
+pub type PersistenceService = CheckpointManager;
 
 pub fn save_index(storage: &Collection) -> Result<()> {
     save_idx(&storage.path, &storage.index)
@@ -105,11 +108,11 @@ pub fn checkpoint(storage: &mut Collection) -> Result<()> {
 
     // If WAL is enabled in the configuration, checkpoint the WAL to ensure flushing any buffered entries and rotating the log file if it exceeds the configured size or if a checkpoint is triggered based on the operation count.
     if storage.config.wal.enabled {
-        storage.persistence.wal.checkpoint(timestamp)?;
-        storage.persistence.record_checkpoint(timestamp);
-        let last_seq = storage.persistence.wal.next_seq.saturating_sub(1);
+        storage.checkpoint.wal.checkpoint(timestamp)?;
+        storage.checkpoint.record_checkpoint(timestamp);
+        let last_seq = storage.checkpoint.wal.next_seq.saturating_sub(1);
         save_wal_meta(&storage.path, last_seq)?;
-        storage.persistence.wal.rotate()?;
+        storage.checkpoint.wal.rotate()?;
     }
 
     Ok(())
@@ -117,6 +120,6 @@ pub fn checkpoint(storage: &mut Collection) -> Result<()> {
 
 pub fn flush(storage: &mut Collection) -> Result<()> {
     // If WAL is enabled, we need to flush any pending entries to disk to ensure durability.
-    storage.persistence.wal.flush()?;
+    storage.checkpoint.wal.flush()?;
     Ok(())
 }

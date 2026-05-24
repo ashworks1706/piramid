@@ -59,7 +59,7 @@ async fn read_endpoints_do_not_create_missing_collections() {
         .await,
     );
 
-    assert_eq!(state.registry.len(), 0);
+    assert_eq!(state.collection_manager.len(), 0);
     assert!(!std::path::Path::new(&format!("{data_dir}/missing.db")).exists());
 
     cleanup_dir(data_dir);
@@ -72,7 +72,7 @@ async fn cache_budget_evicts_metadata_without_dropping_vectors() {
     app_config.cache.max_bytes = Some(1);
     let state = test_state_with_config(data_dir, app_config);
     let collection = state
-        .registry
+        .collection_manager
         .get_or_create("docs")
         .expect("create collection");
 
@@ -134,7 +134,7 @@ async fn insert_endpoint_creates_collection_intentionally() {
         InsertResultsResponse::Multi(_) => panic!("expected single insert response"),
     }
 
-    assert_eq!(state.registry.len(), 1);
+    assert_eq!(state.collection_manager.len(), 1);
     assert!(std::path::Path::new(&format!("{data_dir}/docs.db")).exists());
 
     cleanup_dir(data_dir);
@@ -161,7 +161,7 @@ async fn read_endpoint_loads_existing_collection_from_disk() {
 
     assert_eq!(response.0.name, "docs");
     assert_eq!(response.0.count, 1);
-    assert_eq!(state.registry.len(), 1);
+    assert_eq!(state.collection_manager.len(), 1);
 
     cleanup_dir(data_dir);
 }

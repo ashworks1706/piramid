@@ -7,7 +7,7 @@ use std::sync::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::collections::{CollectionHandle, CollectionRegistry};
+use crate::collections::{CollectionHandle, CollectionManager};
 use crate::config::AppConfig;
 use crate::embeddings::Embedder;
 use crate::error::{Result, ServerError};
@@ -34,7 +34,7 @@ pub struct RebuildJobStatus {
 // DashMap allows concurrent access to different collections without blocking.
 // Holds config + optional embedder so handlers can access without reloading.
 pub struct AppState {
-    pub registry: CollectionRegistry,
+    pub collection_manager: CollectionManager,
     pub data_dir: String, // Base directory for collection files, e.g. "./data"
     pub embedder: Option<Arc<dyn Embedder>>, // Optional embedder, if configured. Wrapped in Arc for shared ownership.
     pub shutting_down: Arc<AtomicBool>, // Flag to indicate server is shutting down, used to reject new requests gracefully
@@ -60,7 +60,7 @@ impl AppState {
         let app_config = Arc::new(RwLock::new(app_config));
 
         Self {
-            registry: CollectionRegistry::new(data_dir.to_string(), app_config.clone()),
+            collection_manager: CollectionManager::new(data_dir.to_string(), app_config.clone()),
             data_dir: data_dir.to_string(),
             embedder: None,
             shutting_down: Arc::new(AtomicBool::new(false)),
@@ -93,7 +93,7 @@ impl AppState {
         let app_config = Arc::new(RwLock::new(app_config));
 
         Self {
-            registry: CollectionRegistry::new(data_dir.to_string(), app_config.clone()),
+            collection_manager: CollectionManager::new(data_dir.to_string(), app_config.clone()),
             data_dir: data_dir.to_string(),
             embedder: Some(embedder),
             shutting_down: Arc::new(AtomicBool::new(false)),
@@ -117,7 +117,7 @@ impl AppState {
         if self.shutting_down.load(Ordering::Relaxed) {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
-        self.registry.get_existing(name)
+        self.collection_manager.get_existing(name)
     }
 
     // Lazily load or create a collection
@@ -125,11 +125,11 @@ impl AppState {
         if self.shutting_down.load(Ordering::Relaxed) {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
         }
-        self.registry.get_or_create(name)
+        self.collection_manager.get_or_create(name)
     }
 
     pub fn checkpoint_all(&self) -> Result<()> {
-        for (_, storage) in self.registry.loaded_collections() {
+        for (_, storage) in self.collection_manager.loaded_collections() {
             let mut storage_guard = storage.write();
             storage_guard.checkpoint()?;
             storage_guard.flush()?;
@@ -214,7 +214,7 @@ impl AppState {
         };
         let mut total: u64 = 0;
         let mut collections = Vec::new();
-        for (name, storage) in self.registry.loaded_collections() {
+        for (name, storage) in self.collection_manager.loaded_collections() {
             let guard = storage.read();
             let cache_bytes = guard.cache_usage_bytes();
             let metadata_bytes = guard.metadata_cache_usage_bytes();

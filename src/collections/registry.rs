@@ -11,14 +11,14 @@ use crate::Collection;
 
 pub type CollectionHandle = Arc<RwLock<Collection>>;
 
-pub struct CollectionRegistry {
+pub struct CollectionManager {
     collections: DashMap<String, CollectionHandle>,
     latency_trackers: DashMap<String, LatencyTracker>,
     data_dir: String,
     app_config: Arc<RwLock<AppConfig>>,
 }
 
-impl CollectionRegistry {
+impl CollectionManager {
     pub fn new(data_dir: String, app_config: Arc<RwLock<AppConfig>>) -> Self {
         Self {
             collections: DashMap::new(),
@@ -107,3 +107,6 @@ impl CollectionRegistry {
         }
     }
 }
+
+#[deprecated(note = "use CollectionManager")]
+pub type CollectionRegistry = CollectionManager;

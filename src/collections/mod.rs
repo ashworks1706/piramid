@@ -9,10 +9,15 @@ pub mod registry;
 mod search;
 
 pub use builder::CollectionBuilder;
+pub use checkpoint::CheckpointManager;
+#[allow(deprecated)]
+pub use checkpoint::PersistenceService;
 pub use collection::Collection;
 pub use compact::{compact, CompactStats};
 pub use dup::{find_duplicates, DuplicateHit};
-pub use registry::{CollectionHandle, CollectionRegistry};
+#[allow(deprecated)]
+pub use registry::CollectionRegistry;
+pub use registry::{CollectionHandle, CollectionManager};
 
 #[derive(Clone, Default)]
 pub struct CollectionOpenOptions {

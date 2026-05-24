@@ -32,10 +32,13 @@ pub fn list_collections(state: &SharedState) -> Result<CollectionsResponse> {
     ensure_available(state)?;
 
     let mut collections = Vec::new();
-    for (name, storage_ref) in state.registry.loaded_collections() {
+    for (name, storage_ref) in state.collection_manager.loaded_collections() {
         let lock_start = Instant::now();
         let storage = storage_ref.read();
-        record_lock_read(state.registry.tracker(&name).as_deref(), lock_start);
+        record_lock_read(
+            state.collection_manager.tracker(&name).as_deref(),
+            lock_start,
+        );
         collections.push(collection_info(name, &storage));
     }
 
@@ -52,7 +55,10 @@ pub fn create_collection(
     let storage_ref = state.get_or_create_collection(&req.name)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&req.name).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&req.name).as_deref(),
+        lock_start,
+    );
     Ok(collection_info(req.name, &storage))
 }
 
@@ -62,14 +68,17 @@ pub fn get_collection(state: &SharedState, collection: String) -> Result<Collect
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
     Ok(collection_info(collection, &storage))
 }
 
 pub fn delete_collection(state: &SharedState, collection: String) -> Result<DeleteResponse> {
     ensure_available(state)?;
 
-    let existed = state.registry.remove(&collection).is_some();
+    let existed = state.collection_manager.remove(&collection).is_some();
     if existed {
         let path = format!("{}/{}.db", state.data_dir, collection);
         std::fs::remove_file(&path).ok();
@@ -87,7 +96,10 @@ pub fn collection_count(state: &SharedState, collection: String) -> Result<Count
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     Ok(CountResponse {
         count: storage.count(),
@@ -100,7 +112,10 @@ pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStats
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let stats = storage.vector_index().stats();
     Ok(IndexStatsResponse {
@@ -192,7 +207,10 @@ pub fn find_duplicates(
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let metric = match req.metric.as_deref() {
         Some("euclidean") => Metric::Euclidean,

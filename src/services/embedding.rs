@@ -45,7 +45,10 @@ pub async fn embed_text(
 
             let lock_start = Instant::now();
             let mut storage = storage_ref.write();
-            record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
+            record_lock_write(
+                state.collection_manager.tracker(&collection).as_deref(),
+                lock_start,
+            );
 
             let entry = Document::with_metadata(
                 response.embedding.clone(),
@@ -97,7 +100,10 @@ pub async fn embed_text(
 
             let lock_start = Instant::now();
             let mut storage = storage_ref.write();
-            record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
+            record_lock_write(
+                state.collection_manager.tracker(&collection).as_deref(),
+                lock_start,
+            );
 
             let insert_ids = storage.insert_batch(entries)?;
             ids.extend(insert_ids.into_iter().map(|id| id.to_string()));
@@ -163,7 +169,10 @@ pub async fn search_by_text(
 
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let start = Instant::now();
     let results = storage.search(
@@ -186,7 +195,7 @@ pub async fn search_by_text(
             "slow_text_search"
         );
     }
-    if let Some(tracker) = state.registry.tracker(&collection) {
+    if let Some(tracker) = state.collection_manager.tracker(&collection) {
         tracker.record_search(duration);
     }
 

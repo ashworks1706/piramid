@@ -54,7 +54,7 @@ pub fn insert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
         metadata: entry.metadata.clone(),
         seq: 0,
     };
-    storage.persistence.wal.log(&mut wal_entry)?;
+    storage.checkpoint.wal.log(&mut wal_entry)?;
 
     let id = insert_internal(storage, entry)?;
     storage.track_operation()?;
@@ -73,7 +73,7 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
             metadata: entry.metadata.clone(),
             seq: 0,
         };
-        storage.persistence.wal.log(&mut wal_entry)?;
+        storage.checkpoint.wal.log(&mut wal_entry)?;
     }
 
     let mut serialized: Vec<(Uuid, Vec<u8>)> = Vec::with_capacity(entries.len());
@@ -130,7 +130,7 @@ pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
             metadata: entry.metadata.clone(),
             seq: 0,
         };
-        storage.persistence.wal.log(&mut wal_entry)?;
+        storage.checkpoint.wal.log(&mut wal_entry)?;
 
         delete_internal(storage, &id);
         insert_internal(storage, entry)?;
@@ -145,7 +145,7 @@ pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
 pub fn delete(storage: &mut Collection, id: &Uuid) -> Result<bool> {
     if storage.index.contains_key(id) {
         let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
-        storage.persistence.wal.log(&mut wal_entry)?;
+        storage.checkpoint.wal.log(&mut wal_entry)?;
 
         delete_internal(storage, id);
         storage.track_operation()?;
@@ -161,7 +161,7 @@ pub fn delete_batch(storage: &mut Collection, ids: &[Uuid]) -> Result<usize> {
     for id in ids {
         if storage.index.contains_key(id) {
             let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
-            storage.persistence.wal.log(&mut wal_entry)?;
+            storage.checkpoint.wal.log(&mut wal_entry)?;
         }
     }
 

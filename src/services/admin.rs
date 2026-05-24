@@ -57,18 +57,21 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
     let mut wal_stats = Vec::new();
     let mut total_vectors = 0;
 
-    for (collection_name, storage_ref) in state.registry.loaded_collections() {
+    for (collection_name, storage_ref) in state.collection_manager.loaded_collections() {
         let lock_start = std::time::Instant::now();
         let storage = storage_ref.read();
         record_lock_read(
-            state.registry.tracker(&collection_name).as_deref(),
+            state
+                .collection_manager
+                .tracker(&collection_name)
+                .as_deref(),
             lock_start,
         );
         let count = storage.count();
         let index_type = storage.vector_index().index_type().to_string();
         let memory_usage_bytes = storage.memory_usage_bytes();
         let (insert_latency_ms, search_latency_ms, lock_read_ms, lock_write_ms) =
-            if let Some(tracker) = state.registry.tracker(&collection_name) {
+            if let Some(tracker) = state.collection_manager.tracker(&collection_name) {
                 (
                     tracker.avg_insert_latency_ms(),
                     tracker.avg_search_latency_ms(),
@@ -112,13 +115,13 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
         let wal_size = std::fs::metadata(format!("{}.wal.db", storage.path))
             .map(|metadata| metadata.len())
             .ok();
-        let checkpoint_age_secs = storage.persistence.last_checkpoint().and_then(|timestamp| {
+        let checkpoint_age_secs = storage.checkpoint.last_checkpoint().and_then(|timestamp| {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
             now.checked_sub(timestamp)
         });
         wal_stats.push(WalStats {
             collection: storage.path.clone(),
-            last_checkpoint: storage.persistence.last_checkpoint(),
+            last_checkpoint: storage.checkpoint.last_checkpoint(),
             checkpoint_age_secs,
             wal_size_bytes: wal_size,
         });
@@ -126,7 +129,7 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
 
     let embed_metrics = state.embed_metrics.snapshot();
     Ok(MetricsResponse {
-        total_collections: state.registry.len(),
+        total_collections: state.collection_manager.len(),
         total_vectors,
         collections: collection_metrics,
         app_config: state.current_config(),
@@ -146,14 +149,17 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     let mut collections = Vec::new();
     let mut total_vectors = 0usize;
 
-    for (name, storage_ref) in state.registry.loaded_collections() {
+    for (name, storage_ref) in state.collection_manager.loaded_collections() {
         let lock_start = std::time::Instant::now();
         let storage = storage_ref.read();
-        record_lock_read(state.registry.tracker(&name).as_deref(), lock_start);
+        record_lock_read(
+            state.collection_manager.tracker(&name).as_deref(),
+            lock_start,
+        );
 
         let count = storage.count();
         total_vectors += count;
-        let last_checkpoint = storage.persistence.last_checkpoint();
+        let last_checkpoint = storage.checkpoint.last_checkpoint();
         let checkpoint_age_secs = last_checkpoint.and_then(|timestamp| {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
             now.checked_sub(timestamp)
@@ -185,7 +191,7 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
                     .and_then(|stem| stem.to_str())
                     .unwrap_or("")
                     .to_string();
-                if state.registry.contains_loaded(&name) {
+                if state.collection_manager.contains_loaded(&name) {
                     continue;
                 }
                 collections.push(CollectionHealth {
@@ -204,7 +210,7 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
         }
     }
 
-    let loaded_collections = state.registry.len();
+    let loaded_collections = state.collection_manager.len();
     let (disk_total_bytes, disk_available_bytes) = disk_stats(&state.data_dir);
     let ok = collections
         .iter()

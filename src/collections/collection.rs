@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::cache_maintenance;
-use super::checkpoint::PersistenceService;
+use super::checkpoint::CheckpointManager;
 use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::{HashMapVectorReader, VectorIndex, VectorReader};
@@ -18,7 +18,7 @@ pub struct Collection {
     pub config: crate::config::CollectionConfig,
     pub metadata: CollectionMetadata,
     pub path: String,
-    pub persistence: PersistenceService,
+    pub checkpoint: CheckpointManager,
 }
 
 impl Collection {
@@ -34,7 +34,7 @@ impl Collection {
 
     // Track operations to trigger checkpoints based on WAL config
     pub(super) fn track_operation(&mut self) -> Result<()> {
-        let interval_due = if let Some(last) = self.persistence.last_checkpoint() {
+        let interval_due = if let Some(last) = self.checkpoint.last_checkpoint() {
             if let Some(interval) = self.config.wal.checkpoint_interval_secs {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -48,9 +48,9 @@ impl Collection {
             false
         };
 
-        if self.persistence.should_checkpoint(&self.config.wal) || interval_due {
+        if self.checkpoint.should_checkpoint(&self.config.wal) || interval_due {
             super::checkpoint::checkpoint(self)?;
-            self.persistence.reset_counter();
+            self.checkpoint.reset_counter();
         }
         Ok(())
     }

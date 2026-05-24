@@ -109,7 +109,10 @@ pub fn insert_vector(
 
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_write(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let response = match (req.vector.take(), req.vectors.take()) {
         (Some(vector), None) => {
@@ -119,7 +122,7 @@ pub fn insert_vector(
             let id = storage.insert(entry)?;
             let duration = start.elapsed();
 
-            if let Some(tracker) = state.registry.tracker(&collection) {
+            if let Some(tracker) = state.collection_manager.tracker(&collection) {
                 tracker.record_insert(duration);
             }
             state.enforce_cache_budget();
@@ -137,7 +140,7 @@ pub fn insert_vector(
             let ids = storage.insert_batch(entries)?;
             let duration = start.elapsed();
 
-            if let Some(tracker) = state.registry.tracker(&collection) {
+            if let Some(tracker) = state.collection_manager.tracker(&collection) {
                 tracker.record_insert(duration);
             }
             state.enforce_cache_budget();
@@ -171,7 +174,10 @@ pub fn get_vector(state: &SharedState, collection: String, id: String) -> Result
 
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let entry = storage
         .get(&uuid)
@@ -194,7 +200,10 @@ pub fn list_vectors(
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     Ok(storage
         .get_all()
@@ -224,13 +233,16 @@ pub fn delete_vector(
 
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_write(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let start = Instant::now();
     let deleted = storage.delete(&uuid)?;
     let duration = start.elapsed();
 
-    if let Some(tracker) = state.registry.tracker(&collection) {
+    if let Some(tracker) = state.collection_manager.tracker(&collection) {
         tracker.record_delete(duration);
     }
 
@@ -260,13 +272,16 @@ pub fn delete_vectors(
 
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_write(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let start = Instant::now();
     let deleted_count = storage.delete_batch(&uuids)?;
     let duration = start.elapsed();
 
-    if let Some(tracker) = state.registry.tracker(&collection) {
+    if let Some(tracker) = state.collection_manager.tracker(&collection) {
         tracker.record_delete(duration);
     }
 
@@ -288,7 +303,10 @@ pub fn search_vectors(
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let SearchRequest {
         vector,
@@ -328,7 +346,7 @@ pub fn search_vectors(
                     "slow_search"
                 );
             }
-            if let Some(tracker) = state.registry.tracker(&collection) {
+            if let Some(tracker) = state.collection_manager.tracker(&collection) {
                 tracker.record_search(duration);
             }
 
@@ -359,7 +377,7 @@ pub fn search_vectors(
                     "slow_batch_search"
                 );
             }
-            if let Some(tracker) = state.registry.tracker(&collection) {
+            if let Some(tracker) = state.collection_manager.tracker(&collection) {
                 tracker.record_search(duration);
             }
 
@@ -399,7 +417,10 @@ pub fn upsert_vector(
     let storage_ref = state.get_or_create_collection(&collection)?;
     let lock_start = Instant::now();
     let mut storage = storage_ref.write();
-    record_lock_write(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_write(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let id = if let Some(id) = req.id {
         Uuid::parse_str(&id).map_err(|_| ServerError::InvalidRequest("Invalid UUID".to_string()))?
@@ -414,7 +435,7 @@ pub fn upsert_vector(
     storage.upsert(entry)?;
     let duration = start.elapsed();
 
-    if let Some(tracker) = state.registry.tracker(&collection) {
+    if let Some(tracker) = state.collection_manager.tracker(&collection) {
         if exists {
             tracker.record_update(duration);
         } else {
@@ -449,7 +470,10 @@ pub fn range_search_vectors(
     let storage_ref = state.get_existing_collection(&collection)?;
     let lock_start = Instant::now();
     let storage = storage_ref.read();
-    record_lock_read(state.registry.tracker(&collection).as_deref(), lock_start);
+    record_lock_read(
+        state.collection_manager.tracker(&collection).as_deref(),
+        lock_start,
+    );
 
     let metric = parse_metric(req.metric);
     let effective_search = apply_search_overrides(
@@ -481,7 +505,7 @@ pub fn range_search_vectors(
             "slow_range_search"
         );
     }
-    if let Some(tracker) = state.registry.tracker(&collection) {
+    if let Some(tracker) = state.collection_manager.tracker(&collection) {
         tracker.record_search(duration);
     }
 

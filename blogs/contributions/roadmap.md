@@ -24,6 +24,7 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [x] split `src/collections/operations.rs` into clearer read/write/metadata modules once the current boundary refactor is stable.
 - [x] rename collection-level persistence orchestration to `src/collections/checkpoint.rs`; keep low-level file-format work in `storage/`.
 - [x] keep compatibility reexports under `storage::collection` temporarily, but use `collections::*` internally.
+- [x] standardize manager-style names: `CacheManager`, `CollectionManager`, and `CheckpointManager`; keep old aliases only as deprecated compatibility exports.
 
 ---
 

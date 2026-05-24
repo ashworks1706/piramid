@@ -18,7 +18,7 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
             metadata: metadata.clone(),
             seq: 0,
         };
-        storage.persistence.wal.log(&mut wal_entry)?;
+        storage.checkpoint.wal.log(&mut wal_entry)?;
 
         let mut entry = entry;
         entry.metadata = metadata.clone();
@@ -45,7 +45,7 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
             metadata: entry.metadata.clone(),
             seq: 0,
         };
-        storage.persistence.wal.log(&mut wal_entry)?;
+        storage.checkpoint.wal.log(&mut wal_entry)?;
 
         let mut entry = entry;
         entry.vector = QuantizedVector::from_f32_with_config(&vector, &storage.config.quantization);
