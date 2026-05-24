@@ -4,6 +4,9 @@ This guide covers the full local setup for Piramid on Linux, macOS, and Windows 
 On Windows, use WSL2 with a Linux distro such as Ubuntu and run the same commands shown here.
 This document does not cover PowerShell.
 
+This document is for local setup. For running published artifacts, see `docs/deployment.md`.
+For CI, release workflows, and publishing internals, see `docs/devops.md`.
+
 ## Prerequisites
 
 You will need Git, Rust, Node.js, Python 3.10+, and Docker if you plan to use containers.
@@ -111,6 +114,8 @@ The repo also includes compose files:
 docker compose up --build
 ```
 
+This builds from the local source tree. Published Docker images are covered in `docs/deployment.md`.
+
 ## Website
 
 The website lives in `website/` and uses Next.js:
@@ -162,3 +167,5 @@ git config core.hooksPath .githooks
 ```
 
 If the pre-push hook is enabled, it will run both checks automatically.
+
+For the full CI and release workflow, see `docs/devops.md`.

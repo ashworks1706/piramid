@@ -16,6 +16,7 @@
   <a href="#usage">Usage</a> •
   <a href="docs/architecture.md">Architecture</a> •
   <a href="docs/setup.md">Setup</a> •
+  <a href="docs/deployment.md">Deployment</a> •
   <a href="https://piramiddb.com/blogs/contributions">Contributing</a>
 </p>
 
@@ -61,6 +62,8 @@ For the full codebase guide, see [docs/architecture.md](docs/architecture.md).
 ## Get Started
 
 For full setup on Linux, macOS, WSL2, Docker, the website, and the SDKs, see [docs/setup.md](docs/setup.md).
+For published Docker images, crates.io installs, and release deployment behavior, see [docs/deployment.md](docs/deployment.md).
+For CI, release workflows, and publishing internals, see [docs/devops.md](docs/devops.md).
 
 If you already have the binary installed, start the server with:
 
