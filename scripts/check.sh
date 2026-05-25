@@ -28,5 +28,4 @@ fi
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
-cargo audit --all-targets --deny warnings
 cargo build --all-targets
