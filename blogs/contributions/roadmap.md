@@ -2,8 +2,6 @@
 
 This is the working roadmap for contributors. If you want to help, start here and pick one scoped task. If your idea is not listed but adjacent, open an issue first and propose it before implementation.
 
-Piramid's north star is a consumer-hardware inference database: start as a reliable single-binary RAG database, it is making mutable database memory usable by transformer inference without copying every retrieved chunk into the prompt.
-
 
 ---
 
@@ -15,105 +13,88 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning -- they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
 - [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
+
+**Quantization (1.1.0)**
+- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
+- [ ] the quantization module already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, but it's not wired into search yet
+- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation -- store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
+- [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
+- [ ] Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format for interoperability with other tools.
+
 ---
 
 ### GPU Acceleration patch
 
 **GPU backend:**
 
+- [ ] decide what library to use
 - [ ] create definite GPU struct and traits
-- [ ] **WGPU Implementation:** Wire the `Cpu` and future parallel backends to dispatch distance-calc batches.
-- [ ] attempt accelerated initialization on boot, fallback to baseline on failure (graceful degrade)
-- [ ] keep CPU as the correctness baseline for every GPU path; GPU acceleration should never change result ordering outside documented approximation tolerances.
+- [ ] modularized service
 
 **Introduce Custom GPU Kernels trait:**
 
-- [ ] index traversal must dispatch distance computation through a pluggable backend abstraction, enabling future parallelism improvements.
+- [ ] use the custom GPU kernels on quantizations, indexings, searchings, wherever required.
 - [ ] Add a query optimizer that switches to Flat Search + Bitmaps when metadata filters are highly selective (>90% reduction)
-- [ ] Replace custom index serialization with rkyv for zero-copy, instant-load index access from mmap.
-- [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
-- [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
-- [ ] add a CPU/GPU backend benchmark harness that reports p50/p95/p99 latency, recall@k, memory usage, and index build time on consumer hardware presets.
-
-**Safetensors / precision compatibility:**
-
-- [ ] **Safetensors-compatible vector export:** Add `GET /api/collections/:name/vectors/export?format=safetensors` that serializes the vector store in `.safetensors` format for interoperability with other tools.
-
-**Blocked / Future (Systems Optimization):**
-
-- [ ] **Warm Index Mirroring:** Automatically hydrate frequently accessed index clusters into memory on startup.
-- [ ] **Batched Retrieval Dispatch:** Group multiple search requests into a single compute batch.
-
-**Quantization Refactor (1.1.0)**
-- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. this causes two problems: search gets no speed benefit because the index still fetches full float vectors during traversal anyway, and final scores are calculated from a lossy reconstruction instead of the originals. the fix is to store raw vectors in storage as the source of truth, move quantization inside the index so it accelerates graph traversal, and re-rank the final small candidate set using the original floats. as part of this: remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
-- [ ] the quantization module already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, giving much better compression than scalar quantization. but it's not wired into search yet. once connected, index traversal would use fast lookup-table distance math instead of full dot products, dropping search compute ~8× and memory per vector ~32×, while the re-ranking step on final candidates keeps recall high.
-- [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation -- store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
-- [ ] add a quantization acceptance suite: each quantized index must report recall loss, latency gain, memory reduction, and rerank recovery against the raw-float baseline.
 
 ---
 
 ### Transformer Inference Patch
 
 **Introduce Transformer:**
-- [ ] add support for running small transformer models, but scope the first version to correctness and integration rather than competing with llama.cpp/vLLM kernels.
+
+- [ ] add support for running small transformer models.
 - [ ] add kvcaching, batching and async support to the transformer inference module.
 - [ ] add paged attention support for long contexts.
 - [ ] add support for quantization.
 - [ ] add streaming api.
-- [ ] add an OpenAI-compatible chat/completions surface so Piramid can be used as a drop-in local RAG inference server.
-- [ ] add a baseline mode that uses normal prompt-RAG: retrieve, rerank, pack context, stream answer. this is the baseline every fusion experiment must beat.
-- [ ] add inference benchmarks against external local runtimes (Ollama/llama.cpp-style OpenAI-compatible servers) so Piramid does not accidentally spend months rebuilding a worse inference engine.
+- [ ] add an OpenAI-compatible chat/completions surface.
 
 ---
 
-### Transformer x Database Attention Fusion Patch
+### Piramid Indexing and Searching Mechanism
 
-- [ ] write the fusion spec first: define which space database memory lives in (embedding space, residual stream space, per-layer K/V space, or learned adapter space). do not assume ordinary embedding vectors are valid transformer keys/values.
-- [ ] add a kill-test benchmark before transformer surgery: hybrid retrieval + rerank + prompt injection must be the baseline, and fusion must beat it on answer quality, latency, and memory on the same hardware.
-- [ ] implement model-aware memory records: raw text, metadata, dense vector, sparse/BM25 terms, source spans, and optional per-model memory tensors.
-- [ ] prototype learned adapters that map retrieved chunks/vectors into model-usable memory tokens or K/V-like states without changing the base model.
-- [ ] only after adapters beat prompt-RAG, modify transformer blocks with configurable key/value projection heads for database vectors.
-- [ ] learnable gating mechanism to balance attention between internal context and external memory.
-- [ ] efficient retrieval of relevant database vectors per query (e.g. via ANN search) to keep attention tractable.
-- [ ] cross attention with database vectors as keyvalues with query from transformer.
-- [ ] add ablations for retrieval frequency: per-request, per-chunk, per-layer, and per-token. per-token retrieval should be rejected unless it proves latency-safe on consumer hardware.
-- [ ] document dead ends from RETRO/REALM/RAG/kNN-LM-style systems so Piramid does not repeat expensive research paths without evidence.
-
+- [ ] decide how this Transformer x Database Attention Fusion will work and experiemnt with latent attention
+- [ ] identify what can be improved and develop better indexing + searching algorithm
+- [ ] add dataset generation/fine-tuning workflows for better piramid transformer 
+- [ ] add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
+- [ ] add context-packing policies: max tokens, diversity, source caps, recency weighting, metadata constraints, and citation-preserving chunk joins.
+- [ ] add this as default indexing + searching method for piramid, always have an option to switch to piramid as a normal database
 
 ---
 
-### RAG Features
+### RAG Support
 
-**Variations**
-
-- [ ] implement GraphRAG as native option, but keep it as a memory-building/retrieval strategy rather than the core identity of Piramid.
-- [ ] add RAPTOR as an optional hierarchical summarization/indexing strategy.
-- [ ] add latent rag experiments behind a feature flag until they beat normal hybrid retrieval in evals.
-- [ ] add RAFT-style dataset generation/fine-tuning workflows as an optional training pipeline, not as a requirement for basic Piramid usage.
-- [ ] Implement Cross-Encoders: a tiny built-in ML model to re-score the final top 10 results (provide options: ColBERT-style late interaction, small cross-encoder, or external reranker).
-- [ ] add citations/source-span tracking as a first-class response primitive; every answer path should be able to explain which records influenced it.
+- [ ] add popular reranking mechanisms support for the pipeline, users should be able to toggle how and where they want what, already prebuilt by piramid
+- [ ] add sparse/BM25 indexes alongside dense vectors as option.
+- [ ] evaludate piramid indexing on benchmarks
 - [ ] add RAG evals: retrieval recall, answer faithfulness, citation correctness, latency, memory, and cost per query.
+- [ ] experiment with hybrid retrieval techniques: dense ANN + sparse/BM25 scoring + rerank, GraphRAG, RAPTOR, Cross-Encoders for our platform, completely abstracted and better
+ 
+---
+
+### Speed Optimizations
+
+**CLI and Logs**
+
+- [ ] piramid show config, piramid show metrics
+- [ ] piramid init should automatically detect system's computational resources etc and setup the config accordingly
+- [ ] all the query planning budget, optimizations, gpu selections, etc and everything should be directly reflected from that generated config 
+- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
+- [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
+- [ ] add all logs properly such as inference, indexing, searching, etc
+
 
 **Query Features (1.1.3)**
 
-- [ ] query result caching (LRU, TTL-based)
-- [ ] query planning/optimization; query budget enforcement (timeouts, complexity limits)
-- [ ] add a query planner that can choose dense ANN, sparse/BM25, metadata prefilter, hybrid fusion, rerank, or flat scan based on selectivity and latency budget.
-- [ ] add result attribution metadata so downstream inference can trace each answer token/span back to retrieved records.
-
-**Search API Extensions (1.1.7)**
-
-- [ ] **Streaming search interface:** add a WebSocket or SSE endpoint for continuous query submission so a client can push queries one at a time and receive results as they complete, enabling continuous batching without pre-grouping queries.
-- [ ] hybrid retrieval: dense ANN + sparse/BM25 scoring + rerank
 - [ ] metadata-only search (no vector similarity)
-- [ ] recommendation API (similar to these IDs, not those)
-- [ ] add `/query` and `/chat`-oriented APIs that combine retrieval, reranking, context packing, citations, and optional local inference in one request.
-- [ ] add context-packing policies: max tokens, diversity, source caps, recency weighting, metadata constraints, and citation-preserving chunk joins.
+- [ ] add `/query` and `/chat`-oriented APIs
+- [ ] query result caching (LRU, TTL-based)
 
----
+**Blocked / Future (Systems Optimization):**
 
+- [ ] Automatically hydrate frequently accessed index clusters into memory on startup.
+- [ ] Group multiple search requests into a single compute batch.
 
-### Searching patch
 
 **Server & API (1.0.3)**
 
@@ -126,7 +107,8 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] IVF prefiltering with metadata posting lists to avoid full-scan overfetch on filtered queries
 - [ ] bitmap/roaring filters for post-filter paths; filter selectivity stats
 - [ ] collection preloading on startup: optionally pre-open a configured list of collections rather than waiting for the first request
-- [ ] add sparse/BM25 indexes alongside dense vectors; vector-only retrieval is not strong enough for production RAG.
+- [ ] Add LSH (Locality Sensitive Hashing) as a high-speed, low-RAM alternative to HNSW.
+- [ ] IVF uses random centroid initialisation (first K vectors) -- k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
 
 **Metadata Filters**
 
@@ -137,13 +119,6 @@ Piramid's north star is a consumer-hardware inference database: start as a relia
 - [ ] array membership checks
 - [ ] vector count per metadata filter
 - [ ] complex boolean filters (AND/OR/NOT combinations)
-
-**Index Improvements (1.1.1)**
-
-- [ ] IVF uses random centroid initialisation (first K vectors) -- k-means++ would sample proportionally to distance from the nearest existing centroid, producing better spread and fewer iterations to convergence
-- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
-- [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
-
 
 ---
 
