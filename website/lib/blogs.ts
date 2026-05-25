@@ -90,6 +90,10 @@ function slugFromPath(filePath: string): string[] {
 let cachedBlogs: BlogMeta[] | null = null;
 let cachedSearch: BlogSearchEntry[] | null = null;
 
+function isFrontendVisibleBlog(slug: string[]): boolean {
+  return slug[0] !== "architecture";
+}
+
 export function listBlogs(): BlogMeta[] {
   if (cachedBlogs) return cachedBlogs;
   const results: BlogMeta[] = [];
@@ -146,7 +150,9 @@ export function buildSidebar(): SidebarSection[] {
     return [
       {
         label: "Blog",
-        items: blogs.filter((d) => d.slug.join("/") !== "index"),
+        items: blogs.filter(
+          (d) => d.slug.join("/") !== "index" && isFrontendVisibleBlog(d.slug),
+        ),
       },
     ];
   }
@@ -157,7 +163,7 @@ export function buildSidebar(): SidebarSection[] {
     const items: BlogMeta[] = [];
     for (const itemSlug of section.items) {
       const match = lookup.get(itemSlug);
-      if (match) items.push(match);
+      if (match && isFrontendVisibleBlog(match.slug)) items.push(match);
     }
     sections.push({ label: section.label, items });
   }
@@ -207,6 +213,7 @@ export function buildSearchIndex(): BlogSearchEntry[] {
   const entries: BlogSearchEntry[] = [];
 
   for (const blog of listBlogs()) {
+    if (!isFrontendVisibleBlog(blog.slug)) continue;
     const raw = fs.readFileSync(blog.filePath, "utf8");
 
     // Strip frontmatter

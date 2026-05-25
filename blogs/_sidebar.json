@@ -5,17 +5,6 @@
       "items": ["history", "history/student", "history/piramid"]
     },
 
-    {
-      "label": "Architecture",
-      "items": [
-        "architecture",
-        "architecture/database",
-        "architecture/embeddings",
-        "architecture/storage",
-        "architecture/indexing",
-        "architecture/query"
-      ]
-    },
    { "label": "Contributions", "items": ["contributions", "contributions/roadmap"] }
   ]
 }
