@@ -1,6 +1,6 @@
 # Indexing
 
-A vector database without a good index is just a very sophisticated `for` loop. The core problem is this: given a query vector $\mathbf{q} \in \mathbb{R}^d$ and a collection of $N$ stored vectors, find the $k$ closest by some distance metric. The naïve approach scans every vector and computes the distance, $O(Nd)$ per query. At $N = 10^6$ with $d = 1536$ (OpenAI's `text-embedding-3-large`), that is 1.5 billion multiply-accumulate operations per query. Even with SIMD, you're looking at tens of milliseconds. That is fine for batch analysis; it is not fine for a latency-sensitive RAG pipeline that needs sub-millisecond retrieval.
+A vector database without a good index is just a very sophisticated `for` loop.  Given a query vector $\mathbf{q} \in \mathbb{R}^d$ and a collection of $N$ stored vectors, find the $k$ closest by some distance metric. The naïve approach scans every vector and computes the distance, $O(Nd)$ per query. At $N = 10^6$ with $d = 1536$ (OpenAI's `text-embedding-3-large`), is 1.5 billion multiply-accumulate operations per query. Even with SIMD, it's tens of milliseconds. Not fine for a latency-sensitive RAG pipeline that needs sub-millisecond retrieval.
 
 I built three index types -- Flat, IVF, and HNSW -- with an Auto mode that picks the right one based on collection size. Each represents a different point on the exact recall / query latency tradeoff curve.
 
