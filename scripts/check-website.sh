@@ -15,4 +15,4 @@ fi
 npm cache clean --force
 npm run lint
 npm run build 
-npm audit
+npm audit --audit-level=high
