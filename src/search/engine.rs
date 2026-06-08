@@ -3,6 +3,7 @@
 
 use crate::collections::Collection;
 use crate::config::ExecutionMode;
+use crate::error::Result;
 use crate::metrics::Metric;
 use crate::search::{query::Filter, utils::sort_and_truncate, Hit};
 use std::collections::HashMap;
@@ -66,32 +67,35 @@ fn search_collection_with_maps(
         effective_search,
         params.filter,
         metadatas,
-    );
+    )?;
 
     let mut results = Vec::new();
 
     // 5. For each candidate ID returned by the vector index search, retrieve the corresponding vector and metadata from storage, calculate the similarity score using the specified metric, and construct a Hit object that includes the ID, score, text, vector, and metadata. This step involves looking up each candidate ID in the storage to get the full information needed to return to the caller. The similarity score is calculated using the configured metric (e.g., cosine similarity), which takes into account the query vector and the candidate vector.
     for id in neighbor_ids {
-        if let Some(entry) = storage.get(&id) {
-            let vec = entry.get_vector();
-            let score = metric.calculate(query, &vec, mode);
-            results.push(Hit {
-                id,
-                score,
-                text: entry.text,
-                vector: vec,
-                metadata: entry.metadata.clone(),
-            });
-        }
+        let entry = storage.get(&id)?.ok_or_else(|| {
+            crate::error::IndexError::SearchFailed(format!(
+                "index returned missing document {id}"
+            ))
+        })?;
+        let vec = entry.try_get_vector()?;
+        let score = metric.calculate(query, &vec, mode);
+        results.push(Hit {
+            id,
+            score,
+            text: entry.text,
+            vector: vec,
+            metadata: entry.metadata.clone(),
+        });
     }
     // 6. If a filter is provided, apply the filter to the results to retain only those hits that match the filter criteria. After filtering, sort the results by score and truncate to the top k results to return to the caller. If no filter is provided, we can skip this step and just return the results as they are already sorted by the vector index search.
     if let Some(filter) = params.filter {
         let mut filtered = results;
         filtered.retain(|hit| filter.matches(&hit.metadata));
         sort_and_truncate(&mut filtered, k);
-        filtered
+        Ok(filtered)
     } else {
-        results
+        Ok(results)
     }
 }
 
@@ -101,7 +105,7 @@ pub fn search_collection(
     k: usize,
     metric: Metric,
     params: SearchParams<'_>,
-) -> Vec<Hit> {
+) -> Result<Vec<Hit>> {
     // Get vectors and metadatas from storage to pass to the search function. This allows us to perform the search using the vector index while also having access to the metadata for filtering and constructing the Hit objects. The search_collection_with_maps function is then called with these maps to perform the actual search and return the results.
     let metadatas = storage.metadata_view();
     search_collection_with_maps(storage, query, k, metric, params, metadatas)
@@ -113,7 +117,7 @@ pub fn search_batch_collection(
     k: usize,
     metric: Metric,
     params: SearchParams<'_>,
-) -> Vec<Vec<Hit>> {
+) -> Result<Vec<Vec<Hit>>> {
     let metadatas = storage.metadata_view();
 
     if storage.config().parallelism.parallel_search {

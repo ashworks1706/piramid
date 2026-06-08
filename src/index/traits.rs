@@ -1,6 +1,7 @@
 // All indexes (HNSW, Flat, IVF, etc.) implement this trait
 
 use crate::config::SearchConfig;
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -69,7 +70,7 @@ pub trait VectorIndex: Send + Sync {
         quality: SearchConfig,
         filter: Option<&crate::search::query::Filter>,
         metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
-    ) -> Vec<Uuid>;
+    ) -> Result<Vec<Uuid>>;
 
     // Remove a vector from the index
     fn remove(&mut self, id: &Uuid);

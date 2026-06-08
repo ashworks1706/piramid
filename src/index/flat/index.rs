@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::config::FlatConfig;
+use crate::error::{IndexError, Result};
 use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex, VectorReader};
 
 // Stores nothing except config, vectors are in main storage
@@ -41,23 +42,21 @@ impl VectorIndex for FlatIndex {
         _quality: crate::config::SearchConfig,
         _filter: Option<&crate::search::query::Filter>,
         _metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
-    ) -> Vec<Uuid> {
-        let mut distances: Vec<(Uuid, f32)> = self
-            .vector_ids
-            .iter()
-            .filter_map(|id| {
-                vectors.get(id).map(|vec| {
-                    let score = self.config.metric.calculate(query, vec, self.config.mode);
-                    (*id, score)
-                })
-            })
-            .collect();
+    ) -> Result<Vec<Uuid>> {
+        let mut distances = Vec::with_capacity(self.vector_ids.len());
+        for id in &self.vector_ids {
+            let vec = vectors.get(id).ok_or_else(|| {
+                IndexError::SearchFailed(format!("Flat index references missing vector {id}"))
+            })?;
+            let score = self.config.metric.calculate(query, vec, self.config.mode);
+            distances.push((*id, score));
+        }
 
         // Sort by score (descending for similarity)
         distances.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Return top k IDs
-        distances.iter().take(k).map(|(id, _)| *id).collect()
+        Ok(distances.iter().take(k).map(|(id, _)| *id).collect())
     }
 
     fn remove(&mut self, id: &Uuid) {

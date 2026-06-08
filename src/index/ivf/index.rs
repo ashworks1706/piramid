@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use super::config::IvfConfig;
+use crate::error::{IndexError, Result};
 use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex, VectorReader};
 
 // IVF index structure
@@ -178,22 +179,9 @@ impl VectorIndex for IvfIndex {
         quality: crate::config::SearchConfig,
         _filter: Option<&crate::search::query::Filter>,
         _metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
-    ) -> Vec<Uuid> {
+    ) -> Result<Vec<Uuid>> {
         if self.centroids.is_empty() {
-            // No clusters yet - fallback to brute force
-            let mut distances: Vec<(Uuid, f32)> = vectors
-                .iter()
-                .map(|(id, vector)| {
-                    let score = self
-                        .config
-                        .metric
-                        .calculate(query, vector, self.config.mode);
-                    (id, score)
-                })
-                .collect();
-
-            distances.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            return distances.iter().take(k).map(|(id, _)| *id).collect();
+            return Err(IndexError::NotInitialized.into());
         }
 
         // Find nearest centroids
@@ -222,20 +210,23 @@ impl VectorIndex for IvfIndex {
         for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
             if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
                 for id in vector_ids {
-                    if let Some(vector) = vectors.get(id) {
-                        let score = self
-                            .config
-                            .metric
-                            .calculate(query, vector, self.config.mode);
-                        candidates.push((*id, score));
-                    }
+                    let vector = vectors.get(id).ok_or_else(|| {
+                        IndexError::SearchFailed(format!(
+                            "IVF index references missing vector {id}"
+                        ))
+                    })?;
+                    let score = self
+                        .config
+                        .metric
+                        .calculate(query, vector, self.config.mode);
+                    candidates.push((*id, score));
                 }
             }
         }
 
         // Sort and return top k
         candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        candidates.iter().take(k).map(|(id, _)| *id).collect()
+        Ok(candidates.iter().take(k).map(|(id, _)| *id).collect())
     }
 
     fn remove(&mut self, id: &Uuid) {

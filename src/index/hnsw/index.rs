@@ -5,6 +5,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use uuid::Uuid;
 
 use super::config::{HnswConfig, HnswStats};
+use crate::error::{IndexError, Result};
 use crate::index::VectorReader;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,12 +216,18 @@ impl HnswIndex {
         vectors: &dyn VectorReader,
         filter: Option<&crate::search::query::Filter>,
         metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
-    ) -> Vec<Uuid> {
+    ) -> Result<Vec<Uuid>> {
         if self.start_node.is_none() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let ep = self.start_node.unwrap();
+        if vectors.get(&ep).is_none() {
+            return Err(IndexError::SearchFailed(format!(
+                "HNSW entry point {ep} is missing from vector storage"
+            ))
+            .into());
+        }
         let mut current_nearest = vec![ep];
 
         let search_context = SearchContext {
@@ -243,7 +250,7 @@ impl HnswIndex {
             .filter(|id| !self.is_tombstone(id))
             .collect();
         filtered.truncate(k);
-        filtered
+        Ok(filtered)
     }
 
     // Search within a specific layer - returns nearest neighbor IDs sorted by distance

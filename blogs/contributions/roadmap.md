@@ -13,7 +13,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 - [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning -- they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
 - [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
-
 **Quantization (1.1.0)**
 - [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
 - [ ] the quantization module already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, but it's not wired into search yet
@@ -78,6 +77,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] piramid show config, piramid show metrics
 - [ ] piramid init should automatically detect system's computational resources etc and setup the config accordingly
+- [ ] have config for literally everything including clusters, index sizes, etc etc for any method 
 - [ ] all the query planning budget, optimizations, gpu selections, etc and everything should be directly reflected from that generated config 
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.

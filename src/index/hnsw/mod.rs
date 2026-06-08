@@ -5,6 +5,7 @@ pub use config::{HnswConfig, HnswStats};
 pub use index::HnswIndex;
 
 use crate::index::traits::{IndexDetails, IndexStats, IndexType, VectorIndex, VectorReader};
+use crate::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -23,7 +24,7 @@ impl VectorIndex for HnswIndex {
         quality: crate::config::SearchConfig,
         filter: Option<&crate::search::query::Filter>,
         metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
-    ) -> Vec<Uuid> {
+    ) -> Result<Vec<Uuid>> {
         // Use quality.ef if provided, otherwise use configured ef_search
         let ef = quality.ef.unwrap_or_else(|| self.get_ef_search()).max(k);
         self.search(query, k, ef, vectors, filter, metadatas)
