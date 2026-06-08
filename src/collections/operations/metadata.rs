@@ -10,10 +10,10 @@ use crate::storage::record_store::RecordStore;
 use crate::storage::wal::WalEntry;
 
 pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) -> Result<bool> {
-    if let Some(entry) = get(storage, id) {
+    if let Some(entry) = get(storage, id)? {
         let mut wal_entry = WalEntry::Update {
             id: *id,
-            vector: entry.get_vector(),
+            vector: entry.try_get_vector()?,
             text: entry.text.clone(),
             metadata: metadata.clone(),
             seq: 0,
@@ -37,7 +37,7 @@ pub fn update_metadata(storage: &mut Collection, id: &Uuid, metadata: Metadata) 
 }
 
 pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> Result<bool> {
-    if let Some(entry) = get(storage, id) {
+    if let Some(entry) = get(storage, id)? {
         let mut wal_entry = WalEntry::Update {
             id: *id,
             vector: vector.clone(),
