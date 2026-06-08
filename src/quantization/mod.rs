@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::config::QuantizationConfig;
+use crate::error::{Result, StorageError};
 
 // Tracks which encoding is used; defaults to Scalar so old checkpoints still load.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -148,9 +149,22 @@ impl ProductQuantizedVector {
         }
     }
 
-    pub fn to_f32(&self) -> Vec<f32> {
+    pub fn try_to_f32(&self) -> Result<Vec<f32>> {
         if self.codes.is_empty() || self.subquantizers == 0 {
-            return Vec::new();
+            if self.dim == 0 {
+                return Ok(Vec::new());
+            }
+            return Err(StorageError::CorruptedData(
+                "PQ vector has no codes or subquantizers for non-empty dimension".into(),
+            )
+            .into());
+        }
+        if self.block_mins.len() < self.subquantizers || self.block_maxs.len() < self.subquantizers
+        {
+            return Err(StorageError::CorruptedData(
+                "PQ vector block metadata is shorter than subquantizer count".into(),
+            )
+            .into());
         }
 
         let mut values = Vec::with_capacity(self.dim);
@@ -166,14 +180,32 @@ impl ProductQuantizedVector {
             let range = (self.block_maxs[block_idx] - self.block_mins[block_idx]).max(f32::EPSILON);
 
             for _ in start..end {
-                let code = self.codes.get(idx).copied().unwrap_or(0);
+                let code = self.codes.get(idx).copied().ok_or_else(|| {
+                    StorageError::CorruptedData(format!(
+                        "PQ vector missing code at position {idx}"
+                    ))
+                })?;
                 let normalized = code as f32 / 255.0;
                 values.push(normalized * range + self.block_mins[block_idx]);
                 idx += 1;
             }
         }
 
-        values
+        if values.len() != self.dim {
+            return Err(StorageError::CorruptedData(format!(
+                "PQ vector decoded dimension mismatch: expected {}, got {}",
+                self.dim,
+                values.len()
+            ))
+            .into());
+        }
+
+        Ok(values)
+    }
+
+    pub fn to_f32(&self) -> Vec<f32> {
+        self.try_to_f32()
+            .expect("invalid product-quantized vector encoding")
     }
 
     pub fn dim(&self) -> usize {
@@ -230,23 +262,28 @@ impl QuantizedVector {
         }
     }
 
-    pub fn to_f32(&self) -> Vec<f32> {
+    pub fn try_to_f32(&self) -> Result<Vec<f32>> {
         match self.kind {
-            QuantizationKind::Scalar => ScalarQuantizedVector {
+            QuantizationKind::Scalar => Ok(ScalarQuantizedVector {
                 values: self.values.clone(),
                 min: self.min,
                 max: self.max,
             }
-            .to_f32(),
-            QuantizationKind::Pq => self.pq.as_ref().map(|pq| pq.to_f32()).unwrap_or_else(|| {
-                ScalarQuantizedVector {
-                    values: self.values.clone(),
-                    min: self.min,
-                    max: self.max,
-                }
-                .to_f32()
-            }),
+            .to_f32()),
+            QuantizationKind::Pq => {
+                let pq = self.pq.as_ref().ok_or_else(|| {
+                    StorageError::CorruptedData(
+                        "vector is marked as PQ but has no PQ payload".into(),
+                    )
+                })?;
+                pq.try_to_f32()
+            }
         }
+    }
+
+    pub fn to_f32(&self) -> Vec<f32> {
+        self.try_to_f32()
+            .expect("invalid quantized vector encoding")
     }
 
     pub fn dim(&self) -> usize {
