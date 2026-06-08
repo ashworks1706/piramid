@@ -57,7 +57,7 @@ pub fn find_duplicates(
             search_cfg,
             None,
             metadatas,
-        );
+        )?;
         for neighbor_id in neighbors {
             if neighbor_id == *id {
                 continue;

@@ -13,7 +13,7 @@ use crate::storage::record_store::RecordStore;
 pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     // 1. Get all live documents and their count before compaction
     let original_entries = collection.index.len();
-    let docs: Vec<Document> = collection.get_all();
+    let docs: Vec<Document> = collection.get_all()?;
 
     let temp_path = format!("{}.compact", collection.path);
     let _ = std::fs::remove_file(&temp_path);
@@ -46,14 +46,14 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     collection.vector_index = new_vector_index;
     collection.metadata = new_metadata;
     collection.clear_caches_for_rebuild();
-    collection.rebuild_vector_cache();
+    collection.rebuild_vector_cache()?;
 
     // 4. Save the new index, vector index, and metadata to disk after compaction
     save_index(&collection.path, &collection.index)?;
     save_vector_index(&collection.path, collection.vector_index())?;
     save_metadata(&collection.path, &collection.metadata)?;
     // Rotate WAL to drop old entries after compaction
-    let _ = collection.checkpoint.wal.rotate();
+    collection.checkpoint.wal.rotate()?;
 
     Ok(CompactStats {
         original_entries,
