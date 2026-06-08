@@ -69,12 +69,13 @@ struct WalMeta {
 
 pub fn load_wal_meta(path: &str) -> Result<u64> {
     let meta_path = wal_meta_path(path);
-    if let Ok(data) = fs::read(&meta_path) {
-        let meta: WalMeta = serde_json::from_slice(&data)?;
-        Ok(meta.last_checkpoint_seq)
-    } else {
-        Ok(0)
-    }
+    let data = match fs::read(&meta_path) {
+        Ok(data) => data,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
+    let meta: WalMeta = serde_json::from_slice(&data)?;
+    Ok(meta.last_checkpoint_seq)
 }
 
 fn save_wal_meta(path: &str, last_checkpoint_seq: u64) -> Result<()> {
@@ -85,9 +86,8 @@ fn save_wal_meta(path: &str, last_checkpoint_seq: u64) -> Result<()> {
     };
     fs::write(&tmp_path, serde_json::to_vec(&meta)?)?;
     fs::rename(&tmp_path, &meta_path)?;
-    if let Ok(file) = fs::File::open(&meta_path) {
-        let _ = file.sync_all();
-    }
+    let file = fs::File::open(&meta_path)?;
+    file.sync_all()?;
     Ok(())
 }
 

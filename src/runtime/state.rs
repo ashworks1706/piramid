@@ -55,11 +55,11 @@ impl AppState {
         slow_query_ms: u128,
         disk_min_free_bytes: Option<u64>,
         disk_readonly_on_low_space: bool,
-    ) -> Self {
-        std::fs::create_dir_all(data_dir).ok();
+    ) -> Result<Self> {
+        std::fs::create_dir_all(data_dir)?;
         let app_config = Arc::new(RwLock::new(app_config));
 
-        Self {
+        Ok(Self {
             collection_manager: CollectionManager::new(data_dir.to_string(), app_config.clone()),
             data_dir: data_dir.to_string(),
             embedder: None,
@@ -78,7 +78,7 @@ impl AppState {
             )),
             disk_min_free_bytes,
             disk_readonly_on_low_space,
-        }
+        })
     }
 
     pub fn with_embedder(
@@ -88,11 +88,11 @@ impl AppState {
         embedder: Arc<dyn Embedder>,
         disk_min_free_bytes: Option<u64>,
         disk_readonly_on_low_space: bool,
-    ) -> Self {
-        std::fs::create_dir_all(data_dir).ok();
+    ) -> Result<Self> {
+        std::fs::create_dir_all(data_dir)?;
         let app_config = Arc::new(RwLock::new(app_config));
 
-        Self {
+        Ok(Self {
             collection_manager: CollectionManager::new(data_dir.to_string(), app_config.clone()),
             data_dir: data_dir.to_string(),
             embedder: Some(embedder),
@@ -110,7 +110,7 @@ impl AppState {
             )),
             disk_min_free_bytes,
             disk_readonly_on_low_space,
-        }
+        })
     }
 
     pub fn get_existing_collection(&self, name: &str) -> Result<CollectionHandle> {
@@ -159,19 +159,25 @@ impl AppState {
         self.shutting_down.store(true, Ordering::Relaxed);
     }
 
-    fn disk_free_bytes(&self) -> Option<u64> {
+    fn disk_free_bytes(&self) -> Result<Option<u64>> {
         #[cfg(target_family = "unix")]
         {
             use std::ffi::CString;
-            let c_path = CString::new(self.data_dir.clone()).ok()?;
+            let c_path = CString::new(self.data_dir.clone()).map_err(|_| {
+                ServerError::Internal("data_dir contains an interior NUL byte".into())
+            })?;
             let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
             let rc = unsafe { libc::statvfs(c_path.as_ptr(), &mut stat) };
             if rc == 0 {
                 let avail = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
-                return Some(avail);
+                return Ok(Some(avail));
             }
+            Err(std::io::Error::last_os_error().into())
         }
-        None
+        #[cfg(not(target_family = "unix"))]
+        {
+            Ok(None)
+        }
     }
 
     pub fn ensure_write_allowed(&self) -> Result<()> {
@@ -185,7 +191,7 @@ impl AppState {
             .into());
         }
         if let Some(min_free) = self.disk_min_free_bytes {
-            if let Some(free) = self.disk_free_bytes() {
+            if let Some(free) = self.disk_free_bytes()? {
                 if free < min_free {
                     if self.disk_readonly_on_low_space {
                         self.read_only.store(true, Ordering::Relaxed);

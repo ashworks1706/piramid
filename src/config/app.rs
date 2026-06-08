@@ -40,6 +40,15 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn validate(&self) -> Result<(), String> {
+        if matches!(self.execution, ExecutionMode::Gpu) {
+            return Err("EXECUTION_MODE gpu is not implemented".into());
+        }
+        if matches!(
+            self.quantization.level,
+            crate::config::QuantizationLevel::Int4 | crate::config::QuantizationLevel::Float16
+        ) {
+            return Err("Configured quantization level is not implemented".into());
+        }
         if self.wal.enabled && self.wal.checkpoint_frequency == 0 {
             return Err("WAL checkpoint_frequency must be > 0 when WAL is enabled".into());
         }

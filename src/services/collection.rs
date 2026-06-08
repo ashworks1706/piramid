@@ -79,7 +79,14 @@ pub fn delete_collection(state: &SharedState, collection: String) -> Result<Dele
 
     let existed = state.collection_manager.remove(&collection).is_some();
     if existed {
-        for suffix in ["", ".index.db", ".metadata.db", ".vecindex.db", ".wal.db", ".wal.meta"] {
+        for suffix in [
+            "",
+            ".index.db",
+            ".metadata.db",
+            ".vecindex.db",
+            ".wal.db",
+            ".wal.meta",
+        ] {
             let path = if suffix.is_empty() {
                 format!("{}/{}.db", state.data_dir, collection)
             } else {

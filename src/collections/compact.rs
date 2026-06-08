@@ -16,7 +16,11 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     let docs: Vec<Document> = collection.get_all()?;
 
     let temp_path = format!("{}.compact", collection.path);
-    let _ = std::fs::remove_file(&temp_path);
+    match std::fs::remove_file(&temp_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     let mut temp_store = RecordStore::open(&temp_path, &collection.config, &HashMap::new())?;
     let mut new_index = HashMap::with_capacity(docs.len());
     let mut new_vectors = HashMap::with_capacity(docs.len());

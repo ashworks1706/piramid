@@ -54,8 +54,8 @@ impl ExecutionMode {
             }
             ExecutionMode::Scalar => ExecutionMode::Scalar,
             ExecutionMode::Gpu => {
-                // GPU not implemented, fallback to best available
-                ExecutionMode::Auto.resolve()
+                // Explicit GPU mode must not silently run on CPU.
+                ExecutionMode::Gpu
             }
             ExecutionMode::Parallel => ExecutionMode::Parallel,
             ExecutionMode::Binary => ExecutionMode::Binary,

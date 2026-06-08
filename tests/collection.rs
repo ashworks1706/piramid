@@ -34,7 +34,7 @@ fn basic_store_and_retrieve() {
     let entry = Document::new(vec![1.0, 2.0, 3.0], "test".to_string());
     let id = storage.insert(entry).unwrap();
 
-    let retrieved = storage.get(&id).unwrap();
+    let retrieved = storage.get(&id).unwrap().unwrap();
     assert_eq!(retrieved.text, "test");
     assert_eq!(retrieved.get_vector(), vec![1.0, 2.0, 3.0]);
 
@@ -70,8 +70,8 @@ fn persistence_roundtrip() {
     {
         let storage = Collection::open(test_path).unwrap();
         assert_eq!(storage.count(), 2);
-        assert_eq!(storage.get(&id1).unwrap().text, "first");
-        assert_eq!(storage.get(&id2).unwrap().text, "second");
+        assert_eq!(storage.get(&id1).unwrap().unwrap().text, "first");
+        assert_eq!(storage.get(&id2).unwrap().unwrap().text, "second");
     }
 
     cleanup_test_files(&files);
@@ -104,7 +104,9 @@ fn search_returns_results() {
     }
 
     let params = SearchParams::default();
-    let results = storage.search(&[1.0, 0.0, 0.0], 2, Metric::Cosine, params);
+    let results = storage
+        .search(&[1.0, 0.0, 0.0], 2, Metric::Cosine, params)
+        .unwrap();
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].text, "vec0");
 
@@ -137,7 +139,7 @@ fn batch_search_multi_queries() {
         vec![5.0, 0.0, 0.0],
         vec![9.0, 0.0, 0.0],
     ];
-    let results = storage.search_batch(&queries, 2, Metric::Cosine);
+    let results = storage.search_batch(&queries, 2, Metric::Cosine).unwrap();
     assert_eq!(results.len(), 3);
     assert!(results.iter().all(|hits| !hits.is_empty()));
 
@@ -174,7 +176,7 @@ fn no_mmap_insert_grows_file_without_panicking() {
         ))
         .unwrap();
 
-    let retrieved = storage.get(&id).unwrap();
+    let retrieved = storage.get(&id).unwrap().unwrap();
     assert_eq!(retrieved.text, "large no-mmap document");
     assert_eq!(retrieved.get_vector().len(), vector.len());
 
@@ -341,8 +343,8 @@ fn append_cursor_survives_reopen_and_preserves_existing_records() {
 
     let storage = Collection::open(test_path).unwrap();
     assert_eq!(storage.count(), 2);
-    assert_eq!(storage.get(&first_id).unwrap().text, "first");
-    assert_eq!(storage.get(&second_id).unwrap().text, "second");
+    assert_eq!(storage.get(&first_id).unwrap().unwrap().text, "first");
+    assert_eq!(storage.get(&second_id).unwrap().unwrap().text, "second");
 
     drop(storage);
     cleanup_test_files(&files);
@@ -377,8 +379,8 @@ fn compaction_rewrites_live_records_through_temp_record_store() {
     assert_eq!(stats.original_entries, 1);
     assert_eq!(stats.compacted_entries, 1);
     assert_eq!(storage.count(), 1);
-    assert_eq!(storage.get(&keep_id).unwrap().text, "keep");
-    assert!(storage.get(&delete_id).is_none());
+    assert_eq!(storage.get(&keep_id).unwrap().unwrap().text, "keep");
+    assert!(storage.get(&delete_id).unwrap().is_none());
     assert!(fs::metadata(format!("{}.compact", test_path)).is_err());
 
     drop(storage);

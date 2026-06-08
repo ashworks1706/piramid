@@ -108,8 +108,8 @@ fn main() {
 fn write_config_file(path: &Path, fmt: OutputFormat) -> std::io::Result<()> {
     let cfg = AppConfig::default();
     let contents = match fmt {
-        OutputFormat::Yaml => serde_yaml::to_string(&cfg).unwrap_or_default(),
-        OutputFormat::Json => serde_json::to_string_pretty(&cfg).unwrap_or_default(),
+        OutputFormat::Yaml => serde_yaml::to_string(&cfg).map_err(std::io::Error::other)?,
+        OutputFormat::Json => serde_json::to_string_pretty(&cfg).map_err(std::io::Error::other)?,
     };
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -133,43 +133,38 @@ fn start_server_inline() -> std::io::Result<()> {
         } = piramid::config::loader::load_runtime_config();
 
         let state = match embedding_config.clone() {
-            Some(config) => {
-                let timeout = std::env::var("EMBEDDING_TIMEOUT_SECS")
-                    .ok()
-                    .and_then(|s| s.parse::<u64>().ok());
-                let mut config = config;
-                if config.timeout.is_none() {
-                    config.timeout = timeout;
-                }
-                match embeddings::providers::create_embedder(&config) {
-                    Ok(embedder) => {
-                        let retry_embedder =
-                            std::sync::Arc::new(embeddings::RetryEmbedder::new(embedder));
-                        std::sync::Arc::new(AppState::with_embedder(
+            Some(config) => match embeddings::providers::create_embedder(&config) {
+                Ok(embedder) => {
+                    let retry_embedder =
+                        std::sync::Arc::new(embeddings::RetryEmbedder::new(embedder));
+                    std::sync::Arc::new(
+                        AppState::with_embedder(
                             &data_dir,
                             app_config.clone(),
                             slow_query_ms,
                             retry_embedder,
                             disk_min_free_bytes,
                             disk_readonly_on_low_space,
-                        ))
-                    }
-                    Err(_) => std::sync::Arc::new(AppState::new(
-                        &data_dir,
-                        app_config.clone(),
-                        slow_query_ms,
-                        disk_min_free_bytes,
-                        disk_readonly_on_low_space,
-                    )),
+                        )
+                        .map_err(std::io::Error::other)?,
+                    )
                 }
-            }
-            None => std::sync::Arc::new(AppState::new(
-                &data_dir,
-                app_config.clone(),
-                slow_query_ms,
-                disk_min_free_bytes,
-                disk_readonly_on_low_space,
-            )),
+                Err(e) => {
+                    return Err(std::io::Error::other(format!(
+                        "embedding provider configured but failed to initialize: {e}"
+                    )));
+                }
+            },
+            None => std::sync::Arc::new(
+                AppState::new(
+                    &data_dir,
+                    app_config.clone(),
+                    slow_query_ms,
+                    disk_min_free_bytes,
+                    disk_readonly_on_low_space,
+                )
+                .map_err(std::io::Error::other)?,
+            ),
         };
 
         let app = server::create_router(state);

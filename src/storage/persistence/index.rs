@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::error::Result;
+use crate::error::{Result, StorageError};
 
 //  maps UUID to location in mmap file
 // This is just file storage metadata
@@ -30,17 +30,18 @@ pub fn save_index(path: &str, index: &HashMap<Uuid, EntryPointer>) -> Result<()>
 pub fn load_index(path: &str) -> Result<HashMap<Uuid, EntryPointer>> {
     let index_path = format!("{}.index.db", path);
 
-    if let Ok(mut index_file) = std::fs::File::open(&index_path) {
-        use std::io::Read;
-        let mut index_data = Vec::new();
-        if index_file.read_to_end(&mut index_data).is_ok() {
-            Ok(bincode::deserialize(&index_data).unwrap_or_else(|_| HashMap::new()))
-        } else {
-            Ok(HashMap::new())
-        }
-    } else {
-        Ok(HashMap::new())
-    }
+    let mut index_file = match std::fs::File::open(&index_path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(HashMap::new()),
+        Err(error) => return Err(error.into()),
+    };
+
+    use std::io::Read;
+    let mut index_data = Vec::new();
+    index_file.read_to_end(&mut index_data)?;
+    bincode::deserialize(&index_data).map_err(|e| {
+        StorageError::CorruptedIndex(format!("failed to decode {index_path}: {e}")).into()
+    })
 }
 
 pub fn get_wal_path(storage_path: &str) -> String {

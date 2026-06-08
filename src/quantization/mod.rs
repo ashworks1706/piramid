@@ -181,9 +181,7 @@ impl ProductQuantizedVector {
 
             for _ in start..end {
                 let code = self.codes.get(idx).copied().ok_or_else(|| {
-                    StorageError::CorruptedData(format!(
-                        "PQ vector missing code at position {idx}"
-                    ))
+                    StorageError::CorruptedData(format!("PQ vector missing code at position {idx}"))
                 })?;
                 let normalized = code as f32 / 255.0;
                 values.push(normalized * range + self.block_mins[block_idx]);
@@ -233,10 +231,18 @@ impl QuantizedVector {
 
     pub fn from_f32_with_config(vector: &[f32], cfg: &QuantizationConfig) -> Self {
         match cfg.level {
+            crate::config::QuantizationLevel::None | crate::config::QuantizationLevel::Int8 => {
+                Self::from_scalar(vector)
+            }
             crate::config::QuantizationLevel::Pq { subquantizers } => {
                 Self::from_pq(vector, subquantizers)
             }
-            _ => Self::from_scalar(vector),
+            crate::config::QuantizationLevel::Int4 => {
+                panic!("Int4 quantization is not implemented")
+            }
+            crate::config::QuantizationLevel::Float16 => {
+                panic!("Float16 quantization is not implemented")
+            }
         }
     }
 

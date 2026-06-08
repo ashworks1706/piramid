@@ -22,6 +22,7 @@ pub fn dot_product(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
         ExecutionMode::Parallel => dot_product_parallel(a, b),
         ExecutionMode::Binary => dot_product_binary(a, b),
         ExecutionMode::Jit => dot_product_jit(a, b),
-        _ => dot_product_scalar(a, b),
+        ExecutionMode::Gpu => panic!("GPU dot product is not implemented"),
+        ExecutionMode::Auto => unreachable!("ExecutionMode::Auto should resolve before dispatch"),
     }
 }

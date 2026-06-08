@@ -25,6 +25,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
         ExecutionMode::Parallel => cosine_similarity_parallel(a, b),
         ExecutionMode::Binary => cosine_similarity_binary(a, b),
         ExecutionMode::Jit => cosine_similarity_jit(a, b),
-        _ => cosine_similarity_scalar(a, b),
+        ExecutionMode::Gpu => panic!("GPU cosine similarity is not implemented"),
+        ExecutionMode::Auto => unreachable!("ExecutionMode::Auto should resolve before dispatch"),
     }
 }

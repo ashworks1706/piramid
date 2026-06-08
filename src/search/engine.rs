@@ -74,9 +74,7 @@ fn search_collection_with_maps(
     // 5. For each candidate ID returned by the vector index search, retrieve the corresponding vector and metadata from storage, calculate the similarity score using the specified metric, and construct a Hit object that includes the ID, score, text, vector, and metadata. This step involves looking up each candidate ID in the storage to get the full information needed to return to the caller. The similarity score is calculated using the configured metric (e.g., cosine similarity), which takes into account the query vector and the candidate vector.
     for id in neighbor_ids {
         let entry = storage.get(&id)?.ok_or_else(|| {
-            crate::error::IndexError::SearchFailed(format!(
-                "index returned missing document {id}"
-            ))
+            crate::error::IndexError::SearchFailed(format!("index returned missing document {id}"))
         })?;
         let vec = entry.try_get_vector()?;
         let score = metric.calculate(query, &vec, mode);

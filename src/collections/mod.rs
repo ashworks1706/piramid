@@ -85,7 +85,12 @@ impl Collection {
         search::search(self, query, k, metric, params)
     }
 
-    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize, metric: Metric) -> Result<Vec<Vec<Hit>>> {
+    pub fn search_batch(
+        &self,
+        queries: &[Vec<f32>],
+        k: usize,
+        metric: Metric,
+    ) -> Result<Vec<Vec<Hit>>> {
         search::search_batch(self, queries, k, metric)
     }
 

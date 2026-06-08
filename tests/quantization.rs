@@ -1,4 +1,4 @@
-use piramid::quantization::QuantizedVector;
+use piramid::quantization::{ProductQuantizedVector, QuantizationKind, QuantizedVector};
 
 #[test]
 fn quantization_roundtrip() {
@@ -42,4 +42,23 @@ fn quantization_pq_roundtrip() {
     );
     let restored = pq.to_f32();
     assert_eq!(restored.len(), original.len());
+}
+
+#[test]
+fn corrupt_pq_encoding_fails_decode() {
+    let corrupt = QuantizedVector {
+        values: Vec::new(),
+        min: 0.0,
+        max: 0.0,
+        pq: Some(ProductQuantizedVector {
+            codes: vec![1],
+            block_mins: vec![0.0],
+            block_maxs: vec![1.0],
+            dim: 4,
+            subquantizers: 1,
+        }),
+        kind: QuantizationKind::Pq,
+    };
+
+    assert!(corrupt.try_to_f32().is_err());
 }

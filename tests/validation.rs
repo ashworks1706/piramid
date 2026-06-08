@@ -36,3 +36,16 @@ fn validate_batch_sizes() {
     assert!(validation::validate_batch_size(0, 100, "insert").is_err());
     assert!(validation::validate_batch_size(101, 100, "insert").is_err());
 }
+
+#[test]
+fn invalid_metric_and_search_preset_are_rejected() {
+    assert!(piramid::services::search::parse_metric(Some("cosinee".into())).is_err());
+    assert!(piramid::services::search::apply_search_overrides(
+        piramid::config::SearchConfig::default(),
+        None,
+        None,
+        None,
+        Some("balanced".into()),
+    )
+    .is_err());
+}

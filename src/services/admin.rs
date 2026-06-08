@@ -112,17 +112,11 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             ivf_nprobe,
         });
 
-        let wal_size = std::fs::metadata(format!("{}.wal.db", collection_guard.path))
-            .map(|metadata| metadata.len())
-            .ok();
-        let checkpoint_age_secs =
-            collection_guard
-                .checkpoint
-                .last_checkpoint()
-                .and_then(|timestamp| {
-                    let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
-                    now.checked_sub(timestamp)
-                });
+        let wal_size = optional_file_size(&format!("{}.wal.db", collection_guard.path))?;
+        let checkpoint_age_secs = collection_guard
+            .checkpoint
+            .last_checkpoint()
+            .and_then(|timestamp| current_unix_secs().ok()?.checked_sub(timestamp));
         wal_stats.push(WalStats {
             collection: collection_guard.path.clone(),
             last_checkpoint: collection_guard.checkpoint.last_checkpoint(),
@@ -164,13 +158,9 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
         let count = collection_guard.count();
         total_vectors += count;
         let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
-        let checkpoint_age_secs = last_checkpoint.and_then(|timestamp| {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
-            now.checked_sub(timestamp)
-        });
-        let wal_size_bytes = std::fs::metadata(format!("{}.wal.db", collection_guard.path))
-            .map(|metadata| metadata.len())
-            .ok();
+        let checkpoint_age_secs =
+            last_checkpoint.and_then(|timestamp| current_unix_secs().ok()?.checked_sub(timestamp));
+        let wal_size_bytes = optional_file_size(&format!("{}.wal.db", collection_guard.path))?;
 
         collections.push(CollectionHealth {
             name,
@@ -215,7 +205,7 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     }
 
     let loaded_collections = state.collection_manager.len();
-    let (disk_total_bytes, disk_available_bytes) = disk_stats(&state.data_dir);
+    let (disk_total_bytes, disk_available_bytes) = disk_stats(&state.data_dir)?;
     let ok = collections
         .iter()
         .all(|collection| collection.integrity_ok && collection.loaded);
@@ -233,21 +223,38 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     })
 }
 
-fn disk_stats(path: &str) -> (Option<u64>, Option<u64>) {
+fn optional_file_size(path: &str) -> Result<Option<u64>> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(Some(metadata.len())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn current_unix_secs() -> Result<u64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| crate::error::PiramidError::other(format!("system clock error: {e}")))?
+        .as_secs())
+}
+
+fn disk_stats(path: &str) -> Result<(Option<u64>, Option<u64>)> {
     #[cfg(target_family = "unix")]
     {
         use std::ffi::CString;
-        let path = match CString::new(path) {
-            Ok(path) => path,
-            Err(_) => return (None, None),
-        };
+        let path = CString::new(path)
+            .map_err(|_| ServerError::Internal("data_dir contains an interior NUL byte".into()))?;
         let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
         let rc = unsafe { libc::statvfs(path.as_ptr(), &mut stat) };
         if rc == 0 {
             let total = (stat.f_blocks as u64).saturating_mul(stat.f_frsize as u64);
             let available = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
-            return (Some(total), Some(available));
+            return Ok((Some(total), Some(available)));
         }
+        Err(std::io::Error::last_os_error().into())
     }
-    (None, None)
+    #[cfg(not(target_family = "unix"))]
+    {
+        Ok((None, None))
+    }
 }

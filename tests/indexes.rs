@@ -24,14 +24,16 @@ fn flat_index_searches() {
     idx.insert(id2, &v2, &reader);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
-    let results = idx.search(
-        &v1,
-        1,
-        &reader,
-        piramid::config::SearchConfig::default(),
-        None,
-        &empty_meta,
-    );
+    let results = idx
+        .search(
+            &v1,
+            1,
+            &reader,
+            piramid::config::SearchConfig::default(),
+            None,
+            &empty_meta,
+        )
+        .unwrap();
     assert_eq!(results.first(), Some(&id1));
 }
 
@@ -47,7 +49,7 @@ fn hnsw_tombstone_tracks() {
     idx.insert(id, &vec, &reader);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
-    let results = idx.search(&vec, 1, 50, &reader, None, &empty_meta);
+    let results = idx.search(&vec, 1, 50, &reader, None, &empty_meta).unwrap();
     assert!(!results.is_empty());
 
     idx.remove(&id);
@@ -58,7 +60,10 @@ fn hnsw_tombstone_tracks() {
 
 #[test]
 fn ivf_search_basic() {
-    let config = IvfConfig::default();
+    let config = IvfConfig {
+        num_clusters: 2,
+        ..IvfConfig::default()
+    };
     let mut idx = IvfIndex::new(config);
     let mut vectors = HashMap::new();
 
@@ -74,15 +79,44 @@ fn ivf_search_basic() {
     idx.insert(id2, &v2, &reader);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
-    let results = idx.search(
-        &v1,
+    let results = idx
+        .search(
+            &v1,
+            1,
+            &reader,
+            piramid::config::SearchConfig::default(),
+            None,
+            &empty_meta,
+        )
+        .unwrap();
+    assert!(!results.is_empty());
+}
+
+#[test]
+fn ivf_search_fails_before_clusters_are_ready() {
+    let config = IvfConfig {
+        num_clusters: 4,
+        ..IvfConfig::default()
+    };
+    let mut idx = IvfIndex::new(config);
+    let mut vectors = HashMap::new();
+
+    let id = Uuid::new_v4();
+    let vec = vec![1.0, 0.0, 0.0];
+    vectors.insert(id, vec.clone());
+    let reader = HashMapVectorReader::new(&vectors);
+    idx.insert(id, &vec, &reader);
+
+    let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
+    let result = idx.search(
+        &vec,
         1,
         &reader,
         piramid::config::SearchConfig::default(),
         None,
         &empty_meta,
     );
-    assert!(!results.is_empty());
+    assert!(result.is_err());
 }
 
 #[test]

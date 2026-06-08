@@ -22,7 +22,8 @@ pub fn euclidean_distance(a: &[f32], b: &[f32], mode: ExecutionMode) -> f32 {
         ExecutionMode::Parallel => euclidean_distance_parallel(a, b),
         ExecutionMode::Binary => euclidean_distance_binary(a, b),
         ExecutionMode::Jit => euclidean_distance_jit(a, b),
-        _ => euclidean_distance_scalar(a, b),
+        ExecutionMode::Gpu => panic!("GPU euclidean distance is not implemented"),
+        ExecutionMode::Auto => unreachable!("ExecutionMode::Auto should resolve before dispatch"),
     }
 }
 
@@ -34,6 +35,7 @@ pub fn euclidean_distance_squared(a: &[f32], b: &[f32], mode: ExecutionMode) -> 
         ExecutionMode::Parallel => euclidean_distance_squared_parallel(a, b),
         ExecutionMode::Binary => euclidean_distance_squared_binary(a, b),
         ExecutionMode::Jit => euclidean_distance_squared_jit(a, b),
-        _ => euclidean_distance_squared_scalar(a, b),
+        ExecutionMode::Gpu => panic!("GPU euclidean squared distance is not implemented"),
+        ExecutionMode::Auto => unreachable!("ExecutionMode::Auto should resolve before dispatch"),
     }
 }
