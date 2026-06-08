@@ -98,7 +98,7 @@ impl CollectionBuilder {
             Self::replay_wal(&mut recovered_collection, wal_entries)?;
 
             // After replaying, rebuild the vector cache to ensure it's in sync with the index
-            recovered_collection.rebuild_vector_cache();
+            recovered_collection.rebuild_vector_cache()?;
 
             // Checkpoint the collection to persist the changes from the WAL replay, which will also clear the WAL
             super::checkpoint::checkpoint(&mut recovered_collection)?;
@@ -109,7 +109,7 @@ impl CollectionBuilder {
 
         // If the index is not empty but the vector index is missing, we need to rebuild the vector index from the existing data
         if !index.is_empty() && vector_index_missing {
-            Self::rebuild_vector_index(&mut vector_index, &index, &record_store);
+            Self::rebuild_vector_index(&mut vector_index, &index, &record_store)?;
         }
 
         // Finally, create the collection instance with the loaded index, metadata, and vector index
@@ -124,7 +124,7 @@ impl CollectionBuilder {
             checkpoint,
         };
 
-        collection.rebuild_vector_cache();
+        collection.rebuild_vector_cache()?;
         Ok(collection)
     }
 
@@ -149,7 +149,7 @@ impl CollectionBuilder {
                         text,
                         metadata,
                     };
-                    let _ = super::operations::insert_internal(collection, vec_entry);
+                    super::operations::insert_internal(collection, vec_entry)?;
                 }
 
                 WalEntry::Update {
@@ -169,7 +169,7 @@ impl CollectionBuilder {
                         text,
                         metadata,
                     };
-                    let _ = super::operations::insert_internal(collection, vec_entry);
+                    super::operations::insert_internal(collection, vec_entry)?;
                 }
                 WalEntry::Delete { id, .. } => {
                     super::operations::delete_internal(collection, &id);
@@ -184,13 +184,12 @@ impl CollectionBuilder {
         vector_index: &mut Box<dyn crate::index::VectorIndex>,
         index: &HashMap<Uuid, crate::storage::persistence::EntryPointer>,
         record_store: &RecordStore,
-    ) {
+    ) -> Result<()> {
         // If the vector index is missing but we have an existing index, we need to rebuild the vector index from the existing data. We read each entry from the memory-mapped file based on the offsets and lengths in the index, deserialize it into a Document, and then insert it into the vector index.
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
         for (id, idx_entry) in index {
-            if let Some(entry) = record_store.read_document(idx_entry) {
-                vectors.insert(*id, entry.get_vector());
-            }
+            let entry = record_store.read_document(idx_entry)?;
+            vectors.insert(*id, entry.try_get_vector()?);
         }
 
         // Once we have all the vectors loaded from the existing data, we can insert them into the vector index. This will rebuild the vector index so that it is in sync with the existing data in the collection.
@@ -199,5 +198,6 @@ impl CollectionBuilder {
         for (id, vector) in &vectors {
             vector_index.insert(*id, vector, &reader);
         }
+        Ok(())
     }
 }
