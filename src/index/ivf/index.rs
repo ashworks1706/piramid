@@ -2,7 +2,7 @@
 // O(√N) search complexity - much faster than brute force for large datasets
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use super::config::IvfConfig;
@@ -16,6 +16,8 @@ pub struct IvfIndex {
     centroids: Vec<Vec<f32>>,                // Cluster centroids
     inverted_lists: Vec<Vec<Uuid>>,          // vectors[cluster_id] = [vector_ids]
     vector_to_cluster: HashMap<Uuid, usize>, // Track which cluster each vector belongs to
+    #[serde(default)]
+    pending_vectors: HashSet<Uuid>, // Vectors waiting for initial clustering
     dimensions: usize,
 }
 
@@ -29,6 +31,7 @@ impl IvfIndex {
             centroids: Vec::new(),
             inverted_lists: Vec::new(),
             vector_to_cluster: HashMap::new(),
+            pending_vectors: HashSet::new(),
             dimensions: 0,
         }
     }
@@ -103,6 +106,7 @@ impl IvfIndex {
         // Build inverted lists
         self.inverted_lists = vec![Vec::new(); num_clusters];
         self.vector_to_cluster.clear();
+        self.pending_vectors.clear();
 
         for (id, vec) in &vector_list {
             let cluster_id = self.find_nearest_centroid(vec);
@@ -154,6 +158,8 @@ impl VectorIndex for IvfIndex {
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) {
         // For online insertion, find nearest centroid and add to that cluster
         if self.centroids.is_empty() {
+            self.pending_vectors.insert(id);
+
             // First insertion - need to build clusters
             if vectors.len() >= self.config.num_clusters {
                 self.build_clusters(vectors);
@@ -230,6 +236,7 @@ impl VectorIndex for IvfIndex {
     }
 
     fn remove(&mut self, id: &Uuid) {
+        self.pending_vectors.remove(id);
         if let Some(cluster_id) = self.vector_to_cluster.remove(id) {
             if let Some(list) = self.inverted_lists.get_mut(cluster_id) {
                 list.retain(|vid| vid != id);
@@ -243,6 +250,7 @@ impl VectorIndex for IvfIndex {
         let memory_usage = self.centroids.len() * self.dimensions * std::mem::size_of::<f32>()
             + self.vector_to_cluster.len()
                 * (std::mem::size_of::<Uuid>() + std::mem::size_of::<usize>())
+            + self.pending_vectors.len() * std::mem::size_of::<Uuid>()
             + self
                 .inverted_lists
                 .iter()
@@ -251,7 +259,7 @@ impl VectorIndex for IvfIndex {
 
         IndexStats {
             index_type: IndexType::Ivf,
-            total_vectors: self.vector_to_cluster.len(),
+            total_vectors: self.vector_to_cluster.len() + self.pending_vectors.len(),
             memory_usage_bytes: memory_usage,
             details: IndexDetails::Ivf {
                 num_clusters: self.centroids.len(),

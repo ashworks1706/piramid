@@ -10,7 +10,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **IVF Index (1.0.2)**
 
-- [ ] during the IVF bootstrap phase, if not enough vectors have been inserted yet to form clusters, new vectors are silently dropped without any error or warning -- they're just lost. vectors should be held in a buffer and replayed into the index once clustering is ready.
 - [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
 **Quantization (1.1.0)**

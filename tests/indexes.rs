@@ -21,7 +21,12 @@ fn flat_index_searches() {
     let reader = HashMapVectorReader::new(&vectors);
 
     idx.insert(id1, &v1, &reader);
+    let bootstrap_stats = idx.stats();
+    assert_eq!(bootstrap_stats.total_vectors, 1);
+
     idx.insert(id2, &v2, &reader);
+    let ready_stats = idx.stats();
+    assert_eq!(ready_stats.total_vectors, 2);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
     let results = idx
@@ -72,11 +77,18 @@ fn ivf_search_basic() {
     let v1 = vec![1.0, 0.0, 0.0];
     let v2 = vec![0.9, 0.1, 0.0];
     vectors.insert(id1, v1.clone());
+    {
+        let reader = HashMapVectorReader::new(&vectors);
+        idx.insert(id1, &v1, &reader);
+    }
+    let bootstrap_stats = idx.stats();
+    assert_eq!(bootstrap_stats.total_vectors, 1);
+
     vectors.insert(id2, v2.clone());
     let reader = HashMapVectorReader::new(&vectors);
-
-    idx.insert(id1, &v1, &reader);
     idx.insert(id2, &v2, &reader);
+    let ready_stats = idx.stats();
+    assert_eq!(ready_stats.total_vectors, 2);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
     let results = idx
@@ -106,6 +118,7 @@ fn ivf_search_fails_before_clusters_are_ready() {
     vectors.insert(id, vec.clone());
     let reader = HashMapVectorReader::new(&vectors);
     idx.insert(id, &vec, &reader);
+    assert_eq!(idx.stats().total_vectors, 1);
 
     let empty_meta: HashMap<Uuid, piramid::metadata::Metadata> = HashMap::new();
     let result = idx.search(
@@ -117,6 +130,9 @@ fn ivf_search_fails_before_clusters_are_ready() {
         &empty_meta,
     );
     assert!(result.is_err());
+
+    idx.remove(&id);
+    assert_eq!(idx.stats().total_vectors, 0);
 }
 
 #[test]
