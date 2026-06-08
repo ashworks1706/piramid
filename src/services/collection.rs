@@ -2,7 +2,6 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::error::{Result, ServerError};
 use crate::metrics::record_lock_read;
-use crate::metrics::Metric;
 use crate::runtime::{RebuildJobStatus, RebuildState, SharedState};
 use crate::server::types::*;
 use crate::validation;
@@ -80,8 +79,18 @@ pub fn delete_collection(state: &SharedState, collection: String) -> Result<Dele
 
     let existed = state.collection_manager.remove(&collection).is_some();
     if existed {
-        let path = format!("{}/{}.db", state.data_dir, collection);
-        std::fs::remove_file(&path).ok();
+        for suffix in ["", ".index.db", ".metadata.db", ".vecindex.db", ".wal.db", ".wal.meta"] {
+            let path = if suffix.is_empty() {
+                format!("{}/{}.db", state.data_dir, collection)
+            } else {
+                format!("{}/{}.db{}", state.data_dir, collection, suffix)
+            };
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
     }
 
     Ok(DeleteResponse {
@@ -122,7 +131,7 @@ pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStats
         index_type: stats.index_type.to_string(),
         total_vectors: stats.total_vectors,
         memory_usage_bytes: stats.memory_usage_bytes,
-        details: serde_json::to_value(&stats.details).unwrap_or(serde_json::json!({})),
+        details: serde_json::to_value(&stats.details)?,
     })
 }
 
@@ -212,11 +221,7 @@ pub fn find_duplicates(
         lock_start,
     );
 
-    let metric = match req.metric.as_deref() {
-        Some("euclidean") => Metric::Euclidean,
-        Some("dot") | Some("dot_product") => Metric::DotProduct,
-        _ => Metric::Cosine,
-    };
+    let metric = crate::services::search::parse_metric(req.metric)?;
     let hits = crate::collections::find_duplicates(
         &collection_guard,
         metric,

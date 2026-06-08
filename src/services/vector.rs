@@ -180,11 +180,11 @@ pub fn get_vector(state: &SharedState, collection: String, id: String) -> Result
     );
 
     let entry = collection_guard
-        .get(&uuid)
+        .get(&uuid)?
         .ok_or(ServerError::NotFound(VECTOR_NOT_FOUND.to_string()))?;
     Ok(VectorResponse {
         id: entry.id.to_string(),
-        vector: entry.get_vector(),
+        vector: entry.try_get_vector()?,
         text: entry.text,
         metadata: metadata_to_json(&entry.metadata),
     })
@@ -205,18 +205,20 @@ pub fn list_vectors(
         lock_start,
     );
 
-    Ok(collection_guard
-        .get_all()
+    collection_guard
+        .get_all()?
         .into_iter()
         .skip(params.offset)
         .take(params.limit)
-        .map(|entry| VectorResponse {
-            id: entry.id.to_string(),
-            vector: entry.get_vector(),
-            text: entry.text,
-            metadata: metadata_to_json(&entry.metadata),
+        .map(|entry| {
+            Ok(VectorResponse {
+                id: entry.id.to_string(),
+                vector: entry.try_get_vector()?,
+                text: entry.text,
+                metadata: metadata_to_json(&entry.metadata),
+            })
         })
-        .collect())
+        .collect()
 }
 
 pub fn delete_vector(
@@ -318,14 +320,14 @@ pub fn search_vectors(
         overfetch,
         preset,
     } = req;
-    let metric = parse_metric(metric);
+    let metric = parse_metric(metric)?;
     let effective_search = apply_search_overrides(
         collection_guard.config().search,
         ef,
         nprobe,
         overfetch,
         preset,
-    );
+    )?;
 
     match (vector, vectors) {
         (Some(vector), None) => {
@@ -341,7 +343,7 @@ pub fn search_vectors(
                     filter_overfetch_override: overfetch,
                     search_config_override: Some(effective_search),
                 },
-            );
+            )?;
             let duration = start.elapsed();
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
@@ -377,7 +379,7 @@ pub fn search_vectors(
                 k,
                 metric,
                 params,
-            );
+            )?;
             let duration = start.elapsed();
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
@@ -437,7 +439,7 @@ pub fn upsert_vector(
     } else {
         Uuid::new_v4()
     };
-    let exists = collection_guard.get(&id).is_some();
+    let exists = collection_guard.get(&id)?.is_some();
     let mut entry = Document::with_metadata(req.vector, req.text, json_to_metadata(req.metadata));
     entry.id = id;
 
@@ -485,14 +487,14 @@ pub fn range_search_vectors(
         lock_start,
     );
 
-    let metric = parse_metric(req.metric);
+    let metric = parse_metric(req.metric)?;
     let effective_search = apply_search_overrides(
         collection_guard.config().search,
         req.ef,
         req.nprobe,
         req.overfetch,
         req.preset,
-    );
+    )?;
     let start = Instant::now();
     let mut results = collection_guard.search(
         &req.vector,
@@ -504,7 +506,7 @@ pub fn range_search_vectors(
             filter_overfetch_override: req.overfetch,
             search_config_override: Some(effective_search),
         },
-    );
+    )?;
     results.retain(|hit| hit.score >= req.min_score);
     let duration = start.elapsed();
     if duration.as_millis() > state.slow_query_ms {

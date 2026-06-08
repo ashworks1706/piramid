@@ -67,7 +67,7 @@ impl AppConfig {
     }
 
     /// Apply environment variable overrides to an existing config.
-    pub fn apply_env_overrides(&mut self) {
+    pub fn apply_env_overrides(&mut self) -> Result<(), String> {
         if let Ok(val) = std::env::var("INDEX_TYPE") {
             self.index = match val.to_lowercase().as_str() {
                 "flat" => IndexConfig::Flat {
@@ -93,40 +93,36 @@ impl AppConfig {
                     mode: ExecutionMode::Auto,
                     search: self.search,
                 },
-                _ => self.index.clone(),
+                _ => return Err(format!("Invalid INDEX_TYPE '{val}'")),
             };
         }
 
         if let Ok(val) = std::env::var("WAL_ENABLED") {
-            self.wal.enabled = val == "1" || val.eq_ignore_ascii_case("true");
+            self.wal.enabled = parse_bool_env("WAL_ENABLED", &val)?;
         }
         if let Ok(val) = std::env::var("WAL_CHECKPOINT_FREQUENCY") {
-            if let Ok(freq) = val.parse::<usize>() {
-                self.wal.checkpoint_frequency = freq.max(1);
-            }
+            let freq = parse_env::<usize>("WAL_CHECKPOINT_FREQUENCY", &val)?;
+            self.wal.checkpoint_frequency = freq.max(1);
         }
         if let Ok(val) = std::env::var("WAL_CHECKPOINT_INTERVAL_SECS") {
-            if let Ok(secs) = val.parse::<u64>() {
-                self.wal.checkpoint_interval_secs = Some(secs.max(1));
-            }
+            let secs = parse_env::<u64>("WAL_CHECKPOINT_INTERVAL_SECS", &val)?;
+            self.wal.checkpoint_interval_secs = Some(secs.max(1));
         }
 
         if let Ok(val) = std::env::var("MEMORY_USE_MMAP") {
-            self.memory.use_mmap = val == "1" || val.eq_ignore_ascii_case("true");
+            self.memory.use_mmap = parse_bool_env("MEMORY_USE_MMAP", &val)?;
         }
         if let Ok(val) = std::env::var("MEMORY_INITIAL_MMAP_MB") {
-            if let Ok(mb) = val.parse::<usize>() {
-                self.memory.initial_mmap_size = mb * 1024 * 1024;
-            }
+            let mb = parse_env::<usize>("MEMORY_INITIAL_MMAP_MB", &val)?;
+            self.memory.initial_mmap_size = mb * 1024 * 1024;
         }
 
         if let Ok(val) = std::env::var("PARALLEL_SEARCH") {
-            self.parallelism.parallel_search = val == "1" || val.eq_ignore_ascii_case("true");
+            self.parallelism.parallel_search = parse_bool_env("PARALLEL_SEARCH", &val)?;
         }
         if let Ok(val) = std::env::var("NUM_THREADS") {
-            if let Ok(n) = val.parse::<usize>() {
-                self.parallelism = self.parallelism.with_num_threads(n);
-            }
+            let n = parse_env::<usize>("NUM_THREADS", &val)?;
+            self.parallelism = self.parallelism.with_num_threads(n);
         }
 
         if let Ok(val) = std::env::var("EXECUTION_MODE") {
@@ -137,58 +133,65 @@ impl AppConfig {
                 "parallel" => ExecutionMode::Parallel,
                 "binary" => ExecutionMode::Binary,
                 "jit" => ExecutionMode::Jit,
-                _ => ExecutionMode::Auto,
+                _ => return Err(format!("Invalid EXECUTION_MODE '{val}'")),
             };
         }
 
         if let Ok(val) = std::env::var("SEARCH_FILTER_OVERFETCH")
             .or_else(|_| std::env::var("SEARCH_FILTER_EXPANSION"))
         {
-            if let Ok(factor) = val.parse::<usize>() {
-                self.search.filter_overfetch = factor.max(1);
-            }
+            let factor = parse_env::<usize>("SEARCH_FILTER_OVERFETCH", &val)?;
+            self.search.filter_overfetch = factor.max(1);
         }
 
         if let Ok(val) = std::env::var("LIMIT_MAX_VECTORS") {
-            if let Ok(v) = val.parse::<usize>() {
-                self.limits.max_vectors = Some(v);
-            }
+            self.limits.max_vectors = Some(parse_env::<usize>("LIMIT_MAX_VECTORS", &val)?);
         }
         if let Ok(val) = std::env::var("LIMIT_MAX_BYTES") {
-            if let Ok(v) = val.parse::<u64>() {
-                self.limits.max_bytes = Some(v);
-            }
+            self.limits.max_bytes = Some(parse_env::<u64>("LIMIT_MAX_BYTES", &val)?);
         }
         if let Ok(val) = std::env::var("LIMIT_MAX_VECTOR_BYTES") {
-            if let Ok(v) = val.parse::<usize>() {
-                self.limits.max_vector_bytes = Some(v);
-            }
+            self.limits.max_vector_bytes =
+                Some(parse_env::<usize>("LIMIT_MAX_VECTOR_BYTES", &val)?);
         }
 
         if let Ok(val) = std::env::var("CACHE_ENABLED") {
-            self.cache.enabled = val == "1" || val.eq_ignore_ascii_case("true");
+            self.cache.enabled = parse_bool_env("CACHE_ENABLED", &val)?;
         }
         if let Ok(val) = std::env::var("CACHE_MAX_SIZE") {
-            if let Ok(v) = val.parse::<usize>() {
-                self.cache.max_size = v;
-            }
+            self.cache.max_size = parse_env::<usize>("CACHE_MAX_SIZE", &val)?;
         }
         if let Ok(val) = std::env::var("CACHE_TTL_SECONDS") {
-            if let Ok(v) = val.parse::<u64>() {
-                self.cache.ttl_seconds = Some(v);
-            }
+            self.cache.ttl_seconds = Some(parse_env::<u64>("CACHE_TTL_SECONDS", &val)?);
         }
         if let Ok(val) = std::env::var("CACHE_MAX_BYTES") {
-            if let Ok(v) = val.parse::<u64>() {
-                self.cache.max_bytes = Some(v);
-            }
+            self.cache.max_bytes = Some(parse_env::<u64>("CACHE_MAX_BYTES", &val)?);
         }
+        Ok(())
     }
 
     pub fn from_env() -> Self {
         // Create a default configuration and then apply any overrides from environment variables.
         let mut cfg = AppConfig::default();
-        cfg.apply_env_overrides();
+        cfg.apply_env_overrides()
+            .expect("invalid application configuration environment override");
         cfg
+    }
+}
+
+fn parse_env<T>(name: &str, value: &str) -> Result<T, String>
+where
+    T: std::str::FromStr,
+{
+    value
+        .parse::<T>()
+        .map_err(|_| format!("Invalid {name} value '{value}'"))
+}
+
+fn parse_bool_env(name: &str, value: &str) -> Result<bool, String> {
+    match value.to_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        _ => Err(format!("Invalid {name} value '{value}'")),
     }
 }

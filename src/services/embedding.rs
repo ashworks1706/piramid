@@ -154,7 +154,7 @@ pub async fn search_by_text(
         .embed_metrics
         .record(1, 1, response.tokens.unwrap_or(0) as u64, embed_duration);
 
-    let metric = parse_metric(req.metric);
+    let metric = parse_metric(req.metric)?;
     let base_search = {
         let collection_guard = collection_handle.read();
         collection_guard.config().search
@@ -165,7 +165,7 @@ pub async fn search_by_text(
         req.nprobe,
         req.overfetch,
         req.preset.clone(),
-    );
+    )?;
 
     let lock_start = Instant::now();
     let collection_guard = collection_handle.read();
@@ -185,7 +185,7 @@ pub async fn search_by_text(
             filter_overfetch_override: req.overfetch,
             search_config_override: Some(effective_search),
         },
-    );
+    )?;
     let duration = start.elapsed();
     if duration.as_millis() > state.slow_query_ms {
         tracing::warn!(
