@@ -36,7 +36,7 @@ fn search_collection_with_maps(
     metric: Metric,
     params: SearchParams<'_>,
     metadatas: &HashMap<Uuid, crate::metadata::Metadata>,
-) -> Vec<Hit> {
+) -> Result<Vec<Hit>> {
     // 1. Determine effective search config and overfetch factor
     let effective_search = params
         .search_config_override
