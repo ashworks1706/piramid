@@ -43,7 +43,7 @@ impl Collection {
         CollectionBuilder::open(path, options)
     }
 
-    pub fn get(&self, id: &Uuid) -> Option<Document> {
+    pub fn get(&self, id: &Uuid) -> Result<Option<Document>> {
         operations::get(self, id)
     }
 
@@ -81,11 +81,11 @@ impl Collection {
         k: usize,
         metric: Metric,
         params: crate::search::SearchParams,
-    ) -> Vec<Hit> {
+    ) -> Result<Vec<Hit>> {
         search::search(self, query, k, metric, params)
     }
 
-    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize, metric: Metric) -> Vec<Vec<Hit>> {
+    pub fn search_batch(&self, queries: &[Vec<f32>], k: usize, metric: Metric) -> Result<Vec<Vec<Hit>>> {
         search::search_batch(self, queries, k, metric)
     }
 

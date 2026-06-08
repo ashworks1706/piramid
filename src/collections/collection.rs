@@ -119,23 +119,23 @@ impl Collection {
         &self.config
     }
 
-    pub fn get_all(&self) -> Vec<crate::storage::document::Document> {
+    pub fn get_all(&self) -> Result<Vec<crate::storage::document::Document>> {
         let mut all_entries = Vec::new();
         for id in self.index.keys() {
-            if let Some(entry) = super::operations::get(self, id) {
+            if let Some(entry) = super::operations::get(self, id)? {
                 all_entries.push(entry);
             }
         }
-        all_entries
+        Ok(all_entries)
     }
 
-    pub(super) fn rebuild_vector_cache(&mut self) {
-        cache_maintenance::rebuild(self);
+    pub(super) fn rebuild_vector_cache(&mut self) -> Result<()> {
+        cache_maintenance::rebuild(self)
     }
 
     // If cache and index diverge (e.g., after crash), rebuild to ensure consistency.
-    pub fn ensure_cache_consistency(&mut self) {
-        cache_maintenance::ensure_consistent(self);
+    pub fn ensure_cache_consistency(&mut self) -> Result<()> {
+        cache_maintenance::ensure_consistent(self)
     }
 
     /// Rebuild the vector index from on-disk data and persist it.
@@ -144,9 +144,8 @@ impl Collection {
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
 
         for (id, pointer) in &self.index {
-            if let Some(entry) = self.record_store.read_document(pointer) {
-                vectors.insert(*id, entry.get_vector());
-            }
+            let entry = self.record_store.read_document(pointer)?;
+            vectors.insert(*id, entry.try_get_vector()?);
         }
 
         // Build fresh index
@@ -158,7 +157,7 @@ impl Collection {
 
         // Swap and persist
         self.vector_index = new_index;
-        self.rebuild_vector_cache();
+        self.rebuild_vector_cache()?;
         save_vector_index(self.path.as_str(), self.vector_index())?;
         Ok(())
     }

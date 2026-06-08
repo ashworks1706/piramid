@@ -1,5 +1,6 @@
 use crate::metrics::Metric;
 use crate::search::Hit;
+use crate::Result;
 
 use super::Collection;
 
@@ -9,7 +10,7 @@ pub fn search(
     k: usize,
     metric: Metric,
     mut params: crate::search::SearchParams,
-) -> Vec<Hit> {
+) -> Result<Vec<Hit>> {
     // If the execution mode in the search parameters is set to Auto, we override it with the collection's configured execution mode.
     if matches!(params.mode, crate::config::ExecutionMode::Auto) {
         params.mode = collection.config().execution;
@@ -26,7 +27,7 @@ pub fn search_batch(
     queries: &[Vec<f32>],
     k: usize,
     metric: Metric,
-) -> Vec<Vec<Hit>> {
+) -> Result<Vec<Vec<Hit>>> {
     let params = crate::search::SearchParams {
         mode: collection.config().execution,
         filter: None,
