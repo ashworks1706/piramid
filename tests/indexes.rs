@@ -136,6 +136,47 @@ fn ivf_search_fails_before_clusters_are_ready() {
 }
 
 #[test]
+fn ivf_duplicate_insert_uses_id_map_without_duplicate_membership() {
+    let config = IvfConfig {
+        num_clusters: 2,
+        ..IvfConfig::default()
+    };
+    let mut idx = IvfIndex::new(config);
+    let mut vectors = HashMap::new();
+
+    let id1 = Uuid::new_v4();
+    let id2 = Uuid::new_v4();
+    let v1 = vec![1.0, 0.0, 0.0];
+    let v2 = vec![0.0, 1.0, 0.0];
+
+    vectors.insert(id1, v1.clone());
+    {
+        let reader = HashMapVectorReader::new(&vectors);
+        idx.insert(id1, &v1, &reader);
+        idx.insert(id1, &v1, &reader);
+    }
+    assert_eq!(idx.stats().total_vectors, 1);
+
+    vectors.insert(id2, v2.clone());
+    let reader = HashMapVectorReader::new(&vectors);
+    idx.insert(id2, &v2, &reader);
+    idx.insert(id2, &v2, &reader);
+
+    let stats = idx.stats();
+    assert_eq!(stats.total_vectors, 2);
+    match stats.details {
+        piramid::index::IndexDetails::Ivf {
+            vectors_per_cluster,
+            ..
+        } => {
+            let indexed_memberships: usize = vectors_per_cluster.iter().sum();
+            assert_eq!(indexed_memberships, 2);
+        }
+        other => panic!("expected IVF stats, got {other:?}"),
+    }
+}
+
+#[test]
 fn index_selector_prefers_expected_types() {
     let cfg = IndexConfig::default();
     assert_eq!(cfg.select_type(1_000), IndexType::Flat);

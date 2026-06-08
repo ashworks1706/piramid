@@ -156,6 +156,10 @@ impl IvfIndex {
 
 impl VectorIndex for IvfIndex {
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) {
+        if self.vector_to_cluster.contains_key(&id) || self.pending_vectors.contains(&id) {
+            return;
+        }
+
         // For online insertion, find nearest centroid and add to that cluster
         if self.centroids.is_empty() {
             self.pending_vectors.insert(id);
@@ -170,11 +174,11 @@ impl VectorIndex for IvfIndex {
         let cluster_id = self.find_nearest_centroid(vector);
 
         // Add to inverted list
-        if cluster_id < self.inverted_lists.len() && !self.inverted_lists[cluster_id].contains(&id)
-        {
-            self.inverted_lists[cluster_id].push(id);
-            self.vector_to_cluster.insert(id, cluster_id);
+        if cluster_id >= self.inverted_lists.len() {
+            return;
         }
+        self.inverted_lists[cluster_id].push(id);
+        self.vector_to_cluster.insert(id, cluster_id);
     }
 
     fn search(

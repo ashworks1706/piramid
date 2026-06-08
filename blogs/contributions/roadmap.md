@@ -10,7 +10,7 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 **IVF Index (1.0.2)**
 
-- [ ] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
+- [x] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
 
 **Quantization (1.1.0)**
 - [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
