@@ -3,7 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::config::CollectionConfig;
-use crate::error::Result;
+use crate::error::{Result, StorageError};
 use crate::storage::document::Document;
 use crate::storage::persistence::{
     create_mmap, ensure_file_size, grow_mmap_if_needed, warm_mmap, EntryPointer,
@@ -72,9 +72,20 @@ impl RecordStore {
         Ok(pointers)
     }
 
-    pub fn read_document(&self, pointer: &EntryPointer) -> Option<Document> {
-        let bytes = self.read_bytes(pointer).ok()?;
-        bincode::deserialize(&bytes).ok()
+    pub fn read_document(&self, pointer: &EntryPointer) -> Result<Document> {
+        let bytes = self.read_bytes(pointer).map_err(|e| {
+            StorageError::ReadFailed(format!(
+                "failed to read document at offset {} length {}: {e}",
+                pointer.offset, pointer.length
+            ))
+        })?;
+        bincode::deserialize(&bytes).map_err(|e| {
+            StorageError::CorruptedData(format!(
+                "failed to decode document at offset {} length {}: {e}",
+                pointer.offset, pointer.length
+            ))
+            .into()
+        })
     }
 
     pub fn used_bytes(&self) -> u64 {

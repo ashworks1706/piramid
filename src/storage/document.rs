@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::metadata::Metadata;
 use crate::quantization::QuantizedVector;
+use crate::Result;
 
 // Vectors are stored as quantized int8 for 4x memory efficiency.
 // Users work with Vec<f32>, conversion happens automatically.
@@ -41,5 +42,9 @@ impl Document {
     // Get the vector as f32 (dequantizes on demand)
     pub fn get_vector(&self) -> Vec<f32> {
         self.vector.to_f32()
+    }
+
+    pub fn try_get_vector(&self) -> Result<Vec<f32>> {
+        self.vector.try_to_f32()
     }
 }
