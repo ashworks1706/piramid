@@ -8,6 +8,41 @@ use super::traits::{IndexType, VectorIndex};
 use super::{FlatConfig, FlatIndex, HnswConfig, HnswIndex, IvfConfig, IvfIndex};
 
 // Unified index configuration
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct AutoIndexConfig {
+    #[serde(default = "default_flat_max_vectors")]
+    pub flat_max_vectors: usize,
+    #[serde(default = "default_ivf_max_vectors")]
+    pub ivf_max_vectors: usize,
+    #[serde(default)]
+    pub ivf_num_clusters: Option<usize>,
+    #[serde(default)]
+    pub ivf_num_probes: Option<usize>,
+    #[serde(default = "default_ivf_max_iterations")]
+    pub ivf_max_iterations: usize,
+    #[serde(default = "default_hnsw_m")]
+    pub hnsw_m: usize,
+    #[serde(default = "default_hnsw_ef_construction")]
+    pub hnsw_ef_construction: usize,
+    #[serde(default = "default_hnsw_ef_search")]
+    pub hnsw_ef_search: usize,
+}
+
+impl Default for AutoIndexConfig {
+    fn default() -> Self {
+        Self {
+            flat_max_vectors: default_flat_max_vectors(),
+            ivf_max_vectors: default_ivf_max_vectors(),
+            ivf_num_clusters: None,
+            ivf_num_probes: None,
+            ivf_max_iterations: default_ivf_max_iterations(),
+            hnsw_m: default_hnsw_m(),
+            hnsw_ef_construction: default_hnsw_ef_construction(),
+            hnsw_ef_search: default_hnsw_ef_search(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum IndexConfig {
@@ -18,6 +53,8 @@ pub enum IndexConfig {
         mode: ExecutionMode,
         #[serde(default)]
         search: SearchConfig,
+        #[serde(default)]
+        auto: AutoIndexConfig,
     },
     // Flat index (brute force)
     Flat {
@@ -60,6 +97,7 @@ impl Default for IndexConfig {
             metric: Metric::Cosine,
             mode: ExecutionMode::default(),
             search: SearchConfig::default(),
+            auto: AutoIndexConfig::default(),
         }
     }
 }
@@ -69,10 +107,10 @@ impl IndexConfig {
     // Select the best index type based on number of vectors
     pub fn select_type(&self, num_vectors: usize) -> IndexType {
         match self {
-            IndexConfig::Auto { .. } => {
-                if num_vectors < 10_000 {
+            IndexConfig::Auto { auto, .. } => {
+                if num_vectors < auto.flat_max_vectors {
                     IndexType::Flat
-                } else if num_vectors < 100_000 {
+                } else if num_vectors < auto.ivf_max_vectors {
                     IndexType::Ivf
                 } else {
                     IndexType::Hnsw
@@ -121,12 +159,14 @@ impl IndexConfig {
                     _ => {
                         //  we use default HNSW parameters but apply the metric and mode from the config. The ef_search parameter defaults to the same value as ef_construction if not explicitly set
                         let (metric, mode) = self.get_metric_and_simd();
+                        let auto = self.auto_config();
+                        let m = auto.hnsw_m;
                         HnswConfig {
-                            m: 16,
-                            m_max: 32,
-                            ef_construction: 200,
-                            ef_search: 200,
-                            ml: 1.0 / (16.0_f32).ln(),
+                            m,
+                            m_max: m * 2,
+                            ef_construction: auto.hnsw_ef_construction,
+                            ef_search: auto.hnsw_ef_search,
+                            ml: 1.0 / (m as f32).ln(),
                             metric,
                             mode,
                         }
@@ -153,7 +193,15 @@ impl IndexConfig {
                     _ => {
                         // we use the auto-configure method to determine the number of clusters and probes based on the number of vectors, while applying the metric and mode from the config. configured dynamically based on the dataset size while still respecting user preferences for the distance metric and execution mode.
                         let (metric, mode) = self.get_metric_and_simd();
+                        let auto = self.auto_config();
                         let mut config = IvfConfig::auto(num_vectors);
+                        if let Some(num_clusters) = auto.ivf_num_clusters {
+                            config.num_clusters = num_clusters;
+                        }
+                        if let Some(num_probes) = auto.ivf_num_probes {
+                            config.num_probes = num_probes;
+                        }
+                        config.max_iterations = auto.ivf_max_iterations;
                         config.metric = metric;
                         config.mode = mode;
                         config
@@ -175,6 +223,10 @@ impl IndexConfig {
     }
 
     fn get_metric_and_simd(&self) -> (Metric, ExecutionMode) {
+        self.get_metric_and_mode()
+    }
+
+    pub fn get_metric_and_mode(&self) -> (Metric, ExecutionMode) {
         match self {
             IndexConfig::Auto { metric, mode, .. } => (*metric, *mode),
             IndexConfig::Flat { metric, mode, .. } => (*metric, *mode),
@@ -191,4 +243,35 @@ impl IndexConfig {
             IndexConfig::Ivf { search, .. } => *search,
         }
     }
+
+    pub fn auto_config(&self) -> AutoIndexConfig {
+        match self {
+            IndexConfig::Auto { auto, .. } => *auto,
+            _ => AutoIndexConfig::default(),
+        }
+    }
+}
+
+fn default_flat_max_vectors() -> usize {
+    10_000
+}
+
+fn default_ivf_max_vectors() -> usize {
+    100_000
+}
+
+fn default_ivf_max_iterations() -> usize {
+    10
+}
+
+fn default_hnsw_m() -> usize {
+    16
+}
+
+fn default_hnsw_ef_construction() -> usize {
+    200
+}
+
+fn default_hnsw_ef_search() -> usize {
+    200
 }

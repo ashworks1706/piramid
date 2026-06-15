@@ -9,7 +9,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 
 **Quantization (1.1.0)**
-- [x] stop quantizing vectors in the storage write path. documents, WAL replay, insert, upsert, and update-vector persistence now keep raw `Vec<f32>` as the source of truth even when quantization is configured.
 - [ ] remove the HNSW vector cache eviction bug by making delete/update graph semantics explicit: either tombstone deleted IDs until rebuild, or rebuild/repair HNSW whenever stale graph nodes can be returned.
 - [ ] remove or redesign the metadata cache so filtered search and re-ranking have one explicit consistency model instead of silently reading stale metadata.
 - [ ] the quantization module already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, but it's not wired into search yet
@@ -74,7 +73,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] piramid show config, piramid show metrics
 - [ ] piramid init should automatically detect system's computational resources etc and setup the config accordingly
-- [ ] have config for literally everything including clusters, index sizes, etc etc for any method 
 - [ ] all the query planning budget, optimizations, gpu selections, etc and everything should be directly reflected from that generated config 
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.

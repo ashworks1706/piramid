@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::{AdaptiveTuningConfig, QueryBudgetConfig};
+
 /// - HNSW uses ef (candidates explored during search)
 /// - IVF uses nprobe (number of clusters to search)
 /// - Flat always exhaustive (ignores these settings)
@@ -16,6 +18,12 @@ pub struct SearchConfig {
     // How many extra candidates to pull when a filter is present multiplier of k
     #[serde(default = "default_filter_overfetch")]
     pub filter_overfetch: usize,
+
+    #[serde(default)]
+    pub budget: QueryBudgetConfig,
+
+    #[serde(default)]
+    pub adaptive: AdaptiveTuningConfig,
 }
 
 impl Default for SearchConfig {
@@ -24,6 +32,8 @@ impl Default for SearchConfig {
             ef: None,
             nprobe: None,
             filter_overfetch: default_filter_overfetch(),
+            budget: QueryBudgetConfig::default(),
+            adaptive: AdaptiveTuningConfig::default(),
         }
     }
 }
@@ -35,6 +45,8 @@ impl SearchConfig {
             ef: Some(400),
             nprobe: Some(20),
             filter_overfetch: default_filter_overfetch(),
+            budget: QueryBudgetConfig::default(),
+            adaptive: AdaptiveTuningConfig::default(),
         }
     }
 
@@ -49,6 +61,8 @@ impl SearchConfig {
             ef: Some(50),
             nprobe: Some(1),
             filter_overfetch: default_filter_overfetch(),
+            budget: QueryBudgetConfig::default(),
+            adaptive: AdaptiveTuningConfig::default(),
         }
     }
 }

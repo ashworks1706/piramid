@@ -7,7 +7,7 @@ mod selector;
 mod traits;
 
 // Re-export trait and types
-pub use selector::IndexConfig;
+pub use selector::{AutoIndexConfig, IndexConfig};
 pub use traits::{
     HashMapVectorReader, IndexDetails, IndexStats, IndexType, SerializableIndex, VectorIndex,
     VectorReader,

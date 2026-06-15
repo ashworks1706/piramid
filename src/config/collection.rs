@@ -33,6 +33,10 @@ pub struct CollectionConfig {
     #[serde(default)]
     pub execution: ExecutionMode,
 
+    // Hardware/profile hints used by generated configs and collection defaults
+    #[serde(default)]
+    pub hardware: HardwareConfig,
+
     // Limits configuration
     #[serde(default)]
     pub limits: LimitsConfig,
@@ -40,6 +44,10 @@ pub struct CollectionConfig {
     // Cache configuration
     #[serde(default)]
     pub cache: CacheConfig,
+
+    // Logging controls for collection operations
+    #[serde(default)]
+    pub logging: LoggingConfig,
 }
 
 impl Default for CollectionConfig {
@@ -52,8 +60,10 @@ impl Default for CollectionConfig {
             wal: WalConfig::default(),
             parallelism: ParallelismConfig::default(),
             execution: ExecutionMode::Auto,
+            hardware: HardwareConfig::default(),
             limits: LimitsConfig::default(),
             cache: CacheConfig::default(),
+            logging: LoggingConfig::default(),
         }
     }
 }
