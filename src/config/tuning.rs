@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct QueryBudgetConfig {
     #[serde(default)]
     pub latency_budget_ms: Option<u64>,
@@ -10,17 +10,6 @@ pub struct QueryBudgetConfig {
     pub max_candidates: Option<usize>,
     #[serde(default)]
     pub max_filtered_candidates: Option<usize>,
-}
-
-impl Default for QueryBudgetConfig {
-    fn default() -> Self {
-        Self {
-            latency_budget_ms: None,
-            recall_target: None,
-            max_candidates: None,
-            max_filtered_candidates: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
