@@ -4,15 +4,13 @@ use super::super::collection::Collection;
 use super::limits;
 use crate::error::Result;
 use crate::metadata::Metadata;
-use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
 use crate::storage::record_store::RecordStore;
 use crate::storage::wal::WalEntry;
 
-pub fn insert_internal(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
+pub fn insert_internal(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     let id = entry.id;
     let raw_vec = entry.get_vector();
-    entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
     let bytes = RecordStore::encode_document(&entry)?;
 
     limits::enforce_single(storage, bytes.len())?;
@@ -81,8 +79,6 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
     for entry in &mut entries {
         let raw_vec = entry.get_vector();
         let metadata = entry.metadata.clone();
-        entry.vector =
-            QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
         let bytes = RecordStore::encode_document(entry)?;
         serialized.push((entry.id, bytes));
         raw_vectors.push((entry.id, raw_vec, metadata));
@@ -113,10 +109,8 @@ pub fn insert_batch(storage: &mut Collection, mut entries: Vec<Document>) -> Res
     Ok(ids)
 }
 
-pub fn upsert(storage: &mut Collection, mut entry: Document) -> Result<Uuid> {
+pub fn upsert(storage: &mut Collection, entry: Document) -> Result<Uuid> {
     let id = entry.id;
-    let raw_vec = entry.get_vector();
-    entry.vector = QuantizedVector::from_f32_with_config(&raw_vec, &storage.config.quantization);
     let bytes = RecordStore::encode_document(&entry)?;
 
     let existing = storage.index.contains_key(&id);

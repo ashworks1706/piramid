@@ -8,7 +8,6 @@ use super::CollectionOpenOptions;
 use crate::cache::CacheManager;
 use crate::error::Result;
 use crate::index::HashMapVectorReader;
-use crate::quantization::QuantizedVector;
 use crate::storage::document::Document;
 use crate::storage::metadata::CollectionMetadata;
 use crate::storage::persistence::{get_wal_path, load_index, load_metadata, load_vector_index};
@@ -142,10 +141,7 @@ impl CollectionBuilder {
                 } => {
                     let vec_entry = Document {
                         id,
-                        vector: QuantizedVector::from_f32_with_config(
-                            &vector,
-                            &collection.config.quantization,
-                        ),
+                        vector,
                         text,
                         metadata,
                     };
@@ -162,10 +158,7 @@ impl CollectionBuilder {
                     super::operations::delete_internal(collection, &id);
                     let vec_entry = Document {
                         id,
-                        vector: QuantizedVector::from_f32_with_config(
-                            &vector,
-                            &collection.config.quantization,
-                        ),
+                        vector,
                         text,
                         metadata,
                     };

@@ -43,6 +43,40 @@ fn basic_store_and_retrieve() {
 }
 
 #[test]
+fn configured_quantization_does_not_quantize_stored_documents() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_raw_storage_with_quantization.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_raw_storage_with_quantization.db.index.db",
+        ".piramid/tests/test_raw_storage_with_quantization.db.wal.db",
+        ".piramid/tests/test_raw_storage_with_quantization.db.vecindex.db",
+        ".piramid/tests/test_raw_storage_with_quantization.db.metadata.db",
+        ".piramid/tests/test_raw_storage_with_quantization.db.wal.meta",
+    ];
+    cleanup_test_files(&files);
+
+    let config = CollectionConfig::default().with_int8_quantization();
+    let vector = vec![0.1, 0.2, 0.3, 0.4];
+    let id = {
+        let mut storage =
+            Collection::open_with_options(test_path, CollectionOpenOptions { config }).unwrap();
+        let id = storage
+            .insert(Document::new(vector.clone(), "raw vector".into()))
+            .unwrap();
+
+        assert_eq!(storage.get(&id).unwrap().unwrap().get_vector(), vector);
+        id
+    };
+
+    let storage = Collection::open(test_path).unwrap();
+    assert_eq!(storage.get(&id).unwrap().unwrap().get_vector(), vector);
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
+
+#[test]
 fn persistence_roundtrip() {
     ensure_test_dir();
     let test_path = ".piramid/tests/test_persist.db";
@@ -210,6 +244,10 @@ fn updates_write_one_wal_entry_each() {
         .update_metadata(&id, metadata([("kind", "updated".into())]))
         .unwrap();
     storage.update_vector(&id, vec![3.0, 2.0, 1.0]).unwrap();
+    assert_eq!(
+        storage.get(&id).unwrap().unwrap().get_vector(),
+        vec![3.0, 2.0, 1.0]
+    );
 
     let wal = fs::read_to_string(format!("{}.wal.db", test_path)).unwrap();
     assert_eq!(
@@ -229,6 +267,39 @@ fn updates_write_one_wal_entry_each() {
             .filter(|line| line.contains("\"Delete\""))
             .count(),
         0
+    );
+
+    drop(storage);
+    cleanup_test_files(&files);
+}
+
+#[test]
+fn update_vector_persists_new_raw_vector_after_reopen() {
+    ensure_test_dir();
+    let test_path = ".piramid/tests/test_update_vector_persist.db";
+    let files = vec![
+        test_path,
+        ".piramid/tests/test_update_vector_persist.db.index.db",
+        ".piramid/tests/test_update_vector_persist.db.wal.db",
+        ".piramid/tests/test_update_vector_persist.db.vecindex.db",
+        ".piramid/tests/test_update_vector_persist.db.metadata.db",
+        ".piramid/tests/test_update_vector_persist.db.wal.meta",
+    ];
+    cleanup_test_files(&files);
+
+    let id = {
+        let mut storage = Collection::open(test_path).unwrap();
+        let id = storage
+            .insert(Document::new(vec![1.0, 2.0, 3.0], "updated".into()))
+            .unwrap();
+        storage.update_vector(&id, vec![3.0, 2.0, 1.0]).unwrap();
+        id
+    };
+
+    let storage = Collection::open(test_path).unwrap();
+    assert_eq!(
+        storage.get(&id).unwrap().unwrap().get_vector(),
+        vec![3.0, 2.0, 1.0]
     );
 
     drop(storage);

@@ -5,7 +5,6 @@ use super::limits;
 use super::read::get;
 use crate::error::Result;
 use crate::metadata::Metadata;
-use crate::quantization::QuantizedVector;
 use crate::storage::record_store::RecordStore;
 use crate::storage::wal::WalEntry;
 
@@ -48,7 +47,7 @@ pub fn update_vector(storage: &mut Collection, id: &Uuid, vector: Vec<f32>) -> R
         storage.checkpoint.wal.log(&mut wal_entry)?;
 
         let mut entry = entry;
-        entry.vector = QuantizedVector::from_f32_with_config(&vector, &storage.config.quantization);
+        entry.vector = vector.clone();
 
         if let Some(expected_dim) = storage.metadata.dimensions {
             crate::validation::validate_dimensions(&vector, expected_dim)?;

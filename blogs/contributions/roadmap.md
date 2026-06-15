@@ -8,12 +8,10 @@ This is the working roadmap for contributors. If you want to help, start here an
 ### Bug Fixes patch
 
 
-**IVF Index (1.0.2)**
-
-- [x] IVF checks for duplicate vector IDs by scanning the cluster list on every insert, which gets slow as clusters grow. it can use the existing ID-to-cluster map instead for an instant lookup.
-
 **Quantization (1.1.0)**
-- [ ] quantization currently happens at insert time in the storage layer, which permanently throws away the original vectors. remove the upsert double-quantize path (storage no longer quantizes at all), remove the HNSW vector cache eviction bug (vector cache gets deleted entirely), and remove the metadata cache (re-ranking reads metadata from mmap for free alongside the vector).
+- [x] stop quantizing vectors in the storage write path. documents, WAL replay, insert, upsert, and update-vector persistence now keep raw `Vec<f32>` as the source of truth even when quantization is configured.
+- [ ] remove the HNSW vector cache eviction bug by making delete/update graph semantics explicit: either tombstone deleted IDs until rebuild, or rebuild/repair HNSW whenever stale graph nodes can be returned.
+- [ ] remove or redesign the metadata cache so filtered search and re-ranking have one explicit consistency model instead of silently reading stale metadata.
 - [ ] the quantization module already has PQ (Product Quantization) implemented -- it splits vectors into sub-blocks and compresses each independently, but it's not wired into search yet
 - [ ] **FP16/BF16 vector precision:** promote `QuantizationLevel::Float16` from a stub to a real implementation -- store and serve vectors in native half-precision without upcasting to FP32, eliminating a costly precision-conversion step on the hot search path.
 - [ ] Add Binary Quantization (BQ): Turning vectors into 1s and 0s for 32x speedups
