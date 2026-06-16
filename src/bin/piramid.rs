@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 
-use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use piramid::cli::animation;
 use piramid::config::{self, AppConfig, LogLevel, LoggingConfig};
 use piramid::runtime::AppState;
@@ -46,11 +46,50 @@ enum Commands {
         format: OutputFormat,
     },
 
+    /// Show runtime/configuration information
+    Show {
+        #[command(subcommand)]
+        command: ShowCommands,
+    },
+
+    /// Deprecated alias for `show config`
+    #[command(hide = true)]
     ShowConfig {
         /// Optional config file to load (overrides CONFIG_FILE)
         #[arg(long)]
         config: Option<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum ShowCommands {
+    /// Print the resolved configuration
+    Config(ShowConfigArgs),
+    /// Print collection and WAL metrics from local data dir
+    Metrics(ShowMetricsArgs),
+}
+
+#[derive(Args)]
+struct ShowConfigArgs {
+    /// Optional config file to load (overrides CONFIG_FILE)
+    #[arg(long)]
+    config: Option<PathBuf>,
+    /// Output format
+    #[arg(long, value_enum, default_value_t = OutputFormat::Yaml)]
+    format: OutputFormat,
+}
+
+#[derive(Args)]
+struct ShowMetricsArgs {
+    /// Optional config file to load (overrides CONFIG_FILE)
+    #[arg(long)]
+    config: Option<PathBuf>,
+    /// Optional data directory (overrides DATA_DIR)
+    #[arg(long)]
+    data_dir: Option<PathBuf>,
+    /// Output format
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+    format: OutputFormat,
 }
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -69,13 +108,20 @@ fn main() {
             }
             println!("Wrote config to {}", path.display());
         }
-        Some(Commands::ShowConfig { config }) => {
-            if let Some(path) = config {
-                std::env::set_var("CONFIG_FILE", path);
+        Some(Commands::Show { command }) => {
+            if let Err(e) = handle_show_command(command) {
+                eprintln!("Failed to show information: {e}");
+                std::process::exit(1);
             }
-            let cfg = config::loader::load_app_config();
-            let yaml = serde_yaml::to_string(&cfg).unwrap_or_else(|_| format!("{cfg:?}"));
-            println!("{yaml}");
+        }
+        Some(Commands::ShowConfig { config }) => {
+            if let Err(e) = show_config(ShowConfigArgs {
+                config,
+                format: OutputFormat::Yaml,
+            }) {
+                eprintln!("Failed to show config: {e}");
+                std::process::exit(1);
+            }
         }
         Some(Commands::Serve {
             config,
@@ -108,12 +154,95 @@ fn main() {
     }
 }
 
+fn handle_show_command(command: ShowCommands) -> std::io::Result<()> {
+    match command {
+        ShowCommands::Config(args) => show_config(args),
+        ShowCommands::Metrics(args) => show_metrics(args),
+    }
+}
+
+fn show_config(args: ShowConfigArgs) -> std::io::Result<()> {
+    if let Some(path) = args.config {
+        std::env::set_var("CONFIG_FILE", path);
+    }
+    let cfg = config::loader::load_app_config();
+    print_serialized(&cfg, args.format)
+}
+
+fn show_metrics(args: ShowMetricsArgs) -> std::io::Result<()> {
+    if let Some(path) = args.config {
+        std::env::set_var("CONFIG_FILE", path);
+    }
+    if let Some(dir) = args.data_dir {
+        std::env::set_var("DATA_DIR", dir);
+    }
+    let RuntimeConfig {
+        app: app_config,
+        data_dir,
+        slow_query_ms,
+        disk_min_free_bytes,
+        disk_readonly_on_low_space,
+        ..
+    } = piramid::config::loader::load_runtime_config();
+
+    let state = std::sync::Arc::new(
+        AppState::new(
+            &data_dir,
+            app_config,
+            slow_query_ms,
+            disk_min_free_bytes,
+            disk_readonly_on_low_space,
+        )
+        .map_err(std::io::Error::other)?,
+    );
+    preload_collections_for_metrics(&state)?;
+    let metrics = piramid::services::admin::metrics(&state).map_err(std::io::Error::other)?;
+    print_serialized(&metrics, args.format)
+}
+
+fn preload_collections_for_metrics(state: &std::sync::Arc<AppState>) -> std::io::Result<()> {
+    let entries = fs::read_dir(&state.data_dir)?;
+    for entry in entries {
+        let entry = entry?;
+        let file_name = match entry.file_name().to_str() {
+            Some(v) => v.to_string(),
+            None => continue,
+        };
+        let collection_name = match collection_name_from_base_db_filename(&file_name) {
+            Some(v) => v,
+            None => continue,
+        };
+        if let Err(error) = state.get_existing_collection(&collection_name) {
+            eprintln!(
+                "Skipping collection '{}' while building metrics: {}",
+                collection_name, error
+            );
+        }
+    }
+    Ok(())
+}
+
+fn collection_name_from_base_db_filename(file_name: &str) -> Option<String> {
+    if !file_name.ends_with(".db") {
+        return None;
+    }
+    if file_name.ends_with(".index.db")
+        || file_name.ends_with(".vecindex.db")
+        || file_name.ends_with(".metadata.db")
+        || file_name.ends_with(".wal.db")
+    {
+        return None;
+    }
+    let name = file_name.strip_suffix(".db")?;
+    if name.is_empty() {
+        return None;
+    }
+    Some(name.to_string())
+}
+
 fn write_config_file(path: &Path, fmt: OutputFormat) -> std::io::Result<()> {
     let cfg = AppConfig::default();
-    let contents = match fmt {
-        OutputFormat::Yaml => serde_yaml::to_string(&cfg).map_err(std::io::Error::other)?,
-        OutputFormat::Json => serde_json::to_string_pretty(&cfg).map_err(std::io::Error::other)?,
-    };
+    let contents = serialize_to_string(&cfg, fmt)?;
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
@@ -255,6 +384,22 @@ fn level_directive(level: LogLevel) -> &'static str {
         LogLevel::Debug => "debug",
         LogLevel::Trace => "trace",
     }
+}
+
+fn serialize_to_string<T: serde::Serialize>(
+    value: &T,
+    fmt: OutputFormat,
+) -> std::io::Result<String> {
+    match fmt {
+        OutputFormat::Yaml => serde_yaml::to_string(value).map_err(std::io::Error::other),
+        OutputFormat::Json => serde_json::to_string_pretty(value).map_err(std::io::Error::other),
+    }
+}
+
+fn print_serialized<T: serde::Serialize>(value: &T, fmt: OutputFormat) -> std::io::Result<()> {
+    let rendered = serialize_to_string(value, fmt)?;
+    println!("{rendered}");
+    Ok(())
 }
 
 fn animate() {
