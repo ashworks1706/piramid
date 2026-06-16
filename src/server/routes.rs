@@ -8,8 +8,6 @@ use axum::{
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tracing::Level;
 
 use super::handlers;
 use super::request_id::assign_request_id;
@@ -125,12 +123,6 @@ pub fn create_router(state: SharedState) -> Router {
         .layer(cors)
         // Assign request IDs to all requests
         .layer(middleware::from_fn(assign_request_id))
-        // HTTP request/response tracing
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
-                .on_response(DefaultOnResponse::new().level(Level::INFO)),
-        )
         // Add API version header
         .layer(SetResponseHeaderLayer::if_not_present(
             axum::http::header::HeaderName::from_static("x-api-version"),

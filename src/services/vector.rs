@@ -101,6 +101,7 @@ pub fn insert_vector(
 
     let collection_handle = state.get_or_create_collection(&collection)?;
     tracing::info!(
+        target: "piramid::writes",
         collection=%collection,
         single=req.vector.is_some(),
         batch=req.vectors.as_ref().map(|vectors| vectors.len()),
@@ -347,6 +348,7 @@ pub fn search_vectors(
             let duration = start.elapsed();
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
+                    target: "piramid::search",
                     collection=%collection,
                     request_id = request_id.0.as_str(),
                     elapsed_ms = duration.as_millis(),
@@ -383,6 +385,7 @@ pub fn search_vectors(
             let duration = start.elapsed();
             if duration.as_millis() > state.slow_query_ms {
                 tracing::warn!(
+                    target: "piramid::search",
                     collection=%collection,
                     request_id = request_id.0.as_str(),
                     elapsed_ms = duration.as_millis(),
@@ -456,6 +459,7 @@ pub fn upsert_vector(
     }
     state.enforce_cache_budget();
     tracing::info!(
+        target: "piramid::writes",
         collection=%collection,
         id=%id,
         created=!exists,
@@ -511,6 +515,7 @@ pub fn range_search_vectors(
     let duration = start.elapsed();
     if duration.as_millis() > state.slow_query_ms {
         tracing::warn!(
+            target: "piramid::search",
             collection=%collection,
             request_id = request_id.0.as_str(),
             elapsed_ms = duration.as_millis(),

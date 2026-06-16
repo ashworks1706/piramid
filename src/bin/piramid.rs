@@ -1,15 +1,18 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use piramid::cli::animation;
-use piramid::config::{self, AppConfig};
+use piramid::config::{self, AppConfig, LogLevel, LoggingConfig};
 use piramid::runtime::AppState;
 use piramid::{config::loader::RuntimeConfig, embeddings, server};
 use tokio::runtime::Runtime;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 #[command(author, version)]
@@ -132,6 +135,15 @@ fn start_server_inline() -> std::io::Result<()> {
             disk_readonly_on_low_space,
         } = piramid::config::loader::load_runtime_config();
 
+        init_tracing(app_config.logging)?;
+        if app_config.logging.config {
+            tracing::info!(
+                target: "piramid::config",
+                config = ?app_config,
+                "using_configuration"
+            );
+        }
+
         let state = match embedding_config.clone() {
             Some(config) => match embeddings::providers::create_embedder(&config) {
                 Ok(embedder) => {
@@ -169,6 +181,12 @@ fn start_server_inline() -> std::io::Result<()> {
 
         let app = server::create_router(state);
         let addr = format!("0.0.0.0:{}", port);
+        tracing::info!(
+            target: "piramid::config",
+            address = addr.as_str(),
+            data_dir = data_dir.as_str(),
+            "server_starting"
+        );
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| std::io::Error::other(format!("bind failed: {e}")))?;
@@ -176,6 +194,67 @@ fn start_server_inline() -> std::io::Result<()> {
             .await
             .map_err(std::io::Error::other)
     })
+}
+
+fn init_tracing(cfg: LoggingConfig) -> std::io::Result<()> {
+    static TRACING_INIT: OnceLock<()> = OnceLock::new();
+    if TRACING_INIT.get().is_some() {
+        return Ok(());
+    }
+    if !cfg.enabled {
+        TRACING_INIT.set(()).ok();
+        return Ok(());
+    }
+
+    let base_level = level_directive(cfg.level);
+    let mut env_filter = if let Ok(val) = std::env::var("RUST_LOG") {
+        EnvFilter::new(val)
+    } else {
+        EnvFilter::new(base_level)
+    };
+
+    if !cfg.config {
+        env_filter = add_directive(env_filter, "piramid::config=off");
+    }
+    if !cfg.indexing {
+        env_filter = add_directive(env_filter, "piramid::indexing=off");
+    }
+    if !cfg.search {
+        env_filter = add_directive(env_filter, "piramid::search=off");
+    }
+    if !cfg.writes {
+        env_filter = add_directive(env_filter, "piramid::writes=off");
+    }
+    if !cfg.inference {
+        env_filter = add_directive(env_filter, "piramid::inference=off");
+    }
+
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(true)
+        .compact()
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|e| std::io::Error::other(format!("failed to initialize tracing: {e}")))?;
+    TRACING_INIT.set(()).ok();
+    Ok(())
+}
+
+fn add_directive(mut filter: EnvFilter, directive: &str) -> EnvFilter {
+    if let Ok(parsed) = tracing_subscriber::filter::Directive::from_str(directive) {
+        filter = filter.add_directive(parsed);
+    }
+    filter
+}
+
+fn level_directive(level: LogLevel) -> &'static str {
+    match level {
+        LogLevel::Error => "error",
+        LogLevel::Warn => "warn",
+        LogLevel::Info => "info",
+        LogLevel::Debug => "debug",
+        LogLevel::Trace => "trace",
+    }
 }
 
 fn animate() {

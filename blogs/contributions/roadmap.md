@@ -9,7 +9,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 - [ ] piramid show config, piramid show metrics
 - [ ] piramid init should automatically detect system's computational resources etc and setup the config accordingly
-- [ ] all the query planning budget, optimizations, gpu selections, etc and everything should be directly reflected from that generated config 
 - [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
 - [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
 - [ ] add all logs properly such as inference, indexing, searching, etc

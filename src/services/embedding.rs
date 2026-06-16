@@ -38,7 +38,11 @@ pub async fn embed_text(
 
     match (req.text.clone(), req.texts.clone()) {
         (Some(text), None) => {
-            tracing::info!(collection=%collection, "embed_single_request");
+            tracing::info!(
+                target: "piramid::inference",
+                collection=%collection,
+                "embed_single_request"
+            );
             let start = Instant::now();
             let response = embedder.embed(&text).await?;
             let embed_duration = start.elapsed();
@@ -73,7 +77,12 @@ pub async fn embed_text(
                     ServerError::InvalidRequest("texts cannot be empty".to_string()).into(),
                 );
             }
-            tracing::info!(collection=%collection, batch=texts.len(), "embed_batch_request");
+            tracing::info!(
+                target: "piramid::inference",
+                collection=%collection,
+                batch=texts.len(),
+                "embed_batch_request"
+            );
 
             let mut ids = Vec::with_capacity(texts.len());
             let mut embeddings = Vec::with_capacity(texts.len());
@@ -146,7 +155,11 @@ pub async fn search_by_text(
             EMBEDDING_NOT_CONFIGURED.to_string(),
         ))?;
 
-    tracing::info!(collection=%collection, "search_by_text_request");
+    tracing::info!(
+        target: "piramid::search",
+        collection=%collection,
+        "search_by_text_request"
+    );
     let start = Instant::now();
     let response = embedder.embed(&req.query).await?;
     let embed_duration = start.elapsed();
@@ -189,6 +202,7 @@ pub async fn search_by_text(
     let duration = start.elapsed();
     if duration.as_millis() > state.slow_query_ms {
         tracing::warn!(
+            target: "piramid::search",
             collection=%collection,
             request_id = request_id.0.as_str(),
             elapsed_ms = duration.as_millis(),

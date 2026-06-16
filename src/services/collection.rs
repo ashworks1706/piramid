@@ -169,7 +169,12 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
         let mut collection_guard = collection_handle_clone.write();
         let start = Instant::now();
         if let Err(e) = collection_guard.rebuild_index() {
-            tracing::error!(collection=%collection_name, error=%e, "index_rebuild_failed");
+            tracing::error!(
+                target: "piramid::indexing",
+                collection=%collection_name,
+                error=%e,
+                "index_rebuild_failed"
+            );
             let finished = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -186,6 +191,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
             );
         } else {
             tracing::info!(
+                target: "piramid::indexing",
                 collection=%collection_name,
                 elapsed_ms = start.elapsed().as_millis(),
                 "index_rebuild_complete"
@@ -260,6 +266,7 @@ pub fn compact_collection(state: &SharedState, collection: String) -> Result<Reb
     let stats = crate::collections::compact(&mut collection_guard)?;
     let duration = start.elapsed();
     tracing::info!(
+        target: "piramid::indexing",
         collection=%collection,
         original=stats.original_entries,
         compacted=stats.compacted_entries,

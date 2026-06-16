@@ -37,8 +37,6 @@ pub fn load_app_config() -> AppConfig {
         eprintln!("Invalid configuration: {}", e);
         std::process::exit(1);
     }
-    // Log resolved configuration for visibility
-    println!("Using configuration: {:?}", cfg);
     cfg
 }
 
@@ -48,7 +46,8 @@ pub fn load_runtime_config() -> RuntimeConfig {
 
     let port = parse_env_or_default("PORT", 6333u16);
     let data_dir = env::var("DATA_DIR").unwrap_or_else(|_| default_data_dir());
-    let slow_query_ms = parse_env_or_default("SLOW_QUERY_MS", 500u128);
+    let slow_query_default = app.logging.slow_query_ms.unwrap_or(500) as u128;
+    let slow_query_ms = parse_env_or_default("SLOW_QUERY_MS", slow_query_default);
 
     let embedding_provider = env::var("EMBEDDING_PROVIDER").ok();
     let embedding_model = env::var("EMBEDDING_MODEL").ok();
