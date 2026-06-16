@@ -5,12 +5,6 @@ This is the working roadmap for contributors. If you want to help, start here an
 
 ---
 
-**CLI and Logs**
-
-- [ ] piramid init should automatically detect system's computational resources etc and setup the config accordingly
-- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
-- [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
-
 **Quantization (1.1.0)**
 - [ ] remove the HNSW vector cache eviction bug by making delete/update graph semantics explicit: either tombstone deleted IDs until rebuild, or rebuild/repair HNSW whenever stale graph nodes can be returned.
 - [ ] remove or redesign the metadata cache so filtered search and re-ranking have one explicit consistency model instead of silently reading stale metadata.
@@ -70,8 +64,13 @@ This is the working roadmap for contributors. If you want to help, start here an
  
 ---
 
-### Speed Optimizations
+### Optimizations
 
+**CLI and Logs**
+
+- [ ] piramid init should automatically detect system's computational resources etc and setup the config accordingly
+- [ ] adaptive index tuning: auto-adjust `ef`, `nprobe`, `filter_overfetch` based on per-collection latency/recall budgets and density
+- [ ] add hardware profiles (`8gb`, `16gb`, `32gb`, `cpu-only`, `gpu`) that choose index type, quantization, cache size, and search depth automatically.
 
 
 **Query Features (1.1.3)**
