@@ -30,16 +30,16 @@ piramid-serving = { path = "apps/engine/serving", version = "0.2.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-bincode = "1.3"
+bincode = "3.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # errors
-thiserror = "1.0"
+thiserror = "2.0"
 
 # async + http
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
-tower-http = { version = "0.6", features = ["cors", "limit", "set-header", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "limit", "set-header", "trace"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 async-trait = "0.1"
 
@@ -56,10 +56,10 @@ opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "trace"] }
 clap = { version = "4.5", features = ["derive"] }
 
 # compute
-wide = "0.7"
+wide = "1.6"
 rayon = "1.10"
 num_cpus = "1.16"
-rand = "0.8.6"
+rand = "0.9.4"
 
 # storage + concurrency
 memmap2 = "0.9.11"
@@ -69,7 +69,7 @@ parking_lot = "0.12"
 libc = "0.2"
 
 # dev
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
