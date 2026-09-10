@@ -21,12 +21,14 @@
 
 ## What this is
 
-Piramid is an inference engine for RAG: one process holding the documents, the model weights and
+Piramid is an inference engine for RAG where one process holding the documents, the model weights and
 the KV cache on one device, so retrieval can run *during* generation rather than once before it.
 
 https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
 
 ### How it's put together
+
+<img width="2368" height="1076" alt="image" src="https://github.com/user-attachments/assets/2bf0d1b8-3085-4c25-8930-15ff66d451c9" />
 
 Five library crates under `apps/engine`, plus the binary that links them. A crate may depend on
 one below it; the reverse fails CI.
