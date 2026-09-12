@@ -67,7 +67,7 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 
 ## Housekeeping
 
-- [ ] backfill doc comments so `missing_docs` can move from `allow` to `warn`
+- [x] backfill doc comments so `missing_docs` can move from `allow` to `warn`
 - [x] make `runtime:` reload reach a running collection, or document that it doesn't
 - [x] test config reload against a running server, not just the loader
 

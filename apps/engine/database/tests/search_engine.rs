@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Search over a collection: filters, metrics and thresholds.
 
 use std::fs;
 use {

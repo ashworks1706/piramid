@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Request validation and conversion.
 
 use piramid_core::validation;
 

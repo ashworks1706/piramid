@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "benchmark setup")]
+#![allow(
+    missing_docs,
+    reason = "criterion_group generates the undocumented harness functions"
+)]
 
 //! Scalar vs SIMD vs parallel, at the dimensions embeddings actually come in.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};

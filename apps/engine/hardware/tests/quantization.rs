@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Quantized vector encoding and decoding.
 
 use piramid_hardware::compute::quantization::{
     ProductQuantizedVector, QuantizationConfig, QuantizationKind, QuantizedVector,

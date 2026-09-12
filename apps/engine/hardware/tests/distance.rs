@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Distance kernels, metrics and the parity of every strategy with scalar.
 
 use piramid_hardware::compute::strategies::for_mode;
 use piramid_hardware::compute::{

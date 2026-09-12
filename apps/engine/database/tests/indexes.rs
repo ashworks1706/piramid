@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! The flat, HNSW and IVF indexes and index selection.
 
 use piramid_database::index::{
     FlatConfig, FlatIndex, HashMapVectorReader, HnswConfig, HnswIndex, IndexConfig, IndexKind,

@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Embedding providers and retries.
 
 use piramid_model::embeddings::retry::RetryConfig;
 use piramid_model::embeddings::{

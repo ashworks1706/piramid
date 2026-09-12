@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "benchmark setup")]
+#![allow(
+    missing_docs,
+    reason = "criterion_group generates the undocumented harness functions"
+)]
 //! The IVF posting-list scan, probing every partition so the scan dominates the query.
 
 use std::collections::HashMap;

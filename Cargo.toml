@@ -85,8 +85,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [workspace.lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"
-# compute, gpu and inference deny this themselves. ~860 undocumented items elsewhere.
-missing_docs = "allow"
+missing_docs = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

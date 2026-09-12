@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Collections: storage, persistence, WAL, checkpoints and index growth.
 
 use std::fs;
 use {

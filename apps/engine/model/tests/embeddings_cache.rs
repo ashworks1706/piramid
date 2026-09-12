@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! The embedding response cache.
 
 use piramid_model::embeddings::{CachedEmbedder, Embedder, EmbeddingResponse, EmbeddingResult};
 use std::sync::atomic::{AtomicUsize, Ordering};

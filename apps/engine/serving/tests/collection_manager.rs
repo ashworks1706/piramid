@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Collection handling through the serving layer.
 
 use axum::{
     extract::{Path, State},
