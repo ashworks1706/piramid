@@ -87,4 +87,7 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
       format change
 - [ ] the embedding token total counts a provider that reports no usage as zero tokens
 - [ ] the MSRV is not checked in CI against the new dependencies
+- [ ] `/api/collections` and `/api/metrics` list open collections only, while `/api/readyz` also
+      lists collections on disk; after a restart the list is empty until something opens them
+- [ ] the cluster router and node health are scaffolding nothing reads
 
