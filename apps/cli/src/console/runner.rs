@@ -313,9 +313,9 @@ pub fn parse_ps(raw: &str) -> Result<HashMap<String, ServiceState>, String> {
         service: String,
         #[serde(rename = "State")]
         state: String,
-        #[serde(rename = "Health", default)]
+        #[serde(rename = "Health")]
         health: String,
-        #[serde(rename = "ExitCode", default)]
+        #[serde(rename = "ExitCode")]
         exit_code: i32,
     }
     let rows: Vec<Row> = if raw.trim().is_empty() {

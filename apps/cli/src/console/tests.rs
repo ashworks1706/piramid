@@ -77,10 +77,10 @@ fn the_catalog_is_unique_and_every_unit_is_runnable() {
 
 #[test]
 fn every_catalog_recipe_exists_in_the_justfile() {
-    let Some(root) = repo_root(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))) else {
-        return;
-    };
-    let justfile = std::fs::read_to_string(root.join("justfile")).unwrap_or_default();
+    let root = repo_root(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+        .expect("the crate is built from a checkout with a justfile at its root");
+    let justfile =
+        std::fs::read_to_string(root.join("justfile")).expect("the justfile is readable");
     let recipes: std::collections::HashSet<String> = justfile
         .lines()
         .filter(|line| !line.starts_with(char::is_whitespace) && line.contains(':'))
@@ -199,17 +199,16 @@ fn compose_states_map_onto_statuses() {
 #[test]
 fn ps_output_parses_as_an_array_or_as_lines() {
     let array = r#"[{"Service":"piramid","State":"running","Health":"healthy","ExitCode":0}]"#;
-    assert_eq!(
-        parse_ps(array).unwrap_or_default()["piramid"].health,
-        "healthy"
-    );
-    let lines = "{\"Service\":\"piramid\",\"State\":\"exited\",\"ExitCode\":1}\n{\"Service\":\"ollama\",\"State\":\"running\"}\n";
-    let parsed: HashMap<_, _> = parse_ps(lines).unwrap_or_default();
+    assert_eq!(parse_ps(array).unwrap()["piramid"].health, "healthy");
+    let lines = "{\"Service\":\"piramid\",\"State\":\"exited\",\"Health\":\"\",\"ExitCode\":1}\n{\"Service\":\"ollama\",\"State\":\"running\",\"Health\":\"\",\"ExitCode\":0}\n";
+    let parsed: HashMap<_, _> = parse_ps(lines).unwrap();
     assert_eq!(parsed["piramid"].exit_code, 1);
     assert_eq!(parsed["ollama"].status(), Status::Running);
     assert!(parse_ps("").is_ok_and(|m| m.is_empty()));
     // A failed query returns an error rather than an empty set of services.
     assert!(parse_ps("not json").is_err());
+    // A row without an exit code cannot say whether the service exited, so it is refused.
+    assert!(parse_ps(r#"{"Service":"piramid","State":"exited","Health":""}"#).is_err());
 }
 
 #[test]
