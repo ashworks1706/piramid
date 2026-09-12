@@ -54,10 +54,8 @@ pub fn list_vectors(
     );
 
     collection_guard
-        .get_all()?
+        .page(params.offset, params.limit)?
         .into_iter()
-        .skip(params.offset)
-        .take(params.limit)
         .map(|entry| {
             Ok(VectorResponse {
                 id: entry.id.to_string(),

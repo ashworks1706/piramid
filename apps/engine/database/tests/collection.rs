@@ -762,3 +762,40 @@ fn an_auto_index_grows_into_the_family_its_size_picks() {
         .unwrap();
     assert_eq!(hits[0].document.text, "doc7");
 }
+
+// Pages come in id order, so walking them visits every document exactly once.
+#[test]
+fn pages_walk_every_document_once_in_id_order() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_pages.db");
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    let mut collection = Collection::open(path).unwrap();
+    let mut ids: Vec<uuid::Uuid> = (0..23)
+        .map(|i| {
+            collection
+                .insert(Document::new(vec![i as f32, 1.0], format!("doc{i}")))
+                .unwrap()
+        })
+        .collect();
+    ids.sort_unstable();
+
+    let mut walked = Vec::new();
+    let mut offset = 0;
+    loop {
+        let page = collection.page(offset, 5).unwrap();
+        if page.is_empty() {
+            break;
+        }
+        offset += page.len();
+        walked.extend(page.into_iter().map(|document| document.id));
+    }
+    assert_eq!(walked, ids);
+}

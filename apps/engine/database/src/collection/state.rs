@@ -168,23 +168,36 @@ impl Collection {
         &self.config
     }
 
+    /// Up to limit documents in id order, skipping the first offset. Only the page is read.
+    ///
+    /// Errors when the offset index names a document the record store cannot return.
+    pub fn page(&self, offset: usize, limit: usize) -> Result<Vec<piramid_core::Document>> {
+        let mut ids: Vec<&Uuid> = self.index.keys().collect();
+        ids.sort_unstable();
+        ids.into_iter()
+            .skip(offset)
+            .take(limit)
+            .map(|id| {
+                crate::document::get(self, id)?.ok_or_else(|| {
+                    piramid_core::error::StorageError::CorruptedIndex(format!(
+                        "the offset index names document {id}, which the record store does not hold"
+                    ))
+                    .into()
+                })
+            })
+            .collect()
+    }
+
+    /// Every document in id order. Errors like [Collection::page].
     pub fn get_all(&self) -> Result<Vec<piramid_core::Document>> {
-        let mut all_entries = Vec::new();
-        for id in self.index.keys() {
-            if let Some(entry) = crate::document::get(self, id)? {
-                all_entries.push(entry);
-            }
-        }
-        Ok(all_entries)
+        self.page(0, usize::MAX)
     }
 
     pub(crate) fn rebuild_vector_cache(&mut self) -> Result<()> {
         let mut cache = CacheManager::new(self.config.cache);
-        for id in self.index.keys() {
-            if let Some(entry) = crate::document::get(self, id)? {
-                cache.put_vector(*id, entry.vector())?;
-                cache.put_metadata(*id, entry.metadata.clone());
-            }
+        for entry in self.get_all()? {
+            cache.put_vector(entry.id, entry.vector())?;
+            cache.put_metadata(entry.id, entry.metadata.clone());
         }
         self.cache = cache;
         Ok(())

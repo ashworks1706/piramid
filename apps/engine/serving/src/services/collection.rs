@@ -126,20 +126,31 @@ pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStats
     fields(collection = %collection)
 )]
 pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildIndexResponse> {
-    state.ensure_available()?;
+    state.ensure_write_allowed()?;
 
     let collection_handle = state.get_existing_collection(&collection)?;
     let started_at = piramid_core::clock::unix_secs();
-    state.rebuild_jobs.insert(
-        collection.clone(),
-        RebuildJobStatus {
-            status: RebuildState::Running,
-            started_at,
-            finished_at: None,
-            error: None,
-            elapsed_ms: None,
-        },
-    );
+    let running = RebuildJobStatus {
+        status: RebuildState::Running,
+        started_at,
+        finished_at: None,
+        error: None,
+        elapsed_ms: None,
+    };
+    match state.rebuild_jobs.entry(collection.clone()) {
+        dashmap::mapref::entry::Entry::Occupied(mut job) => {
+            if matches!(job.get().status, RebuildState::Running) {
+                return Err(ServerError::AlreadyExists(format!(
+                    "a rebuild of '{collection}' is already running"
+                ))
+                .into());
+            }
+            job.insert(running);
+        }
+        dashmap::mapref::entry::Entry::Vacant(slot) => {
+            slot.insert(running);
+        }
+    }
 
     let collection_name = collection.clone();
     let collection_handle_clone = collection_handle.clone();

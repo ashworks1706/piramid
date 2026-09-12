@@ -330,3 +330,32 @@ fn read_only_lifts_once_there_is_space_again() {
     assert!(!state.read_only.load(Ordering::Relaxed));
     cleanup_dir(data_dir);
 }
+
+// A second rebuild of a collection whose rebuild is still running is a conflict, not a second job
+// overwriting the status of the first.
+#[tokio::test]
+async fn a_rebuild_while_one_is_running_is_a_conflict() {
+    use piramid_serving::state::{RebuildJobStatus, RebuildState};
+
+    let data_dir = concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/collection_manager_rebuild_conflict"
+    );
+    let state = test_state(data_dir);
+    state.collection_manager.get_or_create("docs").unwrap();
+    state.rebuild_jobs.insert(
+        "docs".to_string(),
+        RebuildJobStatus {
+            status: RebuildState::Running,
+            started_at: 0,
+            finished_at: None,
+            error: None,
+            elapsed_ms: None,
+        },
+    );
+    let error = piramid_serving::services::collection::rebuild_index(&state, "docs".to_string())
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), ErrorKind::Conflict);
+    cleanup_dir(data_dir);
+}
