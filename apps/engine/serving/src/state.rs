@@ -10,6 +10,7 @@ use crate::cluster::{
     ClusterRouter, LocalClusterRouter, NodeCapabilities, NodeId, NodeRuntimeState, RouteDecision,
 };
 use crate::machine::{MachineReadings, SAMPLE_INTERVAL};
+use piramid_core::config::loader::ConfigSource;
 use piramid_core::config::{Config, HttpConfig, StartupConfig};
 use piramid_core::error::{PiramidError, Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
@@ -44,6 +45,8 @@ pub struct AppState {
     pub app_config: Arc<RwLock<Config>>,
     /// The startup block the process booted with. A reload that changes it is refused.
     booted_with: StartupConfig,
+    /// Where a reload reads configuration from.
+    config_source: ConfigSource,
     pub rebuild_jobs: Arc<DashMap<String, RebuildJobStatus>>,
     pub config_last_reload: Arc<AtomicU64>, // used to invalidate caches on reload
 }
@@ -75,9 +78,16 @@ impl AppState {
             read_only: Arc::new(AtomicBool::new(false)),
             app_config,
             booted_with,
+            config_source: ConfigSource::default(),
             rebuild_jobs: Arc::new(DashMap::new()),
             config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs())),
         })
+    }
+
+    /// Read reloads from source, the one the process booted from.
+    pub fn with_config_source(mut self, source: ConfigSource) -> Self {
+        self.config_source = source;
+        self
     }
 
     /// Authentication, rate limiting and shutdown settings the process booted with.
@@ -142,11 +152,13 @@ impl AppState {
         failures
     }
 
-    /// Re-read configuration from disk and environment, swapping it in atomically.
+    /// Re-read configuration from the boot source, and apply its runtime block to the process
+    /// and to every open collection.
     ///
-    /// Only the runtime block is swapped. A changed startup block returns an error.
+    /// A changed startup block, or a change an open collection can take only when it is opened,
+    /// refuses the reload and changes nothing.
     pub fn reload_config(&self) -> Result<Config> {
-        let new_cfg = piramid_core::config::loader::load()
+        let new_cfg = piramid_core::config::loader::load_from(&self.config_source)
             .map_err(|e| ServerError::InvalidRequest(e.to_string()))?;
         if new_cfg.startup != self.booted_with {
             return Err(ServerError::InvalidRequest(
@@ -155,9 +167,27 @@ impl AppState {
             )
             .into());
         }
+        let next = new_cfg.to_collection_config();
+        for (name, handle) in self.collection_manager.loaded_collections() {
+            if let Some(setting) = handle.read().setting_needing_reopen(&next) {
+                return Err(ServerError::InvalidRequest(format!(
+                    "{setting} changed, and collection '{name}' is open; it applies when a \
+                     collection is opened, so this needs a restart"
+                ))
+                .into());
+            }
+        }
         {
             let mut guard = self.app_config.write();
             *guard = new_cfg.clone();
+        }
+        // A collection opened after the swap already has the new configuration.
+        for (name, handle) in self.collection_manager.loaded_collections() {
+            handle.write().apply_live_settings(&next).map_err(|error| {
+                ServerError::Internal(format!(
+                    "collection '{name}' opened while the reload was applied and refused it: {error}"
+                ))
+            })?;
         }
         let now = piramid_core::clock::unix_secs();
         self.config_last_reload.store(now, AtomicOrdering::Relaxed);

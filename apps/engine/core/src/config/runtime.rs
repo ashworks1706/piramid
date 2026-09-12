@@ -1,7 +1,8 @@
 //! Settings re-read after POST /config/reload.
 //!
-//! A reload takes effect for collections opened after it, and for each request that reads these
-//! values on its way through. It does not reopen collections already in memory.
+//! A reload applies search, limits, WAL checkpoint thresholds, the metadata cache budget and the
+//! execution mode to collections already open. A change to a setting read only when a collection
+//! opens refuses the reload while any collection is open.
 
 use serde::{Deserialize, Serialize};
 

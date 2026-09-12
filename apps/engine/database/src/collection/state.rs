@@ -37,6 +37,67 @@ impl Collection {
         Ok(())
     }
 
+    /// The first setting in next that differs from this collection and takes effect only when
+    /// the collection is opened, named by its config path. None when next can be applied live.
+    pub fn setting_needing_reopen(
+        &self,
+        next: &piramid_core::config::CollectionConfig,
+    ) -> Option<&'static str> {
+        let current = &self.config;
+        let mut metadata_cache = next.cache.metadata;
+        metadata_cache.max_bytes = current.cache.metadata.max_bytes;
+        [
+            (current.index != next.index, "runtime.index"),
+            (
+                current.quantization != next.quantization,
+                "runtime.quantization",
+            ),
+            (current.memory != next.memory, "runtime.memory"),
+            (current.hardware != next.hardware, "startup.hardware"),
+            (
+                current.cache.vectors != next.cache.vectors,
+                "runtime.cache.vectors",
+            ),
+            (
+                current.cache.metadata != metadata_cache,
+                "runtime.cache.metadata",
+            ),
+            (
+                current.wal.enabled != next.wal.enabled,
+                "runtime.wal.enabled",
+            ),
+            (
+                current.wal.sync_on_write != next.wal.sync_on_write,
+                "runtime.wal.sync_on_write",
+            ),
+        ]
+        .into_iter()
+        .find_map(|(differs, name)| differs.then_some(name))
+    }
+
+    /// Apply the settings an open collection reads as it runs: search, limits, WAL checkpoint
+    /// thresholds, the metadata cache budget and the execution mode.
+    ///
+    /// Errors, changing nothing, when next differs in a setting that needs a reopen.
+    pub fn apply_live_settings(
+        &mut self,
+        next: &piramid_core::config::CollectionConfig,
+    ) -> Result<()> {
+        if let Some(setting) = self.setting_needing_reopen(next) {
+            return Err(piramid_core::error::IndexError::InvalidConfig(format!(
+                "{setting} changed; it applies when the collection is opened"
+            ))
+            .into());
+        }
+        self.config.search = next.search;
+        self.config.limits = next.limits;
+        self.config.wal = next.wal;
+        self.config.cache.metadata.max_bytes = next.cache.metadata.max_bytes;
+        self.config.execution = next.execution;
+        self.vector_index.set_execution(next.execution);
+        Ok(())
+    }
+
     pub fn manifest(&self) -> &CollectionMetadata {
         &self.manifest
     }

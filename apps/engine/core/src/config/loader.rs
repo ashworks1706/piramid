@@ -3,7 +3,7 @@
 
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 use yaml_serde::{Mapping, Value};
 
@@ -15,19 +15,30 @@ use crate::error::ConfigError;
 const ENV_PREFIX: &str = "PIRAMID__";
 const ENV_SEPARATOR: &str = "__";
 
+/// Where configuration comes from: a file, and command-line values applied over it.
+///
+/// A running server keeps the source it booted from, so a reload reads the same file and applies
+/// the same values.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfigSource {
+    /// The file to read. None reads CONFIG_FILE, or no file when that is unset.
+    pub file: Option<PathBuf>,
+    /// Replaces the port of startup.bind and keeps its host.
+    pub port: Option<u16>,
+    /// Replaces startup.data_dir.
+    pub data_dir: Option<String>,
+}
+
 /// Read CONFIG_FILE, apply PIRAMID__ overrides, read PIRAMID_API_KEY and OPENAI_API_KEY, then
 /// validate.
 pub fn load() -> Result<Config, ConfigError> {
-    load_with(None, |_| {})
+    load_from(&ConfigSource::default())
 }
 
-/// Read the given file, or CONFIG_FILE when none is given, apply PIRAMID__ overrides, then
-/// adjust the typed configuration and validate the result.
-pub fn load_with(
-    file: Option<&Path>,
-    adjust: impl FnOnce(&mut Config),
-) -> Result<Config, ConfigError> {
-    let path = match file {
+/// Read the file of a source, apply PIRAMID__ overrides and the values of the source, read the
+/// secrets from the environment, then validate.
+pub fn load_from(source: &ConfigSource) -> Result<Config, ConfigError> {
+    let path = match &source.file {
         Some(path) => Some(path.to_string_lossy().into_owned()),
         None => env::var("CONFIG_FILE").ok(),
     };
@@ -37,7 +48,23 @@ pub fn load_with(
 
     let mut config: Config =
         yaml_serde::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
-    adjust(&mut config);
+    if let Some(port) = source.port {
+        let mut address = config
+            .startup
+            .bind
+            .parse::<std::net::SocketAddr>()
+            .map_err(|_| {
+                ConfigError::Invalid(format!(
+                    "--port cannot be applied: startup.bind '{}' is not an address:port",
+                    config.startup.bind
+                ))
+            })?;
+        address.set_port(port);
+        config.startup.bind = address.to_string();
+    }
+    if let Some(dir) = &source.data_dir {
+        config.startup.data_dir = dir.clone();
+    }
     config.startup.http.auth.api_key = server_api_key()?;
 
     config.validate().map_err(ConfigError::Invalid)?;

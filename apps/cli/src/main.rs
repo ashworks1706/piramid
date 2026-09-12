@@ -78,9 +78,10 @@ fn main() {
             data_dir,
         }) => {
             animate();
-            let config = load_config(config.as_deref(), port, data_dir.as_deref())
-                .unwrap_or_else(exit_on_config_error);
-            run_or_exit(|| start_server_inline(config), "piramid serve");
+            let source = config_source(config, port, data_dir);
+            let config =
+                piramid::config::loader::load_from(&source).unwrap_or_else(exit_on_config_error);
+            run_or_exit(|| start_server_inline(config, source), "piramid serve");
         }
         // No subcommand opens the console. Inside a checkout it can drive the repo as well as
         // the server; an installed binary gets the views that need only a server.
@@ -105,36 +106,17 @@ fn exit_on_config_error<T>(error: piramid::error::ConfigError) -> T {
     std::process::exit(1);
 }
 
-/// Load the configuration with the command-line flags applied over the file and environment.
-///
-/// A port replaces the port of startup.bind and keeps its host. A data directory replaces
-/// startup.data_dir.
-fn load_config(
-    file: Option<&std::path::Path>,
+/// The configuration source the command-line flags name.
+fn config_source(
+    file: Option<PathBuf>,
     port: Option<u16>,
-    data_dir: Option<&std::path::Path>,
-) -> Result<piramid::config::Config, piramid::error::ConfigError> {
-    let mut unparsable_bind = None;
-    let config = piramid::config::loader::load_with(file, |config| {
-        if let Some(port) = port {
-            match config.startup.bind.parse::<std::net::SocketAddr>() {
-                Ok(mut address) => {
-                    address.set_port(port);
-                    config.startup.bind = address.to_string();
-                }
-                Err(_) => unparsable_bind = Some(config.startup.bind.clone()),
-            }
-        }
-        if let Some(dir) = data_dir {
-            config.startup.data_dir = dir.to_string_lossy().into_owned();
-        }
-    })?;
-    if let Some(bind) = unparsable_bind {
-        return Err(piramid::error::ConfigError::Invalid(format!(
-            "--port cannot be applied: startup.bind '{bind}' is not an address:port"
-        )));
+    data_dir: Option<PathBuf>,
+) -> piramid::config::loader::ConfigSource {
+    piramid::config::loader::ConfigSource {
+        file,
+        port,
+        data_dir: data_dir.map(|dir| dir.to_string_lossy().into_owned()),
     }
-    Ok(config)
 }
 
 fn support_bundle(
@@ -142,7 +124,7 @@ fn support_bundle(
     config: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 ) -> std::io::Result<()> {
-    let config = load_config(config.as_deref(), None, data_dir.as_deref())
+    let config = piramid::config::loader::load_from(&config_source(config, None, data_dir))
         .unwrap_or_else(exit_on_config_error);
     let state = std::sync::Arc::new(
         AppState::new(config.clone(), embeddings::EmbeddingsManager::disabled())
@@ -172,7 +154,10 @@ fn preload_collections_for_metrics(state: &std::sync::Arc<AppState>) -> std::io:
     Ok(())
 }
 
-fn start_server_inline(config: piramid::config::Config) -> std::io::Result<()> {
+fn start_server_inline(
+    config: piramid::config::Config,
+    source: piramid::config::loader::ConfigSource,
+) -> std::io::Result<()> {
     let rt = Runtime::new().map_err(std::io::Error::other)?;
     rt.block_on(async {
         let _observability =
@@ -199,8 +184,11 @@ fn start_server_inline(config: piramid::config::Config) -> std::io::Result<()> {
         };
         let addr = config.startup.bind.clone();
         let data_dir = config.startup.data_dir.clone();
-        let state =
-            std::sync::Arc::new(AppState::new(config, embeddings).map_err(std::io::Error::other)?);
+        let state = std::sync::Arc::new(
+            AppState::new(config, embeddings)
+                .map_err(std::io::Error::other)?
+                .with_config_source(source),
+        );
 
         tracing::info!(
             target: "piramid::config",
@@ -275,47 +263,4 @@ fn animate() {
 
     print!("\x1b[2J\x1b[H\n\x1b[?25h");
     let _ = std::io::stdout().flush();
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-
-    fn file(name: &str, contents: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!("piramid-cli-{}-{name}", std::process::id()));
-        std::fs::write(&path, contents).unwrap();
-        path
-    }
-
-    #[test]
-    fn serve_flags_replace_the_port_and_the_data_directory() {
-        let path = file(
-            "flags.yaml",
-            "startup:\n  bind: 127.0.0.1:6333\n  data_dir: ./from-file\n",
-        );
-        let config = load_config(
-            Some(&path),
-            Some(7000),
-            Some(std::path::Path::new("/tmp/elsewhere")),
-        )
-        .unwrap();
-        assert_eq!(config.startup.bind, "127.0.0.1:7000");
-        assert_eq!(config.startup.data_dir, "/tmp/elsewhere");
-    }
-
-    #[test]
-    fn no_flags_keep_what_the_file_says() {
-        let path = file(
-            "noflags.yaml",
-            "startup:\n  bind: 127.0.0.1:6333\n  data_dir: ./from-file\n",
-        );
-        let config = load_config(Some(&path), None, None).unwrap();
-        assert_eq!(config.startup.bind, "127.0.0.1:6333");
-        assert_eq!(config.startup.data_dir, "./from-file");
-    }
 }

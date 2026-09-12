@@ -75,10 +75,14 @@ and a test asserts it stays that way. `startup.logging.config: true` logs what a
 
 The file has two blocks and the split is by lifecycle: `startup:` is applied once at boot, so
 changing one of those needs a restart and `POST /config/reload` refuses a file whose startup block
-differs from the running one. `runtime:` is re-read on reload.
+differs from the running one. `runtime:` is re-read on reload, from the same file and flags the
+server started with. Search, limits, WAL checkpoint thresholds, the metadata cache budget and
+`execution` reach collections that are already open. The index, quantization, memory, vector and
+metadata cache shapes, and `wal.enabled` and `wal.sync_on_write` are read when a collection opens,
+so a reload changing one of those is refused while a collection is open.
 
-Any key can also be set from the environment, spelled from its path — `runtime.cache.max_bytes`
-is `PIRAMID__RUNTIME__CACHE__MAX_BYTES`. Values parse as YAML, so `8`, `true` and `null` mean what
+Any key can also be set from the environment, spelled from its path — `runtime.wal.max_log_size`
+is `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`. Values parse as YAML, so `8`, `true` and `null` mean what
 they do in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are the settings that are
 environment-only, so a key never lands in a file that gets shared.
 

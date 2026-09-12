@@ -224,8 +224,8 @@ moving the port is said once.
 The split is by lifecycle because grouping by subsystem had already produced a bug: a reload
 returned 200 and silently changed nothing. Which block a key is in is now the answer to "do I need
 to restart?", and `reload_config` compares the incoming startup block against the booted one and
-errors if it differs. `runtime` is honest about its reach — a reload applies to collections opened
-after it, not to collections already in memory.
+errors if it differs. A reload applies the runtime settings an open collection reads as it runs,
+and refuses a change to one a collection reads only when it opens, naming the key.
 
 Three rules keep the surface legible:
 

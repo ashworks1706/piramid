@@ -8,8 +8,9 @@
 #
 #   startup:  applied once at boot. Changing one needs a restart, and POST /config/reload
 #             refuses a file whose startup block differs from the running one.
-#   runtime:  re-read on POST /config/reload. Takes effect for collections opened after the
-#             reload, and for each request that reads the value on its way through.
+#   runtime:  re-read on POST /config/reload. Search, limits, WAL checkpoint thresholds, the
+#             metadata cache budget and execution reach open collections; a change to anything
+#             read when a collection opens is refused while one is open.
 #
 # Any key can also be set from the environment, spelled from its path:
 # `runtime.wal.max_log_size` is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so

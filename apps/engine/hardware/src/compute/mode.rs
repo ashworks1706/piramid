@@ -13,8 +13,8 @@ pub enum ExecutionMode {
     Scalar,
     /// Explicitly vectorized CPU path through the wide crate. Available on x86_64 and aarch64.
     Simd,
-    /// Rayon-parallel CPU path: batch rows fanned across threads, each scored by the SIMD kernels.
-    /// Available on x86_64 and aarch64.
+    /// Rayon-parallel CPU path: batch rows fanned across threads, each scored by the SIMD kernels,
+    /// and a single pair scored by SIMD on the calling thread. Available on x86_64 and aarch64.
     Parallel,
     /// GPU device execution.
     Gpu,

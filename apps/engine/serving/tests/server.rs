@@ -262,3 +262,101 @@ async fn shutdown_finishes_an_in_flight_request_and_checkpoints_the_collection()
     let collection = reopened.get_existing_collection("docs").unwrap();
     assert_eq!(collection.read().count(), 2);
 }
+
+/// A server booted from a configuration file, with the state it serves.
+async fn start_from_file(file: &Path) -> (Running, Arc<AppState>) {
+    use piramid_core::config::loader::{load_from, ConfigSource};
+
+    let source = ConfigSource {
+        file: Some(file.to_path_buf()),
+        ..ConfigSource::default()
+    };
+    let config = load_from(&source).unwrap();
+    let state = Arc::new(
+        AppState::new(config, EmbeddingsManager::disabled())
+            .unwrap()
+            .with_config_source(source),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = oneshot::channel::<()>();
+    let task = tokio::spawn(serve(state.clone(), listener, async move {
+        let _ = rx.await;
+    }));
+    (
+        Running {
+            addr,
+            shutdown: Some(tx),
+            task,
+        },
+        state,
+    )
+}
+
+// A reload re-reads the file the server booted from, reaches a collection that is already open,
+// and refuses a change that only applies when a collection is opened, leaving everything as it
+// was.
+#[tokio::test]
+async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
+    let dir = data_dir("reload");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("config.yaml");
+    let write_config = |runtime: &str| {
+        std::fs::write(
+            &file,
+            format!(
+                "startup:\n  data_dir: {}\nruntime:\n{runtime}",
+                dir.join("data").display()
+            ),
+        )
+        .unwrap();
+    };
+    write_config("  search:\n    filter_overfetch: 10\n");
+    let (server, state) = start_from_file(&file).await;
+    let http = reqwest::Client::new();
+
+    let inserted = http
+        .post(server.url("/api/collections/docs/vectors"))
+        .json(&serde_json::json!({"vectors": [[1.0, 0.0, 0.0]], "texts": ["first"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(inserted.status(), 200);
+    let overfetch = |state: &AppState| {
+        state
+            .collection_manager
+            .get_existing("docs")
+            .unwrap()
+            .read()
+            .config()
+            .search
+            .filter_overfetch
+    };
+    assert_eq!(overfetch(&state), 10);
+
+    write_config("  search:\n    filter_overfetch: 3\n");
+    let reloaded = http
+        .post(server.url("/api/config/reload"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(reloaded.status(), 200, "{}", reloaded.text().await.unwrap());
+    assert_eq!(overfetch(&state), 3, "the open collection took the reload");
+    assert_eq!(state.current_config().runtime.search.filter_overfetch, 3);
+
+    write_config(
+        "  search:\n    filter_overfetch: 5\n  index:\n    type: flat\n    metric: cosine\n",
+    );
+    let refused = http
+        .post(server.url("/api/config/reload"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 400);
+    let body = refused.text().await.unwrap();
+    assert!(body.contains("runtime.index"), "{body}");
+    assert_eq!(overfetch(&state), 3, "a refused reload changes nothing");
+    assert_eq!(state.current_config().runtime.search.filter_overfetch, 3);
+
+    server.stop().await.unwrap();
+}

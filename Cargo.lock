@@ -1589,7 +1589,6 @@ name = "piramid-hardware"
 version = "0.2.0"
 dependencies = [
  "criterion",
- "num_cpus",
  "rayon",
  "serde",
  "serde_json",

@@ -163,3 +163,34 @@ fn a_zero_rate_limit_is_an_error() {
     );
     assert!(error.to_string().contains("burst"), "{error}");
 }
+
+// A source names its file directly and applies its port and data directory over the file.
+#[test]
+fn a_source_applies_its_values_over_its_file() {
+    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("loader_source.yaml");
+    std::fs::write(
+        &path,
+        "startup:\n  bind: 127.0.0.1:6333\n  data_dir: ./from-file\n",
+    )
+    .unwrap();
+    let cfg = with_env(None, &[], || {
+        loader::load_from(&loader::ConfigSource {
+            file: Some(path.clone()),
+            port: Some(7000),
+            data_dir: Some("/tmp/elsewhere".to_string()),
+        })
+        .unwrap()
+    });
+    assert_eq!(cfg.startup.bind, "127.0.0.1:7000");
+    assert_eq!(cfg.startup.data_dir, "/tmp/elsewhere");
+
+    let untouched = with_env(None, &[], || {
+        loader::load_from(&loader::ConfigSource {
+            file: Some(path.clone()),
+            ..loader::ConfigSource::default()
+        })
+        .unwrap()
+    });
+    assert_eq!(untouched.startup.bind, "127.0.0.1:6333");
+    assert_eq!(untouched.startup.data_dir, "./from-file");
+}
