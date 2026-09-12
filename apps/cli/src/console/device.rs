@@ -20,8 +20,8 @@ pub type Run = Vec<(f64, f64)>;
 pub struct Sample {
     /// When the refresh landed.
     pub at: Instant,
-    /// What the server reported. Every field is None for a refresh that failed.
-    pub host: HostMetrics,
+    /// What the server reported. None for a refresh that failed or a server without host readings.
+    pub host: Option<HostMetrics>,
 }
 
 /// A process monitor the terminal can be handed to.
@@ -68,16 +68,16 @@ impl DeviceView {
     }
 
     /// Appends one refresh, dropping the oldest once the history is full.
-    pub fn record(&mut self, at: Instant, host: HostMetrics) {
+    pub fn record(&mut self, at: Instant, host: Option<HostMetrics>) {
         if self.samples.len() == HISTORY {
             self.samples.pop_front();
         }
         self.samples.push_back(Sample { at, host });
     }
 
-    /// The readings of the newest refresh.
+    /// The readings of the newest refresh, if it has any.
     pub fn latest(&self) -> Option<&HostMetrics> {
-        self.samples.back().map(|sample| &sample.host)
+        self.samples.back().and_then(|sample| sample.host.as_ref())
     }
 
     /// Runs of consecutive readings as points of seconds before now against value.
@@ -87,7 +87,7 @@ impl DeviceView {
         let mut runs: Vec<Run> = Vec::new();
         let mut open = false;
         for sample in &self.samples {
-            match read(&sample.host) {
+            match sample.host.as_ref().and_then(&read) {
                 Some(value) => {
                     let x = -now.saturating_duration_since(sample.at).as_secs_f64();
                     match runs.last_mut().filter(|_| open) {

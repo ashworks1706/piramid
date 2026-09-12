@@ -251,8 +251,19 @@ pub enum Probe {
     Up,
     /// Reachable but reporting a problem, with its message.
     Degraded(String),
-    /// Not reachable.
-    Down,
+    /// Not reachable, with the reason the request failed.
+    Down(String),
+}
+
+/// Where the configuration view is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigState {
+    /// A request for it is in flight.
+    Loading,
+    /// The configuration rendered as YAML.
+    Loaded(String),
+    /// Why it could not be read.
+    Failed(String),
 }
 
 /// Liveness of what the console watches.
@@ -303,6 +314,8 @@ pub enum Event {
     Services(Result<HashMap<String, ServiceState>, String>),
     /// Fresh probes.
     Health(Box<Health>),
+    /// The probes cannot run, with the reason.
+    ProbesStopped(String),
     /// A collections refresh finished.
     Snapshot(Box<Result<super::client::Snapshot, super::client::ClientError>>),
     /// A rebuild or compact finished, with the line to show for it.

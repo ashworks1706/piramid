@@ -60,9 +60,9 @@ opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "trace"] }
 # cli
 clap = { version = "4.5", features = ["derive", "env"] }
 # `piramid top` and the developer console
-ratatui = "0.29"
+ratatui = "0.30"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 futures = "0.3"
 
 # compute

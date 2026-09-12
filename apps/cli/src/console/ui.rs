@@ -1,7 +1,7 @@
 //! Draws the console: status bar, unit list, log pane, command line, help.
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style, Stylize};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
@@ -14,7 +14,9 @@ use crate::console::app::{App, UnitState};
 use crate::console::client::HostMetrics;
 use crate::console::collections::Row;
 use crate::console::device::Run;
-use crate::console::types::{Focus, Group, Mode, Probe, Profile, Status, Stream, View};
+use crate::console::types::{
+    ConfigState, Focus, Group, Mode, Probe, Profile, Status, Stream, View,
+};
 
 const ACCENT: Color = Color::Cyan;
 const DIM: Color = Color::DarkGray;
@@ -243,7 +245,7 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
     ])
     .areas(area);
     let view = &app.device;
-    let latest = view.latest().copied().unwrap_or_default();
+    let latest = view.latest();
 
     let where_line = if view.local() {
         Line::from(vec![
@@ -280,8 +282,8 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
     let process_cpu = view.series(now, |h| h.process_cpu_percent.map(f64::from));
     let cpu_title = format!(
         " cpu  host {}  piramid {} ",
-        percent(latest.cpu_percent),
-        percent(latest.process_cpu_percent)
+        percent(latest.and_then(|h| h.cpu_percent)),
+        percent(latest.and_then(|h| h.process_cpu_percent))
     );
     frame.render_widget(
         chart(
@@ -307,12 +309,18 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
 
     let used = view.series(now, |h| h.memory_used_bytes.map(|b| b as f64));
     let resident = view.series(now, |h| h.process_resident_bytes.map(|b| b as f64));
-    let ceiling = memory_ceiling(view.samples.iter().map(|s| &s.host));
+    let ceiling = memory_ceiling(view.samples.iter().filter_map(|s| s.host.as_ref()));
     let memory_title = format!(
         " memory  host {} of {}  piramid {} ",
-        latest.memory_used_bytes.map_or_else(unmeasured, bytes),
-        latest.memory_total_bytes.map_or_else(unmeasured, bytes),
-        latest.process_resident_bytes.map_or_else(unmeasured, bytes)
+        latest
+            .and_then(|h| h.memory_used_bytes)
+            .map_or_else(unmeasured, bytes),
+        latest
+            .and_then(|h| h.memory_total_bytes)
+            .map_or_else(unmeasured, bytes),
+        latest
+            .and_then(|h| h.process_resident_bytes)
+            .map_or_else(unmeasured, bytes)
     );
     frame.render_widget(
         chart(
@@ -415,11 +423,11 @@ fn unmeasured() -> String {
 /// The configuration as the server resolved it.
 fn config(frame: &mut Frame, app: &App, area: Rect) {
     let body = match &app.config {
-        Some(Ok(text)) if text.is_empty() => Paragraph::new(Line::from(Span::styled(
+        Some(ConfigState::Loading) => Paragraph::new(Line::from(Span::styled(
             "  reading the configuration from the server",
             Style::default().fg(DIM),
         ))),
-        Some(Ok(text)) => {
+        Some(ConfigState::Loaded(text)) => {
             let rows = usize::from(area.height.saturating_sub(2)).max(1);
             let lines: Vec<Line> = text
                 .lines()
@@ -440,7 +448,7 @@ fn config(frame: &mut Frame, app: &App, area: Rect) {
                 .collect();
             Paragraph::new(lines)
         }
-        Some(Err(why)) => Paragraph::new(Line::from(Span::styled(
+        Some(ConfigState::Failed(why)) => Paragraph::new(Line::from(Span::styled(
             format!("  {why}"),
             Style::default().fg(Color::Red),
         ))),
@@ -489,10 +497,28 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
     if app.profile == Profile::Developer {
         spans.push(probe_span("web", &app.health.web));
     }
-    if let Probe::Degraded(why) = &app.health.ready {
+    // The notice comes first so a long line of probe reasons cannot push it off the bar.
+    if let Some(notice) = &app.notice {
+        spans.push(Span::styled(
+            format!("  {notice}"),
+            Style::default().fg(Color::Magenta),
+        ));
+    }
+    for (name, probe) in probe_problems(app) {
+        let (why, color) = match probe {
+            Probe::Degraded(why) => (why, Color::Yellow),
+            Probe::Down(why) => (why, Color::Red),
+            Probe::Unknown | Probe::Up => continue,
+        };
+        spans.push(Span::styled(
+            format!("  {name}: {}", truncate(why, 80)),
+            Style::default().fg(color),
+        ));
+    }
+    if let Some(why) = &app.probes_stopped {
         spans.push(Span::styled(
             format!("  {why}"),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(Color::Red),
         ));
     }
     // A failed refresh is the whole story on a console that only watches a server, so it goes in
@@ -503,13 +529,22 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Red),
         ));
     }
-    if let Some(notice) = &app.notice {
-        spans.push(Span::styled(
-            format!("  {notice}"),
-            Style::default().fg(Color::Magenta),
-        ));
-    }
     frame.render_widget(Line::from(spans), area);
+}
+
+/// The probes whose reason goes on the status bar, by name.
+///
+/// Readiness is left out while liveness is down or degraded.
+fn probe_problems(app: &App) -> Vec<(&'static str, &Probe)> {
+    let mut problems = Vec::new();
+    match &app.health.live {
+        Probe::Down(_) | Probe::Degraded(_) => problems.push(("server", &app.health.live)),
+        Probe::Unknown | Probe::Up => problems.push(("ready", &app.health.ready)),
+    }
+    if app.profile == Profile::Developer {
+        problems.push(("web", &app.health.web));
+    }
+    problems
 }
 
 fn probe_span(name: &str, probe: &Probe) -> Span<'static> {
@@ -517,7 +552,7 @@ fn probe_span(name: &str, probe: &Probe) -> Span<'static> {
         Probe::Unknown => ("·", DIM),
         Probe::Up => ("●", Color::Green),
         Probe::Degraded(_) => ("◐", Color::Yellow),
-        Probe::Down => ("○", Color::Red),
+        Probe::Down(_) => ("○", Color::Red),
     };
     Span::styled(format!(" {glyph} {name}"), Style::default().fg(color))
 }

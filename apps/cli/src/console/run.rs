@@ -14,7 +14,7 @@ use crate::console::client::Client;
 use crate::console::collections::Pending;
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
-use crate::console::types::{Event, Profile};
+use crate::console::types::{ConfigState, Event, Profile};
 use crate::console::{health, ui};
 use piramid_core::config::Config;
 
@@ -30,11 +30,14 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
         let mut app = App::new(settings.clone(), profile, root.clone(), &tx)?;
 
         // Read once. The build does not change while the console is open.
-        if let Ok(version) = app.collections.client.version().await {
-            app.collections.version = match version.git_commit {
-                Some(commit) => format!("v{} {commit}", version.version),
-                None => format!("v{}", version.version),
-            };
+        match app.collections.client.version().await {
+            Ok(version) => {
+                app.collections.version = match version.git_commit {
+                    Some(commit) => format!("v{} {commit}", version.version),
+                    None => format!("v{}", version.version),
+                };
+            }
+            Err(e) => app.notice = Some(format!("server version unknown: {e}")),
         }
 
         tokio::spawn(health::poll(
@@ -92,6 +95,9 @@ async fn drive(
         }
         if app.collections.refresh_due() {
             refresh(app, tx);
+        }
+        if app.config.is_none() {
+            fetch_config(app, tx);
         }
         terminal.draw(|frame| ui::draw(frame, app))?;
     }
@@ -174,7 +180,7 @@ fn refresh(app: &mut App, tx: &UnboundedSender<Event>) {
 
 /// Reads the configuration the server resolved, rather than a file on this machine.
 fn fetch_config(app: &mut App, tx: &UnboundedSender<Event>) {
-    app.config = Some(Ok(String::new()));
+    app.config = Some(ConfigState::Loading);
     let client = app.collections.client.clone();
     let tx = tx.clone();
     tokio::spawn(async move {

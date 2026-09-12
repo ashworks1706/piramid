@@ -9,14 +9,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::console::client::Client;
-use crate::console::collections::{Collections, Pending};
+use crate::console::collections::{self, Collections, Pending, Reply};
 use crate::console::device::{DeviceView, Monitor};
 use crate::console::logs::{LogBuffer, LogWriter};
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
 use crate::console::types::{
-    Command, Event, Focus, Health, Kind, LogLine, Mode, Profile, ServiceState, Status, Stream,
-    Unit, View,
+    Command, ConfigState, Event, Focus, Health, Kind, LogLine, Mode, Profile, ServiceState, Status,
+    Stream, Unit, View,
 };
 use crate::console::units;
 
@@ -52,8 +52,8 @@ pub struct App {
     pub device: DeviceView,
     /// A process monitor confirmed as runnable, for the loop to hand the terminal to.
     pub handoff: Option<(Monitor, PathBuf)>,
-    /// The resolved configuration, once it has been fetched.
-    pub config: Option<Result<String, String>>,
+    /// The resolved configuration. None until it is requested, and again after a reload key.
+    pub config: Option<ConfigState>,
     /// First visible line of the config view.
     pub config_scroll: usize,
     settings: Settings,
@@ -75,6 +75,8 @@ pub struct App {
     pub search_hit: Option<usize>,
     /// Latest probes.
     pub health: Health,
+    /// Why the probes are not running, if they are not.
+    pub probes_stopped: Option<String>,
     /// The help overlay is open.
     pub help: bool,
     /// One-line notice in the status bar.
@@ -131,6 +133,7 @@ impl App {
             search: String::new(),
             search_hit: None,
             health: Health::default(),
+            probes_stopped: None,
             help: false,
             notice: None,
             log_rows: 20,
@@ -176,17 +179,23 @@ impl App {
             Event::Services(Ok(states)) => self.services(&states),
             Event::Services(Err(why)) => self.notice = Some(why),
             Event::Health(health) => self.health = *health,
+            Event::ProbesStopped(why) => self.probes_stopped = Some(why),
             Event::Snapshot(result) => {
                 let host = result
                     .as_ref()
                     .as_ref()
-                    .map(|snapshot| snapshot.metrics.host)
-                    .unwrap_or_default();
+                    .ok()
+                    .and_then(|snapshot| snapshot.metrics.host);
                 self.device.record(Instant::now(), host);
                 self.collections.snapshot(*result);
             }
-            Event::Acted(outcome) => self.collections.acted(outcome),
-            Event::Config(result) => self.config = Some(result),
+            Event::Acted(Ok(note) | Err(note)) => self.notice = Some(note),
+            Event::Config(result) => {
+                self.config = Some(match result {
+                    Ok(text) => ConfigState::Loaded(text),
+                    Err(why) => ConfigState::Failed(why),
+                });
+            }
             Event::InputLost(why) => {
                 self.notice = Some(format!("terminal input ended ({why}); quitting"));
                 self.should_quit = true;
@@ -292,7 +301,14 @@ impl App {
         }
         match self.view {
             View::Units => self.key_units(key),
-            View::Collections => self.pending_action = self.collections.key(key),
+            View::Collections => match self.collections.key(key) {
+                Reply::Nothing => {}
+                Reply::Notice(note) => self.notice = Some(note),
+                Reply::Dispatch(pending) => {
+                    self.notice = Some(format!("{} running", collections::verb(&pending)));
+                    self.pending_action = Some(pending);
+                }
+            },
             View::Config => self.key_config(key),
             View::Device => self.key_device(key),
         }

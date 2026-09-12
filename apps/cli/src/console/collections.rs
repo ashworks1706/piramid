@@ -67,6 +67,17 @@ impl Pending {
     }
 }
 
+/// What a key press in the collections view asks the console to do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reply {
+    /// Nothing beyond the change to the view state.
+    Nothing,
+    /// Show this line in the status bar notice.
+    Notice(String),
+    /// Run this confirmed action.
+    Dispatch(Pending),
+}
+
 /// Collections view state.
 pub struct Collections {
     /// The server this dashboard talks to.
@@ -83,8 +94,6 @@ pub struct Collections {
     pub error: Option<String>,
     /// Search latency history in microseconds, by collection.
     pub history: HashMap<String, VecDeque<u64>>,
-    /// One-line notice on the status bar.
-    pub notice: Option<String>,
     /// An action waiting on a yes or no key.
     pub pending: Option<Pending>,
     /// When the last refresh landed, for the elapsed-time indicator.
@@ -108,7 +117,6 @@ impl Collections {
             snapshot: None,
             error: None,
             history: HashMap::new(),
-            notice: None,
             pending: None,
             last_refresh: None,
             refreshing: false,
@@ -130,16 +138,9 @@ impl Collections {
                 .is_none_or(|at| at.elapsed() >= self.interval)
     }
 
-    /// Applies a key press, and reports whether an action should be dispatched.
-    pub fn key(&mut self, key: KeyEvent) -> Option<Pending> {
+    /// Applies a key press, and reports what the console has to show or dispatch for it.
+    pub fn key(&mut self, key: KeyEvent) -> Reply {
         self.on_key(key)
-    }
-
-    /// Records the outcome of a rebuild or compact.
-    pub fn acted(&mut self, outcome: Result<String, String>) {
-        self.notice = Some(match outcome {
-            Ok(note) | Err(note) => note,
-        });
     }
 
     /// Applies a refresh result.
@@ -199,46 +200,35 @@ impl Collections {
         self.rows = rows;
     }
 
-    fn on_key(&mut self, key: KeyEvent) -> Option<Pending> {
-        if let Some(pending) = self.pending.clone() {
-            return self.confirm(key, pending);
+    fn on_key(&mut self, key: KeyEvent) -> Reply {
+        if let Some(pending) = self.pending.take() {
+            return match key.code {
+                KeyCode::Char('y' | 'Y') => Reply::Dispatch(pending),
+                _ => Reply::Notice("cancelled".into()),
+            };
         }
-        self.notice = None;
         let chord = self.pending_key.take() == Some('g');
         match key.code {
-            KeyCode::Esc => self.notice = None,
             KeyCode::Char('j') | KeyCode::Down => self.move_by(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_by(-1),
             KeyCode::Char('g') if chord => self.selected = 0,
             KeyCode::Char('g') => self.pending_key = Some('g'),
             KeyCode::Char('G') => self.selected = self.rows.len().saturating_sub(1),
             KeyCode::Char('R') => self.last_refresh = None,
-            KeyCode::Char('r') => self.ask(Pending::Rebuild),
-            KeyCode::Char('c') => self.ask(Pending::Compact),
+            KeyCode::Char('r') => return self.ask(Pending::Rebuild),
+            KeyCode::Char('c') => return self.ask(Pending::Compact),
             _ => {}
         }
-        None
+        Reply::Nothing
     }
 
-    fn confirm(&mut self, key: KeyEvent, pending: Pending) -> Option<Pending> {
-        match key.code {
-            KeyCode::Char('y' | 'Y') => {
-                self.pending = None;
-                self.notice = Some(format!("{} running…", verb(&pending)));
-                Some(pending)
-            }
-            _ => {
-                self.pending = None;
-                self.notice = Some("cancelled".into());
-                None
-            }
-        }
-    }
-
-    fn ask(&mut self, make: fn(String) -> Pending) {
+    fn ask(&mut self, make: fn(String) -> Pending) -> Reply {
         match self.current() {
-            Some(row) => self.pending = Some(make(row.name.clone())),
-            None => self.notice = Some("no collection selected".into()),
+            Some(row) => {
+                self.pending = Some(make(row.name.clone()));
+                Reply::Nothing
+            }
+            None => Reply::Notice("no collection selected".into()),
         }
     }
 
