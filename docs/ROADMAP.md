@@ -77,7 +77,7 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 - [ ] inference sub-settings (batching, kv_cache, sampling, fusion, document_kv, dtype, model_path)
       are accepted while inference is off and read by nothing
 - [ ] the `auto` hardware profile means the same as `cpu-only` until something detects a GPU
-- [ ] an `auto` index picks its family when the collection opens and keeps it as the collection
+- [x] an `auto` index picks its family when the collection opens and keeps it as the collection
       grows past the thresholds
 - [ ] behind a reverse proxy every client shares one rate-limit bucket; forwarded headers are not
       read

@@ -33,6 +33,7 @@ pub fn insert_internal(collection: &mut Collection, entry: Document) -> Result<U
     collection
         .manifest
         .update_vector_count(collection.index.len());
+    collection.grow_index_family()?;
 
     Ok(id)
 }

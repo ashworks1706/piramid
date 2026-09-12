@@ -57,7 +57,8 @@ impl Default for AutoIndexConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum IndexConfig {
-    /// Pick a family from the collection's size.
+    /// Pick a family from the collection's size, moving to the next family as the collection
+    /// grows past each threshold. A shrinking collection keeps its family.
     Auto {
         #[serde(default)]
         metric: Metric,

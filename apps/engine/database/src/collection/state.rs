@@ -190,6 +190,52 @@ impl Collection {
         Ok(())
     }
 
+    /// Replace the index with the family an auto configuration picks for the current count, when
+    /// the collection has grown past a threshold. A collection that shrinks keeps its family.
+    pub(crate) fn grow_index_family(&mut self) -> Result<()> {
+        use crate::index::IndexType;
+        use piramid_core::config::IndexKind;
+
+        let rank_of_kind = |kind: IndexKind| match kind {
+            IndexKind::Flat => 0,
+            IndexKind::Ivf => 1,
+            IndexKind::Hnsw => 2,
+        };
+        let rank_of_type = |kind: IndexType| match kind {
+            IndexType::Flat => 0,
+            IndexType::Ivf => 1,
+            IndexType::Hnsw => 2,
+        };
+        let count = self.index.len();
+        let wanted = self.config.index.select_type(count);
+        let current = self.vector_index.index_type();
+        if rank_of_kind(wanted) <= rank_of_type(current) {
+            return Ok(());
+        }
+
+        tracing::info!(
+            target: "piramid::indexing",
+            collection = self.path.as_str(),
+            vectors = count,
+            from = %current,
+            to = ?wanted,
+            "index_family_grown"
+        );
+        let mut grown =
+            crate::index::create_index(&self.config.index, self.config.execution, count);
+        let ids: Vec<Uuid> = self.index.keys().copied().collect();
+        for id in ids {
+            let vector = VectorReader::get(&self.cache, &id).ok_or_else(|| {
+                piramid_core::error::IndexError::BuildFailed(format!(
+                    "vector {id} is not resident, so the index cannot grow into a new family"
+                ))
+            })?;
+            grown.insert(id, vector, &self.cache)?;
+        }
+        self.vector_index = grown;
+        Ok(())
+    }
+
     /// Rebuild the vector index from on-disk data and persist it.
     pub fn rebuild_index(&mut self) -> Result<()> {
         let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();

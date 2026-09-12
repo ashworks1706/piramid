@@ -700,3 +700,65 @@ fn the_checkpoint_interval_runs_from_the_open() {
         .unwrap();
     assert!(collection.checkpoint.last_checkpoint().is_some());
 }
+
+// An auto index moves to the family its thresholds name as the collection grows, and every
+// vector stays searchable across each move.
+#[test]
+fn an_auto_index_grows_into_the_family_its_size_picks() {
+    use piramid_core::config::{AutoIndexConfig, CollectionConfig, IndexConfig};
+    use piramid_database::index::IndexType;
+    use piramid_database::search::SearchParams;
+    use piramid_hardware::compute::Metric;
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_auto_index_growth.db");
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    let config = CollectionConfig {
+        index: IndexConfig::Auto {
+            metric: Metric::Cosine,
+            auto: AutoIndexConfig {
+                flat_max_vectors: 5,
+                ivf_max_vectors: 10,
+                ..AutoIndexConfig::default()
+            },
+        },
+        ..CollectionConfig::default()
+    };
+    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
+    let vector = |i: usize| {
+        let angle = i as f32 * 0.4;
+        vec![angle.cos(), angle.sin(), 0.1 * i as f32]
+    };
+
+    let mut families = Vec::new();
+    for i in 0..12 {
+        collection
+            .insert(Document::new(vector(i), format!("doc{i}")))
+            .unwrap();
+        families.push(collection.vector_index().index_type());
+    }
+    assert_eq!(families[3], IndexType::Flat);
+    assert_eq!(
+        families[4],
+        IndexType::Ivf,
+        "the fifth vector reaches flat_max_vectors"
+    );
+    assert_eq!(
+        families[9],
+        IndexType::Hnsw,
+        "the tenth vector reaches ivf_max_vectors"
+    );
+
+    let hits = collection
+        .search(&vector(7), 1, Metric::Cosine, SearchParams::default())
+        .unwrap();
+    assert_eq!(hits[0].document.text, "doc7");
+}

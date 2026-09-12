@@ -125,8 +125,9 @@ startup:
 
 runtime:
   index:
-    # auto | flat | hnsw | ivf. `auto` picks a family from the collection's size; the others
-    # take that family's parameters inline (see the commented examples below).
+    # auto | flat | hnsw | ivf. `auto` picks a family from the collection's size and rebuilds into
+    # the next family as an insert crosses a threshold, keeping it if the collection shrinks. The
+    # others take that family's parameters inline (see the commented examples below).
     type: auto
     # cosine | euclidean | dot
     metric: cosine
