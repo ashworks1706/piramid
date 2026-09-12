@@ -1,5 +1,8 @@
+//! Per-collection size ceilings.
+
 use serde::{Deserialize, Serialize};
 
+/// Ceilings a collection refuses writes beyond.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct LimitsConfig {

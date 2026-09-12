@@ -1,7 +1,9 @@
 //! Opening a collection: load sidecars, replay the WAL, rebuild what is missing.
 
+/// Settings a collection is opened with.
 #[derive(Clone, Default)]
 pub struct CollectionOpenOptions {
+    /// Configuration the collection runs with.
     pub config: piramid_core::config::CollectionConfig,
 }
 

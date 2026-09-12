@@ -30,6 +30,7 @@ pub struct EmbeddingConfig {
 }
 
 impl EmbeddingConfig {
+    /// Reject a provider this build cannot construct.
     pub fn validate(&self) -> Result<(), String> {
         match self.provider.as_str() {
             "openai" | "ollama" => Ok(()),

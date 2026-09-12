@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Memory ceiling for a collection and how its data file is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct MemoryConfig {
@@ -26,6 +27,7 @@ impl Default for MemoryConfig {
 }
 
 impl MemoryConfig {
+    /// Unbounded memory with the data file read through ordinary file reads.
     pub fn no_mmap() -> Self {
         MemoryConfig {
             max_memory_per_collection: None,

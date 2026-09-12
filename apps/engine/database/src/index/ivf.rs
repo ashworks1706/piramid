@@ -12,6 +12,7 @@ use piramid_hardware::compute::{strategies::for_mode, DistanceKernels};
 /// Centroids at least this similar between iterations count as settled.
 const CONVERGENCE_SIMILARITY: f32 = 0.99;
 
+/// Vectors partitioned by nearest centroid, searched by probing the closest partitions.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IvfIndex {
     config: IvfConfig,
@@ -24,6 +25,7 @@ pub struct IvfIndex {
 }
 
 impl IvfIndex {
+    /// An empty index with no trained centroids.
     pub fn new(config: IvfConfig) -> Self {
         IvfIndex {
             config,

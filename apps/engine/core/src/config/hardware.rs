@@ -55,9 +55,11 @@ impl HardwareProfile {
     }
 }
 
+/// Hardware selection and memory budgets for the process.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct HardwareConfig {
+    /// Which hardware to run on, or which memory class to assume.
     pub profile: HardwareProfile,
 
     /// Host memory the process will use. None takes the profile's memory class, or is unbounded.
@@ -66,8 +68,10 @@ pub struct HardwareConfig {
     /// Device memory to claim. None is unbounded.
     pub gpu_memory_budget_bytes: Option<u64>,
 
+    /// Device selection and kernel launch shapes.
     pub gpu: GpuConfig,
 
+    /// Division of device memory between weights, KV cache and index.
     pub vram: VramSplit,
 }
 

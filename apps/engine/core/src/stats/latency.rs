@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Moving-average latencies for writes, searches and lock waits. Clones share the same counters.
 #[derive(Debug, Clone, Default)]
 pub struct LatencyTracker {
     // Microseconds, held as integers.
@@ -23,58 +24,69 @@ pub struct LatencyTracker {
 }
 
 impl LatencyTracker {
+    /// A tracker with no samples.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Fold an insert duration into its average.
     pub fn record_insert(&self, duration: Duration) {
         self.insert_count.fetch_add(1, Ordering::Relaxed);
         let us = duration.as_micros() as u64;
         self.update_moving_average(&self.insert_latency_us, us, &self.insert_count);
     }
 
+    /// Fold a search duration into its average.
     pub fn record_search(&self, duration: Duration) {
         self.search_count.fetch_add(1, Ordering::Relaxed);
         let us = duration.as_micros() as u64;
         self.update_moving_average(&self.search_latency_us, us, &self.search_count);
     }
 
+    /// Fold a delete duration into its average.
     pub fn record_delete(&self, duration: Duration) {
         self.delete_count.fetch_add(1, Ordering::Relaxed);
         let us = duration.as_micros() as u64;
         self.update_moving_average(&self.delete_latency_us, us, &self.delete_count);
     }
 
+    /// Fold an update duration into its average.
     pub fn record_update(&self, duration: Duration) {
         self.update_count.fetch_add(1, Ordering::Relaxed);
         let us = duration.as_micros() as u64;
         self.update_moving_average(&self.update_latency_us, us, &self.update_count);
     }
 
+    /// Fold a read-lock wait into its average.
     pub fn record_lock_read(&self, duration: Duration) {
         self.lock_read_count.fetch_add(1, Ordering::Relaxed);
         let us = duration.as_micros() as u64;
         self.update_moving_average(&self.lock_read_latency_us, us, &self.lock_read_count);
     }
 
+    /// Fold a write-lock wait into its average.
     pub fn record_lock_write(&self, duration: Duration) {
         self.lock_write_count.fetch_add(1, Ordering::Relaxed);
         let us = duration.as_micros() as u64;
         self.update_moving_average(&self.lock_write_latency_us, us, &self.lock_write_count);
     }
 
+    /// Average insert latency in milliseconds. None while the average is zero.
     pub fn avg_insert_latency_ms(&self) -> Option<f32> {
         Self::avg_ms(&self.insert_latency_us)
     }
 
+    /// Average search latency in milliseconds. None while the average is zero.
     pub fn avg_search_latency_ms(&self) -> Option<f32> {
         Self::avg_ms(&self.search_latency_us)
     }
 
+    /// Average read-lock wait in milliseconds. None while the average is zero.
     pub fn avg_lock_read_latency_ms(&self) -> Option<f32> {
         Self::avg_ms(&self.lock_read_latency_us)
     }
 
+    /// Average write-lock wait in milliseconds. None while the average is zero.
     pub fn avg_lock_write_latency_ms(&self) -> Option<f32> {
         Self::avg_ms(&self.lock_write_latency_us)
     }

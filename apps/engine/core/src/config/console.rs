@@ -49,6 +49,7 @@ impl ConsoleConfig {
         format!("http://{host}:{port}")
     }
 
+    /// Reject a zero log line count or refresh interval.
     pub fn validate(&self) -> Result<(), String> {
         if self.log_lines == 0 {
             return Err("console.log_lines must be greater than zero".into());

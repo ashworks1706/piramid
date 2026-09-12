@@ -1,3 +1,5 @@
+//! The embedding providers this build can construct.
+
 mod factory;
 pub mod ollama;
 pub mod openai;

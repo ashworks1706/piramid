@@ -21,6 +21,7 @@ const CACHE_CAPACITY: NonZeroUsize = NonZeroUsize::new(10_000).unwrap();
 pub enum EmbeddingProvider {
     /// Anything speaking the OpenAI embeddings format, including a local server.
     OpenAI,
+    /// An Ollama server.
     Ollama,
 }
 

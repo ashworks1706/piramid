@@ -13,9 +13,11 @@ struct WalHeader {
 
 const WAL_VERSION: u32 = 1;
 
+/// A collection's write-ahead log file, or a stand-in that writes nothing when logging is off.
 pub struct Wal {
     file: Option<BufWriter<File>>,
     path: PathBuf,
+    /// Sequence number the next logged entry receives.
     pub next_seq: u64,
     /// Calls fsync after every entry. Without it a write reaches the kernel and no further.
     sync_on_write: bool,
@@ -117,6 +119,7 @@ impl Wal {
         Ok(())
     }
 
+    /// Append a checkpoint entry stamped with timestamp.
     pub fn checkpoint(&mut self, timestamp: u64) -> Result<()> {
         let mut entry = WalEntry::Checkpoint { timestamp, seq: 0 };
         self.log(&mut entry)?;
@@ -140,6 +143,7 @@ impl Wal {
         Ok(())
     }
 
+    /// Drain buffered entries to the kernel without fsync.
     pub fn flush(&mut self) -> Result<()> {
         if let Some(file) = &mut self.file {
             file.flush()?;

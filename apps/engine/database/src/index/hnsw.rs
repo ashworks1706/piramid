@@ -1,3 +1,5 @@
+//! Hierarchical navigable small world index: a layered proximity graph searched greedily.
+
 use piramid_hardware::compute::{strategies::for_mode, DistanceKernels, Metric};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -71,6 +73,7 @@ impl Ord for SearchCandidate {
     }
 }
 
+/// A layered proximity graph over vector ids, with deleted nodes kept as tombstones.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HnswIndex {
     config: HnswConfig,
@@ -80,6 +83,7 @@ pub struct HnswIndex {
 }
 
 impl HnswIndex {
+    /// An empty graph with the given parameters.
     pub fn new(config: HnswConfig) -> Self {
         HnswIndex {
             config,

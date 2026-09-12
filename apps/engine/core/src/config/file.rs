@@ -11,12 +11,16 @@ use super::{CollectionConfig, ConsoleConfig, RuntimeConfig, StartupConfig};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
+    /// Settings applied once at boot.
     pub startup: StartupConfig,
+    /// Settings re-read on reload.
     pub runtime: RuntimeConfig,
+    /// Settings for the terminal UI.
     pub console: ConsoleConfig,
 }
 
 impl Config {
+    /// Validate every block and reject a GPU profile paired with scalar execution.
     pub fn validate(&self) -> Result<(), String> {
         self.startup.validate()?;
         self.runtime.validate()?;

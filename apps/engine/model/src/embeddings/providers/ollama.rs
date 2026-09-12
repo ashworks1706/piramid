@@ -11,6 +11,7 @@ use piramid_core::error::embedding::EmbeddingError;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
+/// Embeds text through an Ollama server's embeddings endpoint.
 pub struct OllamaEmbedder {
     client: Client,
     model: String,
@@ -18,6 +19,7 @@ pub struct OllamaEmbedder {
 }
 
 impl OllamaEmbedder {
+    /// A client for the configured model. base_url is the server root; unset is localhost:11434.
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let base_url = config
             .base_url

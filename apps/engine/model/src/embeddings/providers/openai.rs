@@ -11,6 +11,7 @@ use piramid_core::error::embedding::EmbeddingError;
 
 const DEFAULT_OPENAI_API_URL: &str = "https://api.openai.com/v1/embeddings";
 
+/// Embeds text through an endpoint speaking the OpenAI embeddings format.
 pub struct OpenAIEmbedder {
     client: Client,
     api_key: Option<String>,
@@ -19,6 +20,7 @@ pub struct OpenAIEmbedder {
 }
 
 impl OpenAIEmbedder {
+    /// A client for the configured model. base_url is the full endpoint URL; unset is OpenAI's.
     // The key reaches config from OPENAI_API_KEY in the loader.
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let base_url = config

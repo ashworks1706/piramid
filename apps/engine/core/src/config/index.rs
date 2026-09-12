@@ -20,20 +20,28 @@ pub enum IndexKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct AutoIndexConfig {
+    /// Below this many vectors, the flat index is chosen.
     #[serde(default = "default_flat_max_vectors")]
     pub flat_max_vectors: usize,
+    /// Below this many vectors, IVF is chosen; at or above it, HNSW.
     #[serde(default = "default_ivf_max_vectors")]
     pub ivf_max_vectors: usize,
+    /// IVF partition count. None sizes it from the collection.
     #[serde(default)]
     pub ivf_num_clusters: Option<usize>,
+    /// IVF partitions scanned per query. None sizes it from the collection.
     #[serde(default)]
     pub ivf_num_probes: Option<usize>,
+    /// Iteration cap when training IVF centroids.
     #[serde(default = "default_ivf_max_iterations")]
     pub ivf_max_iterations: usize,
+    /// HNSW connections per node above layer 0.
     #[serde(default = "default_hnsw_m")]
     pub hnsw_m: usize,
+    /// HNSW candidate width while linking a new node.
     #[serde(default = "default_hnsw_ef_construction")]
     pub hnsw_ef_construction: usize,
+    /// HNSW candidate width while searching.
     #[serde(default = "default_hnsw_ef_search")]
     pub hnsw_ef_search: usize,
 }
@@ -59,8 +67,10 @@ impl Default for AutoIndexConfig {
 pub enum IndexConfig {
     /// Pick a family from the collection's size.
     Auto {
+        /// Distance metric for whichever family is chosen.
         #[serde(default)]
         metric: Metric,
+        /// Size thresholds and the parameters of each family.
         #[serde(default)]
         auto: AutoIndexConfig,
     },
