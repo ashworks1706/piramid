@@ -7,7 +7,6 @@ use crate::state::{RebuildJobStatus, RebuildState, SharedState};
 use piramid_core::error::{Result, ServerError};
 use piramid_core::stats::record_lock_read;
 use piramid_core::validation;
-use piramid_database::storage::SidecarManager;
 
 fn collection_info(name: String, collection: &piramid_database::Collection) -> CollectionInfo {
     let meta = collection.manifest();
@@ -75,23 +74,10 @@ pub fn delete_collection(
     state: &SharedState,
     collection: String,
 ) -> Result<DeleteCollectionResponse> {
+    // Deleting frees disk space, so it is allowed while low disk space has writes disabled.
     state.ensure_available()?;
-
-    let existed = state.collection_manager.remove(&collection).is_some();
-    if existed {
-        let base = format!("{}/{}.db", state.data_dir, collection);
-        let mut paths = vec![base.clone()];
-        paths.extend(SidecarManager::at(&base).all_paths());
-        for path in paths {
-            match std::fs::remove_file(&path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
-    }
-
-    Ok(DeleteCollectionResponse { deleted: existed })
+    state.collection_manager.delete(&collection)?;
+    Ok(DeleteCollectionResponse { deleted: true })
 }
 
 /// Number of documents stored in one existing collection.

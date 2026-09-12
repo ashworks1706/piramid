@@ -77,6 +77,15 @@ impl AppState {
     pub fn new(config: Config, embeddings: EmbeddingsManager) -> Result<Self> {
         let data_dir = config.startup.data_dir.clone();
         std::fs::create_dir_all(&data_dir)?;
+        if config.startup.disk.min_free_bytes.is_some()
+            && super::disk::free_bytes(&data_dir)?.is_none()
+        {
+            return Err(ServerError::InvalidRequest(
+                "startup.disk.min_free_bytes is set, and this platform cannot measure free disk space"
+                    .into(),
+            )
+            .into());
+        }
         let booted_with = config.startup.clone();
         let cluster_router: Arc<dyn ClusterRouter> =
             Arc::new(LocalClusterRouter::new(NodeRuntimeState {
@@ -235,28 +244,38 @@ impl AppState {
         super::disk::free_bytes(&self.data_dir)
     }
 
-    /// Error with 503 when shutting down, read-only, or below the free-space floor with read-only
-    /// on low space enabled. Enabling read-only here latches it.
+    /// Error with 503 when shutting down, or below the free-space floor with read-only on low
+    /// space enabled. Read-only lifts at the first write that finds the space back.
     pub fn ensure_write_allowed(&self) -> Result<()> {
         self.ensure_available()?;
-        if self.read_only.load(Ordering::Relaxed) {
-            return Err(ServerError::ServiceUnavailable(
-                "Server is in read-only mode due to low disk space".into(),
-            )
-            .into());
-        }
-
         let Some(min_free) = self.disk_min_free_bytes() else {
             return Ok(());
         };
-        let Some(free) = self.disk_free_bytes()? else {
-            return Ok(());
-        };
+        let free = self.disk_free_bytes()?.ok_or_else(|| {
+            ServerError::Internal(
+                "startup.disk.min_free_bytes is set, and this platform cannot measure free disk \
+                 space"
+                    .into(),
+            )
+        })?;
         if free >= min_free {
+            if self.read_only.swap(false, Ordering::Relaxed) {
+                tracing::info!(
+                    target: "piramid::disk",
+                    free_bytes = free,
+                    min_free = min_free,
+                    "write_access_restored"
+                );
+            }
             return Ok(());
         }
         if !self.disk_readonly_on_low_space() {
-            tracing::warn!(free_bytes = free, min_free = min_free, "disk_space_low");
+            tracing::warn!(
+                target: "piramid::disk",
+                free_bytes = free,
+                min_free = min_free,
+                "disk_space_low"
+            );
             return Ok(());
         }
         self.read_only.store(true, Ordering::Relaxed);

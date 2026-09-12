@@ -121,7 +121,7 @@ pub struct RebuildIndexStatusResponse {
 /// Result of deleting a collection.
 #[derive(Serialize)]
 pub struct DeleteCollectionResponse {
-    /// True when a loaded collection of that name was removed.
+    /// True. Deleting a collection that is neither open nor on disk is a not found error.
     pub deleted: bool,
 }
 

@@ -30,6 +30,7 @@ impl CollectionManager {
     }
 
     pub fn get_existing(&self, name: &str) -> Result<CollectionHandle> {
+        piramid_core::validation::validate_collection_name(name)?;
         if let Some(existing) = self.collections.get(name) {
             return Ok(existing.value().clone());
         }
@@ -43,6 +44,7 @@ impl CollectionManager {
     }
 
     pub fn get_or_create(&self, name: &str) -> Result<CollectionHandle> {
+        piramid_core::validation::validate_collection_name(name)?;
         if let Some(existing) = self.collections.get(name) {
             return Ok(existing.value().clone());
         }
@@ -67,9 +69,26 @@ impl CollectionManager {
         Ok(handle)
     }
 
-    pub fn remove(&self, name: &str) -> Option<CollectionHandle> {
+    /// Close a collection if it is open and delete its data file and sidecars.
+    ///
+    /// Errors with not found when the collection is neither open nor on disk.
+    pub fn delete(&self, name: &str) -> Result<()> {
+        piramid_core::validation::validate_collection_name(name)?;
         self.latency_trackers.remove(name);
-        self.collections.remove(name).map(|(_, handle)| handle)
+        let was_open = self.collections.remove(name).is_some();
+        let base = self.collection_path(name);
+        let mut removed_any = false;
+        for path in std::iter::once(base.clone()).chain(SidecarManager::at(&base).all_paths()) {
+            match std::fs::remove_file(&path) {
+                Ok(()) => removed_any = true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        if !was_open && !removed_any {
+            return Err(ServerError::NotFound(format!("collection '{name}' not found")).into());
+        }
+        Ok(())
     }
 
     /// Collection names present in the data directory, loaded or not.
