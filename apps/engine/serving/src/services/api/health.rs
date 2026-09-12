@@ -24,7 +24,10 @@ pub struct CollectionHealth {
     pub wal_size_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema_version: Option<u32>,
-    pub integrity_ok: bool,
+    /// Whether the collection opened cleanly. Absent for a collection not yet opened, which has
+    /// not been checked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub integrity_ok: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

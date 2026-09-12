@@ -29,6 +29,8 @@ pub enum IndexDetails {
         layer_sizes: Vec<usize>,
         /// Mean out-degree.
         avg_connections: f32,
+        /// Candidate list width a search uses when the query sets none.
+        ef_search: usize,
     },
     /// Partition shape for IVF.
     Ivf {
@@ -38,6 +40,8 @@ pub enum IndexDetails {
         vectors_per_cluster: Vec<usize>,
         /// Whether centroids have been trained.
         centroids_computed: bool,
+        /// Partitions a search scans when the query sets none.
+        num_probes: usize,
     },
 }
 

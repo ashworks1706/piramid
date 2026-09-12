@@ -40,7 +40,7 @@ impl Row {
         if let Some(error) = health.error.as_deref() {
             return Some(error);
         }
-        (!health.integrity_ok).then_some("integrity check failed")
+        (health.integrity_ok == Some(false)).then_some("integrity check failed")
     }
 }
 

@@ -529,12 +529,21 @@ impl VectorIndex for HnswIndex {
                 max_layer: hnsw_stats.max_layer,
                 layer_sizes: hnsw_stats.layer_sizes,
                 avg_connections: hnsw_stats.avg_connections,
+                ef_search: self.config.ef_search,
             },
         }
     }
 
     fn index_type(&self) -> IndexType {
         IndexType::Hnsw
+    }
+
+    fn metric(&self) -> piramid_hardware::compute::Metric {
+        self.config.metric
+    }
+
+    fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
+        self.config.mode = mode;
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

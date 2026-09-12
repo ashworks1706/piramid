@@ -67,9 +67,11 @@ Settings resolve in this order, with later winning:
 1. defaults in `apps/engine/core/src/config`
 2. a YAML or JSON file named by `CONFIG_FILE`
 3. environment variables
+4. `piramid serve --config`, `--port` and `--data-dir`, which name the file, replace the port of
+   `startup.bind` and replace `startup.data_dir`
 
 [`config.example.yaml`](../config.example.yaml) is the whole surface, every value at its default,
-and a test asserts it stays that way. `piramid show config` prints what actually resolved.
+and a test asserts it stays that way. `startup.logging.config: true` logs what actually resolved.
 
 The file has two blocks and the split is by lifecycle: `startup:` is applied once at boot, so
 changing one of those needs a restart and `POST /config/reload` refuses a file whose startup block

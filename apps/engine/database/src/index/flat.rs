@@ -140,6 +140,14 @@ impl VectorIndex for FlatIndex {
         IndexType::Flat
     }
 
+    fn metric(&self) -> piramid_hardware::compute::Metric {
+        self.config.metric
+    }
+
+    fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
+        self.config.mode = mode;
+    }
+
     fn to_serializable(&self) -> crate::index::SerializableIndex {
         crate::index::SerializableIndex::Flat(self.clone())
     }

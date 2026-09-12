@@ -2,7 +2,7 @@
 
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 use serde_yaml::{Mapping, Value};
 
@@ -16,23 +16,34 @@ const ENV_SEPARATOR: &str = "__";
 
 /// Read CONFIG_FILE, apply PIRAMID__ overrides, then validate.
 pub fn load() -> Result<Config, ConfigError> {
-    let mut document = load_file()?;
-    apply_env_overrides(&mut document)?;
-    apply_secret_env(&mut document);
+    load_with(None, |_| {})
+}
 
-    let config: Config = serde_yaml::from_value(document).map_err(|e| {
-        ConfigError::Invalid(format!(
-            "{e}. Run `piramid show config` for the full set of keys"
-        ))
-    })?;
+/// Read the given file, or CONFIG_FILE when none is given, apply PIRAMID__ overrides, then
+/// adjust the typed configuration and validate the result.
+pub fn load_with(
+    file: Option<&Path>,
+    adjust: impl FnOnce(&mut Config),
+) -> Result<Config, ConfigError> {
+    let path = match file {
+        Some(path) => Some(path.to_string_lossy().into_owned()),
+        None => env::var("CONFIG_FILE").ok(),
+    };
+    let mut document = load_file(path)?;
+    apply_env_overrides(&mut document)?;
+    apply_secret_env(&mut document)?;
+
+    let mut config: Config =
+        serde_yaml::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
+    adjust(&mut config);
 
     config.validate().map_err(ConfigError::Invalid)?;
     Ok(config)
 }
 
-/// Parse CONFIG_FILE into an untyped document, or an empty one when it is unset.
-fn load_file() -> Result<Value, ConfigError> {
-    let Ok(path) = env::var("CONFIG_FILE") else {
+/// Parse the configuration file into an untyped document, or an empty one when there is none.
+fn load_file(path: Option<String>) -> Result<Value, ConfigError> {
+    let Some(path) = path else {
         return Ok(Value::Mapping(Mapping::new()));
     };
     let data = fs::read_to_string(&path)
@@ -84,11 +95,15 @@ fn apply_env_overrides(document: &mut Value) -> Result<(), ConfigError> {
 }
 
 /// Read the API key from the environment. It has no place in the configuration file.
-fn apply_secret_env(document: &mut Value) {
+fn apply_secret_env(document: &mut Value) -> Result<(), ConfigError> {
     if let Ok(key) = env::var("OPENAI_API_KEY") {
         let path = ["startup", "embedding", "api_key"].map(str::to_string);
-        let _ = insert_at(document, &path, Value::String(key));
+        insert_at(document, &path, Value::String(key)).map_err(|reason| ConfigError::Env {
+            name: "OPENAI_API_KEY".to_string(),
+            reason,
+        })?;
     }
+    Ok(())
 }
 
 /// Write the value at the given path, creating intermediate mappings.
@@ -111,15 +126,4 @@ fn insert_at(document: &mut Value, path: &[String], value: Value) -> Result<(), 
     };
     map.insert(Value::String(leaf.clone()), value);
     Ok(())
-}
-
-/// Default data directory: ~/.piramid. An unset HOME is an error.
-pub fn default_data_dir() -> Result<String, ConfigError> {
-    let home = env::var("HOME").map_err(|_| ConfigError::Env {
-        name: "HOME".to_string(),
-        reason: "unset, so the default data directory ~/.piramid cannot be resolved".to_string(),
-    })?;
-    let mut path = PathBuf::from(home);
-    path.push(".piramid");
-    Ok(path.to_string_lossy().to_string())
 }

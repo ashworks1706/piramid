@@ -90,7 +90,7 @@ pub struct Readyz {
 pub struct CollectionHealth {
     pub name: String,
     pub loaded: bool,
-    pub integrity_ok: bool,
+    pub integrity_ok: Option<bool>,
     pub schema_version: Option<u32>,
     pub error: Option<String>,
 }

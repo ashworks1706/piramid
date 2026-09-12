@@ -50,7 +50,6 @@ pub fn search_vectors(
     validation::validate_batch_size(vectors.len(), MAX_BATCH_SIZE, "Search")?;
     validation::validate_vectors(&vectors)?;
 
-    let metric = parse_metric(metric)?;
     let filter = parse_filter(filter)?;
 
     let collection_handle = state.get_existing_collection(&collection)?;
@@ -60,6 +59,7 @@ pub fn search_vectors(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
+    let metric = parse_metric(metric, collection_guard.vector_index().metric())?;
 
     let effective_search = apply_search_overrides(collection_guard.config().search, &tuning)?;
 
@@ -148,7 +148,6 @@ pub fn range_search_vectors(
     validation::validate_batch_size(vectors.len(), MAX_BATCH_SIZE, "Search")?;
     validation::validate_vectors(&vectors)?;
 
-    let metric = parse_metric(metric)?;
     let filter = parse_filter(filter)?;
 
     let collection_handle = state.get_existing_collection(&collection)?;
@@ -158,6 +157,7 @@ pub fn range_search_vectors(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
+    let metric = parse_metric(metric, collection_guard.vector_index().metric())?;
 
     let effective_search = apply_search_overrides(collection_guard.config().search, &tuning)?;
     let params = piramid_database::search::SearchParams {

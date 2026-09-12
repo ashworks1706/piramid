@@ -8,12 +8,13 @@ use piramid_core::Hit;
 use piramid_hardware::compute::{ComputeError, Metric};
 use std::collections::HashMap;
 
-/// Resolve a requested metric name, defaulting when the caller omits one.
+/// Resolve a requested metric name against the metric a collection is indexed by.
 ///
-/// An absent metric resolves to the default. An unknown one is a bad request.
-pub fn parse_metric(metric: Option<String>) -> Result<Metric> {
+/// An absent metric is the indexed one. An unknown name is a bad request, and a known name other
+/// than the indexed metric is refused by the search itself.
+pub fn parse_metric(metric: Option<String>, indexed: Metric) -> Result<Metric> {
     let Some(name) = metric else {
-        return Ok(Metric::default());
+        return Ok(indexed);
     };
     name.parse()
         .map_err(|error: ComputeError| ServerError::InvalidRequest(error.to_string()).into())

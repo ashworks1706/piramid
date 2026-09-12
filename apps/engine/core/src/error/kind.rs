@@ -70,8 +70,16 @@ impl PiramidError {
         match self {
             Self::Server(e) => e.kind(),
             Self::Embedding(_) => ErrorKind::Upstream,
-            Self::Compute(_) | Self::Gpu(_) => ErrorKind::Unavailable,
-            Self::Storage(_)
+            Self::Index(super::index::IndexError::MetricMismatch { .. }) => ErrorKind::BadRequest,
+            Self::Compute(piramid_hardware::compute::ComputeError::UnknownMetric { .. }) => {
+                ErrorKind::BadRequest
+            }
+            Self::Compute(piramid_hardware::compute::ComputeError::StrategyUnavailable {
+                ..
+            })
+            | Self::Gpu(_) => ErrorKind::Unavailable,
+            Self::Compute(_)
+            | Self::Storage(_)
             | Self::Index(_)
             | Self::Io(_)
             | Self::Serialization(_)

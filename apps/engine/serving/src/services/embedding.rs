@@ -134,7 +134,6 @@ pub async fn search_by_text(
         embed_duration,
     );
 
-    let metric = parse_metric(req.metric)?;
     let filter = parse_filter(req.filter)?;
     let base_search = {
         let collection_guard = collection_handle.read();
@@ -148,6 +147,7 @@ pub async fn search_by_text(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
+    let metric = parse_metric(req.metric, collection_guard.vector_index().metric())?;
 
     let start = Instant::now();
     let results = collection_guard.search(

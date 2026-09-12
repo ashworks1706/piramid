@@ -75,17 +75,19 @@ impl CollectionManager {
     /// Collection names present in the data directory, loaded or not.
     ///
     /// A collection is the base {name}.db file. Every other .db file beside it is a sidecar.
-    pub fn discover_on_disk(&self) -> Vec<String> {
-        let Ok(entries) = std::fs::read_dir(&self.data_dir) else {
-            return Vec::new();
-        };
-        let mut names: Vec<String> = entries
-            .flatten()
-            .filter_map(|entry| collection_name_of(entry.file_name().to_str()?))
-            .collect();
+    ///
+    /// Errors when the data directory or one of its entries cannot be read.
+    pub fn discover_on_disk(&self) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for entry in std::fs::read_dir(&self.data_dir)? {
+            let entry = entry?;
+            if let Some(name) = entry.file_name().to_str().and_then(collection_name_of) {
+                names.push(name);
+            }
+        }
         names.sort();
         names.dedup();
-        names
+        Ok(names)
     }
 
     pub fn contains_loaded(&self, name: &str) -> bool {
@@ -162,5 +164,20 @@ mod tests {
         assert_eq!(collection_name_of(".db"), None);
         assert_eq!(collection_name_of("docs.db.wal.meta"), None);
         assert_eq!(collection_name_of("docs.db.compact"), None);
+    }
+
+    #[test]
+    fn an_unreadable_data_directory_is_an_error_not_an_empty_listing() {
+        let missing = std::env::temp_dir().join(format!(
+            "piramid-missing-data-dir-{}/does-not-exist",
+            std::process::id()
+        ));
+        let manager = super::CollectionManager::new(
+            missing.to_string_lossy().into_owned(),
+            std::sync::Arc::new(parking_lot::RwLock::new(
+                piramid_core::config::Config::default(),
+            )),
+        );
+        assert!(manager.discover_on_disk().is_err());
     }
 }

@@ -28,4 +28,17 @@ pub enum IndexError {
 
     #[error("Index load failed: {0}")]
     LoadFailed(String),
+
+    /// A search asked for a metric other than the one the index orders candidates by.
+    #[error(
+        "the collection is indexed by {} and cannot be searched by {}",
+        .indexed.as_str(),
+        .requested.as_str()
+    )]
+    MetricMismatch {
+        /// The metric the index was built with.
+        indexed: piramid_hardware::compute::Metric,
+        /// The metric the search asked for.
+        requested: piramid_hardware::compute::Metric,
+    },
 }
