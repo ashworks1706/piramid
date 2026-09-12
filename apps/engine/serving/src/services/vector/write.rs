@@ -1,3 +1,5 @@
+//! Inserting, upserting and deleting documents.
+
 use std::time::Instant;
 
 use uuid::Uuid;
@@ -112,6 +114,7 @@ pub fn insert_vector(
     })
 }
 
+/// Delete one document of an existing collection, by UUID.
 pub fn delete_vector(
     state: &SharedState,
     collection: String,

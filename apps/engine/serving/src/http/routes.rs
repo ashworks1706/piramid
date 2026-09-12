@@ -1,3 +1,5 @@
+//! The route table and the middleware stack of the server.
+
 use std::sync::Arc;
 
 use axum::http::HeaderValue;

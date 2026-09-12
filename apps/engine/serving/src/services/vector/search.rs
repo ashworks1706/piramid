@@ -1,3 +1,5 @@
+//! Nearest-neighbour and range search over query vectors.
+
 use std::time::Instant;
 
 use crate::services::api::{RangeSearchRequest, SearchRequest, SearchResponse};

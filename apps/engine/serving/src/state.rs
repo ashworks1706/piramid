@@ -1,3 +1,5 @@
+//! Process-wide shared state of the server and the index rebuild job registry.
+
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::{
@@ -16,42 +18,62 @@ use piramid_core::error::{PiramidError, Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
 use piramid_model::embeddings::EmbeddingsManager;
 
+/// Phase of an index rebuild job.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RebuildState {
+    /// The rebuild has started and not yet finished.
     Running,
+    /// The rebuild finished without error.
     Completed,
+    /// The rebuild returned an error.
     Failed,
 }
 
+/// Record of the most recent index rebuild of one collection.
 #[derive(Clone)]
 pub struct RebuildJobStatus {
+    /// Current phase of the job.
     pub status: RebuildState,
-    pub started_at: u64,          // seconds since UNIX epoch
-    pub finished_at: Option<u64>, // seconds since UNIX epoch
+    /// Start time, in seconds since the Unix epoch.
+    pub started_at: u64,
+    /// End time, in seconds since the Unix epoch. None while running.
+    pub finished_at: Option<u64>,
+    /// Error message of a failed rebuild. None unless failed.
     pub error: Option<String>,
+    /// Duration of the rebuild, in milliseconds. None while running.
     pub elapsed_ms: Option<u128>,
 }
 
-// Collections are held in a DashMap, one entry per collection.
+/// Process-wide state shared by every request handler.
 pub struct AppState {
+    /// Open collections and their latency trackers.
     pub collection_manager: CollectionManager,
-    pub data_dir: String, // e.g. ./data
+    /// Directory holding the collection files.
+    pub data_dir: String,
+    /// Decides which node serves each collection.
     pub cluster_router: Arc<dyn ClusterRouter>,
+    /// The embedding provider, if configured, and its usage metrics.
     pub embeddings: EmbeddingsManager,
     /// Readings of the machine the server runs on.
     pub machine: MachineReadings,
-    pub shutting_down: Arc<AtomicBool>, // set on shutdown to reject new requests
-    pub read_only: Arc<AtomicBool>,     // disk-pressure read-only mode
+    /// Set once shutdown begins; requests are refused with 503 afterwards.
+    pub shutting_down: Arc<AtomicBool>,
+    /// Set when low disk space disables writes; writes are refused with 503 afterwards.
+    pub read_only: Arc<AtomicBool>,
+    /// The configuration in effect, replaced on reload.
     pub app_config: Arc<RwLock<Config>>,
     /// The startup block the process booted with. A reload that changes it is refused.
     booted_with: StartupConfig,
     /// Where a reload reads configuration from.
     config_source: ConfigSource,
+    /// Most recent index rebuild of each collection, keyed by collection name.
     pub rebuild_jobs: Arc<DashMap<String, RebuildJobStatus>>,
-    pub config_last_reload: Arc<AtomicU64>, // used to invalidate caches on reload
+    /// Time of startup or of the last successful reload, in seconds since the Unix epoch.
+    pub config_last_reload: Arc<AtomicU64>,
 }
 
 impl AppState {
+    /// Build the state from a loaded configuration, creating the data directory if missing.
     pub fn new(config: Config, embeddings: EmbeddingsManager) -> Result<Self> {
         let data_dir = config.startup.data_dir.clone();
         std::fs::create_dir_all(&data_dir)?;
@@ -100,14 +122,17 @@ impl AppState {
         u128::from(self.booted_with.logging.slow_query_ms)
     }
 
+    /// Free bytes below which the disk counts as low, from the startup config.
     pub fn disk_min_free_bytes(&self) -> Option<u64> {
         self.booted_with.disk.min_free_bytes
     }
 
+    /// Whether low disk space switches the server to read-only, from the startup config.
     pub fn disk_readonly_on_low_space(&self) -> bool {
         self.booted_with.disk.readonly_on_low_space
     }
 
+    /// Error with 503 once shutdown has begun.
     pub fn ensure_available(&self) -> Result<()> {
         if self.shutting_down.load(Ordering::Relaxed) {
             return Err(ServerError::ServiceUnavailable("Server is shutting down".into()).into());
@@ -126,11 +151,13 @@ impl AppState {
         Ok(())
     }
 
+    /// Handle to a collection that is loaded or present on disk, opening it if needed.
     pub fn get_existing_collection(&self, name: &str) -> Result<CollectionHandle> {
         self.check_routable(name)?;
         self.collection_manager.get_existing(name)
     }
 
+    /// Handle to a collection, opening or creating it if needed.
     pub fn get_or_create_collection(&self, name: &str) -> Result<CollectionHandle> {
         self.check_routable(name)?;
         self.collection_manager.get_or_create(name)
@@ -194,10 +221,12 @@ impl AppState {
         Ok(new_cfg)
     }
 
+    /// Copy of the configuration in effect.
     pub fn current_config(&self) -> Config {
         self.app_config.read().clone()
     }
 
+    /// Mark the server as shutting down.
     pub fn initiate_shutdown(&self) {
         self.shutting_down.store(true, Ordering::Relaxed);
     }
@@ -206,6 +235,8 @@ impl AppState {
         super::disk::free_bytes(&self.data_dir)
     }
 
+    /// Error with 503 when shutting down, read-only, or below the free-space floor with read-only
+    /// on low space enabled. Enabling read-only here latches it.
     pub fn ensure_write_allowed(&self) -> Result<()> {
         self.ensure_available()?;
         if self.read_only.load(Ordering::Relaxed) {
@@ -275,4 +306,5 @@ impl AppState {
     }
 }
 
+/// Reference-counted handle to [AppState].
 pub type SharedState = Arc<AppState>;

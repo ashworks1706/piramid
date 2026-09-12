@@ -1,3 +1,6 @@
+//! Use cases behind the HTTP handlers: admission checks, lock acquisition, metrics, and the API
+//! shapes they take and return.
+
 pub mod admin;
 pub mod api;
 pub mod collection;
@@ -5,6 +8,7 @@ pub mod convert;
 pub mod embedding;
 pub mod vector;
 
-// Error strings shared by several services.
+/// Error message for a document id that is not in the collection.
 pub const VECTOR_NOT_FOUND: &str = "Vector not found";
+/// Error message for an embedding request when no provider is configured.
 pub const EMBEDDING_NOT_CONFIGURED: &str = "Embedding service not configured";

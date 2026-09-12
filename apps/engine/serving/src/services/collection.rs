@@ -1,3 +1,5 @@
+//! Collection lifecycle, index maintenance and duplicate-scan operations.
+
 use std::time::Instant;
 
 use crate::services::api::*;
@@ -18,6 +20,7 @@ fn collection_info(name: String, collection: &piramid_database::Collection) -> C
     }
 }
 
+/// Summaries of the collections loaded in memory.
 pub fn list_collections(state: &SharedState) -> Result<CollectionsResponse> {
     state.ensure_available()?;
 
@@ -35,6 +38,7 @@ pub fn list_collections(state: &SharedState) -> Result<CollectionsResponse> {
     Ok(CollectionsResponse { collections })
 }
 
+/// Create a collection, or open it if it already exists, and return its summary.
 pub fn create_collection(
     state: &SharedState,
     req: CreateCollectionRequest,
@@ -52,6 +56,7 @@ pub fn create_collection(
     Ok(collection_info(req.name, &collection_guard))
 }
 
+/// Summary of one existing collection, opening it from disk if needed.
 pub fn get_collection(state: &SharedState, collection: String) -> Result<CollectionInfo> {
     state.ensure_available()?;
 
@@ -65,6 +70,7 @@ pub fn get_collection(state: &SharedState, collection: String) -> Result<Collect
     Ok(collection_info(collection, &collection_guard))
 }
 
+/// Unload a collection and remove its record file and sidecars.
 pub fn delete_collection(
     state: &SharedState,
     collection: String,
@@ -88,6 +94,7 @@ pub fn delete_collection(
     Ok(DeleteCollectionResponse { deleted: existed })
 }
 
+/// Number of documents stored in one existing collection.
 pub fn collection_count(state: &SharedState, collection: String) -> Result<CountResponse> {
     state.ensure_available()?;
 
@@ -104,6 +111,7 @@ pub fn collection_count(state: &SharedState, collection: String) -> Result<Count
     })
 }
 
+/// Statistics of the vector index of one existing collection.
 pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStatsResponse> {
     state.ensure_available()?;
 
@@ -199,6 +207,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
     })
 }
 
+/// Pairs of near-identical documents in one existing collection.
 pub fn find_duplicates(
     state: &SharedState,
     collection: String,
@@ -270,6 +279,7 @@ pub fn compact_collection(state: &SharedState, collection: String) -> Result<Reb
     })
 }
 
+/// State of the most recent index rebuild started for a collection.
 pub fn rebuild_index_status(
     state: &SharedState,
     collection: String,

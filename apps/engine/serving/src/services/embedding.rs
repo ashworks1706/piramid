@@ -1,3 +1,5 @@
+//! Operations that call the configured embedding provider.
+
 use std::time::Instant;
 
 use crate::services::api::*;
