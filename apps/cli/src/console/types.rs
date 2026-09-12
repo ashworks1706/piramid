@@ -166,8 +166,8 @@ impl Profile {
     /// The views this profile offers, in tab order.
     pub fn views(self) -> &'static [View] {
         match self {
-            Self::Developer => &[View::Units, View::Collections, View::Config],
-            Self::Production => &[View::Collections, View::Config],
+            Self::Developer => &[View::Units, View::Collections, View::Config, View::Device],
+            Self::Production => &[View::Collections, View::Config, View::Device],
         }
     }
 }
@@ -181,6 +181,8 @@ pub enum View {
     Collections,
     /// The configuration as the server resolved it.
     Config,
+    /// Host processor and memory of the server over time.
+    Device,
 }
 
 impl View {
@@ -190,6 +192,7 @@ impl View {
             Self::Units => "units",
             Self::Collections => "collections",
             Self::Config => "config",
+            Self::Device => "device",
         }
     }
 }

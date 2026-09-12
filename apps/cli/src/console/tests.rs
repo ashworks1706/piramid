@@ -303,11 +303,11 @@ fn a_production_console_hides_the_views_that_need_a_checkout() {
     // The units view drives just recipes and compose, neither of which exists outside a checkout.
     assert_eq!(
         Profile::Production.views(),
-        [View::Collections, View::Config]
+        [View::Collections, View::Config, View::Device]
     );
     assert_eq!(
         Profile::Developer.views(),
-        [View::Units, View::Collections, View::Config]
+        [View::Units, View::Collections, View::Config, View::Device]
     );
     // The first view is what the console opens on, and every profile has one.
     assert!(!Profile::Production.views().is_empty());
@@ -360,4 +360,183 @@ fn an_unreachable_server_is_reported_rather_than_left_blank() {
     // instead of waiting forever.
     assert!(app.collections.error.is_some());
     assert!(app.collections.rows.is_empty());
+}
+
+/// A console watching the server at base_url.
+fn console_watching(base_url: &str) -> super::app::App {
+    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut config = piramid_core::config::Config::default();
+    config.console.base_url = base_url.to_owned();
+    super::app::App::new(
+        Settings::from_config(&config),
+        Profile::Production,
+        root,
+        &tx,
+    )
+    .expect("the log directory is creatable")
+}
+
+#[test]
+fn loopback_urls_are_this_machine_and_every_other_host_is_not() {
+    use super::device::is_loopback;
+
+    for local in [
+        "http://localhost:6333",
+        "http://LOCALHOST",
+        "http://127.0.0.1:7000/",
+        "http://127.3.2.1",
+        "http://[::1]:6333/api",
+        "http://user:secret@localhost:6333",
+    ] {
+        assert!(is_loopback(local), "{local} is this machine");
+    }
+    for remote in [
+        "https://piramid.internal:6333",
+        "http://10.0.0.5:6333",
+        "http://[2001:db8::1]:6333",
+        "http://localhost.example.com",
+        "http://0.0.0.0:6333",
+    ] {
+        assert!(!is_loopback(remote), "{remote} is not this machine");
+    }
+}
+
+/// A scratch directory holding an executable and a non-executable file.
+#[cfg(unix)]
+fn scratch_path(name: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join(format!("piramid-console-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("the scratch directory is creatable");
+    let tool = dir.join("htop");
+    std::fs::write(&tool, "#!/bin/sh\n").expect("the stand-in is writable");
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755))
+        .expect("the stand-in is executable");
+    let plain = dir.join("nvtop");
+    std::fs::write(&plain, "").expect("the stand-in is writable");
+    std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644))
+        .expect("the stand-in is not executable");
+    dir
+}
+
+#[cfg(unix)]
+#[test]
+fn a_program_is_found_only_as_an_executable_on_path() {
+    use super::device::find_program;
+
+    let dir = scratch_path("find");
+    let path = std::env::join_paths([std::path::Path::new("/nonexistent"), dir.as_path()])
+        .expect("the path joins");
+    assert_eq!(find_program("htop", Some(&path)), Some(dir.join("htop")));
+    assert_eq!(find_program("nvtop", Some(&path)), None);
+    assert_eq!(find_program("top-of-nothing", Some(&path)), None);
+    assert_eq!(find_program("htop", None), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_handoff_needs_a_local_server_and_an_installed_monitor() {
+    use super::device::{DeviceView, Monitor};
+
+    let dir = scratch_path("handoff");
+    let path = dir.clone().into_os_string();
+
+    let local = DeviceView::new("http://localhost:6333");
+    assert_eq!(
+        local.handoff(Monitor::Htop, Some(&path)),
+        Ok(dir.join("htop"))
+    );
+    assert_eq!(
+        local.handoff(Monitor::Nvtop, Some(&path)),
+        Err("nvtop is not installed: not found on PATH".to_owned())
+    );
+
+    // The remote refusal wins even where the monitor is installed.
+    let remote = DeviceView::new("https://piramid.internal:6333");
+    assert_eq!(
+        remote.handoff(Monitor::Htop, Some(&path)),
+        Err(
+            "htop shows this machine, and the console watches https://piramid.internal:6333"
+                .to_owned()
+        )
+    );
+}
+
+#[test]
+fn a_remote_console_says_why_it_will_not_open_htop() {
+    let mut app = console_watching("https://piramid.internal:6333");
+    app.handle(press('3'));
+    assert_eq!(app.view, View::Device);
+
+    app.handle(press('h'));
+    assert!(app.handoff.is_none());
+    assert_eq!(
+        app.notice.as_deref(),
+        Some("htop shows this machine, and the console watches https://piramid.internal:6333")
+    );
+}
+
+#[test]
+fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
+    use super::client::HostMetrics;
+    use super::device::DeviceView;
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let reading = |cpu: Option<f32>| HostMetrics {
+        cpu_percent: cpu,
+        ..HostMetrics::default()
+    };
+    let mut view = DeviceView::new("http://localhost:6333");
+    view.record(start, reading(Some(10.0)));
+    view.record(start + Duration::from_secs(1), reading(Some(20.0)));
+    view.record(start + Duration::from_secs(2), reading(None));
+    view.record(start + Duration::from_secs(3), reading(Some(30.0)));
+
+    let now = start + Duration::from_secs(3);
+    let runs = view.series(now, |h| h.cpu_percent.map(f64::from));
+    assert_eq!(
+        runs,
+        vec![vec![(-3.0, 10.0), (-2.0, 20.0)], vec![(-0.0, 30.0)]]
+    );
+    assert!(view
+        .series(now, |h| h.memory_used_bytes.map(|b| b as f64))
+        .is_empty());
+}
+
+#[test]
+fn a_failed_refresh_records_a_sample_with_nothing_measured() {
+    use super::client::{ClientError, Metrics, Snapshot};
+
+    let mut app = console();
+    let mut metrics = Metrics::default();
+    metrics.host.cpu_percent = Some(42.0);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(Snapshot {
+        metrics,
+        ..Snapshot::default()
+    }))));
+    assert_eq!(app.device.latest().and_then(|h| h.cpu_percent), Some(42.0));
+
+    app.handle(super::types::Event::Snapshot(Box::new(Err(
+        ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
+    ))));
+    assert_eq!(app.device.samples.len(), 2);
+    let latest = app.device.latest().expect("a sample was recorded");
+    assert_eq!(latest.cpu_percent, None);
+    assert_eq!(latest.memory_total_bytes, None);
+}
+
+#[test]
+fn host_fields_the_server_leaves_out_read_as_absent() {
+    let metrics: super::client::Metrics =
+        serde_json::from_str(r#"{"host": {"memory_total_bytes": 4096, "cpu_percent": 0.0}}"#)
+            .expect("the body decodes");
+    assert_eq!(metrics.host.memory_total_bytes, Some(4096));
+    assert_eq!(metrics.host.cpu_percent, Some(0.0));
+    assert_eq!(metrics.host.memory_used_bytes, None);
+    assert_eq!(metrics.host.process_resident_bytes, None);
+
+    let older: super::client::Metrics = serde_json::from_str("{}").expect("the body decodes");
+    assert_eq!(older.host.cpu_percent, None);
 }

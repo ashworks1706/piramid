@@ -9,6 +9,7 @@ use std::sync::{
 use crate::cluster::{
     ClusterRouter, LocalClusterRouter, NodeCapabilities, NodeId, NodeRuntimeState, RouteDecision,
 };
+use crate::machine::{MachineReadings, SAMPLE_INTERVAL};
 use piramid_core::config::{Config, StartupConfig};
 use piramid_core::error::{Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
@@ -36,6 +37,8 @@ pub struct AppState {
     pub data_dir: String, // e.g. ./data
     pub cluster_router: Arc<dyn ClusterRouter>,
     pub embeddings: EmbeddingsManager,
+    /// Readings of the machine the server runs on.
+    pub machine: MachineReadings,
     pub shutting_down: Arc<AtomicBool>, // set on shutdown to reject new requests
     pub read_only: Arc<AtomicBool>,     // disk-pressure read-only mode
     pub app_config: Arc<RwLock<Config>>,
@@ -67,6 +70,7 @@ impl AppState {
             data_dir,
             cluster_router,
             embeddings,
+            machine: MachineReadings::start(SAMPLE_INTERVAL)?,
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
             app_config,

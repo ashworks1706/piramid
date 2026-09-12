@@ -34,6 +34,19 @@ pub struct Metrics {
     pub collections: Vec<CollectionMetrics>,
     pub wal_stats: Vec<WalStats>,
     pub embedding: EmbeddingMetrics,
+    pub host: HostMetrics,
+}
+
+/// Processor and memory use of the host and of the server process. An absent field is one the
+/// server did not measure.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(default)]
+pub struct HostMetrics {
+    pub cpu_percent: Option<f32>,
+    pub memory_used_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
+    pub process_cpu_percent: Option<f32>,
+    pub process_resident_bytes: Option<u64>,
 }
 
 /// The counters of one collection.
