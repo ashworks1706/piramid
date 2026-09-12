@@ -28,7 +28,7 @@ pub trait DistanceKernels: Send + Sync {
     /// Squared L2 distance, skipping the final sqrt.
     fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> f32;
 
-    // Batch. Defaults loop over pairwise; devices override with a device launch.
+    // Batch. Every strategy implements these itself.
 
     /// Score query against every row of the row-major candidates slab.
     fn cosine_batch(
@@ -37,9 +37,7 @@ pub trait DistanceKernels: Send + Sync {
         candidates: &[f32],
         dim: usize,
         out: &mut [f32],
-    ) -> ComputeResult<()> {
-        batch_via_pairwise(query, candidates, dim, out, |a, b| self.cosine(a, b))
-    }
+    ) -> ComputeResult<()>;
 
     /// Inner product of query against every row of the candidates slab.
     fn dot_batch(
@@ -48,9 +46,7 @@ pub trait DistanceKernels: Send + Sync {
         candidates: &[f32],
         dim: usize,
         out: &mut [f32],
-    ) -> ComputeResult<()> {
-        batch_via_pairwise(query, candidates, dim, out, |a, b| self.dot(a, b))
-    }
+    ) -> ComputeResult<()>;
 
     /// L2 distance from query to every row of the candidates slab.
     fn euclidean_batch(
@@ -59,9 +55,7 @@ pub trait DistanceKernels: Send + Sync {
         candidates: &[f32],
         dim: usize,
         out: &mut [f32],
-    ) -> ComputeResult<()> {
-        batch_via_pairwise(query, candidates, dim, out, |a, b| self.euclidean(a, b))
-    }
+    ) -> ComputeResult<()>;
 }
 
 /// Validate the slab and out shape shared by every batch kernel; returns the row count.
@@ -97,19 +91,4 @@ pub fn check_batch_shape(
         });
     }
     Ok(rows)
-}
-
-/// Shared default body for the batch kernels: validate, then fold over rows.
-fn batch_via_pairwise(
-    query: &[f32],
-    candidates: &[f32],
-    dim: usize,
-    out: &mut [f32],
-    score: impl Fn(&[f32], &[f32]) -> f32,
-) -> ComputeResult<()> {
-    check_batch_shape(query, candidates, dim, out)?;
-    for (row, slot) in candidates.chunks_exact(dim).zip(out.iter_mut()) {
-        *slot = score(query, row);
-    }
-    Ok(())
 }

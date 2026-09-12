@@ -30,13 +30,9 @@ pub struct RuntimeConfig {
 
 impl RuntimeConfig {
     pub fn validate(&self) -> Result<(), String> {
-        // compute owns the feature flag and answers for it.
-        if matches!(self.execution, ExecutionMode::Gpu)
-            && piramid_hardware::compute::strategies::for_mode(ExecutionMode::Gpu).is_err()
-        {
-            return Err(
-                "runtime.execution: 'gpu' requires a build with the `gpu-cuda` feature".into(),
-            );
+        // compute answers for whether a strategy can run.
+        if let Err(error) = piramid_hardware::compute::strategies::for_mode(self.execution) {
+            return Err(format!("runtime.execution: {error}"));
         }
         if matches!(
             self.quantization.level,

@@ -207,8 +207,8 @@ runtime:
     # Byte budget for resident vectors, shared across every loaded collection.
     max_bytes: null
 
-  # auto | scalar | simd | parallel | binary | gpu. The one place a distance strategy is chosen.
-  # `gpu` needs a build with the `gpu-cuda` feature.
+  # auto | scalar | simd | parallel | gpu. The one place a distance strategy is chosen.
+  # `gpu` is rejected at startup until GPU distance kernels exist.
   execution: auto
 
   # Model execution. Not implemented (roadmap v0.4.0); setting `enabled: true` or

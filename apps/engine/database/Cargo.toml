@@ -35,5 +35,9 @@ harness = false
 name = "flat_scan"
 harness = false
 
+[[bench]]
+name = "ivf_scan"
+harness = false
+
 [lints]
 workspace = true

@@ -6,56 +6,28 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ExecutionMode {
-    /// Detect the best available strategy at runtime.
+    /// The SIMD strategy on x86_64 and aarch64, the scalar strategy on every other target.
     #[default]
     Auto,
     /// Portable scalar reference implementation.
     Scalar,
-    /// Explicitly vectorized CPU path (AVX2 or NEON via the wide crate).
+    /// Explicitly vectorized CPU path through the wide crate. Available on x86_64 and aarch64.
     Simd,
-    /// Rayon-parallel CPU path, for vectors large enough to amortize the fan-out.
+    /// Rayon-parallel CPU path: batch rows fanned across threads, each scored by the SIMD kernels.
+    /// Available on x86_64 and aarch64.
     Parallel,
-    /// 1-bit quantized approximation. Lossy; intended for cheap pre-filtering.
-    Binary,
     /// GPU device execution.
     Gpu,
 }
 
 impl ExecutionMode {
-    /// Resolve Auto into a concrete strategy using detected CPU features; other modes pass through.
+    /// Resolve Auto into the strategy it names on this target; other modes pass through unchanged.
     pub fn resolve(&self) -> ExecutionMode {
         match self {
             ExecutionMode::Auto => {
-                #[cfg(target_arch = "x86_64")]
-                {
-                    if is_x86_feature_detected!("avx2") {
-                        ExecutionMode::Simd
-                    } else {
-                        ExecutionMode::Scalar
-                    }
-                }
-
-                #[cfg(target_arch = "aarch64")]
-                {
-                    if std::arch::is_aarch64_feature_detected!("neon") {
-                        ExecutionMode::Simd
-                    } else {
-                        ExecutionMode::Scalar
-                    }
-                }
-
-                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-                {
-                    ExecutionMode::Scalar
-                }
-            }
-            ExecutionMode::Simd => {
-                #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-                {
+                if cfg!(any(target_arch = "x86_64", target_arch = "aarch64")) {
                     ExecutionMode::Simd
-                }
-                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-                {
+                } else {
                     ExecutionMode::Scalar
                 }
             }
@@ -63,28 +35,14 @@ impl ExecutionMode {
         }
     }
 
-    /// Stable lowercase name, used by config parsing and telemetry labels.
+    /// Stable lowercase name, matching the serde representation.
     pub fn as_str(&self) -> &'static str {
         match self {
             ExecutionMode::Auto => "auto",
             ExecutionMode::Scalar => "scalar",
             ExecutionMode::Simd => "simd",
             ExecutionMode::Parallel => "parallel",
-            ExecutionMode::Binary => "binary",
             ExecutionMode::Gpu => "gpu",
-        }
-    }
-
-    /// Parse a mode from a config string. Unknown values yield None.
-    pub fn from_name(name: &str) -> Option<ExecutionMode> {
-        match name {
-            "auto" => Some(ExecutionMode::Auto),
-            "scalar" => Some(ExecutionMode::Scalar),
-            "simd" => Some(ExecutionMode::Simd),
-            "parallel" => Some(ExecutionMode::Parallel),
-            "binary" => Some(ExecutionMode::Binary),
-            "gpu" => Some(ExecutionMode::Gpu),
-            _ => None,
         }
     }
 }
