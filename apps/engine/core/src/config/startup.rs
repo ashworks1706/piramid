@@ -6,7 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{DiskConfig, EmbeddingConfig, HardwareConfig, LoggingConfig, TelemetryConfig};
+use super::{
+    DiskConfig, EmbeddingConfig, HardwareConfig, HttpConfig, LoggingConfig, TelemetryConfig,
+};
 
 /// Everything fixed at boot.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -25,6 +27,7 @@ pub struct StartupConfig {
     pub telemetry: TelemetryConfig,
     pub hardware: HardwareConfig,
     pub disk: DiskConfig,
+    pub http: HttpConfig,
 
     /// Embedding provider, built once at boot. None disables server-side embedding.
     pub embedding: Option<EmbeddingConfig>,
@@ -33,13 +36,14 @@ pub struct StartupConfig {
 impl Default for StartupConfig {
     fn default() -> Self {
         StartupConfig {
-            bind: "0.0.0.0:6333".to_string(),
+            bind: "127.0.0.1:6333".to_string(),
             data_dir: "./data".to_string(),
             threads: None,
             logging: LoggingConfig::default(),
             telemetry: TelemetryConfig::default(),
             hardware: HardwareConfig::default(),
             disk: DiskConfig::default(),
+            http: HttpConfig::default(),
             embedding: None,
         }
     }
@@ -87,6 +91,7 @@ impl StartupConfig {
                     .into(),
             );
         }
+        self.http.validate()?;
         self.hardware.gpu.validate()?;
         self.hardware.vram.validate()?;
         Ok(())

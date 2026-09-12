@@ -13,7 +13,7 @@
       temperature, host CPU and memory. What the build can't measure is absent, never zero
 - [ ] a device view in the console graphing those over time, against a local or remote server,
       with a key that hands the terminal to nvtop or htop for the local machine
-- [ ] make `serve` safe to expose — graceful shutdown, authentication, rate limiting, and a test
+- [x] make `serve` safe to expose — graceful shutdown, authentication, rate limiting, and a test
       that actually starts the server
 - [ ] clear the dependency debt: bincode 2.x with a read path for existing data, off the archived
       YAML parser, and either implement the unimplemented quantization levels or drop them

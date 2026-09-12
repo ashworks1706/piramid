@@ -39,7 +39,7 @@ just doctor       # checks every tool above
 
 ```bash
 just cli                      # the console: units, collections, config
-just serve                    # just the server, on http://0.0.0.0:6333
+just serve                    # just the server, on http://127.0.0.1:6333
 just piramid support-bundle   # diagnostics for a bug report
 ```
 
@@ -79,8 +79,21 @@ differs from the running one. `runtime:` is re-read on reload.
 
 Any key can also be set from the environment, spelled from its path — `runtime.cache.max_bytes`
 is `PIRAMID__RUNTIME__CACHE__MAX_BYTES`. Values parse as YAML, so `8`, `true` and `null` mean what
-they do in the file. `OPENAI_API_KEY` is the one setting that is environment-only, so a key never
-lands in a file that gets shared.
+they do in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are the settings that are
+environment-only, so a key never lands in a file that gets shared.
+
+## Authentication, rate limiting and shutdown
+
+With `PIRAMID_API_KEY` set, every route except `/api/health` and `/api/readyz` requires
+`Authorization: Bearer <key>`. The default bind is `127.0.0.1:6333`, which serves without a key.
+Binding anything else with no key fails at startup; set the key, or set
+`startup.http.auth.allow_unauthenticated: true` to serve an open port on purpose. The console sends
+`PIRAMID_API_KEY` when it is set and reports a refused key as such.
+
+`startup.http.rate_limit` is a token bucket per client IP; a request over it gets 429 with
+`Retry-After`. On SIGINT or SIGTERM the server stops accepting connections, waits up to
+`startup.http.drain_timeout_secs` for in-flight requests, checkpoints every open collection, and
+exits 0, or non-zero if a checkpoint failed.
 
 An unknown key, a misspelled one, a setting in the wrong block, and a setting that is not
 implemented yet all fail at startup with a message naming the key. Nothing is silently ignored.
@@ -145,6 +158,6 @@ commands directly. `just --list` shows what each recipe does.
 **Disk fills during builds** — the workspace `target/` directory grows quickly. `just clean`
 removes it along with `node_modules`.
 
-**Port 6333 already in use** — `PIRAMID__STARTUP__BIND=0.0.0.0:7333 just serve`.
+**Port 6333 already in use** — `PIRAMID__STARTUP__BIND=127.0.0.1:7333 just serve`.
 
 **Where test data goes** — `target/tmp/`, via `CARGO_TARGET_TMPDIR`. Safe to delete.

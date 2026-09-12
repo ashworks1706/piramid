@@ -10,6 +10,8 @@ services:
       - "6333:6333"
     volumes:
       - piramid-data:/data
+    # PIRAMID_API_KEY must be set in ../.env: the server binds every interface in the container
+    # and refuses to start without a key.
     env_file:
       - path: ../.env
         required: false
@@ -18,6 +20,8 @@ services:
       PIRAMID__STARTUP__DATA_DIR: /data
       RUST_LOG: ${RUST_LOG:-info}
     restart: unless-stopped
+    # Longer than startup.http.drain_timeout_secs, so a stop drains and checkpoints before SIGKILL.
+    stop_grace_period: 45s
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:6333/api/health"]
       interval: 30s

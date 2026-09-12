@@ -69,7 +69,7 @@ check-features: check-gpu check-inference
 
 # ---------- run ----------
 
-# Run the server (defaults to 0.0.0.0:6333)
+# Run the server (defaults to 127.0.0.1:6333)
 serve *ARGS:
     cargo run -p piramid -- serve {{ARGS}}
 

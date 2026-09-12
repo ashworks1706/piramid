@@ -42,6 +42,11 @@ axum = "0.8"
 tower-http = { version = "0.6", features = ["cors", "limit", "set-header", "trace"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 async-trait = "0.1"
+# per-client rate limiting as a tower layer
+tower_governor = { version = "0.8", default-features = false, features = ["axum"] }
+governor = "0.10"
+# constant-time comparison of API keys
+subtle = "2.6"
 
 # observability
 tracing = "0.1"

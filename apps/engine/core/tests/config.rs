@@ -26,7 +26,7 @@ fn an_empty_file_is_all_defaults() {
     let cfg: Config = yaml_serde::from_str("{}").unwrap();
 
     assert_eq!(cfg, Config::default());
-    assert_eq!(cfg.startup.bind, "0.0.0.0:6333");
+    assert_eq!(cfg.startup.bind, "127.0.0.1:6333");
     assert_eq!(cfg.startup.hardware.profile, HardwareProfile::Auto);
     assert_eq!(cfg.startup.logging.level, LogLevel::Info);
     assert_eq!(cfg.runtime.quantization.stage, QuantizationStage::Disabled);

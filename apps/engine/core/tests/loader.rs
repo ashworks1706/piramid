@@ -114,3 +114,52 @@ fn the_api_key_comes_from_the_environment_only() {
         Some("sk-test")
     );
 }
+
+#[test]
+fn the_server_api_key_comes_from_the_environment() {
+    let cfg = with_env(None, &[("PIRAMID_API_KEY", "a-long-server-key")], || {
+        loader::load().unwrap()
+    });
+    let key = cfg.startup.http.auth.api_key.unwrap();
+    assert_eq!(key.expose(), "a-long-server-key");
+    assert!(!format!("{key:?}").contains("a-long-server-key"));
+}
+
+#[test]
+fn the_server_api_key_cannot_be_written_in_the_file() {
+    let file = "startup:\n  http:\n    auth:\n      api_key: in-a-file\n";
+    let error = with_env(Some(file), &[], || loader::load().unwrap_err());
+    assert!(error.to_string().contains("api_key"), "{error}");
+}
+
+#[test]
+fn an_empty_server_api_key_is_an_error() {
+    let error = with_env(None, &[("PIRAMID_API_KEY", "")], || {
+        loader::load().unwrap_err()
+    });
+    assert!(error.to_string().contains("PIRAMID_API_KEY"), "{error}");
+}
+
+#[test]
+fn opting_out_of_authentication_while_setting_a_key_is_an_error() {
+    let file = "startup:\n  http:\n    auth:\n      allow_unauthenticated: true\n";
+    let error = with_env(
+        Some(file),
+        &[("PIRAMID_API_KEY", "a-long-server-key")],
+        || loader::load().unwrap_err(),
+    );
+    assert!(
+        error.to_string().contains("allow_unauthenticated"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_zero_rate_limit_is_an_error() {
+    let error = with_env(
+        None,
+        &[("PIRAMID__STARTUP__HTTP__RATE_LIMIT__BURST", "0")],
+        || loader::load().unwrap_err(),
+    );
+    assert!(error.to_string().contains("burst"), "{error}");
+}

@@ -1,4 +1,5 @@
-//! Loading: defaults, then the file, then environment overrides.
+//! Loading: defaults, then the file, then environment overrides, then secrets from the
+//! environment.
 
 use std::env;
 use std::fs;
@@ -6,7 +7,7 @@ use std::path::Path;
 
 use yaml_serde::{Mapping, Value};
 
-use crate::config::Config;
+use crate::config::{ApiKey, Config, API_KEY_ENV};
 use crate::error::ConfigError;
 
 /// Prefix and separator for overrides. PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE=1024 sets
@@ -14,7 +15,8 @@ use crate::error::ConfigError;
 const ENV_PREFIX: &str = "PIRAMID__";
 const ENV_SEPARATOR: &str = "__";
 
-/// Read CONFIG_FILE, apply PIRAMID__ overrides, then validate.
+/// Read CONFIG_FILE, apply PIRAMID__ overrides, read PIRAMID_API_KEY and OPENAI_API_KEY, then
+/// validate.
 pub fn load() -> Result<Config, ConfigError> {
     load_with(None, |_| {})
 }
@@ -36,6 +38,7 @@ pub fn load_with(
     let mut config: Config =
         yaml_serde::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
     adjust(&mut config);
+    config.startup.http.auth.api_key = server_api_key()?;
 
     config.validate().map_err(ConfigError::Invalid)?;
     Ok(config)
@@ -104,6 +107,19 @@ fn apply_secret_env(document: &mut Value) -> Result<(), ConfigError> {
         })?;
     }
     Ok(())
+}
+
+/// Read the server API key from the environment. It has no place in the configuration file.
+fn server_api_key() -> Result<Option<ApiKey>, ConfigError> {
+    let Ok(key) = env::var(API_KEY_ENV) else {
+        return Ok(None);
+    };
+    ApiKey::new(key)
+        .map(Some)
+        .map_err(|reason| ConfigError::Env {
+            name: API_KEY_ENV.to_string(),
+            reason: format!("{reason}; unset it, or set it to the key clients must send"),
+        })
 }
 
 /// Write the value at the given path, creating intermediate mappings.

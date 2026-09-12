@@ -274,7 +274,7 @@ fn console_settings_come_from_the_one_configuration_file() {
     // Unset, the console follows the address the server in the same file binds, so a deployment
     // that moves the port does not have to say so twice.
     assert_eq!(config.console.base_url, "");
-    assert_eq!(settings.base_url, "http://localhost:6333");
+    assert_eq!(settings.base_url, "http://127.0.0.1:6333");
     assert_eq!(settings.web_url, "http://localhost:3000");
     assert_eq!(
         settings.log_dir_under(std::path::Path::new("/repo")),
@@ -539,4 +539,84 @@ fn host_fields_the_server_leaves_out_read_as_absent() {
 
     let older: super::client::Metrics = serde_json::from_str("{}").expect("the body decodes");
     assert_eq!(older.host.cpu_percent, None);
+}
+
+type ServeTask = tokio::task::JoinHandle<Result<(), piramid_serving::http::serve::ServeError>>;
+
+/// A server on a loopback port that requires key, the sender that stops it, and its task.
+async fn server_requiring(
+    key: &str,
+    name: &str,
+) -> (String, tokio::sync::oneshot::Sender<()>, ServeTask) {
+    let dir = std::env::temp_dir().join(format!("piramid-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = piramid_core::config::Config::default();
+    config.startup.data_dir = dir.to_string_lossy().into_owned();
+    config.startup.http.auth.api_key =
+        Some(piramid_core::config::ApiKey::new(key.to_owned()).unwrap());
+    let state = std::sync::Arc::new(
+        piramid_serving::state::AppState::new(
+            config,
+            piramid_model::embeddings::EmbeddingsManager::disabled(),
+        )
+        .unwrap(),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let task = tokio::spawn(piramid_serving::http::serve::serve(
+        state,
+        listener,
+        async move {
+            let _ = rx.await;
+        },
+    ));
+    (base, tx, task)
+}
+
+#[tokio::test]
+async fn a_rejected_key_is_reported_as_an_authentication_failure_not_as_unreachable() {
+    use super::client::{Client, ClientError};
+    use piramid_core::config::ApiKey;
+
+    let (base, stop, task) = server_requiring("console-test-key", "console_auth").await;
+    let timeout = std::time::Duration::from_secs(5);
+
+    let missing = Client::new(&base, timeout, None).unwrap();
+    let error = missing.snapshot().await.unwrap_err();
+    assert!(
+        matches!(error, ClientError::Unauthorized { .. }),
+        "{error:?}"
+    );
+    assert!(error.to_string().contains("PIRAMID_API_KEY"), "{error}");
+
+    let wrong = Client::new(&base, timeout, Some(ApiKey::new("nope".into()).unwrap())).unwrap();
+    assert!(matches!(
+        wrong.snapshot().await.unwrap_err(),
+        ClientError::Unauthorized { .. }
+    ));
+
+    let right = Client::new(
+        &base,
+        timeout,
+        Some(ApiKey::new("console-test-key".into()).unwrap()),
+    )
+    .unwrap();
+    right.snapshot().await.unwrap();
+    right.config().await.unwrap();
+
+    stop.send(()).unwrap();
+    task.await.unwrap().unwrap();
+    let dir = std::env::temp_dir().join(format!("piramid-console_auth-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_console_sends_the_key_the_environment_set() {
+    let mut config = piramid_core::config::Config::default();
+    assert!(Settings::from_config(&config).api_key.is_none());
+
+    let key = piramid_core::config::ApiKey::new("from-env".into()).unwrap();
+    config.startup.http.auth.api_key = Some(key.clone());
+    assert_eq!(Settings::from_config(&config).api_key, Some(key));
 }
