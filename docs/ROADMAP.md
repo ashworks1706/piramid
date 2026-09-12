@@ -90,4 +90,9 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 - [ ] `/api/collections` and `/api/metrics` list open collections only, while `/api/readyz` also
       lists collections on disk; after a restart the list is empty until something opens them
 - [ ] the cluster router and node health are scaffolding nothing reads
+- [ ] compaction renames the new record file before the offset sidecar is saved, so a crash in
+      between leaves offsets pointing into the wrong file
+- [ ] about sixteen error variants are never constructed
+- [ ] `model::embeddings`, `database::index` and `core::observability` re-export other modules'
+      items, against the one-canonical-path rule
 

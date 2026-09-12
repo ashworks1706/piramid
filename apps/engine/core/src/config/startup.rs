@@ -55,7 +55,7 @@ impl Default for StartupConfig {
 }
 
 impl StartupConfig {
-    /// Resolved worker-thread count. Zero leaves the choice to rayon.
+    /// Resolved worker-thread count: threads when set, otherwise one per CPU.
     pub fn num_threads(&self) -> usize {
         self.threads.unwrap_or_else(num_cpus::get)
     }

@@ -264,8 +264,9 @@ pub fn compact_collection(state: &SharedState, collection: String) -> Result<Reb
     tracing::info!(
         target: "piramid::indexing",
         collection=%collection,
-        original=stats.original_entries,
-        compacted=stats.compacted_entries,
+        documents = stats.documents,
+        bytes_before = stats.bytes_before,
+        bytes_after = stats.bytes_after,
         elapsed_ms=duration.as_millis(),
         "collection_compacted"
     );

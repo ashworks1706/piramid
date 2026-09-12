@@ -538,8 +538,11 @@ fn compaction_rewrites_live_records_through_temp_record_store() {
 
     let stats = compact(&mut storage).unwrap();
 
-    assert_eq!(stats.original_entries, 1);
-    assert_eq!(stats.compacted_entries, 1);
+    assert_eq!(stats.documents, 1);
+    assert!(
+        stats.bytes_after < stats.bytes_before,
+        "the deleted record is reclaimed: {stats:?}"
+    );
     assert_eq!(storage.count(), 1);
     assert_eq!(storage.get(&keep_id).unwrap().unwrap().text, "keep");
     assert!(storage.get(&delete_id).unwrap().is_none());
@@ -799,4 +802,73 @@ fn pages_walk_every_document_once_in_id_order() {
         walked.extend(page.into_iter().map(|document| document.id));
     }
     assert_eq!(walked, ids);
+}
+
+fn fresh_path(name: &str) -> String {
+    let path = format!("{}/{name}", env!("CARGO_TARGET_TMPDIR"));
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    path
+}
+
+// A write refused for its width or a limit leaves nothing behind: not stored, not counted, and not
+// in the log to be replayed on the next open.
+#[test]
+fn a_refused_write_leaves_nothing_behind() {
+    let path = fresh_path("test_refused_write.db");
+    {
+        let mut collection = Collection::open(&path).unwrap();
+        collection
+            .insert(Document::new(vec![1.0, 0.0], "two wide".to_string()))
+            .unwrap();
+
+        let wrong = Document::new(vec![1.0, 0.0, 0.0], "three wide".to_string());
+        let wrong_id = wrong.id;
+        assert!(collection.insert(wrong).is_err());
+        assert!(collection.get(&wrong_id).unwrap().is_none());
+
+        let batch = vec![
+            Document::new(vec![0.0, 1.0], "fits".to_string()),
+            Document::new(vec![0.0, 1.0, 2.0], "does not".to_string()),
+        ];
+        let fits = batch[0].id;
+        assert!(collection.insert_batch(batch).is_err());
+        assert!(
+            collection.get(&fits).unwrap().is_none(),
+            "a refused batch stores none of it"
+        );
+        assert_eq!(collection.count(), 1);
+    }
+    let reopened = Collection::open(&path).unwrap();
+    assert_eq!(reopened.count(), 1, "nothing refused was replayed");
+}
+
+// Replacing a stored document at the vector limit does not add a vector, so it is allowed.
+#[test]
+fn replacing_a_document_at_the_vector_limit_is_allowed() {
+    use piramid_core::config::CollectionConfig;
+
+    let path = fresh_path("test_replace_at_limit.db");
+    let mut config = CollectionConfig::default();
+    config.limits.max_vectors = Some(1);
+    let mut collection = Collection::open_with_options(&path, config.into()).unwrap();
+    let mut document = Document::new(vec![1.0, 0.0], "first".to_string());
+    let id = collection.insert(document.clone()).unwrap();
+    assert!(collection
+        .insert(Document::new(vec![0.0, 1.0], "second".to_string()))
+        .is_err());
+
+    document.text = "replaced".to_string();
+    collection.upsert(document).unwrap();
+    assert!(collection.update_vector(&id, vec![0.5, 0.5]).unwrap());
+    assert_eq!(collection.get(&id).unwrap().unwrap().text, "replaced");
+    assert_eq!(collection.count(), 1);
 }

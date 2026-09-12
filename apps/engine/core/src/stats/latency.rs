@@ -4,21 +4,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Moving-average latencies for writes, searches and lock waits. Clones share the same counters.
+/// Moving-average latencies for inserts, searches and lock waits. Clones share the same counters.
 #[derive(Debug, Clone, Default)]
 pub struct LatencyTracker {
-    // Microseconds, held as integers.
+    // Microseconds, held as integers. An average is read only once its count is non-zero.
     insert_latency_us: Arc<AtomicU64>,
     search_latency_us: Arc<AtomicU64>,
-    delete_latency_us: Arc<AtomicU64>,
-    update_latency_us: Arc<AtomicU64>,
     lock_read_latency_us: Arc<AtomicU64>,
     lock_write_latency_us: Arc<AtomicU64>,
 
     insert_count: Arc<AtomicU64>,
     search_count: Arc<AtomicU64>,
-    delete_count: Arc<AtomicU64>,
-    update_count: Arc<AtomicU64>,
     lock_read_count: Arc<AtomicU64>,
     lock_write_count: Arc<AtomicU64>,
 }
@@ -43,20 +39,6 @@ impl LatencyTracker {
         self.update_moving_average(&self.search_latency_us, us, &self.search_count);
     }
 
-    /// Fold a delete duration into its average.
-    pub fn record_delete(&self, duration: Duration) {
-        self.delete_count.fetch_add(1, Ordering::Relaxed);
-        let us = duration.as_micros() as u64;
-        self.update_moving_average(&self.delete_latency_us, us, &self.delete_count);
-    }
-
-    /// Fold an update duration into its average.
-    pub fn record_update(&self, duration: Duration) {
-        self.update_count.fetch_add(1, Ordering::Relaxed);
-        let us = duration.as_micros() as u64;
-        self.update_moving_average(&self.update_latency_us, us, &self.update_count);
-    }
-
     /// Fold a read-lock wait into its average.
     pub fn record_lock_read(&self, duration: Duration) {
         self.lock_read_count.fetch_add(1, Ordering::Relaxed);
@@ -71,30 +53,30 @@ impl LatencyTracker {
         self.update_moving_average(&self.lock_write_latency_us, us, &self.lock_write_count);
     }
 
-    /// Average insert latency in milliseconds. None while the average is zero.
+    /// Average insert latency in milliseconds. None before the first sample.
     pub fn avg_insert_latency_ms(&self) -> Option<f32> {
-        Self::avg_ms(&self.insert_latency_us)
+        Self::avg_ms(&self.insert_latency_us, &self.insert_count)
     }
 
-    /// Average search latency in milliseconds. None while the average is zero.
+    /// Average search latency in milliseconds. None before the first sample.
     pub fn avg_search_latency_ms(&self) -> Option<f32> {
-        Self::avg_ms(&self.search_latency_us)
+        Self::avg_ms(&self.search_latency_us, &self.search_count)
     }
 
-    /// Average read-lock wait in milliseconds. None while the average is zero.
+    /// Average read-lock wait in milliseconds. None before the first sample.
     pub fn avg_lock_read_latency_ms(&self) -> Option<f32> {
-        Self::avg_ms(&self.lock_read_latency_us)
+        Self::avg_ms(&self.lock_read_latency_us, &self.lock_read_count)
     }
 
-    /// Average write-lock wait in milliseconds. None while the average is zero.
+    /// Average write-lock wait in milliseconds. None before the first sample.
     pub fn avg_lock_write_latency_ms(&self) -> Option<f32> {
-        Self::avg_ms(&self.lock_write_latency_us)
+        Self::avg_ms(&self.lock_write_latency_us, &self.lock_write_count)
     }
 
     /// None until at least one sample has landed.
-    fn avg_ms(latency_us: &AtomicU64) -> Option<f32> {
-        let us = latency_us.load(Ordering::Relaxed);
-        (us > 0).then(|| us as f32 / 1000.0)
+    fn avg_ms(latency_us: &AtomicU64, count: &AtomicU64) -> Option<f32> {
+        (count.load(Ordering::Relaxed) > 0)
+            .then(|| latency_us.load(Ordering::Relaxed) as f32 / 1000.0)
     }
 
     /// Fold a new sample into the running average.

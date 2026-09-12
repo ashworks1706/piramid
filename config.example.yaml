@@ -233,8 +233,6 @@ runtime:
   # `gpu` is rejected at startup until GPU distance kernels exist.
   execution: auto
 
-  # Model execution. Not implemented (roadmap v0.4.0); setting `enabled: true` or
-  # `augment.enabled: true` fails at startup rather than being ignored.
   # Model execution. None of this is implemented — the shape is settled so the forward-pass work
   # lands into a surface that already exists, and every switch below fails at startup rather than
   # parsing and doing nothing.

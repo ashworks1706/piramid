@@ -1,10 +1,16 @@
 use super::Collection;
 use piramid_core::error::{Result, ServerError};
 
-pub(crate) fn enforce_single(collection: &Collection, entry_bytes: usize) -> Result<()> {
+/// Refuse one entry of entry_bytes that would pass a limit. replacing is true when the entry takes
+/// the place of a stored one, so the vector count does not grow.
+pub(crate) fn enforce_single(
+    collection: &Collection,
+    entry_bytes: usize,
+    replacing: bool,
+) -> Result<()> {
     let limits = collection.config.limits;
 
-    if let Some(max_vecs) = limits.max_vectors {
+    if let (Some(max_vecs), false) = (limits.max_vectors, replacing) {
         if collection.count() >= max_vecs {
             return Err(
                 ServerError::InvalidRequest("Collection max vectors reached".into()).into(),

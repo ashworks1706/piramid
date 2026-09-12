@@ -89,7 +89,11 @@ impl PiramidError {
         match self {
             Self::Server(e) => e.kind(),
             Self::Embedding(_) => ErrorKind::Upstream,
-            Self::Index(super::index::IndexError::MetricMismatch { .. }) => ErrorKind::BadRequest,
+            Self::Index(super::index::IndexError::MetricMismatch { .. })
+            | Self::Storage(
+                super::storage::StorageError::InvalidDimension { .. }
+                | super::storage::StorageError::InvalidPath(_),
+            ) => ErrorKind::BadRequest,
             Self::Compute(piramid_hardware::compute::ComputeError::UnknownMetric { .. }) => {
                 ErrorKind::BadRequest
             }
