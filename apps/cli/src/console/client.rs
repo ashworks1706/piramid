@@ -1,8 +1,9 @@
 //! The view the dashboard takes of a running server.
 //!
 //! Deserialization mirrors of the wire shapes in serving::services::api, holding only the fields
-//! the dashboard draws. Every field defaults, so an unknown field is ignored and a missing one
-//! reads as absent rather than failing the poll.
+//! the dashboard draws. An unknown field is ignored. A field the server always sends is required,
+//! so a body without it is a decode error. A field the server leaves out when it has no value is
+//! an Option, and reads as None only when it is absent.
 
 use std::time::Duration;
 
@@ -11,7 +12,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::Deserialize;
 
 /// Everything one refresh collects.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Snapshot {
     /// The metrics response.
     pub metrics: Metrics,
@@ -20,29 +21,24 @@ pub struct Snapshot {
 }
 
 /// The version response, read once at startup.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Version {
     pub version: String,
     pub git_commit: Option<String>,
 }
 
 /// The metrics response.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Metrics {
-    pub total_collections: usize,
-    pub total_vectors: usize,
     pub collections: Vec<CollectionMetrics>,
     pub wal_stats: Vec<WalStats>,
-    pub embedding: EmbeddingMetrics,
-    pub host: HostMetrics,
+    /// Host readings. None from a server that predates the host block.
+    pub host: Option<HostMetrics>,
 }
 
 /// Processor and memory use of the host and of the server process. An absent field is one the
 /// server did not measure.
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct HostMetrics {
     pub cpu_percent: Option<f32>,
     pub memory_used_bytes: Option<u64>,
@@ -52,70 +48,59 @@ pub struct HostMetrics {
 }
 
 /// The counters of one collection.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+///
+/// The server sends every Option here as null when it has no value, so each key is required.
+#[derive(Debug, Clone, Deserialize)]
 pub struct CollectionMetrics {
     pub name: String,
     pub vector_count: usize,
     pub index_type: String,
     pub memory_usage_bytes: usize,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub insert_latency_ms: Option<f32>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub search_latency_ms: Option<f32>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub lock_read_ms: Option<f32>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub lock_write_ms: Option<f32>,
-    pub filter_overfetch: Option<usize>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub hnsw_ef_search: Option<usize>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub ivf_nprobe: Option<usize>,
 }
 
 /// The durability state of one collection.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+///
+/// The server sends every Option here as null when it has no value, so each key is required.
+#[derive(Debug, Clone, Deserialize)]
 pub struct WalStats {
     pub collection: String,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub checkpoint_age_secs: Option<u64>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub wal_size_bytes: Option<u64>,
 }
 
-/// Embedding provider counters, server-wide.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
-pub struct EmbeddingMetrics {
-    pub requests: u64,
-    pub texts: u64,
-    pub total_tokens: u64,
-    pub avg_latency_ms: Option<f32>,
-}
-
 /// The readiness response.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Readyz {
-    pub ok: bool,
-    pub data_dir: String,
-    pub loaded_collections: usize,
-    pub disk_total_bytes: Option<u64>,
-    pub disk_available_bytes: Option<u64>,
     pub collections: Vec<CollectionHealth>,
 }
 
 /// One collection as readiness sees it.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct CollectionHealth {
     pub name: String,
     pub loaded: bool,
     pub integrity_ok: Option<bool>,
-    pub schema_version: Option<u32>,
     pub error: Option<String>,
 }
 
 /// Where a rebuild is, from the rebuild status endpoint.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RebuildStatus {
     pub status: String,
-    pub elapsed_ms: Option<f32>,
     pub error: Option<String>,
 }
 
@@ -195,13 +180,12 @@ impl Client {
 
     /// The configuration the server resolved, rendered as YAML.
     ///
-    /// The response nests the configuration under one key, which is unwrapped here so the view
-    /// shows the same shape as the file on disk.
+    /// The response nests the configuration under the app_config key, which is unwrapped here so
+    /// the view shows the same shape as the file on disk. A response without that key is a
+    /// decode error.
     pub async fn config(&self) -> Result<String, ClientError> {
-        let value: serde_json::Value = self.get("/api/config").await?;
-        let config = value.get("app_config").unwrap_or(&value);
-        yaml_serde::to_string(config)
-            .map_err(|e| ClientError::Decode("/api/config".to_owned(), e.to_string()))
+        let value: serde_json::Value = self.get(CONFIG_PATH).await?;
+        render_config(&value)
     }
 
     /// Asks for an index rebuild and returns once the server accepts it.
@@ -274,12 +258,32 @@ impl Client {
                 summarize(&body),
             ));
         }
-        serde_json::from_str(&body).map_err(|e| ClientError::Decode(path.to_owned(), e.to_string()))
+        parse(path, &body)
     }
 }
 
+/// The path of the resolved configuration.
+const CONFIG_PATH: &str = "/api/config";
+
+/// Decodes the body path answered with into the shape T.
+pub fn parse<T: serde::de::DeserializeOwned>(path: &str, body: &str) -> Result<T, ClientError> {
+    serde_json::from_str(body).map_err(|e| ClientError::Decode(path.to_owned(), e.to_string()))
+}
+
+/// The configuration under the app_config key of a config response, rendered as YAML.
+pub fn render_config(response: &serde_json::Value) -> Result<String, ClientError> {
+    let config = response.get("app_config").ok_or_else(|| {
+        ClientError::Decode(
+            CONFIG_PATH.to_owned(),
+            "the response has no app_config field".to_owned(),
+        )
+    })?;
+    yaml_serde::to_string(config)
+        .map_err(|e| ClientError::Decode(CONFIG_PATH.to_owned(), e.to_string()))
+}
+
 /// The innermost reason a request failed, such as the refused connection or the timeout.
-fn root_cause(error: &reqwest::Error) -> String {
+pub fn root_cause(error: &reqwest::Error) -> String {
     let mut source: &dyn std::error::Error = error;
     while let Some(inner) = source.source() {
         source = inner;

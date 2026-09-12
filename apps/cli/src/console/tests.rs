@@ -477,22 +477,34 @@ fn a_remote_console_says_why_it_will_not_open_htop() {
     );
 }
 
+/// Host readings with only the processor reading set.
+fn cpu_reading(cpu: Option<f32>) -> super::client::HostMetrics {
+    super::client::HostMetrics {
+        cpu_percent: cpu,
+        memory_used_bytes: None,
+        memory_total_bytes: None,
+        process_cpu_percent: None,
+        process_resident_bytes: None,
+    }
+}
+
 #[test]
 fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
-    use super::client::HostMetrics;
     use super::device::DeviceView;
     use std::time::{Duration, Instant};
 
     let start = Instant::now();
-    let reading = |cpu: Option<f32>| HostMetrics {
-        cpu_percent: cpu,
-        ..HostMetrics::default()
-    };
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(start, reading(Some(10.0)));
-    view.record(start + Duration::from_secs(1), reading(Some(20.0)));
-    view.record(start + Duration::from_secs(2), reading(None));
-    view.record(start + Duration::from_secs(3), reading(Some(30.0)));
+    view.record(start, Some(cpu_reading(Some(10.0))));
+    view.record(
+        start + Duration::from_secs(1),
+        Some(cpu_reading(Some(20.0))),
+    );
+    view.record(start + Duration::from_secs(2), Some(cpu_reading(None)));
+    view.record(
+        start + Duration::from_secs(3),
+        Some(cpu_reading(Some(30.0))),
+    );
 
     let now = start + Duration::from_secs(3);
     let runs = view.series(now, |h| h.cpu_percent.map(f64::from));
@@ -505,40 +517,233 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
         .is_empty());
 }
 
+/// A metrics body with one collection, the host block given, and the rest as the server sends it.
+fn metrics_body(host: &str) -> String {
+    format!(
+        r#"{{
+            "total_collections": 1,
+            "total_vectors": 3,
+            "collections": [{{
+                "name": "docs", "vector_count": 3, "index_type": "hnsw",
+                "memory_usage_bytes": 64, "insert_latency_ms": null, "search_latency_ms": 1.5,
+                "lock_read_ms": null, "lock_write_ms": null, "filter_overfetch": null,
+                "hnsw_ef_search": 64, "ivf_nprobe": null
+            }}],
+            "wal_stats": [{{
+                "collection": "docs", "last_checkpoint": null,
+                "checkpoint_age_secs": null, "wal_size_bytes": 12
+            }}],
+            "embedding": {{"requests": 0, "texts": 0, "total_tokens": 0}}
+            {host}
+        }}"#
+    )
+}
+
+/// A readiness body with one loaded collection.
+const READY_BODY: &str = r#"{
+    "ok": true, "version": "0.2.0", "data_dir": "/data", "total_collections": 1,
+    "loaded_collections": 1, "total_vectors": 3,
+    "collections": [{"name": "docs", "loaded": true, "integrity_ok": true}]
+}"#;
+
+/// A snapshot decoded from bodies shaped like the server's.
+fn snapshot_from(metrics: &str, ready: &str) -> super::client::Snapshot {
+    use super::client::parse;
+    super::client::Snapshot {
+        metrics: parse("/api/metrics", metrics).expect("the metrics body decodes"),
+        ready: parse("/api/readyz", ready).expect("the readiness body decodes"),
+    }
+}
+
 #[test]
 fn a_failed_refresh_records_a_sample_with_nothing_measured() {
-    use super::client::{ClientError, Metrics, Snapshot};
+    use super::client::ClientError;
 
     let mut app = console();
-    let mut metrics = Metrics::default();
-    metrics.host.cpu_percent = Some(42.0);
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(Snapshot {
-        metrics,
-        ..Snapshot::default()
-    }))));
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
     assert_eq!(app.device.latest().and_then(|h| h.cpu_percent), Some(42.0));
 
     app.handle(super::types::Event::Snapshot(Box::new(Err(
         ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
     ))));
     assert_eq!(app.device.samples.len(), 2);
-    let latest = app.device.latest().expect("a sample was recorded");
-    assert_eq!(latest.cpu_percent, None);
-    assert_eq!(latest.memory_total_bytes, None);
+    assert!(app.device.latest().is_none());
 }
 
 #[test]
 fn host_fields_the_server_leaves_out_read_as_absent() {
-    let metrics: super::client::Metrics =
-        serde_json::from_str(r#"{"host": {"memory_total_bytes": 4096, "cpu_percent": 0.0}}"#)
-            .expect("the body decodes");
-    assert_eq!(metrics.host.memory_total_bytes, Some(4096));
-    assert_eq!(metrics.host.cpu_percent, Some(0.0));
-    assert_eq!(metrics.host.memory_used_bytes, None);
-    assert_eq!(metrics.host.process_resident_bytes, None);
+    use super::client::{parse, Metrics};
 
-    let older: super::client::Metrics = serde_json::from_str("{}").expect("the body decodes");
-    assert_eq!(older.host.cpu_percent, None);
+    let metrics: Metrics = parse(
+        "/api/metrics",
+        &metrics_body(r#", "host": {"memory_total_bytes": 4096, "cpu_percent": 0.0}"#),
+    )
+    .expect("the body decodes");
+    let host = metrics.host.expect("the host block was sent");
+    assert_eq!(host.memory_total_bytes, Some(4096));
+    assert_eq!(host.cpu_percent, Some(0.0));
+    assert_eq!(host.memory_used_bytes, None);
+    assert_eq!(host.process_resident_bytes, None);
+
+    // A server that predates the host block has no host readings at all.
+    let older: Metrics = parse("/api/metrics", &metrics_body("")).expect("the body decodes");
+    assert!(older.host.is_none());
+}
+
+#[test]
+fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
+    use super::client::{parse, ClientError, CollectionHealth, Metrics, Readyz, Version};
+
+    // Readiness always sends loaded; without it the collection must not read as not loaded.
+    let error = parse::<CollectionHealth>("/api/readyz", r#"{"name": "docs"}"#)
+        .expect_err("loaded is required");
+    assert!(matches!(error, ClientError::Decode(..)), "{error:?}");
+    assert!(error.to_string().contains("loaded"), "{error}");
+
+    assert!(parse::<Readyz>("/api/readyz", "{}").is_err());
+    assert!(parse::<Version>("/api/version", "{}").is_err());
+    assert!(parse::<Metrics>("/api/metrics", r#"{"collections": []}"#).is_err());
+
+    // A null the server always sends is required as a key, not only as a value.
+    let no_latency = metrics_body("").replace(r#""search_latency_ms": 1.5,"#, "");
+    let error = parse::<Metrics>("/api/metrics", &no_latency).expect_err("the key is required");
+    assert!(error.to_string().contains("search_latency_ms"), "{error}");
+
+    // Fields the server leaves out when empty are optional.
+    let version: Version =
+        parse("/api/version", r#"{"version": "0.2.0"}"#).expect("the commit is optional");
+    assert_eq!(version.version, "0.2.0");
+}
+
+/// The text of every cell of the console drawn at 200 by 20.
+fn screen(app: &mut super::app::App) -> String {
+    let backend = ratatui::backend::TestBackend::new(200, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("a test terminal opens");
+    terminal
+        .draw(|frame| super::ui::draw(frame, app))
+        .expect("the frame draws");
+    terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect()
+}
+
+#[test]
+fn a_decode_error_in_a_refresh_is_on_the_screen() {
+    use super::client::{parse, Readyz};
+
+    let mut app = console();
+    app.handle(press('2'));
+    let error = parse::<Readyz>("/api/readyz", r#"{"collections": [{"name": "docs"}]}"#)
+        .expect_err("loaded is required");
+    app.handle(super::types::Event::Snapshot(Box::new(Err(error))));
+
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("/api/readyz"), "{drawn}");
+    assert!(drawn.contains("missing field `loaded`"), "{drawn}");
+}
+
+#[test]
+fn a_config_response_without_the_config_key_is_an_error() {
+    use super::client::{render_config, ClientError};
+
+    let error =
+        render_config(&serde_json::json!({ "startup": {} })).expect_err("the key is required");
+    assert!(matches!(error, ClientError::Decode(..)), "{error:?}");
+    assert!(error.to_string().contains("app_config"), "{error}");
+
+    let rendered = render_config(&serde_json::json!({ "app_config": { "startup": {} } }))
+        .expect("the key is present");
+    assert!(rendered.starts_with("startup:"), "{rendered}");
+}
+
+/// A console on the collections view holding the snapshot of one collection.
+fn console_with_a_collection() -> super::app::App {
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
+        &metrics_body(""),
+        READY_BODY,
+    )))));
+    app
+}
+
+#[test]
+fn collections_messages_reach_the_status_bar() {
+    // With no collection there is nothing to act on, and the console says so.
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(press('r'));
+    assert_eq!(app.notice.as_deref(), Some("no collection selected"));
+    assert!(screen(&mut app).contains("no collection selected"));
+
+    let mut app = console_with_a_collection();
+    app.handle(press('c'));
+    assert!(app.collections.pending.is_some());
+    app.handle(press('n'));
+    assert!(app.collections.pending.is_none());
+    assert!(app.pending_action.is_none());
+    assert!(screen(&mut app).contains("cancelled"));
+
+    app.handle(press('r'));
+    app.handle(press('y'));
+    assert_eq!(
+        app.pending_action,
+        Some(super::collections::Pending::Rebuild("docs".into()))
+    );
+    assert!(screen(&mut app).contains("rebuild of docs running"));
+
+    app.handle(super::types::Event::Acted(Err(
+        "rebuild of docs failed: /api/collections/docs/index/rebuild returned 500: boom".into(),
+    )));
+    assert!(screen(&mut app).contains("rebuild of docs failed"));
+    app.handle(super::types::Event::Acted(Ok(
+        "compaction of docs done".into()
+    )));
+    assert!(screen(&mut app).contains("compaction of docs done"));
+}
+
+#[test]
+fn a_probe_failure_shows_its_reason() {
+    use super::types::{Health, Probe};
+
+    let mut app = console();
+    app.handle(super::types::Event::Health(Box::new(Health {
+        live: Probe::Down("Connection refused".into()),
+        ready: Probe::Down("Connection refused".into()),
+        web: Probe::Degraded("502 Bad Gateway: upstream".into()),
+    })));
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("server: Connection refused"), "{drawn}");
+    assert!(drawn.contains("web: 502 Bad Gateway"), "{drawn}");
+
+    app.handle(super::types::Event::ProbesStopped(
+        "health probes are off: http client: no TLS backend".into(),
+    ));
+    assert!(screen(&mut app).contains("health probes are off"));
+}
+
+#[test]
+fn the_reload_key_asks_for_the_configuration_again() {
+    use super::types::ConfigState;
+
+    let mut app = console();
+    app.handle(super::types::Event::Config(Ok("startup: {}".into())));
+    assert_eq!(app.config, Some(ConfigState::Loaded("startup: {}".into())));
+    app.handle(press('3'));
+    app.handle(press('R'));
+    // The loop fetches whenever the configuration is None.
+    assert!(app.config.is_none());
+
+    app.handle(super::types::Event::Config(Err("/api/config: boom".into())));
+    assert!(screen(&mut app).contains("/api/config: boom"));
 }
 
 type ServeTask = tokio::task::JoinHandle<Result<(), piramid_serving::http::serve::ServeError>>;
