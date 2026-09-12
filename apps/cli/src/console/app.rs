@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::ExitStatus;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -9,6 +10,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::console::client::Client;
 use crate::console::collections::{Collections, Pending};
+use crate::console::device::{DeviceView, Monitor};
 use crate::console::logs::{LogBuffer, LogWriter};
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
@@ -46,6 +48,10 @@ pub struct App {
     pub view: View,
     /// Collections on a running server.
     pub collections: Collections,
+    /// Host readings of the server over time.
+    pub device: DeviceView,
+    /// A process monitor confirmed as runnable, for the loop to hand the terminal to.
+    pub handoff: Option<(Monitor, PathBuf)>,
     /// The resolved configuration, once it has been fetched.
     pub config: Option<Result<String, String>>,
     /// First visible line of the config view.
@@ -106,6 +112,8 @@ impl App {
                 .copied()
                 .unwrap_or(View::Collections),
             collections: Collections::new(client, settings.refresh),
+            device: DeviceView::new(&settings.base_url),
+            handoff: None,
             config: None,
             config_scroll: 0,
             runner: Runner::new(root, tx.clone()),
@@ -164,7 +172,15 @@ impl App {
             Event::Services(Ok(states)) => self.services(&states),
             Event::Services(Err(why)) => self.notice = Some(why),
             Event::Health(health) => self.health = *health,
-            Event::Snapshot(result) => self.collections.snapshot(*result),
+            Event::Snapshot(result) => {
+                let host = result
+                    .as_ref()
+                    .as_ref()
+                    .map(|snapshot| snapshot.metrics.host)
+                    .unwrap_or_default();
+                self.device.record(Instant::now(), host);
+                self.collections.snapshot(*result);
+            }
             Event::Acted(outcome) => self.collections.acted(outcome),
             Event::Config(result) => self.config = Some(result),
             Event::InputLost(why) => {
@@ -274,7 +290,42 @@ impl App {
             View::Units => self.key_units(key),
             View::Collections => self.pending_action = self.collections.key(key),
             View::Config => self.key_config(key),
+            View::Device => self.key_device(key),
         }
+    }
+
+    fn key_device(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('h') => self.request_handoff(Monitor::Htop),
+            KeyCode::Char('n') => self.request_handoff(Monitor::Nvtop),
+            KeyCode::Char('R') => self.collections.last_refresh = None,
+            KeyCode::Esc => self.notice = None,
+            _ => {}
+        }
+    }
+
+    /// Queues a handoff to monitor, or says why there cannot be one.
+    fn request_handoff(&mut self, monitor: Monitor) {
+        match self
+            .device
+            .handoff(monitor, std::env::var_os("PATH").as_deref())
+        {
+            Ok(program) => self.handoff = Some((monitor, program)),
+            Err(why) => self.notice = Some(why),
+        }
+    }
+
+    /// Records how a handoff to monitor ended, once the terminal is back.
+    pub fn handed_back(&mut self, monitor: Monitor, outcome: std::io::Result<ExitStatus>) {
+        let program = monitor.program();
+        self.notice = match outcome {
+            Ok(status) if status.success() => None,
+            Ok(status) => Some(match status.code() {
+                Some(code) => format!("{program} exited with {code}"),
+                None => format!("{program} was killed by a signal"),
+            }),
+            Err(e) => Some(format!("{program}: {e}")),
+        };
     }
 
     /// Switches to the view a digit names, if this profile offers one there.

@@ -20,7 +20,7 @@ checks tends not to survive. So the layering is physical. Each layer is a crate,
 apps/                     everything we author
   engine/                 the library crates, one folder each
     core/                 errors, config, document, metadata, validation, stats, observability
-    hardware/             compute, gpu, quantization
+    hardware/             compute, gpu, quantization, host
     database/             storage, index, search, cache, document, collection
     model/                inference, fusion, embeddings
     serving/              how the outside world reaches it
@@ -39,7 +39,7 @@ Each cut is a real one:
 
 - **`hardware`** is the code that changes when the machine changes. `compute` owns what cosine means
   and which strategy runs it, `gpu` owns the device, `quantization` owns the encodings both score
-  over. It is a leaf, so kernels can be benchmarked on their own and `model` can get a device
+  over, `host` reads the processor and memory use of the machine itself. It is a leaf, so kernels can be benchmarked on their own and `model` can get a device
   without reaching through retrieval math.
 - **`database`** is where vectors live and how they are found: records, WAL, mmap and sidecars; the
   ANN indexes; query planning and scoring; and `collection`, the object composing a store, a cache,
@@ -78,7 +78,7 @@ document in the same change.
 | Crate | Owns | Must not |
 |---|---|---|
 | `core` | Every error the app wraps, all configuration, the document and hit shapes, metadata and its filters, validation, `stats`, and the telemetry export those feed | Know about HTTP or end the process |
-| `hardware` | Distance math and strategy dispatch, the device runtime, quantization encodings | Depend on anything in the workspace, or let vendor types escape `gpu::backends` |
+| `hardware` | Distance math and strategy dispatch, the device runtime, quantization encodings, host readings | Depend on anything in the workspace, or let vendor types escape `gpu::backends` |
 | `database` | Records, WAL, sidecars, mmap; ANN traversal and the sidecar format; planning, filtering, scoring; the `Collection`, its caches, checkpoint and compaction | Serve HTTP |
 | `model` | Model execution, KV cache, batching, sampling; the `RetrievalHook` seam; embedding providers | Depend on `database`, or be required for retrieval to work |
 | `serving` | Routes, handlers, services, wire shapes, `AppState`, routing | Touch file formats or index internals |
@@ -270,7 +270,7 @@ newtype in the transport layer that maps a kind onto an HTTP status and renders 
 | Routes, handlers, wire shapes | `serving/src/http` |
 | Coordinating a user-facing operation | `serving/src/services` |
 | Collection state, records, WAL, sidecars, ANN internals | `database` |
-| Distance math, backend dispatch, device memory, kernels | `hardware` |
+| Distance math, backend dispatch, device memory, kernels, host readings | `hardware` |
 | Model execution, and retrieval inside the forward pass | `model` |
 | Shared vocabulary — error, config, metadata | `core` |
 | A deployable, a site, or a client library | `apps/` |

@@ -7,6 +7,7 @@
 mod app;
 mod client;
 mod collections;
+mod device;
 mod health;
 mod logs;
 mod run;

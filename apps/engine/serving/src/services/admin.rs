@@ -122,6 +122,7 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             total_tokens: embed_metrics.total_tokens,
             avg_latency_ms: embed_metrics.avg_latency_ms,
         },
+        host: crate::services::convert::host_to_response(state.machine.host()),
     })
 }
 

@@ -38,6 +38,19 @@ impl Registry {
         let _ = writeln!(self.out, "{name} {}", format_value(value));
     }
 
+    /// Write a metric with no labels when it has a value, and nothing when it has none.
+    pub fn optional_metric(
+        &mut self,
+        name: &str,
+        help: &str,
+        kind: MetricType,
+        value: Option<f64>,
+    ) {
+        if let Some(value) = value {
+            self.metric(name, help, kind, value);
+        }
+    }
+
     /// Write a metric family, one line per label set.
     pub fn metric_family<'a>(
         &mut self,
@@ -144,6 +157,22 @@ mod tests {
             Vec::<(Vec<(&str, String)>, f64)>::new(),
         );
         assert_eq!(registry.render(), "");
+    }
+
+    #[test]
+    fn omits_an_absent_metric_entirely() {
+        let mut registry = Registry::new();
+        registry.optional_metric("piramid_host_cpu_percent", "CPU.", MetricType::Gauge, None);
+        assert_eq!(registry.render(), "");
+
+        let mut registry = Registry::new();
+        registry.optional_metric(
+            "piramid_host_cpu_percent",
+            "CPU.",
+            MetricType::Gauge,
+            Some(0.0),
+        );
+        assert!(registry.render().contains("piramid_host_cpu_percent 0\n"));
     }
 
     #[test]

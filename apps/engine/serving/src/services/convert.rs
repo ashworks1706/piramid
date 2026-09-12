@@ -1,11 +1,12 @@
 //! Conversions between the HTTP request/response shapes and domain types.
 
-use crate::services::api::{HitResponse, SearchTuning};
+use crate::services::api::{HitResponse, HostMetricsResponse, SearchTuning};
 use piramid_core::config::SearchConfig;
 use piramid_core::error::{Result, ServerError};
 use piramid_core::metadata::{Filter, Metadata, MetadataValue};
 use piramid_core::Hit;
 use piramid_hardware::compute::{ComputeError, Metric};
+use piramid_hardware::host::HostReading;
 use std::collections::HashMap;
 
 /// Resolve a requested metric name, defaulting when the caller omits one.
@@ -130,6 +131,17 @@ fn json_to_metadata_value(field: &str, value: serde_json::Value) -> Result<Metad
             .into())
         }
     })
+}
+
+/// The wire shape of a host reading.
+pub fn host_to_response(reading: HostReading) -> HostMetricsResponse {
+    HostMetricsResponse {
+        cpu_percent: reading.cpu_percent,
+        memory_used_bytes: reading.memory_used_bytes,
+        memory_total_bytes: reading.memory_total_bytes,
+        process_cpu_percent: reading.process_cpu_percent,
+        process_resident_bytes: reading.process_resident_bytes,
+    }
 }
 
 pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Result<Metadata> {

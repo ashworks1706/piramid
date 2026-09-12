@@ -64,6 +64,7 @@ futures = "0.3"
 wide = "0.7"
 rayon = "1.10"
 num_cpus = "1.16"
+sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 rand = "0.8.6"
 
 # storage + concurrency

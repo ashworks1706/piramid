@@ -1,11 +1,13 @@
 //! The event loop: terminal setup, the tasks that feed it, and the draw cycle.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 use std::time::Duration;
 
 use crossterm::event::{Event as TermEvent, EventStream, KeyEventKind};
 use futures::StreamExt;
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::task::JoinHandle;
 
 use crate::console::app::App;
 use crate::console::client::Client;
@@ -46,7 +48,7 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             tokio::spawn(services(root, tx.clone()));
         }
         tokio::spawn(ticker(tx.clone()));
-        tokio::spawn(keys(tx.clone()));
+        let mut input = tokio::spawn(keys(tx.clone()));
 
         // The terminal is restored before a panic message is printed.
         let original_hook = std::panic::take_hook();
@@ -55,7 +57,7 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             original_hook(info);
         }));
         let mut terminal = ratatui::init();
-        let outcome = drive(&mut terminal, &mut app, &mut rx, &tx).await;
+        let outcome = drive(&mut terminal, &mut app, &mut rx, &tx, &mut input).await;
         app.shutdown();
         ratatui::restore();
         outcome
@@ -67,6 +69,7 @@ async fn drive(
     app: &mut App,
     rx: &mut mpsc::UnboundedReceiver<Event>,
     tx: &UnboundedSender<Event>,
+    input: &mut JoinHandle<()>,
 ) -> std::io::Result<()> {
     refresh(app, tx);
     fetch_config(app, tx);
@@ -83,12 +86,42 @@ async fn drive(
         if let Some(pending) = app.pending_action.take() {
             act(app.collections.client.clone(), tx.clone(), pending);
         }
+        if let Some((monitor, program)) = app.handoff.take() {
+            let outcome = hand_over(terminal, &program, input, tx).await;
+            app.handed_back(monitor, outcome);
+        }
         if app.collections.refresh_due() {
             refresh(app, tx);
         }
         terminal.draw(|frame| ui::draw(frame, app))?;
     }
     Ok(())
+}
+
+/// Runs program in the foreground with the terminal it needs, then takes the terminal back.
+///
+/// The key reader is stopped for the duration so it does not consume the input meant for program.
+async fn hand_over(
+    terminal: &mut ratatui::DefaultTerminal,
+    program: &Path,
+    input: &mut JoinHandle<()>,
+    tx: &UnboundedSender<Event>,
+) -> std::io::Result<ExitStatus> {
+    input.abort();
+    let _ = (&mut *input).await;
+    ratatui::restore();
+    let status = tokio::process::Command::new(program).status().await;
+    let resumed = resume_terminal(terminal);
+    *input = tokio::spawn(keys(tx.clone()));
+    resumed?;
+    status
+}
+
+/// Puts the terminal back into the raw alternate screen the console draws on.
+fn resume_terminal(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    terminal.clear()
 }
 
 async fn services(root: PathBuf, tx: UnboundedSender<Event>) {

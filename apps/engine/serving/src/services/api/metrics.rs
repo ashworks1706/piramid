@@ -10,6 +10,7 @@ pub struct MetricsResponse {
     pub app_config: piramid_core::config::Config,
     pub wal_stats: Vec<WalStats>,
     pub embedding: EmbeddingMetricsResponse,
+    pub host: HostMetricsResponse,
 }
 
 #[derive(Serialize)]
@@ -42,4 +43,47 @@ pub struct EmbeddingMetricsResponse {
     pub total_tokens: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_latency_ms: Option<f32>,
+}
+
+/// Processor and memory use of the host and of the server process. A field the server could not
+/// measure is left out.
+#[derive(Debug, Default, Serialize)]
+pub struct HostMetricsResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_percent: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_used_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_total_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_cpu_percent: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_resident_bytes: Option<u64>,
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "a failed assertion is the point of a test"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unmeasured_host_field_is_left_out_of_the_json() {
+        let json = serde_json::to_value(HostMetricsResponse {
+            memory_total_bytes: Some(4096),
+            process_cpu_percent: Some(0.0),
+            ..HostMetricsResponse::default()
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "memory_total_bytes": 4096, "process_cpu_percent": 0.0 })
+        );
+        assert_eq!(
+            serde_json::to_value(HostMetricsResponse::default()).unwrap(),
+            serde_json::json!({})
+        );
+    }
 }
