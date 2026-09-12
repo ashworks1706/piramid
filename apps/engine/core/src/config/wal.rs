@@ -2,9 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Write-ahead logging and checkpoint cadence for a collection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct WalConfig {
+    /// Log every write before applying it. Off skips the log and replay on open.
     pub enabled: bool,
 
     /// Checkpoint after this many operations.

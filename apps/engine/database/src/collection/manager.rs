@@ -1,3 +1,5 @@
+//! The registry of open collections under one data directory.
+
 use dashmap::{mapref::one::Ref, DashMap};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -10,8 +12,10 @@ use piramid_core::config::Config;
 use piramid_core::error::{Result, ServerError};
 use piramid_core::stats::LatencyTracker;
 
+/// A shared, lockable reference to an open collection.
 pub type CollectionHandle = Arc<RwLock<Collection>>;
 
+/// Open collections by name, each with its latency tracker, under one data directory.
 pub struct CollectionManager {
     collections: DashMap<String, CollectionHandle>,
     latency_trackers: DashMap<String, LatencyTracker>,
@@ -20,6 +24,7 @@ pub struct CollectionManager {
 }
 
 impl CollectionManager {
+    /// A manager with nothing open, reading collection defaults from app_config.
     pub fn new(data_dir: String, app_config: Arc<RwLock<Config>>) -> Self {
         Self {
             collections: DashMap::new(),
@@ -29,6 +34,7 @@ impl CollectionManager {
         }
     }
 
+    /// The named collection, opening it from disk if needed. Fails when no data file exists.
     pub fn get_existing(&self, name: &str) -> Result<CollectionHandle> {
         piramid_core::validation::validate_collection_name(name)?;
         if let Some(existing) = self.collections.get(name) {
@@ -43,6 +49,7 @@ impl CollectionManager {
         self.open_and_register(name, &path)
     }
 
+    /// The named collection, opening or creating its data file if needed.
     pub fn get_or_create(&self, name: &str) -> Result<CollectionHandle> {
         piramid_core::validation::validate_collection_name(name)?;
         if let Some(existing) = self.collections.get(name) {
@@ -109,18 +116,22 @@ impl CollectionManager {
         Ok(names)
     }
 
+    /// Whether the named collection is open.
     pub fn contains_loaded(&self, name: &str) -> bool {
         self.collections.contains_key(name)
     }
 
+    /// Number of open collections.
     pub fn len(&self) -> usize {
         self.collections.len()
     }
 
+    /// Whether no collection is open.
     pub fn is_empty(&self) -> bool {
         self.collections.is_empty()
     }
 
+    /// Name and handle of every open collection.
     pub fn loaded_collections(&self) -> Vec<(String, CollectionHandle)> {
         self.collections
             .iter()
@@ -128,6 +139,7 @@ impl CollectionManager {
             .collect()
     }
 
+    /// Latency tracker of the named open collection.
     pub fn tracker(&self, name: &str) -> Option<Ref<'_, String, LatencyTracker>> {
         self.latency_trackers.get(name)
     }

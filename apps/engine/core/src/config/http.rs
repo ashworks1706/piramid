@@ -9,6 +9,7 @@ pub const API_KEY_ENV: &str = "PIRAMID_API_KEY";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct HttpConfig {
+    /// Who may call the server.
     pub auth: AuthConfig,
 
     /// Per-client token bucket. None serves every request without a limit.

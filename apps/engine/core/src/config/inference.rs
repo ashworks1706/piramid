@@ -33,10 +33,15 @@ pub struct InferenceConfig {
     /// Run a throwaway pass at boot, allocating before the first real request.
     pub warmup: bool,
 
+    /// How requests become forward passes.
     pub batching: BatchingConfig,
+    /// Paged key/value cache for attention.
     pub kv_cache: KvCacheConfig,
+    /// How the next token is drawn from the logits.
     pub sampling: SamplingConfig,
+    /// Retrieval fused into the forward pass.
     pub fusion: FusionConfig,
+    /// Precomputed key/value states for retrieved documents.
     pub document_kv: DocumentKvConfig,
 }
 
@@ -67,8 +72,11 @@ pub enum Dtype {
     /// Whatever the checkpoint stores.
     #[default]
     Auto,
+    /// 32-bit float.
     Fp32,
+    /// 16-bit float.
     Fp16,
+    /// 16-bit brain float.
     Bf16,
 }
 
@@ -316,6 +324,7 @@ pub enum DeadlineMiss {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct DocumentKvConfig {
+    /// Store and reuse document states at prefill.
     pub enabled: bool,
 
     /// Budget for the store, drawn from the same device memory as the live KV cache.

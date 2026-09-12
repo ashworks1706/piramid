@@ -16,6 +16,7 @@ use piramid_core::error::embedding::EmbeddingError;
 pub enum EmbeddingProvider {
     /// Anything speaking the OpenAI embeddings format, including a local server.
     OpenAI,
+    /// An Ollama server.
     Ollama,
 }
 

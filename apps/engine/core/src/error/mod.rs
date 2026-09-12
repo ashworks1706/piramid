@@ -1,3 +1,5 @@
+//! Error types for every layer, and the classification they share.
+
 pub mod config;
 pub mod context;
 pub mod embedding;

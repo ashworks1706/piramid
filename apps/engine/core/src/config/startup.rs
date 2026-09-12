@@ -23,10 +23,15 @@ pub struct StartupConfig {
     /// Worker threads for parallel search and indexing. None is one per core.
     pub threads: Option<usize>,
 
+    /// Log level, format and per-subsystem switches.
     pub logging: LoggingConfig,
+    /// Trace export and span events.
     pub telemetry: TelemetryConfig,
+    /// Hardware selection and memory budgets.
     pub hardware: HardwareConfig,
+    /// Free-space checks on the data directory.
     pub disk: DiskConfig,
+    /// Authentication, rate limiting and shutdown for the HTTP server.
     pub http: HttpConfig,
 
     /// Embedding provider, built once at boot. None disables server-side embedding.
@@ -55,6 +60,8 @@ impl StartupConfig {
         self.threads.unwrap_or_else(num_cpus::get)
     }
 
+    /// Reject an unparseable bind address, zero threads, an OTLP block this build or logging cannot
+    /// export, an unenforced memory budget, or an invalid embedding, GPU or HTTP setting.
     pub fn validate(&self) -> Result<(), String> {
         if self.bind.parse::<std::net::SocketAddr>().is_err() {
             return Err(format!(

@@ -3,19 +3,28 @@
 use piramid_core::error::{Result, StorageError};
 use serde::{Deserialize, Serialize};
 
+/// The manifest persisted beside a collection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionMetadata {
+    /// Manifest format version the file was written with.
     pub schema_version: u32,
+    /// Collection name, taken from the data file's stem.
     pub name: String,
-    pub created_at: u64, // Unix timestamp (seconds)
+    /// Creation time in Unix seconds.
+    pub created_at: u64,
+    /// Last change in Unix seconds.
     pub updated_at: u64,
+    /// Vector width. None until the first vector is stored.
     pub dimensions: Option<usize>,
+    /// Live documents at the last update.
     pub vector_count: usize,
 }
 
+/// Manifest format version this build reads and writes.
 pub const SCHEMA_VERSION: u32 = 1;
 
 impl CollectionMetadata {
+    /// A manifest for an empty collection, created now.
     pub fn new(name: String) -> Self {
         let now = piramid_core::clock::unix_secs();
 
@@ -29,6 +38,7 @@ impl CollectionMetadata {
         }
     }
 
+    /// Set updated_at to now.
     pub fn touch(&mut self) {
         self.updated_at = piramid_core::clock::unix_secs();
     }
@@ -49,6 +59,7 @@ impl CollectionMetadata {
         }
     }
 
+    /// Set the live document count and touch the manifest.
     pub fn update_vector_count(&mut self, count: usize) {
         self.vector_count = count;
         self.touch();

@@ -15,21 +15,30 @@ use super::{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct RuntimeConfig {
+    /// Index family, metric and family parameters.
     pub index: IndexConfig,
+    /// Default search depth and filter overfetch.
     pub search: SearchConfig,
+    /// How stored vectors are compressed.
     pub quantization: QuantizationConfig,
+    /// Memory ceiling and mapping of the data file.
     pub memory: MemoryConfig,
+    /// Write-ahead log and checkpoint cadence.
     pub wal: WalConfig,
+    /// Per-collection size ceilings.
     pub limits: LimitsConfig,
+    /// Cache sizes and eviction.
     pub cache: CacheConfig,
 
     /// Which distance-kernel strategy to run.
     pub execution: ExecutionMode,
 
+    /// Model execution.
     pub inference: InferenceConfig,
 }
 
 impl RuntimeConfig {
+    /// Reject a setting this build cannot honour or a combination that contradicts itself.
     pub fn validate(&self) -> Result<(), String> {
         // compute answers for whether a strategy can run.
         if let Err(error) = piramid_hardware::compute::strategies::for_mode(self.execution) {

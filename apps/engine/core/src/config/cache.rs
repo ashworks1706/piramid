@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct CacheConfig {
+    /// Vectors held resident for search.
     pub vectors: VectorCacheConfig,
+    /// Document metadata held for filter evaluation.
     pub metadata: MetadataCacheConfig,
 }
 
@@ -78,6 +80,7 @@ impl VectorCacheConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct MetadataCacheConfig {
+    /// Whether metadata is cached at all.
     pub enabled: bool,
 
     /// Entry ceiling.
@@ -122,6 +125,7 @@ impl MetadataCacheConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct EmbeddingCacheConfig {
+    /// Whether embeddings are cached at all.
     pub enabled: bool,
 
     /// Entry ceiling.

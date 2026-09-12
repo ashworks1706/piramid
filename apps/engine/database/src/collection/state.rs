@@ -1,3 +1,5 @@
+//! The collection object and the operations it exposes.
+
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -16,14 +18,19 @@ use crate::storage::sidecars::{warm_file, EntryPointer};
 use crate::storage::SidecarManager;
 use piramid_core::error::Result;
 
+/// One open collection: its data file, offset index, caches, vector index, manifest and log.
 pub struct Collection {
     pub(crate) record_store: RecordStore,
     pub(crate) index: HashMap<Uuid, EntryPointer>,
     pub(crate) vector_index: Box<dyn VectorIndex>,
     pub(crate) cache: CacheManager,
+    /// Configuration the collection was opened with.
     pub config: piramid_core::config::CollectionConfig,
+    /// Name, width, counts and timestamps.
     pub manifest: CollectionMetadata,
+    /// Path of the data file; sidecar paths derive from it.
     pub path: String,
+    /// Write-ahead log and checkpoint counters.
     pub checkpoint: CheckpointManager,
 }
 
@@ -98,10 +105,12 @@ impl Collection {
         Ok(())
     }
 
+    /// Name, width, counts and timestamps.
     pub fn manifest(&self) -> &CollectionMetadata {
         &self.manifest
     }
 
+    /// Number of live documents.
     pub fn count(&self) -> usize {
         self.index.len()
     }
@@ -116,22 +125,27 @@ impl Collection {
             + self.vector_index.stats().memory_usage_bytes)
     }
 
+    /// The ANN index over the collection's vectors.
     pub fn vector_index(&self) -> &dyn VectorIndex {
         self.vector_index.as_ref()
     }
 
+    /// Approximate bytes held by the vector store and metadata cache.
     pub fn cache_usage_bytes(&self) -> usize {
         self.cache.memory_usage_bytes()
     }
 
+    /// Approximate bytes held by the metadata cache.
     pub fn metadata_cache_usage_bytes(&self) -> usize {
         self.cache.metadata_usage_bytes()
     }
 
+    /// Empty the metadata cache and return the bytes freed.
     pub fn clear_metadata_cache(&mut self) -> usize {
         self.cache.clear_metadata()
     }
 
+    /// Empty the vector store and metadata cache. Search cannot score until they are repopulated.
     pub fn clear_caches_for_rebuild(&mut self) {
         self.cache.clear_all();
     }
@@ -156,14 +170,17 @@ impl Collection {
         }
     }
 
+    /// The resident vectors, as indexes read them.
     pub fn vector_reader(&self) -> &dyn VectorReader {
         &self.cache
     }
 
+    /// Metadata currently in the cache, keyed by id. Evicted documents are absent.
     pub fn metadata_view(&self) -> &HashMap<Uuid, piramid_core::metadata::Metadata> {
         self.cache.metadata()
     }
 
+    /// Configuration the collection was opened with.
     pub fn config(&self) -> &piramid_core::config::CollectionConfig {
         &self.config
     }
@@ -273,46 +290,57 @@ impl Collection {
 }
 
 impl Collection {
+    /// Open or create the collection at path with default configuration.
     pub fn open(path: &str) -> Result<Self> {
         super::open::open(path, CollectionOpenOptions::default())
     }
 
+    /// Open or create the collection at path with the given options.
     pub fn open_with_options(path: &str, options: CollectionOpenOptions) -> Result<Self> {
         super::open::open(path, options)
     }
 
+    /// The document with id, or None when absent.
     pub fn get(&self, id: &Uuid) -> Result<Option<Document>> {
         crate::document::get(self, id)
     }
 
+    /// Log and store a new document and return its id.
     pub fn insert(&mut self, entry: Document) -> Result<Uuid> {
         crate::document::insert(self, entry)
     }
 
+    /// Log and store new documents and return their ids.
     pub fn insert_batch(&mut self, entries: Vec<Document>) -> Result<Vec<Uuid>> {
         crate::document::insert_batch(self, entries)
     }
 
+    /// Replace the document with the same id, or insert it when absent, and return its id.
     pub fn upsert(&mut self, entry: Document) -> Result<Uuid> {
         crate::document::upsert(self, entry)
     }
 
+    /// Remove the document with id. False when it was absent.
     pub fn delete(&mut self, id: &Uuid) -> Result<bool> {
         crate::document::delete(self, id)
     }
 
+    /// Remove the documents with the given ids and return how many were present.
     pub fn delete_batch(&mut self, ids: &[Uuid]) -> Result<usize> {
         crate::document::delete_batch(self, ids)
     }
 
+    /// Replace the metadata of the document with id. False when it was absent.
     pub fn update_metadata(&mut self, id: &Uuid, metadata: Metadata) -> Result<bool> {
         crate::document::update_metadata(self, id, metadata)
     }
 
+    /// Replace the vector of the document with id. False when it was absent.
     pub fn update_vector(&mut self, id: &Uuid, vector: Vec<f32>) -> Result<bool> {
         crate::document::update_vector(self, id, vector)
     }
 
+    /// The k best hits for query, scored under metric.
     pub fn search(
         &self,
         query: &[f32],
@@ -323,6 +351,7 @@ impl Collection {
         super::search_target::search(self, query, k, metric, params)
     }
 
+    /// The k best hits for each query, scored under metric, one list per query.
     pub fn search_batch_with(
         &self,
         queries: &[Vec<f32>],
@@ -333,10 +362,12 @@ impl Collection {
         super::search_target::search_batch(self, queries, k, metric, params)
     }
 
+    /// Save the sidecars, then mark and rotate the write-ahead log.
     pub fn checkpoint(&mut self) -> Result<()> {
         super::checkpoint::checkpoint(self)
     }
 
+    /// Drain buffered log entries to the kernel.
     pub fn flush(&mut self) -> Result<()> {
         super::checkpoint::flush(self)
     }

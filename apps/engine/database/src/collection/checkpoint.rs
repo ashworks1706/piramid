@@ -6,7 +6,9 @@ use crate::storage::wal::Wal;
 use crate::storage::SidecarManager;
 use piramid_core::error::Result;
 
+/// A collection's write-ahead log and the counters that decide when it checkpoints.
 pub struct CheckpointManager {
+    /// The log writes are recorded in.
     pub wal: Wal,
     operation_count: usize,
     last_checkpoint_ts: Option<u64>,
@@ -15,6 +17,7 @@ pub struct CheckpointManager {
 }
 
 impl CheckpointManager {
+    /// A manager over wal with no operations counted and no checkpoint recorded.
     pub fn new(wal: Wal) -> Self {
         Self {
             wal,
@@ -52,15 +55,19 @@ impl CheckpointManager {
             .is_some_and(|bytes| bytes >= cfg.max_log_size as u64))
     }
 
+    /// Zero the operation count.
     pub fn reset_counter(&mut self) {
         self.operation_count = 0;
     }
 
+    /// Record ts, in Unix seconds, as the time of the last checkpoint and the start of the next
+    /// checkpoint interval.
     pub fn record_checkpoint(&mut self, ts: u64) {
         self.last_checkpoint_ts = Some(ts);
         self.interval_start_ts = ts;
     }
 
+    /// Unix seconds of the last checkpoint since open. None before the first.
     pub fn last_checkpoint(&self) -> Option<u64> {
         self.last_checkpoint_ts
     }

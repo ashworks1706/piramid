@@ -69,8 +69,11 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     })
 }
 
+/// Document counts from a compaction.
 #[derive(Debug)]
 pub struct CompactStats {
+    /// Live documents in the offset index before compaction.
     pub original_entries: usize,
+    /// Live documents in the offset index after compaction.
     pub compacted_entries: usize,
 }

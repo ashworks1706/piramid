@@ -13,12 +13,14 @@ struct CachedEmbedding {
     model: String,
 }
 
+/// An [Embedder] that answers repeated text from a bounded least-recently-used cache.
 pub struct CachedEmbedder<E: Embedder> {
     inner: E,
     cache: Mutex<LruCache<String, CachedEmbedding>>,
 }
 
 impl<E: Embedder> CachedEmbedder<E> {
+    /// Wrap embedder with a cache holding up to capacity texts.
     pub fn new(embedder: E, capacity: NonZeroUsize) -> Self {
         Self {
             inner: embedder,

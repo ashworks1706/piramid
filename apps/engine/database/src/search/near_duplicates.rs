@@ -17,8 +17,11 @@ use crate::search::SearchTarget;
 /// Two documents alike enough to be worth reporting, and how alike.
 #[derive(Debug)]
 pub struct DuplicatePair {
+    /// One document of the pair.
     pub id_a: Uuid,
+    /// The other document of the pair.
     pub id_b: Uuid,
+    /// Similarity between the two, higher is closer.
     pub score: f32,
 }
 

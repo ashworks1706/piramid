@@ -35,6 +35,7 @@ pub struct EmbeddingConfig {
 }
 
 impl EmbeddingConfig {
+    /// Reject a provider this build cannot construct.
     pub fn validate(&self) -> Result<(), String> {
         self.cache.validate()?;
         match &self.options {

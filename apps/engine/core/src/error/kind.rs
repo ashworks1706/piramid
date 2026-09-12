@@ -1,6 +1,9 @@
+//! The top-level error and its transport-agnostic classification.
+
 use std::io;
 use thiserror::Error;
 
+/// Result with [PiramidError] as the error.
 pub type Result<T> = std::result::Result<T, PiramidError>;
 
 /// What kind of failure occurred, independent of any wire protocol.
@@ -28,42 +31,55 @@ pub enum ErrorKind {
     Internal,
 }
 
+/// Any error the engine returns.
 #[derive(Error, Debug)]
 pub enum PiramidError {
+    /// A storage failure.
     #[error("Storage error: {0}")]
     Storage(#[from] super::storage::StorageError),
 
+    /// An index failure.
     #[error("Index error: {0}")]
     Index(#[from] super::index::IndexError),
 
+    /// A request-level failure with its own classification.
     #[error("Server error: {0}")]
     Server(#[from] super::server::ServerError),
 
+    /// An embedding provider failure.
     #[error("Embedding error: {0}")]
     Embedding(#[from] super::embedding::EmbeddingError),
 
+    /// A distance kernel or strategy failure.
     #[error("Compute error: {0}")]
     Compute(#[from] piramid_hardware::compute::ComputeError),
+    /// A GPU device failure.
     #[error("Device error: {0}")]
     Gpu(#[from] piramid_hardware::gpu::GpuError),
 
+    /// A filesystem or other I/O failure.
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
+    /// A bincode encode failure.
     #[error("Encoding error: {0}")]
     Encode(#[from] bincode::error::EncodeError),
 
+    /// A bincode decode failure.
     #[error("Decoding error: {0}")]
     Decode(#[from] bincode::error::DecodeError),
 
+    /// A JSON encode or decode failure.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// Any other failure, described by its message.
     #[error("{0}")]
     Other(String),
 }
 
 impl PiramidError {
+    /// A [PiramidError::Other] carrying msg.
     pub fn other<S: Into<String>>(msg: S) -> Self {
         Self::Other(msg.into())
     }
