@@ -20,10 +20,3 @@ pub struct CollectionConfig {
     pub limits: LimitsConfig,
     pub cache: CacheConfig,
 }
-
-impl CollectionConfig {
-    pub fn with_int8_quantization(mut self) -> Self {
-        self.quantization = QuantizationConfig::int8();
-        self
-    }
-}

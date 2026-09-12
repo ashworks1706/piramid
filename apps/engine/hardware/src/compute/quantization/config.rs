@@ -88,12 +88,6 @@ impl QuantizationConfig {
             preserve_raw_vectors: true,
         }
     }
-
-    /// Switch the stage to quantizing results after search.
-    pub fn post_search(mut self) -> Self {
-        self.stage = QuantizationStage::ResultPostSearch;
-        self
-    }
 }
 
 fn default_preserve_raw_vectors() -> bool {

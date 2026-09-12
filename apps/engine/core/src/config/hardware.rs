@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 
 /// Which hardware to run on, and at what memory class.
 ///
-/// The memory-class profiles are presets. They name a machine size, and index family,
-/// quantization, cache budget and search depth follow from it. An explicit setting wins over
-/// what a profile would choose.
+/// The memory-class profiles name a machine size, which sets the host memory budget when
+/// memory_budget_bytes is unset. No budget is enforced yet, so validation refuses them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum HardwareProfile {
-    /// CPU, until GPU detection exists.
+    /// The CPU. Nothing detects a GPU yet.
     #[default]
     Auto,
     /// Never touch the GPU.

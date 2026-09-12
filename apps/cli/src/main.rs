@@ -176,7 +176,8 @@ fn start_server_inline(config: piramid::config::Config) -> std::io::Result<()> {
     let rt = Runtime::new().map_err(std::io::Error::other)?;
     rt.block_on(async {
         let _observability =
-            observability::install(config.startup.logging, &config.startup.telemetry);
+            observability::install(config.startup.logging, &config.startup.telemetry)
+                .map_err(std::io::Error::other)?;
         init_thread_pool(&config.startup);
         if config.startup.logging.config {
             tracing::info!(

@@ -12,7 +12,7 @@
 #             reload, and for each request that reads the value on its way through.
 #
 # Any key can also be set from the environment, spelled from its path:
-# `runtime.cache.max_bytes` is PIRAMID__RUNTIME__CACHE__MAX_BYTES. Values parse as YAML, so
+# `runtime.wal.max_log_size` is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so
 # `8`, `true` and `null` mean what they do here. Environment wins over the file.
 #
 # An unknown or misspelled key is a startup error, never a silent default. So is a setting that
@@ -54,9 +54,11 @@ startup:
     span_events: false
 
   hardware:
-    # auto | cpu-only | gpu. This is the only GPU switch; `gpu` fails to start without a device.
+    # auto | cpu-only | gpu | 8gb | 16gb | 32gb. `gpu` requires runtime.execution: gpu. The memory
+    # classes set a host memory budget, which is not enforced yet, so they are refused.
     profile: auto
-    # host memory the process will use; null is unbounded
+    # host memory the process will use; null is unbounded. Not enforced yet, so setting it is an
+    # error.
     memory_budget_bytes: null
     # device memory to claim; null is unbounded
     gpu_memory_budget_bytes: null
@@ -146,18 +148,19 @@ runtime:
     # fan a batch of queries across the worker threads
     parallel: true
 
+  # Nothing applies quantization yet: every key here must stay at its default.
   quantization:
-    # none | int8 | binary. int4 and float16 are not implemented.
+    # none | int8 | pq | int4 | float16
     level: none
     # keep only the compressed form in memory
     disk_only: false
-    # disabled | storage | index | query-pre-search | result-post-search
+    # disabled | storage | index | query_pre_search | result_post_search
     stage: disabled
     # keep full-precision vectors alongside the codes, for reranking
     preserve_raw_vectors: true
 
   memory:
-    # byte ceiling per collection; null is unbounded
+    # byte ceiling per collection. Not enforced yet, so setting one is an error.
     max_memory_per_collection: null
     # size the data file is first mapped at; it grows from here
     initial_mmap_size: 1048576
@@ -199,13 +202,14 @@ runtime:
       ttl_seconds: null
       # none | oldest | lru. Only `oldest` is implemented.
       eviction: oldest
+      # Byte budget for cached metadata across every loaded collection; past it the largest
+      # metadata caches are cleared. null is unbounded.
+      max_bytes: null
     embeddings:
       # Identical text is not sent to a provider twice. Size this above your corpus, or the tail
       # is re-embedded on every pass.
       enabled: true
       entries: 10000
-    # Byte budget for resident vectors, shared across every loaded collection.
-    max_bytes: null
 
   # auto | scalar | simd | parallel | gpu. The one place a distance strategy is chosen.
   # `gpu` is rejected at startup until GPU distance kernels exist.

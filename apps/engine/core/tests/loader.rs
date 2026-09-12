@@ -47,10 +47,10 @@ fn no_file_and_no_overrides_is_the_defaults() {
 fn an_env_override_reaches_a_nested_key() {
     let cfg = with_env(
         None,
-        &[("PIRAMID__RUNTIME__CACHE__MAX_BYTES", "4096")],
+        &[("PIRAMID__RUNTIME__CACHE__METADATA__MAX_BYTES", "4096")],
         || loader::load().unwrap(),
     );
-    assert_eq!(cfg.runtime.cache.max_bytes, Some(4096));
+    assert_eq!(cfg.runtime.cache.metadata.max_bytes, Some(4096));
 }
 
 #[test]

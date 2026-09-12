@@ -11,10 +11,6 @@ pub struct CacheConfig {
     pub vectors: VectorCacheConfig,
     pub metadata: MetadataCacheConfig,
     pub embeddings: EmbeddingCacheConfig,
-
-    /// Byte budget for resident vectors, shared across every loaded collection. None is
-    /// unbounded.
-    pub max_bytes: Option<u64>,
 }
 
 impl CacheConfig {
@@ -93,6 +89,10 @@ pub struct MetadataCacheConfig {
 
     /// What to drop when the ceiling is reached.
     pub eviction: EvictionPolicy,
+
+    /// Byte budget for cached metadata across every loaded collection. Past it, the largest
+    /// metadata caches are cleared. None is unbounded.
+    pub max_bytes: Option<u64>,
 }
 
 impl Default for MetadataCacheConfig {
@@ -102,6 +102,7 @@ impl Default for MetadataCacheConfig {
             entries: 10_000,
             ttl_seconds: None,
             eviction: EvictionPolicy::Oldest,
+            max_bytes: None,
         }
     }
 }

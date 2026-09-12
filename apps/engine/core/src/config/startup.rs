@@ -58,11 +58,34 @@ impl StartupConfig {
                 self.bind
             ));
         }
+        if self.telemetry.otlp.is_some() {
+            if !cfg!(feature = "otel") {
+                return Err(
+                    "startup.telemetry.otlp: this build lacks the otel feature, so spans cannot \
+                     be exported"
+                        .into(),
+                );
+            }
+            if !self.logging.enabled {
+                return Err(
+                    "startup.telemetry.otlp: spans are exported through the tracing subscriber, \
+                     which startup.logging.enabled: false does not install"
+                        .into(),
+                );
+            }
+        }
         if self.threads == Some(0) {
             return Err("startup.threads: must be > 0, or null for one per core".into());
         }
         if let Some(embedding) = &self.embedding {
             embedding.validate()?;
+        }
+        if self.hardware.memory_budget().is_some() {
+            return Err(
+                "startup.hardware: a host memory budget, from memory_budget_bytes or a memory-class \
+                 profile, is not enforced yet"
+                    .into(),
+            );
         }
         self.hardware.gpu.validate()?;
         self.hardware.vram.validate()?;

@@ -75,21 +75,6 @@ runtime:
 }
 
 #[test]
-fn quantization_can_express_pre_and_post_search_experiments() {
-    let mut cfg = Config::default();
-    cfg.runtime.quantization.level = QuantizationLevel::Int8;
-    cfg.runtime.quantization.stage = QuantizationStage::QueryPreSearch;
-    cfg.validate().unwrap();
-
-    cfg.runtime.quantization = cfg.runtime.quantization.post_search();
-    assert_eq!(
-        cfg.runtime.quantization.stage,
-        QuantizationStage::ResultPostSearch
-    );
-    cfg.validate().unwrap();
-}
-
-#[test]
 fn auto_index_thresholds_are_configurable() {
     let cfg = IndexConfig::Auto {
         metric: Metric::Cosine,
@@ -114,9 +99,23 @@ fn auto_index_thresholds_are_configurable() {
 fn unimplemented_settings_are_rejected_rather_than_ignored() {
     let mut cfg = Config::default();
 
-    cfg.runtime.quantization.level = QuantizationLevel::Int4;
+    for level in [
+        QuantizationLevel::Int8,
+        QuantizationLevel::Pq { subquantizers: 4 },
+        QuantizationLevel::Int4,
+        QuantizationLevel::Float16,
+    ] {
+        cfg.runtime.quantization.level = level;
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("runtime.quantization"), "{err}");
+    }
+
+    let mut cfg = Config::default();
+    cfg.runtime.quantization.stage = QuantizationStage::Index;
     assert!(cfg.validate().is_err());
-    cfg.runtime.quantization.level = QuantizationLevel::Float16;
+
+    let mut cfg = Config::default();
+    cfg.runtime.memory.max_memory_per_collection = Some(1024);
     assert!(cfg.validate().is_err());
 
     let mut cfg = Config::default();
@@ -197,6 +196,44 @@ fn a_memory_class_profile_supplies_the_memory_budget() {
     cfg.startup.hardware.memory_budget_bytes = None;
     cfg.startup.hardware.profile = HardwareProfile::CpuOnly;
     assert_eq!(cfg.startup.hardware.memory_budget(), None);
+}
+
+// Nothing enforces a host memory budget yet, so one is refused rather than accepted and ignored.
+#[test]
+fn a_memory_budget_is_refused_until_it_is_enforced() {
+    use piramid_core::config::HardwareProfile;
+
+    for profile in [
+        HardwareProfile::Memory8Gb,
+        HardwareProfile::Memory16Gb,
+        HardwareProfile::Memory32Gb,
+    ] {
+        let mut cfg = Config::default();
+        cfg.startup.hardware.profile = profile;
+        assert!(cfg.validate().unwrap_err().contains("not enforced"));
+    }
+    let mut cfg = Config::default();
+    cfg.startup.hardware.memory_budget_bytes = Some(1 << 30);
+    assert!(cfg.validate().unwrap_err().contains("not enforced"));
+}
+
+// The gpu profile is a promise to run on a device, so it cannot pair with a CPU strategy.
+#[test]
+fn the_gpu_profile_refuses_a_cpu_execution_mode() {
+    use piramid_core::config::HardwareProfile;
+    use piramid_hardware::compute::ExecutionMode;
+
+    for execution in [
+        ExecutionMode::Auto,
+        ExecutionMode::Scalar,
+        ExecutionMode::Simd,
+        ExecutionMode::Parallel,
+    ] {
+        let mut cfg = Config::default();
+        cfg.startup.hardware.profile = HardwareProfile::Gpu;
+        cfg.runtime.execution = execution;
+        assert!(cfg.validate().is_err(), "{execution:?}");
+    }
 }
 
 #[test]

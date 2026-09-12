@@ -54,58 +54,6 @@ fn basic_store_and_retrieve() {
 }
 
 #[test]
-fn configured_quantization_does_not_quantize_stored_documents() {
-    ensure_test_dir();
-    let test_path = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/test_raw_storage_with_quantization.db"
-    );
-    let files = vec![
-        test_path,
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.offsets.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.wal.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.manifest.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.wal.meta"
-        ),
-    ];
-    cleanup_test_files(&files);
-
-    let config = CollectionConfig::default().with_int8_quantization();
-    let vector = vec![0.1, 0.2, 0.3, 0.4];
-    let id = {
-        let mut storage =
-            Collection::open_with_options(test_path, CollectionOpenOptions { config }).unwrap();
-        let id = storage
-            .insert(Document::new(vector.clone(), "raw vector".into()))
-            .unwrap();
-
-        assert_eq!(storage.get(&id).unwrap().unwrap().vector(), vector);
-        id
-    };
-
-    let storage = Collection::open(test_path).unwrap();
-    assert_eq!(storage.get(&id).unwrap().unwrap().vector(), vector);
-
-    drop(storage);
-    cleanup_test_files(&files);
-}
-
-#[test]
 fn persistence_roundtrip() {
     ensure_test_dir();
     let test_path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_persist.db");

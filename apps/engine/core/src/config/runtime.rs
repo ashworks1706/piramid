@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     CacheConfig, ExecutionMode, IndexConfig, InferenceConfig, LimitsConfig, MemoryConfig,
-    QuantizationConfig, QuantizationLevel, QuantizationStage, SearchConfig, WalConfig,
+    QuantizationConfig, SearchConfig, WalConfig,
 };
 
 /// Everything that can change without a restart.
@@ -34,16 +34,15 @@ impl RuntimeConfig {
         if let Err(error) = piramid_hardware::compute::strategies::for_mode(self.execution) {
             return Err(format!("runtime.execution: {error}"));
         }
-        if matches!(
-            self.quantization.level,
-            QuantizationLevel::Int4 | QuantizationLevel::Float16
-        ) {
-            return Err("runtime.quantization.level: not implemented yet".into());
+        if self.quantization != QuantizationConfig::default() {
+            return Err(
+                "runtime.quantization: nothing applies quantization yet, so every key must stay \
+                 at its default"
+                    .into(),
+            );
         }
-        if self.quantization.level == QuantizationLevel::None
-            && self.quantization.stage != QuantizationStage::Disabled
-        {
-            return Err("runtime.quantization.stage: must be disabled when level is none".into());
+        if self.memory.max_memory_per_collection.is_some() {
+            return Err("runtime.memory.max_memory_per_collection: not enforced yet".into());
         }
         if self.wal.enabled && self.wal.checkpoint_frequency == 0 {
             return Err("runtime.wal.checkpoint_frequency: must be > 0 when the WAL is on".into());

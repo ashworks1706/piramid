@@ -93,7 +93,7 @@ async fn cache_budget_evicts_metadata_without_dropping_vectors() {
         "/collection_manager_cache_budget"
     );
     let mut app_config = Config::default();
-    app_config.runtime.cache.max_bytes = Some(1);
+    app_config.runtime.cache.metadata.max_bytes = Some(1);
     let state = test_state_with_config(data_dir, app_config);
     let collection = state
         .collection_manager

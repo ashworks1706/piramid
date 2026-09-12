@@ -78,7 +78,7 @@ impl AppState {
 
     /// Milliseconds above which a query is logged at warn level.
     pub fn slow_query_ms(&self) -> u128 {
-        u128::from(self.booted_with.logging.slow_query_ms())
+        u128::from(self.booted_with.logging.slow_query_ms)
     }
 
     pub fn disk_min_free_bytes(&self) -> Option<u64> {
@@ -189,47 +189,42 @@ impl AppState {
         )
     }
 
+    /// Clear the largest metadata caches until cached metadata fits runtime.cache.metadata.max_bytes.
     pub fn enforce_cache_budget(&self) {
-        let cache_config = self.current_config().runtime.cache;
-        if !cache_config.metadata.enabled {
-            return;
-        }
-
-        let Some(max_bytes) = cache_config.max_bytes else {
+        let metadata_config = self.current_config().runtime.cache.metadata;
+        let Some(max_bytes) = metadata_config.max_bytes else {
             return;
         };
         let mut total: u64 = 0;
         let mut collections = Vec::new();
         for (name, storage) in self.collection_manager.loaded_collections() {
-            let guard = storage.read();
-            let cache_bytes = guard.cache_usage_bytes();
-            let metadata_bytes = guard.metadata_cache_usage_bytes();
-            total = total.saturating_add(cache_bytes as u64);
-            collections.push((name, storage.clone(), metadata_bytes));
+            let metadata_bytes = storage.read().metadata_cache_usage_bytes() as u64;
+            total = total.saturating_add(metadata_bytes);
+            collections.push((name, storage, metadata_bytes));
         }
-
-        if total > max_bytes {
-            tracing::warn!(
-                total_cache_bytes = total,
-                max_bytes = max_bytes,
-                "cache_budget_exceeded_evicting_metadata"
-            );
-
-            collections.sort_by_key(|collection| std::cmp::Reverse(collection.2));
-            for (name, storage, metadata_bytes) in collections {
-                if total <= max_bytes || metadata_bytes == 0 {
-                    break;
-                }
-                let mut guard = storage.write();
-                let freed = guard.clear_metadata_cache() as u64;
-                total = total.saturating_sub(freed);
-                tracing::debug!(
-                    collection = name,
-                    freed_cache_bytes = freed,
-                    total_cache_bytes = total,
-                    "metadata_cache_evicted"
-                );
+        if total <= max_bytes {
+            return;
+        }
+        tracing::warn!(
+            target: "piramid::cache",
+            metadata_bytes = total,
+            max_bytes = max_bytes,
+            "metadata_cache_budget_exceeded"
+        );
+        collections.sort_by_key(|collection| std::cmp::Reverse(collection.2));
+        for (name, storage, metadata_bytes) in collections {
+            if total <= max_bytes || metadata_bytes == 0 {
+                break;
             }
+            let freed = storage.write().clear_metadata_cache() as u64;
+            total = total.saturating_sub(freed);
+            tracing::debug!(
+                target: "piramid::cache",
+                collection = name,
+                freed_bytes = freed,
+                metadata_bytes = total,
+                "metadata_cache_cleared"
+            );
         }
     }
 }

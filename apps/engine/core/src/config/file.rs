@@ -22,11 +22,12 @@ impl Config {
         self.runtime.validate()?;
         self.console.validate()?;
         if self.startup.hardware.gpu_enabled()
-            && matches!(self.runtime.execution, super::ExecutionMode::Scalar)
+            && self.runtime.execution != super::ExecutionMode::Gpu
         {
-            return Err(
-                "startup.hardware.gpu_enabled conflicts with runtime.execution 'scalar'".into(),
-            );
+            return Err(format!(
+                "startup.hardware.profile: gpu requires runtime.execution: gpu, not '{}'",
+                self.runtime.execution.as_str()
+            ));
         }
         Ok(())
     }

@@ -9,8 +9,8 @@ use yaml_serde::{Mapping, Value};
 use crate::config::Config;
 use crate::error::ConfigError;
 
-/// Prefix and separator for overrides. PIRAMID__RUNTIME__CACHE__MAX_BYTES=1024 sets
-/// runtime.cache.max_bytes.
+/// Prefix and separator for overrides. PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE=1024 sets
+/// runtime.wal.max_log_size.
 const ENV_PREFIX: &str = "PIRAMID__";
 const ENV_SEPARATOR: &str = "__";
 

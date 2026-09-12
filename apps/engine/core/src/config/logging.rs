@@ -33,19 +33,14 @@ pub struct LoggingConfig {
     /// Emit structured JSON lines instead of human-readable console output.
     #[serde(default)]
     pub json: bool,
-    #[serde(default)]
-    pub slow_query_ms: Option<u64>,
+    /// Threshold in milliseconds above which a query is logged at warn.
+    #[serde(default = "default_slow_query_ms")]
+    pub slow_query_ms: u64,
 }
 
-impl LoggingConfig {
-    /// Threshold above which a query is logged at warn.
-    pub fn slow_query_ms(&self) -> u64 {
-        self.slow_query_ms.unwrap_or(DEFAULT_SLOW_QUERY_MS)
-    }
+fn default_slow_query_ms() -> u64 {
+    500
 }
-
-/// The serde default, and the value used for an explicit null.
-const DEFAULT_SLOW_QUERY_MS: u64 = 500;
 
 impl Default for LoggingConfig {
     fn default() -> Self {
@@ -59,7 +54,7 @@ impl Default for LoggingConfig {
             inference: true,
             http: true,
             json: false,
-            slow_query_ms: Some(DEFAULT_SLOW_QUERY_MS),
+            slow_query_ms: default_slow_query_ms(),
         }
     }
 }

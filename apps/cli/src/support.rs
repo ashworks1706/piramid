@@ -113,7 +113,7 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
     let _ = writeln!(
         out,
         "slow_query_ms       {}",
-        config.startup.logging.slow_query_ms()
+        config.startup.logging.slow_query_ms
     );
     let _ = writeln!(
         out,
