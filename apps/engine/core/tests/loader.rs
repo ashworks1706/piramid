@@ -47,10 +47,10 @@ fn no_file_and_no_overrides_is_the_defaults() {
 fn an_env_override_reaches_a_nested_key() {
     let cfg = with_env(
         None,
-        &[("PIRAMID__RUNTIME__CACHE__MAX_BYTES", "4096")],
+        &[("PIRAMID__RUNTIME__CACHE__METADATA__MAX_BYTES", "4096")],
         || loader::load().unwrap(),
     );
-    assert_eq!(cfg.runtime.cache.max_bytes, Some(4096));
+    assert_eq!(cfg.runtime.cache.metadata.max_bytes, Some(4096));
 }
 
 #[test]
@@ -113,4 +113,84 @@ fn the_api_key_comes_from_the_environment_only() {
         cfg.startup.embedding.unwrap().api_key.as_deref(),
         Some("sk-test")
     );
+}
+
+#[test]
+fn the_server_api_key_comes_from_the_environment() {
+    let cfg = with_env(None, &[("PIRAMID_API_KEY", "a-long-server-key")], || {
+        loader::load().unwrap()
+    });
+    let key = cfg.startup.http.auth.api_key.unwrap();
+    assert_eq!(key.expose(), "a-long-server-key");
+    assert!(!format!("{key:?}").contains("a-long-server-key"));
+}
+
+#[test]
+fn the_server_api_key_cannot_be_written_in_the_file() {
+    let file = "startup:\n  http:\n    auth:\n      api_key: in-a-file\n";
+    let error = with_env(Some(file), &[], || loader::load().unwrap_err());
+    assert!(error.to_string().contains("api_key"), "{error}");
+}
+
+#[test]
+fn an_empty_server_api_key_is_an_error() {
+    let error = with_env(None, &[("PIRAMID_API_KEY", "")], || {
+        loader::load().unwrap_err()
+    });
+    assert!(error.to_string().contains("PIRAMID_API_KEY"), "{error}");
+}
+
+#[test]
+fn opting_out_of_authentication_while_setting_a_key_is_an_error() {
+    let file = "startup:\n  http:\n    auth:\n      allow_unauthenticated: true\n";
+    let error = with_env(
+        Some(file),
+        &[("PIRAMID_API_KEY", "a-long-server-key")],
+        || loader::load().unwrap_err(),
+    );
+    assert!(
+        error.to_string().contains("allow_unauthenticated"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_zero_rate_limit_is_an_error() {
+    let error = with_env(
+        None,
+        &[("PIRAMID__STARTUP__HTTP__RATE_LIMIT__BURST", "0")],
+        || loader::load().unwrap_err(),
+    );
+    assert!(error.to_string().contains("burst"), "{error}");
+}
+
+// A source names its file directly and applies its port and data directory over the file.
+#[test]
+fn a_source_applies_its_values_over_its_file() {
+    let path = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("loader_source.yaml");
+    std::fs::write(
+        &path,
+        "startup:\n  bind: 127.0.0.1:6333\n  data_dir: ./from-file\n",
+    )
+    .unwrap();
+    let cfg = with_env(None, &[], || {
+        loader::load_from(&loader::ConfigSource {
+            file: Some(path.clone()),
+            port: Some(7000),
+            data_dir: Some("/tmp/elsewhere".to_string()),
+        })
+        .unwrap()
+    });
+    assert_eq!(cfg.startup.bind, "127.0.0.1:7000");
+    assert_eq!(cfg.startup.data_dir, "/tmp/elsewhere");
+
+    let untouched = with_env(None, &[], || {
+        loader::load_from(&loader::ConfigSource {
+            file: Some(path.clone()),
+            ..loader::ConfigSource::default()
+        })
+        .unwrap()
+    });
+    assert_eq!(untouched.startup.bind, "127.0.0.1:6333");
+    assert_eq!(untouched.startup.data_dir, "./from-file");
 }

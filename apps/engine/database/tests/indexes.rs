@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! The flat, HNSW and IVF indexes and index selection.
 
 use piramid_database::index::{
     FlatConfig, FlatIndex, HashMapVectorReader, HnswConfig, HnswIndex, IndexConfig, IndexKind,
@@ -342,4 +343,120 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
         let expected: Vec<Uuid> = pairwise.into_iter().take(k).map(|(id, _)| id).collect();
         assert_eq!(from_slab, expected, "{metric:?}: batch vs pairwise");
     }
+}
+
+/// An IVF search probing every partition scores each posting list in blocks, and ranks a
+/// collection exactly as scoring one pair at a time would.
+#[test]
+fn ivf_probing_every_partition_ranks_as_pairwise_scoring_does() {
+    use piramid_core::config::{CacheConfig, SearchConfig};
+    use piramid_database::CacheManager;
+    use piramid_hardware::compute::strategies::for_mode;
+    use piramid_hardware::compute::Metric;
+
+    // Two partitions over 2500 rows puts at least one posting list across a block boundary.
+    let dim = 16;
+    let rows: Vec<(Uuid, Vec<f32>)> = (0..2500)
+        .map(|i| {
+            let f = i as f32;
+            (
+                Uuid::new_v4(),
+                (0..dim).map(|d| ((f + d as f32) % 7.0) - 3.0).collect(),
+            )
+        })
+        .collect();
+    let query: Vec<f32> = (0..dim).map(|d| (d as f32 % 5.0) - 2.0).collect();
+    let empty_meta: HashMap<Uuid, piramid_core::metadata::Metadata> = HashMap::new();
+    let map: HashMap<Uuid, Vec<f32>> = rows.iter().cloned().collect();
+    let scattered = HashMapVectorReader::new(&map);
+    let mut cache = CacheManager::new(CacheConfig::default());
+    for (id, vector) in &rows {
+        cache.put_vector(*id, vector).unwrap();
+    }
+
+    for metric in [Metric::Cosine, Metric::Euclidean, Metric::DotProduct] {
+        let config = IvfConfig {
+            num_clusters: 2,
+            metric,
+            ..IvfConfig::default()
+        };
+        let mut index = IvfIndex::new(config);
+        index.build_clusters(&scattered).unwrap();
+
+        let probe_all = SearchConfig {
+            nprobe: Some(config.num_clusters),
+            ..SearchConfig::default()
+        };
+        let k = 10;
+        let from_scattered = index
+            .search(IndexSearchRequest::new(
+                &query,
+                k,
+                &scattered,
+                probe_all,
+                &empty_meta,
+            ))
+            .unwrap();
+        let from_cache = index
+            .search(IndexSearchRequest::new(
+                &query,
+                k,
+                &cache,
+                probe_all,
+                &empty_meta,
+            ))
+            .unwrap();
+
+        let kernels = for_mode(config.mode).unwrap();
+        let mut pairwise: Vec<(Uuid, f32)> = rows
+            .iter()
+            .map(|(id, vector)| (*id, metric.calculate(&query, vector, kernels)))
+            .collect();
+        pairwise.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let expected: Vec<(Uuid, f32)> = pairwise.into_iter().take(k).collect();
+
+        assert_eq!(from_scattered.len(), k);
+        assert_eq!(from_scattered, from_cache, "{metric:?}: scattered vs cache");
+        // Rows repeat with period 7, so ties are compared by score rather than by id.
+        let score_of = |id: &Uuid| metric.calculate(&query, &map[id], kernels);
+        for (got, (_, want)) in from_scattered.iter().zip(&expected) {
+            assert!(
+                (score_of(got) - want).abs() < 1e-5,
+                "{metric:?}: batch ranking diverges from pairwise"
+            );
+        }
+    }
+}
+
+/// A posting list naming a vector the reader does not hold fails the search.
+#[test]
+fn ivf_search_fails_when_a_posting_list_names_a_missing_vector() {
+    let config = IvfConfig {
+        num_clusters: 2,
+        ..IvfConfig::default()
+    };
+    let mut index = IvfIndex::new(config);
+    let mut vectors = HashMap::new();
+    let kept = Uuid::new_v4();
+    let dropped = Uuid::new_v4();
+    vectors.insert(kept, vec![1.0, 0.0, 0.0]);
+    vectors.insert(dropped, vec![0.0, 1.0, 0.0]);
+    index
+        .build_clusters(&HashMapVectorReader::new(&vectors))
+        .unwrap();
+
+    vectors.remove(&dropped);
+    let reader = HashMapVectorReader::new(&vectors);
+    let empty_meta: HashMap<Uuid, piramid_core::metadata::Metadata> = HashMap::new();
+    let result = index.search(IndexSearchRequest::new(
+        &[1.0, 0.0, 0.0],
+        2,
+        &reader,
+        piramid_core::config::SearchConfig {
+            nprobe: Some(2),
+            ..piramid_core::config::SearchConfig::default()
+        },
+        &empty_meta,
+    ));
+    assert!(result.is_err());
 }

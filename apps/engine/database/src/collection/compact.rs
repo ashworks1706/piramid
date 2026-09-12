@@ -12,7 +12,7 @@ use piramid_core::Document;
 
 /// Compact a collection by rewriting live documents into a fresh file and rebuilding indexes.
 pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
-    let original_entries = collection.index.len();
+    let bytes_before = collection.record_store.used_bytes();
     let docs: Vec<Document> = collection.get_all()?;
 
     let temp_path = SidecarManager::at(&collection.path).compact_path();
@@ -64,13 +64,19 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     collection.checkpoint.wal.rotate()?;
 
     Ok(CompactStats {
-        original_entries,
-        compacted_entries: collection.index.len(),
+        documents: collection.index.len(),
+        bytes_before,
+        bytes_after: collection.record_store.used_bytes(),
     })
 }
 
+/// What a compaction kept and reclaimed.
 #[derive(Debug)]
 pub struct CompactStats {
-    pub original_entries: usize,
-    pub compacted_entries: usize,
+    /// Live documents rewritten into the new record file.
+    pub documents: usize,
+    /// Bytes of records in the data file before compaction, dead entries included.
+    pub bytes_before: u64,
+    /// Bytes of records in the data file after compaction.
+    pub bytes_after: u64,
 }

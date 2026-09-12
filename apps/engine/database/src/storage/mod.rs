@@ -1,5 +1,6 @@
 //! Persistence primitives: records, WAL, sidecars, mmap, and vector layout.
 
+pub mod codec;
 pub mod manifest;
 pub mod record_store;
 pub mod sidecars;

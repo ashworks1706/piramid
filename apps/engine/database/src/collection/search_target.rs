@@ -1,6 +1,7 @@
 //! Collection-level search: adapts collection configuration into a search target.
 
 use crate::search::{SearchParams, SearchTarget};
+use piramid_core::error::IndexError;
 use piramid_core::Hit;
 use piramid_core::Result;
 use piramid_hardware::compute::{ExecutionMode, Metric};
@@ -16,6 +17,16 @@ pub(crate) fn target(collection: &Collection) -> SearchTarget<'_> {
     }
 }
 
+/// Refuse a metric other than the one the index of the collection orders candidates by.
+pub(crate) fn ensure_indexed_metric(collection: &Collection, requested: Metric) -> Result<()> {
+    let indexed = collection.vector_index().metric();
+    if indexed == requested {
+        Ok(())
+    } else {
+        Err(IndexError::MetricMismatch { indexed, requested }.into())
+    }
+}
+
 /// Search one query, filling unset params from the configuration of the collection.
 pub fn search(
     collection: &Collection,
@@ -24,6 +35,7 @@ pub fn search(
     metric: Metric,
     mut params: SearchParams,
 ) -> Result<Vec<Hit>> {
+    ensure_indexed_metric(collection, metric)?;
     if matches!(params.mode, ExecutionMode::Auto) {
         params.mode = collection.config().execution;
     }
@@ -43,6 +55,7 @@ pub fn search_batch(
     metric: Metric,
     params: SearchParams,
 ) -> Result<Vec<Vec<Hit>>> {
+    ensure_indexed_metric(collection, metric)?;
     let mut params = params;
     if matches!(params.mode, ExecutionMode::Auto) {
         params.mode = collection.config().execution;

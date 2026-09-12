@@ -12,6 +12,7 @@ use piramid_hardware::compute::{strategies::for_mode, DistanceKernels};
 /// Centroids at least this similar between iterations count as settled.
 const CONVERGENCE_SIMILARITY: f32 = 0.99;
 
+/// Vectors partitioned by nearest centroid, searched by probing the closest partitions.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IvfIndex {
     config: IvfConfig,
@@ -24,6 +25,7 @@ pub struct IvfIndex {
 }
 
 impl IvfIndex {
+    /// An empty index with no trained centroids.
     pub fn new(config: IvfConfig) -> Self {
         IvfIndex {
             config,
@@ -200,16 +202,17 @@ impl VectorIndex for IvfIndex {
         let mut candidates: Vec<(Uuid, f32)> = Vec::new();
 
         for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
-            if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
-                for id in vector_ids {
-                    let vector = vectors.get(id).ok_or_else(|| {
-                        IndexError::SearchFailed(format!(
-                            "IVF index references missing vector {id}"
-                        ))
-                    })?;
-                    let score = self.config.metric.calculate(query, vector, kernels);
-                    candidates.push((*id, score));
-                }
+            let vector_ids = self.inverted_lists.get(*cluster_id).ok_or_else(|| {
+                IndexError::SearchFailed(format!(
+                    "IVF centroid {cluster_id} has no inverted list; the index needs a rebuild"
+                ))
+            })?;
+            for id in vector_ids {
+                let vector = vectors.get(id).ok_or_else(|| {
+                    IndexError::SearchFailed(format!("IVF index references missing vector {id}"))
+                })?;
+                let score = self.config.metric.calculate(query, vector, kernels);
+                candidates.push((*id, score));
             }
         }
 
@@ -247,12 +250,21 @@ impl VectorIndex for IvfIndex {
                 num_clusters: self.centroids.len(),
                 vectors_per_cluster,
                 centroids_computed: !self.centroids.is_empty(),
+                num_probes: self.config.num_probes,
             },
         }
     }
 
     fn index_type(&self) -> IndexType {
         IndexType::Ivf
+    }
+
+    fn metric(&self) -> piramid_hardware::compute::Metric {
+        self.config.metric
+    }
+
+    fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
+        self.config.mode = mode;
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

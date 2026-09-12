@@ -1,16 +1,22 @@
 //! Draws the console: status bar, unit list, log pane, command line, help.
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style, Stylize};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::symbols::Marker;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Sparkline,
+    Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState,
+    Paragraph, Sparkline,
 };
 use ratatui::Frame;
 
 use crate::console::app::{App, UnitState};
+use crate::console::client::HostMetrics;
 use crate::console::collections::Row;
-use crate::console::types::{Focus, Group, Mode, Probe, Profile, Status, Stream, View};
+use crate::console::device::Run;
+use crate::console::types::{
+    ConfigState, Focus, Group, Mode, Probe, Profile, Status, Stream, View,
+};
 
 const ACCENT: Color = Color::Cyan;
 const DIM: Color = Color::DarkGray;
@@ -34,6 +40,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         }
         View::Collections => collections(frame, app, body),
         View::Config => config(frame, app, body),
+        View::Device => device(frame, app, body),
     }
     bottom_line(frame, app, bottom);
     if app.help {
@@ -229,14 +236,198 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
     lines
 }
 
+/// Host processor and memory of the watched server, graphed over the refresh history.
+fn device(frame: &mut Frame, app: &App, area: Rect) {
+    let [about, cpu_area, memory_area] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(6),
+        Constraint::Min(6),
+    ])
+    .areas(area);
+    let view = &app.device;
+    let latest = view.latest();
+
+    let where_line = if view.local() {
+        Line::from(vec![
+            Span::styled("  this machine  ", Style::default().fg(Color::Green)),
+            Span::styled(
+                "h hands the terminal to htop, n to nvtop, quitting either returns here",
+                Style::default().fg(DIM),
+            ),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  remote server  ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                "htop and nvtop would show this machine, not the server, so h and n are off",
+                Style::default().fg(DIM),
+            ),
+        ])
+    };
+    frame.render_widget(
+        Paragraph::new(where_line).block(pane(&format!(" device {} ", app.base_url()), true)),
+        about,
+    );
+
+    let now = std::time::Instant::now();
+    let window = view
+        .samples
+        .front()
+        .map_or(0.0, |first| {
+            now.saturating_duration_since(first.at).as_secs_f64()
+        })
+        .max(60.0);
+
+    let host_cpu = view.series(now, |h| h.cpu_percent.map(f64::from));
+    let process_cpu = view.series(now, |h| h.process_cpu_percent.map(f64::from));
+    let cpu_title = format!(
+        " cpu  host {}  piramid {} ",
+        percent(latest.and_then(|h| h.cpu_percent)),
+        percent(latest.and_then(|h| h.process_cpu_percent))
+    );
+    frame.render_widget(
+        chart(
+            &cpu_title,
+            [
+                Series {
+                    runs: &host_cpu,
+                    color: ACCENT,
+                    name: "host",
+                },
+                Series {
+                    runs: &process_cpu,
+                    color: Color::Magenta,
+                    name: "piramid",
+                },
+            ],
+            window,
+            100.0,
+            ["0%".to_owned(), "50%".to_owned(), "100%".to_owned()],
+        ),
+        cpu_area,
+    );
+
+    let used = view.series(now, |h| h.memory_used_bytes.map(|b| b as f64));
+    let resident = view.series(now, |h| h.process_resident_bytes.map(|b| b as f64));
+    let ceiling = memory_ceiling(view.samples.iter().filter_map(|s| s.host.as_ref()));
+    let memory_title = format!(
+        " memory  host {} of {}  piramid {} ",
+        latest
+            .and_then(|h| h.memory_used_bytes)
+            .map_or_else(unmeasured, bytes),
+        latest
+            .and_then(|h| h.memory_total_bytes)
+            .map_or_else(unmeasured, bytes),
+        latest
+            .and_then(|h| h.process_resident_bytes)
+            .map_or_else(unmeasured, bytes)
+    );
+    frame.render_widget(
+        chart(
+            &memory_title,
+            [
+                Series {
+                    runs: &used,
+                    color: ACCENT,
+                    name: "host",
+                },
+                Series {
+                    runs: &resident,
+                    color: Color::Magenta,
+                    name: "piramid",
+                },
+            ],
+            window,
+            ceiling,
+            [
+                "0".to_owned(),
+                bytes((ceiling / 2.0) as u64),
+                bytes(ceiling as u64),
+            ],
+        ),
+        memory_area,
+    );
+}
+
+/// One named reading drawn as a set of runs.
+struct Series<'a> {
+    runs: &'a [Run],
+    color: Color,
+    name: &'static str,
+}
+
+/// A line chart of two series over the last window seconds, from zero to ceiling.
+fn chart<'a>(
+    title: &str,
+    series: [Series<'a>; 2],
+    window: f64,
+    ceiling: f64,
+    y_labels: [String; 3],
+) -> Chart<'a> {
+    let datasets: Vec<Dataset<'a>> = series
+        .into_iter()
+        .flat_map(|Series { runs, color, name }| {
+            runs.iter().enumerate().map(move |(index, run)| {
+                let dataset = Dataset::default()
+                    .marker(Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .style(Style::default().fg(color))
+                    .data(run);
+                if index == 0 {
+                    dataset.name(name)
+                } else {
+                    dataset
+                }
+            })
+        })
+        .collect();
+    Chart::new(datasets)
+        .block(pane(title, false))
+        .x_axis(
+            Axis::default()
+                .style(Style::default().fg(DIM))
+                .bounds([-window, 0.0])
+                .labels([format!("-{}", duration(window as u64)), "now".to_owned()]),
+        )
+        .y_axis(
+            Axis::default()
+                .style(Style::default().fg(DIM))
+                .bounds([0.0, ceiling])
+                .labels(y_labels),
+        )
+}
+
+/// The top of the memory axis: the largest total the server reported, else the largest reading.
+fn memory_ceiling<'a>(readings: impl Iterator<Item = &'a HostMetrics>) -> f64 {
+    let top = readings
+        .filter_map(|host| {
+            host.memory_total_bytes
+                .or(host.memory_used_bytes)
+                .or(host.process_resident_bytes)
+        })
+        .max()
+        .unwrap_or(0);
+    (top as f64).max(1.0)
+}
+
+/// A percentage reading, or a phrase saying it was not measured.
+fn percent(value: Option<f32>) -> String {
+    value.map_or_else(unmeasured, |v| format!("{v:.1}%"))
+}
+
+/// The phrase shown in place of a reading the server did not report.
+fn unmeasured() -> String {
+    "not reported".to_owned()
+}
+
 /// The configuration as the server resolved it.
 fn config(frame: &mut Frame, app: &App, area: Rect) {
     let body = match &app.config {
-        Some(Ok(text)) if text.is_empty() => Paragraph::new(Line::from(Span::styled(
+        Some(ConfigState::Loading) => Paragraph::new(Line::from(Span::styled(
             "  reading the configuration from the server",
             Style::default().fg(DIM),
         ))),
-        Some(Ok(text)) => {
+        Some(ConfigState::Loaded(text)) => {
             let rows = usize::from(area.height.saturating_sub(2)).max(1);
             let lines: Vec<Line> = text
                 .lines()
@@ -257,7 +448,7 @@ fn config(frame: &mut Frame, app: &App, area: Rect) {
                 .collect();
             Paragraph::new(lines)
         }
-        Some(Err(why)) => Paragraph::new(Line::from(Span::styled(
+        Some(ConfigState::Failed(why)) => Paragraph::new(Line::from(Span::styled(
             format!("  {why}"),
             Style::default().fg(Color::Red),
         ))),
@@ -306,10 +497,28 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
     if app.profile == Profile::Developer {
         spans.push(probe_span("web", &app.health.web));
     }
-    if let Probe::Degraded(why) = &app.health.ready {
+    // The notice comes first so a long line of probe reasons cannot push it off the bar.
+    if let Some(notice) = &app.notice {
+        spans.push(Span::styled(
+            format!("  {notice}"),
+            Style::default().fg(Color::Magenta),
+        ));
+    }
+    for (name, probe) in probe_problems(app) {
+        let (why, color) = match probe {
+            Probe::Degraded(why) => (why, Color::Yellow),
+            Probe::Down(why) => (why, Color::Red),
+            Probe::Unknown | Probe::Up => continue,
+        };
+        spans.push(Span::styled(
+            format!("  {name}: {}", truncate(why, 80)),
+            Style::default().fg(color),
+        ));
+    }
+    if let Some(why) = &app.probes_stopped {
         spans.push(Span::styled(
             format!("  {why}"),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(Color::Red),
         ));
     }
     // A failed refresh is the whole story on a console that only watches a server, so it goes in
@@ -320,13 +529,22 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Red),
         ));
     }
-    if let Some(notice) = &app.notice {
-        spans.push(Span::styled(
-            format!("  {notice}"),
-            Style::default().fg(Color::Magenta),
-        ));
-    }
     frame.render_widget(Line::from(spans), area);
+}
+
+/// The probes whose reason goes on the status bar, by name.
+///
+/// Readiness is left out while liveness is down or degraded.
+fn probe_problems(app: &App) -> Vec<(&'static str, &Probe)> {
+    let mut problems = Vec::new();
+    match &app.health.live {
+        Probe::Down(_) | Probe::Degraded(_) => problems.push(("server", &app.health.live)),
+        Probe::Unknown | Probe::Up => problems.push(("ready", &app.health.ready)),
+    }
+    if app.profile == Profile::Developer {
+        problems.push(("web", &app.health.web));
+    }
+    problems
 }
 
 fn probe_span(name: &str, probe: &Probe) -> Span<'static> {
@@ -334,7 +552,7 @@ fn probe_span(name: &str, probe: &Probe) -> Span<'static> {
         Probe::Unknown => ("·", DIM),
         Probe::Up => ("●", Color::Green),
         Probe::Degraded(_) => ("◐", Color::Yellow),
-        Probe::Down => ("○", Color::Red),
+        Probe::Down(_) => ("○", Color::Red),
     };
     Span::styled(format!(" {glyph} {name}"), Style::default().fg(color))
 }
@@ -518,6 +736,7 @@ fn bottom_line(frame: &mut Frame, app: &App, area: Rect) {
                     ("R", "refresh"),
                 ],
                 View::Config => &[("j/k", "scroll"), ("g", "top"), ("R", "reload")],
+                View::Device => &[("h", "htop"), ("n", "nvtop"), ("R", "refresh")],
             };
             for (key, what) in hints.iter().copied().chain([("?", "help"), ("q", "quit")]) {
                 spans.push(Span::styled(
@@ -575,6 +794,11 @@ fn help(frame: &mut Frame, app: &App, area: Rect) {
             ("j / k", "scroll"),
             ("g", "top"),
             ("R", "read the configuration again"),
+        ],
+        View::Device => &[
+            ("h", "hand the terminal to htop on this machine"),
+            ("n", "hand the terminal to nvtop on this machine"),
+            ("R", "refresh now instead of waiting for the interval"),
         ],
     };
 

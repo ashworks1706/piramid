@@ -5,7 +5,8 @@ The machine: the math, the device that runs it, and the encodings it runs over.
 `compute` owns what a distance means and which strategy computes it. `gpu` owns talking to a
 device — contexts, buffers, streams, module loading — and nothing about what the math means; vendor
 SDK types like `cudarc` appear only in `gpu/backends/`. `quantization` owns the encodings
-both score over, beside them rather than under either.
+both score over, beside them rather than under either. `host` reads processor and memory use of
+the machine and of this process; a reading the platform cannot take is absent, never zero.
 
 A leaf crate: it depends on nothing else in the workspace, so kernels can be benchmarked on their
 own and `model` can get a `Device` without reaching through retrieval math.

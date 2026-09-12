@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Metadata filter matching.
 
 use {
     piramid_core::metadata::metadata, piramid_core::metadata::Filter,

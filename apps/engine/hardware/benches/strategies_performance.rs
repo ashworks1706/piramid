@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "benchmark setup")]
+#![allow(
+    missing_docs,
+    reason = "criterion_group generates the undocumented harness functions"
+)]
 
 //! Scalar vs SIMD vs parallel, at the dimensions embeddings actually come in.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
@@ -59,8 +63,7 @@ fn pairwise(c: &mut Criterion) {
     group.finish();
 }
 
-/// One query against many candidates in a single batch call. On CPU the default implementation
-/// loops over the pairwise kernel, so the gap between this and pairwise is dispatch overhead.
+/// One query against many candidates in a single batch call.
 fn batch(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch/cosine");
     // Held at a mid-range embedding size so the axis being varied is candidate count alone.

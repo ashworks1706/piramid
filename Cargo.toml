@@ -29,8 +29,8 @@ piramid-serving = { path = "apps/engine/serving", version = "0.2.0" }
 # serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_yaml = "0.9"
-bincode = "1.3"
+yaml_serde = "0.10"
+bincode = { version = "2.0", default-features = false, features = ["std", "serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # errors
@@ -42,6 +42,11 @@ axum = "0.8"
 tower-http = { version = "0.6", features = ["cors", "limit", "set-header", "trace"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 async-trait = "0.1"
+# per-client rate limiting as a tower layer
+tower_governor = { version = "0.8", default-features = false, features = ["axum"] }
+governor = "0.10"
+# constant-time comparison of API keys
+subtle = "2.6"
 
 # observability
 tracing = "0.1"
@@ -55,15 +60,16 @@ opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "trace"] }
 # cli
 clap = { version = "4.5", features = ["derive", "env"] }
 # `piramid top` and the developer console
-ratatui = "0.29"
+ratatui = "0.30"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 futures = "0.3"
 
 # compute
 wide = "0.7"
 rayon = "1.10"
 num_cpus = "1.16"
+sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 rand = "0.8.6"
 
 # storage + concurrency
@@ -79,8 +85,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [workspace.lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"
-# compute, gpu and inference deny this themselves. ~860 undocumented items elsewhere.
-missing_docs = "allow"
+missing_docs = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Metadata values and the map helper.
 
 use std::f64::consts::PI;
 use {piramid_core::metadata::metadata, piramid_core::metadata::MetadataValue};

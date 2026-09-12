@@ -5,15 +5,22 @@ use std::collections::HashMap;
 /// A value in a document's metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MetadataValue {
+    /// UTF-8 text.
     String(String),
+    /// Signed 64-bit integer.
     Integer(i64),
+    /// 64-bit float.
     Float(f64),
+    /// True or false.
     Boolean(bool),
+    /// Ordered list of values.
     Array(Vec<MetadataValue>),
+    /// Explicit absence of a value.
     Null,
 }
 
 impl MetadataValue {
+    /// The text, if this is a string.
     pub fn as_string(&self) -> Option<&str> {
         match self {
             MetadataValue::String(s) => Some(s),
@@ -21,6 +28,7 @@ impl MetadataValue {
         }
     }
 
+    /// The integer, if this is an integer.
     pub fn as_integer(&self) -> Option<i64> {
         match self {
             MetadataValue::Integer(i) => Some(*i),
@@ -28,6 +36,7 @@ impl MetadataValue {
         }
     }
 
+    /// The float, if this is a float. An integer returns None.
     pub fn as_float(&self) -> Option<f64> {
         match self {
             MetadataValue::Float(f) => Some(*f),
@@ -35,6 +44,7 @@ impl MetadataValue {
         }
     }
 
+    /// The boolean, if this is a boolean.
     pub fn as_boolean(&self) -> Option<bool> {
         match self {
             MetadataValue::Boolean(b) => Some(*b),
@@ -86,6 +96,7 @@ impl From<bool> for MetadataValue {
     }
 }
 
+/// A document's metadata: field name to value.
 pub type Metadata = HashMap<String, MetadataValue>;
 
 /// Build a [Metadata] map from an array of pairs.

@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Latency tracking.
 
 use piramid_core::stats::latency::LatencyTracker;
 use std::time::Duration;

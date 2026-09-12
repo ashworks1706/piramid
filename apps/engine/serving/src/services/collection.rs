@@ -1,3 +1,5 @@
+//! Collection lifecycle, index maintenance and duplicate-scan operations.
+
 use std::time::Instant;
 
 use crate::services::api::*;
@@ -5,7 +7,6 @@ use crate::state::{RebuildJobStatus, RebuildState, SharedState};
 use piramid_core::error::{Result, ServerError};
 use piramid_core::stats::record_lock_read;
 use piramid_core::validation;
-use piramid_database::storage::SidecarManager;
 
 fn collection_info(name: String, collection: &piramid_database::Collection) -> CollectionInfo {
     let meta = collection.manifest();
@@ -18,6 +19,7 @@ fn collection_info(name: String, collection: &piramid_database::Collection) -> C
     }
 }
 
+/// Summaries of the collections loaded in memory.
 pub fn list_collections(state: &SharedState) -> Result<CollectionsResponse> {
     state.ensure_available()?;
 
@@ -35,6 +37,7 @@ pub fn list_collections(state: &SharedState) -> Result<CollectionsResponse> {
     Ok(CollectionsResponse { collections })
 }
 
+/// Create a collection, or open it if it already exists, and return its summary.
 pub fn create_collection(
     state: &SharedState,
     req: CreateCollectionRequest,
@@ -52,6 +55,7 @@ pub fn create_collection(
     Ok(collection_info(req.name, &collection_guard))
 }
 
+/// Summary of one existing collection, opening it from disk if needed.
 pub fn get_collection(state: &SharedState, collection: String) -> Result<CollectionInfo> {
     state.ensure_available()?;
 
@@ -65,29 +69,18 @@ pub fn get_collection(state: &SharedState, collection: String) -> Result<Collect
     Ok(collection_info(collection, &collection_guard))
 }
 
+/// Unload a collection and remove its record file and sidecars.
 pub fn delete_collection(
     state: &SharedState,
     collection: String,
 ) -> Result<DeleteCollectionResponse> {
+    // Deleting frees disk space, so it is allowed while low disk space has writes disabled.
     state.ensure_available()?;
-
-    let existed = state.collection_manager.remove(&collection).is_some();
-    if existed {
-        let base = format!("{}/{}.db", state.data_dir, collection);
-        let mut paths = vec![base.clone()];
-        paths.extend(SidecarManager::at(&base).all_paths());
-        for path in paths {
-            match std::fs::remove_file(&path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error.into()),
-            }
-        }
-    }
-
-    Ok(DeleteCollectionResponse { deleted: existed })
+    state.collection_manager.delete(&collection)?;
+    Ok(DeleteCollectionResponse { deleted: true })
 }
 
+/// Number of documents stored in one existing collection.
 pub fn collection_count(state: &SharedState, collection: String) -> Result<CountResponse> {
     state.ensure_available()?;
 
@@ -104,6 +97,7 @@ pub fn collection_count(state: &SharedState, collection: String) -> Result<Count
     })
 }
 
+/// Statistics of the vector index of one existing collection.
 pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStatsResponse> {
     state.ensure_available()?;
 
@@ -132,20 +126,31 @@ pub fn index_stats(state: &SharedState, collection: String) -> Result<IndexStats
     fields(collection = %collection)
 )]
 pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildIndexResponse> {
-    state.ensure_available()?;
+    state.ensure_write_allowed()?;
 
     let collection_handle = state.get_existing_collection(&collection)?;
     let started_at = piramid_core::clock::unix_secs();
-    state.rebuild_jobs.insert(
-        collection.clone(),
-        RebuildJobStatus {
-            status: RebuildState::Running,
-            started_at,
-            finished_at: None,
-            error: None,
-            elapsed_ms: None,
-        },
-    );
+    let running = RebuildJobStatus {
+        status: RebuildState::Running,
+        started_at,
+        finished_at: None,
+        error: None,
+        elapsed_ms: None,
+    };
+    match state.rebuild_jobs.entry(collection.clone()) {
+        dashmap::mapref::entry::Entry::Occupied(mut job) => {
+            if matches!(job.get().status, RebuildState::Running) {
+                return Err(ServerError::AlreadyExists(format!(
+                    "a rebuild of '{collection}' is already running"
+                ))
+                .into());
+            }
+            job.insert(running);
+        }
+        dashmap::mapref::entry::Entry::Vacant(slot) => {
+            slot.insert(running);
+        }
+    }
 
     let collection_name = collection.clone();
     let collection_handle_clone = collection_handle.clone();
@@ -199,6 +204,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
     })
 }
 
+/// Pairs of near-identical documents in one existing collection.
 pub fn find_duplicates(
     state: &SharedState,
     collection: String,
@@ -214,7 +220,10 @@ pub fn find_duplicates(
         lock_start,
     );
 
-    let metric = crate::services::convert::parse_metric(req.metric)?;
+    let metric = crate::services::convert::parse_metric(
+        req.metric,
+        collection_guard.vector_index().metric(),
+    )?;
     let hits = piramid_database::find_duplicates(
         &collection_guard,
         metric,
@@ -255,8 +264,9 @@ pub fn compact_collection(state: &SharedState, collection: String) -> Result<Reb
     tracing::info!(
         target: "piramid::indexing",
         collection=%collection,
-        original=stats.original_entries,
-        compacted=stats.compacted_entries,
+        documents = stats.documents,
+        bytes_before = stats.bytes_before,
+        bytes_after = stats.bytes_after,
         elapsed_ms=duration.as_millis(),
         "collection_compacted"
     );
@@ -267,6 +277,7 @@ pub fn compact_collection(state: &SharedState, collection: String) -> Result<Reb
     })
 }
 
+/// State of the most recent index rebuild started for a collection.
 pub fn rebuild_index_status(
     state: &SharedState,
     collection: String,

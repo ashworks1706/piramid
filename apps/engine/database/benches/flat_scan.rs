@@ -1,4 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "benchmark setup")]
+#![allow(
+    missing_docs,
+    reason = "criterion_group generates the undocumented harness functions"
+)]
 //! The flat scan on its two paths to the kernel.
 //!
 //! slab hands the store's own buffer to one batch call. gathered copies each block of rows into

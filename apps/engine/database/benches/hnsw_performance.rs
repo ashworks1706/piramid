@@ -1,4 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "benchmark setup")]
+#![allow(
+    missing_docs,
+    reason = "criterion_group generates the undocumented harness functions"
+)]
+//! HNSW insert and search.
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;

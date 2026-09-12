@@ -22,6 +22,7 @@ pub fn find_duplicates(
     ef_override: Option<usize>,
     nprobe_override: Option<usize>,
 ) -> Result<Vec<DuplicatePair>> {
+    super::search_target::ensure_indexed_metric(collection, metric)?;
     let mut search = collection.config.search;
     if let Some(ef) = ef_override {
         search.ef = Some(ef);

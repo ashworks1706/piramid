@@ -2,19 +2,21 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::ExitStatus;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::console::client::Client;
-use crate::console::collections::{Collections, Pending};
+use crate::console::collections::{self, Collections, Pending, Reply};
+use crate::console::device::{DeviceView, Monitor};
 use crate::console::logs::{LogBuffer, LogWriter};
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
 use crate::console::types::{
-    Command, Event, Focus, Health, Kind, LogLine, Mode, Profile, ServiceState, Status, Stream,
-    Unit, View,
+    Command, ConfigState, Event, Focus, Health, Kind, LogLine, Mode, Profile, ServiceState, Status,
+    Stream, Unit, View,
 };
 use crate::console::units;
 
@@ -46,8 +48,12 @@ pub struct App {
     pub view: View,
     /// Collections on a running server.
     pub collections: Collections,
-    /// The resolved configuration, once it has been fetched.
-    pub config: Option<Result<String, String>>,
+    /// Host readings of the server over time.
+    pub device: DeviceView,
+    /// A process monitor confirmed as runnable, for the loop to hand the terminal to.
+    pub handoff: Option<(Monitor, PathBuf)>,
+    /// The resolved configuration. None until it is requested, and again after a reload key.
+    pub config: Option<ConfigState>,
     /// First visible line of the config view.
     pub config_scroll: usize,
     settings: Settings,
@@ -69,6 +75,8 @@ pub struct App {
     pub search_hit: Option<usize>,
     /// Latest probes.
     pub health: Health,
+    /// Why the probes are not running, if they are not.
+    pub probes_stopped: Option<String>,
     /// The help overlay is open.
     pub help: bool,
     /// One-line notice in the status bar.
@@ -96,8 +104,12 @@ impl App {
             .into_iter()
             .map(|unit| UnitState::new(unit, settings.log_lines))
             .collect();
-        let client = Client::new(&settings.base_url, std::time::Duration::from_secs(15))
-            .map_err(std::io::Error::other)?;
+        let client = Client::new(
+            &settings.base_url,
+            std::time::Duration::from_secs(15),
+            settings.api_key.clone(),
+        )
+        .map_err(std::io::Error::other)?;
         Ok(Self {
             profile,
             view: profile
@@ -106,6 +118,8 @@ impl App {
                 .copied()
                 .unwrap_or(View::Collections),
             collections: Collections::new(client, settings.refresh),
+            device: DeviceView::new(&settings.base_url),
+            handoff: None,
             config: None,
             config_scroll: 0,
             runner: Runner::new(root, tx.clone()),
@@ -119,6 +133,7 @@ impl App {
             search: String::new(),
             search_hit: None,
             health: Health::default(),
+            probes_stopped: None,
             help: false,
             notice: None,
             log_rows: 20,
@@ -164,9 +179,23 @@ impl App {
             Event::Services(Ok(states)) => self.services(&states),
             Event::Services(Err(why)) => self.notice = Some(why),
             Event::Health(health) => self.health = *health,
-            Event::Snapshot(result) => self.collections.snapshot(*result),
-            Event::Acted(outcome) => self.collections.acted(outcome),
-            Event::Config(result) => self.config = Some(result),
+            Event::ProbesStopped(why) => self.probes_stopped = Some(why),
+            Event::Snapshot(result) => {
+                let host = result
+                    .as_ref()
+                    .as_ref()
+                    .ok()
+                    .and_then(|snapshot| snapshot.metrics.host);
+                self.device.record(Instant::now(), host);
+                self.collections.snapshot(*result);
+            }
+            Event::Acted(Ok(note) | Err(note)) => self.notice = Some(note),
+            Event::Config(result) => {
+                self.config = Some(match result {
+                    Ok(text) => ConfigState::Loaded(text),
+                    Err(why) => ConfigState::Failed(why),
+                });
+            }
             Event::InputLost(why) => {
                 self.notice = Some(format!("terminal input ended ({why}); quitting"));
                 self.should_quit = true;
@@ -272,9 +301,51 @@ impl App {
         }
         match self.view {
             View::Units => self.key_units(key),
-            View::Collections => self.pending_action = self.collections.key(key),
+            View::Collections => match self.collections.key(key) {
+                Reply::Nothing => {}
+                Reply::Notice(note) => self.notice = Some(note),
+                Reply::Dispatch(pending) => {
+                    self.notice = Some(format!("{} running", collections::verb(&pending)));
+                    self.pending_action = Some(pending);
+                }
+            },
             View::Config => self.key_config(key),
+            View::Device => self.key_device(key),
         }
+    }
+
+    fn key_device(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('h') => self.request_handoff(Monitor::Htop),
+            KeyCode::Char('n') => self.request_handoff(Monitor::Nvtop),
+            KeyCode::Char('R') => self.collections.last_refresh = None,
+            KeyCode::Esc => self.notice = None,
+            _ => {}
+        }
+    }
+
+    /// Queues a handoff to monitor, or says why there cannot be one.
+    fn request_handoff(&mut self, monitor: Monitor) {
+        match self
+            .device
+            .handoff(monitor, std::env::var_os("PATH").as_deref())
+        {
+            Ok(program) => self.handoff = Some((monitor, program)),
+            Err(why) => self.notice = Some(why),
+        }
+    }
+
+    /// Records how a handoff to monitor ended, once the terminal is back.
+    pub fn handed_back(&mut self, monitor: Monitor, outcome: std::io::Result<ExitStatus>) {
+        let program = monitor.program();
+        self.notice = match outcome {
+            Ok(status) if status.success() => None,
+            Ok(status) => Some(match status.code() {
+                Some(code) => format!("{program} exited with {code}"),
+                None => format!("{program} was killed by a signal"),
+            }),
+            Err(e) => Some(format!("{program}: {e}")),
+        };
     }
 
     /// Switches to the view a digit names, if this profile offers one there.

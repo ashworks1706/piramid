@@ -1,3 +1,5 @@
+//! Inserting, upserting and deleting documents.
+
 use std::time::Instant;
 
 use uuid::Uuid;
@@ -112,6 +114,7 @@ pub fn insert_vector(
     })
 }
 
+/// Delete one document of an existing collection, by UUID.
 pub fn delete_vector(
     state: &SharedState,
     collection: String,
@@ -134,10 +137,6 @@ pub fn delete_vector(
     let start = Instant::now();
     let deleted = collection_guard.delete(&uuid)?;
     let duration = start.elapsed();
-
-    if let Some(tracker) = state.collection_manager.tracker(&collection) {
-        tracker.record_delete(duration);
-    }
 
     Ok(DeleteResponse {
         deleted_count: usize::from(deleted),
@@ -180,10 +179,6 @@ pub fn delete_vectors(
     let start = Instant::now();
     let deleted_count = collection_guard.delete_batch(&uuids)?;
     let duration = start.elapsed();
-
-    if let Some(tracker) = state.collection_manager.tracker(&collection) {
-        tracker.record_delete(duration);
-    }
 
     Ok(DeleteResponse {
         deleted_count,
@@ -234,12 +229,8 @@ pub fn upsert_vector(
     collection_guard.upsert(entry)?;
     let duration = start.elapsed();
 
-    if let Some(tracker) = state.collection_manager.tracker(&collection) {
-        if exists {
-            tracker.record_update(duration);
-        } else {
-            tracker.record_insert(duration);
-        }
+    if let (Some(tracker), false) = (state.collection_manager.tracker(&collection), exists) {
+        tracker.record_insert(duration);
     }
     state.enforce_cache_budget();
     tracing::info!(

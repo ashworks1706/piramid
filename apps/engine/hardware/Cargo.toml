@@ -14,7 +14,7 @@ thiserror.workspace = true
 serde.workspace = true
 wide.workspace = true
 rayon.workspace = true
-num_cpus.workspace = true
+sysinfo.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

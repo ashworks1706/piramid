@@ -1,7 +1,9 @@
 //! Opening a collection: load sidecars, replay the WAL, rebuild what is missing.
 
+/// Settings a collection is opened with.
 #[derive(Clone, Default)]
 pub struct CollectionOpenOptions {
+    /// Configuration the collection runs with.
     pub config: piramid_core::config::CollectionConfig,
 }
 
@@ -23,7 +25,7 @@ use crate::storage::manifest::CollectionMetadata;
 use crate::storage::record_store::RecordStore;
 use crate::storage::wal::{Wal, WalEntry};
 use crate::storage::SidecarManager;
-use piramid_core::error::{Result, StorageError};
+use piramid_core::error::{IndexError, Result, StorageError};
 use piramid_core::Document;
 
 /// Open the collection at path, replaying the WAL and rebuilding sidecars as needed.
@@ -51,14 +53,28 @@ pub fn open(path: &str, options: CollectionOpenOptions) -> Result<Collection> {
             meta.update_vector_count(index.len());
             meta
         }
-        None => CollectionMetadata::new(collection_name),
+        None => CollectionMetadata::new(collection_name.clone()),
     };
 
     let loaded_vector_index = load_vector_index(path)?;
     let vector_index_missing = loaded_vector_index.is_none();
-    let mut vector_index = loaded_vector_index.unwrap_or_else(|| {
-        crate::index::create_index(&config.index, config.execution, index.len())
-    });
+    let mut vector_index = match loaded_vector_index {
+        Some(mut loaded) => {
+            let configured = config.index.metric();
+            if loaded.metric() != configured {
+                return Err(IndexError::InvalidConfig(format!(
+                    "collection '{collection_name}' is indexed by {} but the configuration asks \
+                     for {}; rebuild the collection to change its metric",
+                    loaded.metric().as_str(),
+                    configured.as_str()
+                ))
+                .into());
+            }
+            loaded.set_execution(config.execution);
+            loaded
+        }
+        None => crate::index::create_index(&config.index, config.execution, index.len()),
+    };
 
     let min_seq = if config.wal.enabled {
         sidecars.load_wal_meta()?

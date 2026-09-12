@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Collections: storage, persistence, WAL, checkpoints and index growth.
 
 use std::fs;
 use {
@@ -48,58 +49,6 @@ fn basic_store_and_retrieve() {
     let retrieved = storage.get(&id).unwrap().unwrap();
     assert_eq!(retrieved.text, "test");
     assert_eq!(retrieved.vector(), vec![1.0, 2.0, 3.0]);
-
-    drop(storage);
-    cleanup_test_files(&files);
-}
-
-#[test]
-fn configured_quantization_does_not_quantize_stored_documents() {
-    ensure_test_dir();
-    let test_path = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/test_raw_storage_with_quantization.db"
-    );
-    let files = vec![
-        test_path,
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.offsets.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.wal.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.manifest.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_raw_storage_with_quantization.db.wal.meta"
-        ),
-    ];
-    cleanup_test_files(&files);
-
-    let config = CollectionConfig::default().with_int8_quantization();
-    let vector = vec![0.1, 0.2, 0.3, 0.4];
-    let id = {
-        let mut storage =
-            Collection::open_with_options(test_path, CollectionOpenOptions { config }).unwrap();
-        let id = storage
-            .insert(Document::new(vector.clone(), "raw vector".into()))
-            .unwrap();
-
-        assert_eq!(storage.get(&id).unwrap().unwrap().vector(), vector);
-        id
-    };
-
-    let storage = Collection::open(test_path).unwrap();
-    assert_eq!(storage.get(&id).unwrap().unwrap().vector(), vector);
 
     drop(storage);
     cleanup_test_files(&files);
@@ -589,8 +538,11 @@ fn compaction_rewrites_live_records_through_temp_record_store() {
 
     let stats = compact(&mut storage).unwrap();
 
-    assert_eq!(stats.original_entries, 1);
-    assert_eq!(stats.compacted_entries, 1);
+    assert_eq!(stats.documents, 1);
+    assert!(
+        stats.bytes_after < stats.bytes_before,
+        "the deleted record is reclaimed: {stats:?}"
+    );
     assert_eq!(storage.count(), 1);
     assert_eq!(storage.get(&keep_id).unwrap().unwrap().text, "keep");
     assert!(storage.get(&delete_id).unwrap().is_none());
@@ -721,4 +673,202 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
 
     drop(storage);
     cleanup_test_files(&files);
+}
+
+// The interval trigger counts from the open, so it fires before any other trigger has run a
+// first checkpoint.
+#[test]
+fn the_checkpoint_interval_runs_from_the_open() {
+    use piramid_core::config::CollectionConfig;
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_wal_interval.db");
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+
+    let mut config = CollectionConfig::default();
+    config.wal.checkpoint_frequency = 10_000;
+    config.wal.checkpoint_interval_secs = Some(0);
+
+    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
+    assert_eq!(collection.checkpoint.last_checkpoint(), None);
+    collection
+        .insert(Document::new(vec![1.0, 0.0], "doc".to_string()))
+        .unwrap();
+    assert!(collection.checkpoint.last_checkpoint().is_some());
+}
+
+// An auto index moves to the family its thresholds name as the collection grows, and every
+// vector stays searchable across each move.
+#[test]
+fn an_auto_index_grows_into_the_family_its_size_picks() {
+    use piramid_core::config::{AutoIndexConfig, CollectionConfig, IndexConfig};
+    use piramid_database::index::IndexType;
+    use piramid_database::search::SearchParams;
+    use piramid_hardware::compute::Metric;
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_auto_index_growth.db");
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    let config = CollectionConfig {
+        index: IndexConfig::Auto {
+            metric: Metric::Cosine,
+            auto: AutoIndexConfig {
+                flat_max_vectors: 5,
+                ivf_max_vectors: 10,
+                ..AutoIndexConfig::default()
+            },
+        },
+        ..CollectionConfig::default()
+    };
+    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
+    let vector = |i: usize| {
+        let angle = i as f32 * 0.4;
+        vec![angle.cos(), angle.sin(), 0.1 * i as f32]
+    };
+
+    let mut families = Vec::new();
+    for i in 0..12 {
+        collection
+            .insert(Document::new(vector(i), format!("doc{i}")))
+            .unwrap();
+        families.push(collection.vector_index().index_type());
+    }
+    assert_eq!(families[3], IndexType::Flat);
+    assert_eq!(
+        families[4],
+        IndexType::Ivf,
+        "the fifth vector reaches flat_max_vectors"
+    );
+    assert_eq!(
+        families[9],
+        IndexType::Hnsw,
+        "the tenth vector reaches ivf_max_vectors"
+    );
+
+    let hits = collection
+        .search(&vector(7), 1, Metric::Cosine, SearchParams::default())
+        .unwrap();
+    assert_eq!(hits[0].document.text, "doc7");
+}
+
+// Pages come in id order, so walking them visits every document exactly once.
+#[test]
+fn pages_walk_every_document_once_in_id_order() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_pages.db");
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    let mut collection = Collection::open(path).unwrap();
+    let mut ids: Vec<uuid::Uuid> = (0..23)
+        .map(|i| {
+            collection
+                .insert(Document::new(vec![i as f32, 1.0], format!("doc{i}")))
+                .unwrap()
+        })
+        .collect();
+    ids.sort_unstable();
+
+    let mut walked = Vec::new();
+    let mut offset = 0;
+    loop {
+        let page = collection.page(offset, 5).unwrap();
+        if page.is_empty() {
+            break;
+        }
+        offset += page.len();
+        walked.extend(page.into_iter().map(|document| document.id));
+    }
+    assert_eq!(walked, ids);
+}
+
+fn fresh_path(name: &str) -> String {
+    let path = format!("{}/{name}", env!("CARGO_TARGET_TMPDIR"));
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    path
+}
+
+// A write refused for its width or a limit leaves nothing behind: not stored, not counted, and not
+// in the log to be replayed on the next open.
+#[test]
+fn a_refused_write_leaves_nothing_behind() {
+    let path = fresh_path("test_refused_write.db");
+    {
+        let mut collection = Collection::open(&path).unwrap();
+        collection
+            .insert(Document::new(vec![1.0, 0.0], "two wide".to_string()))
+            .unwrap();
+
+        let wrong = Document::new(vec![1.0, 0.0, 0.0], "three wide".to_string());
+        let wrong_id = wrong.id;
+        assert!(collection.insert(wrong).is_err());
+        assert!(collection.get(&wrong_id).unwrap().is_none());
+
+        let batch = vec![
+            Document::new(vec![0.0, 1.0], "fits".to_string()),
+            Document::new(vec![0.0, 1.0, 2.0], "does not".to_string()),
+        ];
+        let fits = batch[0].id;
+        assert!(collection.insert_batch(batch).is_err());
+        assert!(
+            collection.get(&fits).unwrap().is_none(),
+            "a refused batch stores none of it"
+        );
+        assert_eq!(collection.count(), 1);
+    }
+    let reopened = Collection::open(&path).unwrap();
+    assert_eq!(reopened.count(), 1, "nothing refused was replayed");
+}
+
+// Replacing a stored document at the vector limit does not add a vector, so it is allowed.
+#[test]
+fn replacing_a_document_at_the_vector_limit_is_allowed() {
+    use piramid_core::config::CollectionConfig;
+
+    let path = fresh_path("test_replace_at_limit.db");
+    let mut config = CollectionConfig::default();
+    config.limits.max_vectors = Some(1);
+    let mut collection = Collection::open_with_options(&path, config.into()).unwrap();
+    let mut document = Document::new(vec![1.0, 0.0], "first".to_string());
+    let id = collection.insert(document.clone()).unwrap();
+    assert!(collection
+        .insert(Document::new(vec![0.0, 1.0], "second".to_string()))
+        .is_err());
+
+    document.text = "replaced".to_string();
+    collection.upsert(document).unwrap();
+    assert!(collection.update_vector(&id, vec![0.5, 0.5]).unwrap());
+    assert_eq!(collection.get(&id).unwrap().unwrap().text, "replaced");
+    assert_eq!(collection.count(), 1);
 }

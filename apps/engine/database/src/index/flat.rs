@@ -14,6 +14,7 @@ use piramid_hardware::compute::{DistanceKernels, Metric};
 /// The gather buffer holds CHUNK * dim floats and lives for one query.
 const CHUNK: usize = 1024;
 
+/// An index that scores the query against every vector it holds.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FlatIndex {
     config: FlatConfig,
@@ -21,6 +22,7 @@ pub struct FlatIndex {
 }
 
 impl FlatIndex {
+    /// An empty index with the given metric and execution mode.
     pub fn new(config: FlatConfig) -> Self {
         FlatIndex {
             config,
@@ -138,6 +140,14 @@ impl VectorIndex for FlatIndex {
 
     fn index_type(&self) -> IndexType {
         IndexType::Flat
+    }
+
+    fn metric(&self) -> piramid_hardware::compute::Metric {
+        self.config.metric
+    }
+
+    fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
+        self.config.mode = mode;
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

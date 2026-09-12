@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
+/// An [Embedder] that retries recoverable failures with doubling delays.
 pub struct RetryEmbedder {
     inner: Arc<dyn Embedder>,
     max_retries: u32,
@@ -13,10 +14,14 @@ pub struct RetryEmbedder {
     max_delay_ms: u64,
 }
 
+/// Retry count and backoff bounds for a [RetryEmbedder].
 #[derive(Clone, Debug)]
 pub struct RetryConfig {
+    /// Attempts after the first before the error is returned.
     pub max_retries: u32,
+    /// Delay before the first retry, in milliseconds.
     pub initial_delay_ms: u64,
+    /// Ceiling the doubling delay stops at, in milliseconds.
     pub max_delay_ms: u64,
 }
 
@@ -31,10 +36,12 @@ impl Default for RetryConfig {
 }
 
 impl RetryEmbedder {
+    /// Wrap embedder with the default retry settings.
     pub fn new(embedder: Arc<dyn Embedder>) -> Self {
         Self::with_options(embedder, RetryConfig::default())
     }
 
+    /// Wrap embedder with the given retry settings.
     pub fn with_options(embedder: Arc<dyn Embedder>, options: RetryConfig) -> Self {
         Self {
             inner: embedder,

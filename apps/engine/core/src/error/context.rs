@@ -1,8 +1,12 @@
+//! Attaching a message to a failure.
+
 use super::Result;
 
 /// Attach a message to an error or to a None.
 pub trait ErrorContext<T> {
+    /// Convert to a [Result], prefixing any error with msg.
     fn context<S: Into<String>>(self, msg: S) -> Result<T>;
+    /// Convert to a [Result], prefixing any error with the message f returns.
     fn with_context<F, S>(self, f: F) -> Result<T>
     where
         F: FnOnce() -> S,

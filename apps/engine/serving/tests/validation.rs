@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Request validation and conversion.
 
 use piramid_core::validation;
 
@@ -45,9 +46,26 @@ fn validate_batch_sizes() {
 
 #[test]
 fn invalid_metric_is_rejected() {
-    assert!(piramid_serving::services::convert::parse_metric(Some("cosinee".into())).is_err());
-    assert!(piramid_serving::services::convert::parse_metric(Some("dot_product".into())).is_err());
-    assert!(piramid_serving::services::convert::parse_metric(Some("dot".into())).is_ok());
+    use piramid_hardware::compute::Metric;
+    use piramid_serving::services::convert::parse_metric;
+
+    assert!(parse_metric(Some("cosinee".into()), Metric::Cosine).is_err());
+    assert!(parse_metric(Some("dot_product".into()), Metric::Cosine).is_err());
+    assert_eq!(
+        parse_metric(Some("dot".into()), Metric::Cosine).unwrap(),
+        Metric::DotProduct
+    );
+}
+
+// A request that names no metric searches by the metric the collection is indexed by.
+#[test]
+fn an_absent_metric_is_the_indexed_metric() {
+    use piramid_hardware::compute::Metric;
+    use piramid_serving::services::convert::parse_metric;
+
+    for indexed in [Metric::Cosine, Metric::Euclidean, Metric::DotProduct] {
+        assert_eq!(parse_metric(None, indexed).unwrap(), indexed);
+    }
 }
 
 #[test]

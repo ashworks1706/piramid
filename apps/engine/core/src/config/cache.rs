@@ -1,6 +1,7 @@
 //! What is held in memory, and what gives when the budget is reached.
 //!
-//! Vectors, metadata and embeddings are each configured separately.
+//! Vectors and metadata are configured separately. The embedding cache belongs to the embedding
+//! provider, in startup.embedding.cache.
 
 use serde::{Deserialize, Serialize};
 
@@ -8,13 +9,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct CacheConfig {
+    /// Vectors held resident for search.
     pub vectors: VectorCacheConfig,
+    /// Document metadata held for filter evaluation.
     pub metadata: MetadataCacheConfig,
-    pub embeddings: EmbeddingCacheConfig,
-
-    /// Byte budget for resident vectors, shared across every loaded collection. None is
-    /// unbounded.
-    pub max_bytes: Option<u64>,
 }
 
 impl CacheConfig {
@@ -32,8 +30,7 @@ impl CacheConfig {
     /// Reject anything the build cannot honour.
     pub fn validate(&self) -> Result<(), String> {
         self.vectors.validate()?;
-        self.metadata.validate()?;
-        self.embeddings.validate()
+        self.metadata.validate()
     }
 }
 
@@ -83,6 +80,7 @@ impl VectorCacheConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct MetadataCacheConfig {
+    /// Whether metadata is cached at all.
     pub enabled: bool,
 
     /// Entry ceiling.
@@ -93,6 +91,10 @@ pub struct MetadataCacheConfig {
 
     /// What to drop when the ceiling is reached.
     pub eviction: EvictionPolicy,
+
+    /// Byte budget for cached metadata across every loaded collection. Past it, the largest
+    /// metadata caches are cleared. None is unbounded.
+    pub max_bytes: Option<u64>,
 }
 
 impl Default for MetadataCacheConfig {
@@ -102,6 +104,7 @@ impl Default for MetadataCacheConfig {
             entries: 10_000,
             ttl_seconds: None,
             eviction: EvictionPolicy::Oldest,
+            max_bytes: None,
         }
     }
 }
@@ -122,6 +125,7 @@ impl MetadataCacheConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct EmbeddingCacheConfig {
+    /// Whether embeddings are cached at all.
     pub enabled: bool,
 
     /// Entry ceiling.
@@ -138,10 +142,11 @@ impl Default for EmbeddingCacheConfig {
 }
 
 impl EmbeddingCacheConfig {
-    fn validate(&self) -> Result<(), String> {
+    /// Reject a cache that is on with no room.
+    pub fn validate(&self) -> Result<(), String> {
         if self.enabled && self.entries == 0 {
             return Err(
-                "runtime.cache.embeddings.entries: must be >= 1, or set enabled: false".into(),
+                "startup.embedding.cache.entries: must be >= 1, or set enabled: false".into(),
             );
         }
         Ok(())

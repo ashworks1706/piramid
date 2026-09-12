@@ -1,45 +1,86 @@
-//! Loading: defaults, then the file, then environment overrides.
+//! Loading: defaults, then the file, then environment overrides, then secrets from the
+//! environment.
 
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
-use crate::config::Config;
+use crate::config::{ApiKey, Config, API_KEY_ENV};
 use crate::error::ConfigError;
 
-/// Prefix and separator for overrides. PIRAMID__RUNTIME__CACHE__MAX_BYTES=1024 sets
-/// runtime.cache.max_bytes.
+/// Prefix and separator for overrides. PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE=1024 sets
+/// runtime.wal.max_log_size.
 const ENV_PREFIX: &str = "PIRAMID__";
 const ENV_SEPARATOR: &str = "__";
 
-/// Read CONFIG_FILE, apply PIRAMID__ overrides, then validate.
-pub fn load() -> Result<Config, ConfigError> {
-    let mut document = load_file()?;
-    apply_env_overrides(&mut document)?;
-    apply_secret_env(&mut document);
+/// Where configuration comes from: a file, and command-line values applied over it.
+///
+/// A running server keeps the source it booted from, so a reload reads the same file and applies
+/// the same values.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ConfigSource {
+    /// The file to read. None reads CONFIG_FILE, or no file when that is unset.
+    pub file: Option<PathBuf>,
+    /// Replaces the port of startup.bind and keeps its host.
+    pub port: Option<u16>,
+    /// Replaces startup.data_dir.
+    pub data_dir: Option<String>,
+}
 
-    let config: Config = serde_yaml::from_value(document).map_err(|e| {
-        ConfigError::Invalid(format!(
-            "{e}. Run `piramid show config` for the full set of keys"
-        ))
-    })?;
+/// Read CONFIG_FILE, apply PIRAMID__ overrides, read PIRAMID_API_KEY and OPENAI_API_KEY, then
+/// validate.
+pub fn load() -> Result<Config, ConfigError> {
+    load_from(&ConfigSource::default())
+}
+
+/// Read the file of a source, apply PIRAMID__ overrides and the values of the source, read the
+/// secrets from the environment, then validate.
+pub fn load_from(source: &ConfigSource) -> Result<Config, ConfigError> {
+    let path = match &source.file {
+        Some(path) => Some(path.to_string_lossy().into_owned()),
+        None => env::var("CONFIG_FILE").ok(),
+    };
+    let mut document = load_file(path)?;
+    apply_env_overrides(&mut document)?;
+    apply_secret_env(&mut document)?;
+
+    let mut config: Config =
+        yaml_serde::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
+    if let Some(port) = source.port {
+        let mut address = config
+            .startup
+            .bind
+            .parse::<std::net::SocketAddr>()
+            .map_err(|_| {
+                ConfigError::Invalid(format!(
+                    "--port cannot be applied: startup.bind '{}' is not an address:port",
+                    config.startup.bind
+                ))
+            })?;
+        address.set_port(port);
+        config.startup.bind = address.to_string();
+    }
+    if let Some(dir) = &source.data_dir {
+        config.startup.data_dir = dir.clone();
+    }
+    config.startup.http.auth.api_key = server_api_key()?;
 
     config.validate().map_err(ConfigError::Invalid)?;
     Ok(config)
 }
 
-/// Parse CONFIG_FILE into an untyped document, or an empty one when it is unset.
-fn load_file() -> Result<Value, ConfigError> {
-    let Ok(path) = env::var("CONFIG_FILE") else {
+/// Parse the configuration file into an untyped document, or an empty one when there is none.
+fn load_file(path: Option<String>) -> Result<Value, ConfigError> {
+    let Some(path) = path else {
         return Ok(Value::Mapping(Mapping::new()));
     };
     let data = fs::read_to_string(&path)
         .map_err(|e| ConfigError::File(format!("failed to read CONFIG_FILE '{path}': {e}")))?;
 
     let parsed = if path.ends_with(".yaml") || path.ends_with(".yml") {
-        serde_yaml::from_str::<Value>(&data)
+        yaml_serde::from_str::<Value>(&data)
             .map_err(|e| ConfigError::File(format!("failed to parse YAML '{path}': {e}")))?
     } else if path.ends_with(".json") {
         serde_json::from_str::<Value>(&data)
@@ -77,18 +118,35 @@ fn apply_env_overrides(document: &mut Value) -> Result<(), ConfigError> {
             });
         }
         // Values are parsed as YAML scalars. Anything that does not parse stays a string.
-        let value = serde_yaml::from_str::<Value>(&raw).unwrap_or_else(|_| Value::String(raw));
+        let value = yaml_serde::from_str::<Value>(&raw).unwrap_or_else(|_| Value::String(raw));
         insert_at(document, &path, value).map_err(|reason| ConfigError::Env { name, reason })?;
     }
     Ok(())
 }
 
 /// Read the API key from the environment. It has no place in the configuration file.
-fn apply_secret_env(document: &mut Value) {
+fn apply_secret_env(document: &mut Value) -> Result<(), ConfigError> {
     if let Ok(key) = env::var("OPENAI_API_KEY") {
         let path = ["startup", "embedding", "api_key"].map(str::to_string);
-        let _ = insert_at(document, &path, Value::String(key));
+        insert_at(document, &path, Value::String(key)).map_err(|reason| ConfigError::Env {
+            name: "OPENAI_API_KEY".to_string(),
+            reason,
+        })?;
     }
+    Ok(())
+}
+
+/// Read the server API key from the environment. It has no place in the configuration file.
+fn server_api_key() -> Result<Option<ApiKey>, ConfigError> {
+    let Ok(key) = env::var(API_KEY_ENV) else {
+        return Ok(None);
+    };
+    ApiKey::new(key)
+        .map(Some)
+        .map_err(|reason| ConfigError::Env {
+            name: API_KEY_ENV.to_string(),
+            reason: format!("{reason}; unset it, or set it to the key clients must send"),
+        })
 }
 
 /// Write the value at the given path, creating intermediate mappings.
@@ -111,15 +169,4 @@ fn insert_at(document: &mut Value, path: &[String], value: Value) -> Result<(), 
     };
     map.insert(Value::String(leaf.clone()), value);
     Ok(())
-}
-
-/// Default data directory: ~/.piramid. An unset HOME is an error.
-pub fn default_data_dir() -> Result<String, ConfigError> {
-    let home = env::var("HOME").map_err(|_| ConfigError::Env {
-        name: "HOME".to_string(),
-        reason: "unset, so the default data directory ~/.piramid cannot be resolved".to_string(),
-    })?;
-    let mut path = PathBuf::from(home);
-    path.push(".piramid");
-    Ok(path.to_string_lossy().to_string())
 }

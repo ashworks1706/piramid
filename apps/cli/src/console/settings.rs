@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use piramid_core::config::Config;
+use piramid_core::config::{ApiKey, Config};
 
 /// The console settings, resolved from the configuration file.
 #[derive(Debug, Clone)]
@@ -18,6 +18,8 @@ pub struct Settings {
     pub log_dir: PathBuf,
     /// Time between probes and refreshes.
     pub refresh: Duration,
+    /// Key sent to the server, from PIRAMID_API_KEY.
+    pub api_key: Option<ApiKey>,
 }
 
 impl Settings {
@@ -33,6 +35,7 @@ impl Settings {
             log_lines: console.log_lines,
             log_dir: PathBuf::from(&console.log_dir),
             refresh: Duration::from_secs(console.refresh_secs),
+            api_key: config.startup.http.auth.api_key.clone(),
         }
     }
 

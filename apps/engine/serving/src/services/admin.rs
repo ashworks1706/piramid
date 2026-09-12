@@ -1,9 +1,12 @@
+//! Health, readiness, metrics and configuration operations.
+
 use crate::services::api::*;
 use crate::state::SharedState;
 use piramid_core::error::Result;
 use piramid_core::stats::record_lock_read;
 use piramid_database::storage::SidecarManager;
 
+/// Liveness of the process and the binary version.
 pub fn health() -> HealthResponse {
     HealthResponse {
         status: "ok",
@@ -11,10 +14,12 @@ pub fn health() -> HealthResponse {
     }
 }
 
+/// Whether an embedding provider is configured.
 pub fn embeddings_available(state: &SharedState) -> bool {
     state.embeddings.is_configured()
 }
 
+/// The configuration in effect and the time it was last loaded.
 pub fn config_status(state: &SharedState) -> Result<ConfigStatusResponse> {
     state.ensure_available()?;
     Ok(ConfigStatusResponse {
@@ -27,6 +32,7 @@ pub fn config_status(state: &SharedState) -> Result<ConfigStatusResponse> {
     })
 }
 
+/// Reload configuration from disk and environment and return the result.
 pub fn reload_config(state: &SharedState) -> Result<ConfigReloadResponse> {
     state.ensure_available()?;
     let app_config = state.reload_config()?;
@@ -41,6 +47,7 @@ pub fn reload_config(state: &SharedState) -> Result<ConfigReloadResponse> {
     })
 }
 
+/// Metrics snapshot of every loaded collection, the configuration and embedding usage.
 pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
     let mut collection_metrics = Vec::new();
     let mut wal_stats = Vec::new();
@@ -74,11 +81,14 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
 
         total_vectors += count;
         let filter_overfetch = Some(collection_guard.config.search.filter_overfetch);
-        let (hnsw_ef_search, ivf_nprobe) = match &collection_guard.config.index {
-            piramid_database::index::IndexConfig::Auto { .. }
-            | piramid_database::index::IndexConfig::Flat { .. } => (None, None),
-            piramid_database::index::IndexConfig::Hnsw { params } => (Some(params.ef_search), None),
-            piramid_database::index::IndexConfig::Ivf { params } => (None, Some(params.num_probes)),
+        let (hnsw_ef_search, ivf_nprobe) = match collection_guard.vector_index().stats().details {
+            piramid_database::index::IndexDetails::Flat => (None, None),
+            piramid_database::index::IndexDetails::Hnsw { ef_search, .. } => {
+                (Some(ef_search), None)
+            }
+            piramid_database::index::IndexDetails::Ivf { num_probes, .. } => {
+                (None, Some(num_probes))
+            }
         };
 
         collection_metrics.push(CollectionMetrics {
@@ -122,9 +132,11 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             total_tokens: embed_metrics.total_tokens,
             avg_latency_ms: embed_metrics.avg_latency_ms,
         },
+        host: crate::services::convert::host_to_response(state.machine.host()),
     })
 }
 
+/// Readiness report covering loaded collections, collections on disk only, and disk capacity.
 pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     state.ensure_available()?;
 
@@ -156,13 +168,13 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             checkpoint_age_secs,
             wal_size_bytes,
             schema_version: Some(collection_guard.manifest.schema_version),
-            integrity_ok: true,
+            integrity_ok: Some(true),
             error: None,
         });
     }
 
-    // Collections load lazily. One present on disk but not yet opened is reported as healthy.
-    for name in state.collection_manager.discover_on_disk() {
+    // Collections load lazily. One present on disk but not yet opened is listed unchecked.
+    for name in state.collection_manager.discover_on_disk()? {
         if state.collection_manager.contains_loaded(&name) {
             continue;
         }
@@ -175,14 +187,16 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             checkpoint_age_secs: None,
             wal_size_bytes: None,
             schema_version: None,
-            integrity_ok: true,
+            integrity_ok: None,
             error: None,
         });
     }
 
     let loaded_collections = state.collection_manager.len();
     let (disk_total_bytes, disk_available_bytes) = crate::disk::stats(&state.data_dir)?;
-    let ok = collections.iter().all(|collection| collection.integrity_ok);
+    let ok = collections
+        .iter()
+        .all(|collection| collection.integrity_ok != Some(false));
 
     Ok(ReadyzResponse {
         ok,

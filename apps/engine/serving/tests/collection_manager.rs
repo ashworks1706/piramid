@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Collection handling through the serving layer.
 
 use axum::{
     extract::{Path, State},
@@ -93,7 +94,7 @@ async fn cache_budget_evicts_metadata_without_dropping_vectors() {
         "/collection_manager_cache_budget"
     );
     let mut app_config = Config::default();
-    app_config.runtime.cache.max_bytes = Some(1);
+    app_config.runtime.cache.metadata.max_bytes = Some(1);
     let state = test_state_with_config(data_dir, app_config);
     let collection = state
         .collection_manager
@@ -238,4 +239,124 @@ async fn search_applies_a_metadata_filter_from_the_request() {
     for hit in hits {
         assert_eq!(hit.metadata["lang"], serde_json::json!("rust"));
     }
+}
+
+// A name is validated where it becomes a path, so no route can reach outside the data directory.
+#[test]
+fn a_collection_name_that_is_not_a_plain_name_is_refused_by_the_manager() {
+    let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_names");
+    let state = test_state(data_dir);
+    for name in ["../outside", "a/b", "", "dot.name"] {
+        let manager = &state.collection_manager;
+        assert_eq!(
+            manager.get_existing(name).err().unwrap().kind(),
+            ErrorKind::BadRequest,
+            "{name}"
+        );
+        assert_eq!(
+            manager.get_or_create(name).err().unwrap().kind(),
+            ErrorKind::BadRequest,
+            "{name}"
+        );
+        assert_eq!(
+            manager.delete(name).unwrap_err().kind(),
+            ErrorKind::BadRequest,
+            "{name}"
+        );
+    }
+    cleanup_dir(data_dir);
+}
+
+// A collection on disk that is not open is deleted with its files, and one that exists nowhere
+// is not found.
+#[test]
+fn deleting_removes_a_collection_that_is_only_on_disk() {
+    let data_dir = concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/collection_manager_delete_on_disk"
+    );
+    let state = test_state(data_dir);
+    {
+        let handle = state.collection_manager.get_or_create("docs").unwrap();
+        let mut guard = handle.write();
+        guard
+            .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
+            .unwrap();
+        guard.checkpoint().unwrap();
+    }
+    // A fresh state has nothing open, so the collection exists only on disk.
+    let mut config = Config::default();
+    config.startup.data_dir = data_dir.to_string();
+    let fresh = AppState::new(
+        config,
+        piramid_model::embeddings::EmbeddingsManager::disabled(),
+    )
+    .unwrap();
+    assert!(!fresh.collection_manager.contains_loaded("docs"));
+    assert_eq!(
+        fresh.collection_manager.discover_on_disk().unwrap(),
+        vec!["docs".to_string()]
+    );
+
+    fresh.collection_manager.delete("docs").unwrap();
+    assert!(fresh
+        .collection_manager
+        .discover_on_disk()
+        .unwrap()
+        .is_empty());
+    assert!(
+        fs::read_dir(data_dir).unwrap().next().is_none(),
+        "no sidecar left"
+    );
+    assert_eq!(
+        fresh.collection_manager.delete("docs").unwrap_err().kind(),
+        ErrorKind::NotFound
+    );
+    cleanup_dir(data_dir);
+}
+
+// Read-only on low disk space lifts at the first write that finds the space back.
+#[test]
+fn read_only_lifts_once_there_is_space_again() {
+    use std::sync::atomic::Ordering;
+
+    let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_read_only");
+    let mut config = Config::default();
+    config.startup.disk.min_free_bytes = Some(0);
+    config.startup.disk.readonly_on_low_space = true;
+    let state = test_state_with_config(data_dir, config);
+
+    state.read_only.store(true, Ordering::Relaxed);
+    state.ensure_write_allowed().unwrap();
+    assert!(!state.read_only.load(Ordering::Relaxed));
+    cleanup_dir(data_dir);
+}
+
+// A second rebuild of a collection whose rebuild is still running is a conflict, not a second job
+// overwriting the status of the first.
+#[tokio::test]
+async fn a_rebuild_while_one_is_running_is_a_conflict() {
+    use piramid_serving::state::{RebuildJobStatus, RebuildState};
+
+    let data_dir = concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/collection_manager_rebuild_conflict"
+    );
+    let state = test_state(data_dir);
+    state.collection_manager.get_or_create("docs").unwrap();
+    state.rebuild_jobs.insert(
+        "docs".to_string(),
+        RebuildJobStatus {
+            status: RebuildState::Running,
+            started_at: 0,
+            finished_at: None,
+            error: None,
+            elapsed_ms: None,
+        },
+    );
+    let error = piramid_serving::services::collection::rebuild_index(&state, "docs".to_string())
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), ErrorKind::Conflict);
+    cleanup_dir(data_dir);
 }

@@ -27,15 +27,18 @@ anywhere else, the abstraction has leaked.
 One file in `compute/src/strategies/`, one arm in `for_mode` in `strategies/mod.rs`. Nothing
 else in the workspace changes. If you find yourself editing a third file, stop and reconsider.
 
-1. Implement `DistanceKernels`: `mode`, `name`, `is_available`, and the four pairwise methods.
-2. Leave the batch methods alone unless you can beat the default. The defaults loop over pairwise,
-   which is correct for every CPU strategy.
-3. Add a variant to `ExecutionMode` and a string in `from_name` and `as_str`.
+1. Implement all of `DistanceKernels`: `mode`, `name`, `is_available`, the four pairwise methods
+   and the three batch methods. The batch methods have no default; each validates with
+   `check_batch_shape` and scores the slab with the strategy's own row kernel, hoisting whatever
+   depends only on the query (the query norm, for cosine) out of the row loop.
+2. Never delegate to another strategy. A strategy that cannot compute something is unavailable,
+   not quietly served by a different one.
+3. Add a variant to `ExecutionMode` and a string in `as_str`. serde is the only parser.
 4. Add a parity test against `ScalarStrategy` — same inputs, results within `1e-5`.
 5. Add a criterion bench against `ScalarStrategy`. A strategy with no measurement is a guess.
 
-`is_available` has to be honest. `resolve_available` uses it to fall back, and a backend that lies
-produces wrong answers instead of a warning.
+`is_available` has to be honest. `for_mode` refuses an unavailable strategy with
+`StrategyUnavailable`, and a backend that lies produces wrong answers instead of an error.
 
 ## Adding a GPU kernel
 
@@ -58,9 +61,10 @@ Order of work:
    of broken transfer is unfixable.
 2. Kernel source in `gpu/src/kernels/<family>.cu`, with a typed launch wrapper beside it
    in `<family>.rs`. The wrapper owns launch geometry and argument binding, not device lifetime.
-3. Wire it in `compute/src/strategies/cuda.rs` by overriding the batch methods only. Leave
-   the pairwise methods delegating to CPU; a single-pair distance will never justify a launch.
-4. Flip `CudaStrategy::is_available` to a real device probe.
+3. Add `compute/src/strategies/cuda.rs` implementing the whole trait on the device, and replace
+   the `Gpu` arm in `for_mode`, which refuses the mode until then. How a single-pair call is
+   served is decided when that file lands; it does not silently run a CPU strategy.
+4. `is_available` is a real device probe.
 
 Keep data resident. The point of `DeviceBuffer` is that a candidate slab uploads once and gets
 reused. If your benchmark uploads per query, you're measuring PCIe and CPU will win.

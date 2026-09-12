@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! Search over a collection: filters, metrics and thresholds.
 
 use std::fs;
 use {
@@ -64,17 +65,25 @@ fn search_respects_filter() {
     cleanup(test_db);
 }
 
-// The engine rescores with the metric the request asked for, not the index's configured metric.
+// A collection indexed by dot product ranks by dot product.
 #[test]
-fn results_are_ranked_by_the_requested_metric_not_the_index_metric() {
-    let path = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/test_rank_by_request_metric.db"
-    );
+fn a_dot_product_collection_ranks_by_dot_product() {
+    use piramid_core::config::{CollectionConfig, FlatConfig, IndexConfig};
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_rank_by_dot.db");
     for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
         let _ = fs::remove_file(format!("{path}{suffix}"));
     }
-    let mut collection = Collection::open(path).unwrap();
+    let config = CollectionConfig {
+        index: IndexConfig::Flat {
+            params: FlatConfig {
+                metric: Metric::DotProduct,
+                ..FlatConfig::default()
+            },
+        },
+        ..CollectionConfig::default()
+    };
+    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
 
     // Cosine ranks these near-identically; dot product orders them by magnitude.
     for (vector, text) in [
@@ -101,6 +110,45 @@ fn results_are_ranked_by_the_requested_metric_not_the_index_metric() {
         "scores must descend: {:?}",
         hits.iter().map(|h| h.score).collect::<Vec<_>>()
     );
+}
+
+// Searching by a metric other than the indexed one is refused rather than reranking candidates
+// the index chose by a different measure.
+#[test]
+fn a_search_by_another_metric_than_the_index_is_refused() {
+    use piramid_core::error::{ErrorKind, IndexError, PiramidError};
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_metric_mismatch.db");
+    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    let mut collection = Collection::open(path).unwrap();
+    collection
+        .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
+        .unwrap();
+    assert_eq!(collection.vector_index().metric(), Metric::Cosine);
+
+    let error = collection
+        .search(&[1.0, 0.0], 1, Metric::DotProduct, SearchParams::default())
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        PiramidError::Index(IndexError::MetricMismatch {
+            indexed: Metric::Cosine,
+            requested: Metric::DotProduct,
+        })
+    ));
+    assert_eq!(error.kind(), ErrorKind::BadRequest);
+
+    let error = collection
+        .search_batch_with(
+            &[vec![1.0, 0.0]],
+            1,
+            Metric::Euclidean,
+            SearchParams::default(),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::BadRequest);
 }
 
 // A range query narrows the candidate set by threshold before k truncates it, so it returns every
@@ -142,4 +190,37 @@ fn a_range_query_fills_k_from_the_whole_qualifying_set() {
         );
     }
     assert!(hits.windows(2).all(|w| w[0].score >= w[1].score));
+}
+
+// A collection reopened under a configuration naming another metric refuses to open rather than
+// searching a saved index built by the old one.
+#[test]
+fn reopening_under_another_metric_is_refused() {
+    use piramid_core::config::{CollectionConfig, FlatConfig, IndexConfig};
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_reopen_other_metric.db");
+    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+    let flat = |metric| CollectionConfig {
+        index: IndexConfig::Flat {
+            params: FlatConfig {
+                metric,
+                ..FlatConfig::default()
+            },
+        },
+        ..CollectionConfig::default()
+    };
+    {
+        let mut collection =
+            Collection::open_with_options(path, flat(Metric::Cosine).into()).unwrap();
+        collection
+            .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
+            .unwrap();
+        collection.checkpoint().unwrap();
+    }
+    let error = Collection::open_with_options(path, flat(Metric::DotProduct).into())
+        .err()
+        .expect("a metric change must not open silently");
+    assert!(error.to_string().contains("indexed by cosine"), "{error}");
 }

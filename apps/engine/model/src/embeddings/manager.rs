@@ -25,7 +25,7 @@ impl EmbeddingsManager {
         }
     }
 
-    /// Wrap an embedder the caller built, in the same cache-and-retry stack.
+    /// Wrap an embedder the caller built in the retry layer.
     ///
     /// The seam for a provider this crate cannot construct. The binary builds the embedder and
     /// passes it here.

@@ -1,3 +1,5 @@
+//! Request id assignment and per-request logging.
+
 use axum::{body::Body, http::Request, middleware::Next, response::Response};
 use std::time::Instant;
 use uuid::Uuid;

@@ -2,6 +2,7 @@
 
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::console::client::root_cause;
 use crate::console::settings::Settings;
 use crate::console::types::{Event, Health, Probe};
 
@@ -29,15 +30,23 @@ impl Targets {
 
 /// Probes forever on the configured interval, sending each result to the UI.
 ///
-/// The website probe is skipped where there is no checkout to serve one from.
+/// The website probe is skipped where there is no checkout to serve one from. An HTTP client that
+/// cannot be built is sent to the UI as the reason no probe runs.
 pub async fn poll(targets: Targets, probe_web: bool, tx: UnboundedSender<Event>) {
-    let Ok(http) = reqwest::Client::builder()
+    let http = match reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))
         // Readiness opens every collection on disk and can be slow on a large data directory.
         .timeout(std::time::Duration::from_secs(8))
         .build()
-    else {
-        return;
+    {
+        Ok(http) => http,
+        Err(e) => {
+            let _ = tx.send(Event::ProbesStopped(format!(
+                "health probes are off: http client: {}",
+                root_cause(&e)
+            )));
+            return;
+        }
     };
     loop {
         let (live, ready) = tokio::join!(probe(&http, &targets.live), probe(&http, &targets.ready));
@@ -61,12 +70,14 @@ async fn probe(http: &reqwest::Client, url: &str) -> Probe {
         Ok(response) if response.status().is_success() => Probe::Up,
         Ok(response) => {
             let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            Probe::Degraded(format!(
-                "{status}: {}",
-                body.chars().take(120).collect::<String>()
-            ))
+            match response.text().await {
+                Ok(body) => Probe::Degraded(format!(
+                    "{status}: {}",
+                    body.chars().take(120).collect::<String>()
+                )),
+                Err(e) => Probe::Degraded(format!("{status}: body unreadable: {}", root_cause(&e))),
+            }
         }
-        Err(_) => Probe::Down,
+        Err(e) => Probe::Down(root_cause(&e)),
     }
 }

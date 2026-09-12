@@ -166,8 +166,8 @@ impl Profile {
     /// The views this profile offers, in tab order.
     pub fn views(self) -> &'static [View] {
         match self {
-            Self::Developer => &[View::Units, View::Collections, View::Config],
-            Self::Production => &[View::Collections, View::Config],
+            Self::Developer => &[View::Units, View::Collections, View::Config, View::Device],
+            Self::Production => &[View::Collections, View::Config, View::Device],
         }
     }
 }
@@ -181,6 +181,8 @@ pub enum View {
     Collections,
     /// The configuration as the server resolved it.
     Config,
+    /// Host processor and memory of the server over time.
+    Device,
 }
 
 impl View {
@@ -190,6 +192,7 @@ impl View {
             Self::Units => "units",
             Self::Collections => "collections",
             Self::Config => "config",
+            Self::Device => "device",
         }
     }
 }
@@ -248,8 +251,19 @@ pub enum Probe {
     Up,
     /// Reachable but reporting a problem, with its message.
     Degraded(String),
-    /// Not reachable.
-    Down,
+    /// Not reachable, with the reason the request failed.
+    Down(String),
+}
+
+/// Where the configuration view is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigState {
+    /// A request for it is in flight.
+    Loading,
+    /// The configuration rendered as YAML.
+    Loaded(String),
+    /// Why it could not be read.
+    Failed(String),
 }
 
 /// Liveness of what the console watches.
@@ -300,6 +314,8 @@ pub enum Event {
     Services(Result<HashMap<String, ServiceState>, String>),
     /// Fresh probes.
     Health(Box<Health>),
+    /// The probes cannot run, with the reason.
+    ProbesStopped(String),
     /// A collections refresh finished.
     Snapshot(Box<Result<super::client::Snapshot, super::client::ClientError>>),
     /// A rebuild or compact finished, with the line to show for it.

@@ -77,10 +77,10 @@ fn the_catalog_is_unique_and_every_unit_is_runnable() {
 
 #[test]
 fn every_catalog_recipe_exists_in_the_justfile() {
-    let Some(root) = repo_root(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))) else {
-        return;
-    };
-    let justfile = std::fs::read_to_string(root.join("justfile")).unwrap_or_default();
+    let root = repo_root(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+        .expect("the crate is built from a checkout with a justfile at its root");
+    let justfile =
+        std::fs::read_to_string(root.join("justfile")).expect("the justfile is readable");
     let recipes: std::collections::HashSet<String> = justfile
         .lines()
         .filter(|line| !line.starts_with(char::is_whitespace) && line.contains(':'))
@@ -199,17 +199,16 @@ fn compose_states_map_onto_statuses() {
 #[test]
 fn ps_output_parses_as_an_array_or_as_lines() {
     let array = r#"[{"Service":"piramid","State":"running","Health":"healthy","ExitCode":0}]"#;
-    assert_eq!(
-        parse_ps(array).unwrap_or_default()["piramid"].health,
-        "healthy"
-    );
-    let lines = "{\"Service\":\"piramid\",\"State\":\"exited\",\"ExitCode\":1}\n{\"Service\":\"ollama\",\"State\":\"running\"}\n";
-    let parsed: HashMap<_, _> = parse_ps(lines).unwrap_or_default();
+    assert_eq!(parse_ps(array).unwrap()["piramid"].health, "healthy");
+    let lines = "{\"Service\":\"piramid\",\"State\":\"exited\",\"Health\":\"\",\"ExitCode\":1}\n{\"Service\":\"ollama\",\"State\":\"running\",\"Health\":\"\",\"ExitCode\":0}\n";
+    let parsed: HashMap<_, _> = parse_ps(lines).unwrap();
     assert_eq!(parsed["piramid"].exit_code, 1);
     assert_eq!(parsed["ollama"].status(), Status::Running);
     assert!(parse_ps("").is_ok_and(|m| m.is_empty()));
     // A failed query returns an error rather than an empty set of services.
     assert!(parse_ps("not json").is_err());
+    // A row without an exit code cannot say whether the service exited, so it is refused.
+    assert!(parse_ps(r#"{"Service":"piramid","State":"exited","Health":""}"#).is_err());
 }
 
 #[test]
@@ -274,7 +273,7 @@ fn console_settings_come_from_the_one_configuration_file() {
     // Unset, the console follows the address the server in the same file binds, so a deployment
     // that moves the port does not have to say so twice.
     assert_eq!(config.console.base_url, "");
-    assert_eq!(settings.base_url, "http://localhost:6333");
+    assert_eq!(settings.base_url, "http://127.0.0.1:6333");
     assert_eq!(settings.web_url, "http://localhost:3000");
     assert_eq!(
         settings.log_dir_under(std::path::Path::new("/repo")),
@@ -303,11 +302,11 @@ fn a_production_console_hides_the_views_that_need_a_checkout() {
     // The units view drives just recipes and compose, neither of which exists outside a checkout.
     assert_eq!(
         Profile::Production.views(),
-        [View::Collections, View::Config]
+        [View::Collections, View::Config, View::Device]
     );
     assert_eq!(
         Profile::Developer.views(),
-        [View::Units, View::Collections, View::Config]
+        [View::Units, View::Collections, View::Config, View::Device]
     );
     // The first view is what the console opens on, and every profile has one.
     assert!(!Profile::Production.views().is_empty());
@@ -360,4 +359,468 @@ fn an_unreachable_server_is_reported_rather_than_left_blank() {
     // instead of waiting forever.
     assert!(app.collections.error.is_some());
     assert!(app.collections.rows.is_empty());
+}
+
+/// A console watching the server at base_url.
+fn console_watching(base_url: &str) -> super::app::App {
+    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut config = piramid_core::config::Config::default();
+    config.console.base_url = base_url.to_owned();
+    super::app::App::new(
+        Settings::from_config(&config),
+        Profile::Production,
+        root,
+        &tx,
+    )
+    .expect("the log directory is creatable")
+}
+
+#[test]
+fn loopback_urls_are_this_machine_and_every_other_host_is_not() {
+    use super::device::is_loopback;
+
+    for local in [
+        "http://localhost:6333",
+        "http://LOCALHOST",
+        "http://127.0.0.1:7000/",
+        "http://127.3.2.1",
+        "http://[::1]:6333/api",
+        "http://user:secret@localhost:6333",
+    ] {
+        assert!(is_loopback(local), "{local} is this machine");
+    }
+    for remote in [
+        "https://piramid.internal:6333",
+        "http://10.0.0.5:6333",
+        "http://[2001:db8::1]:6333",
+        "http://localhost.example.com",
+        "http://0.0.0.0:6333",
+    ] {
+        assert!(!is_loopback(remote), "{remote} is not this machine");
+    }
+}
+
+/// A scratch directory holding an executable and a non-executable file.
+#[cfg(unix)]
+fn scratch_path(name: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join(format!("piramid-console-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("the scratch directory is creatable");
+    let tool = dir.join("htop");
+    std::fs::write(&tool, "#!/bin/sh\n").expect("the stand-in is writable");
+    std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755))
+        .expect("the stand-in is executable");
+    let plain = dir.join("nvtop");
+    std::fs::write(&plain, "").expect("the stand-in is writable");
+    std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644))
+        .expect("the stand-in is not executable");
+    dir
+}
+
+#[cfg(unix)]
+#[test]
+fn a_program_is_found_only_as_an_executable_on_path() {
+    use super::device::find_program;
+
+    let dir = scratch_path("find");
+    let path = std::env::join_paths([std::path::Path::new("/nonexistent"), dir.as_path()])
+        .expect("the path joins");
+    assert_eq!(find_program("htop", Some(&path)), Some(dir.join("htop")));
+    assert_eq!(find_program("nvtop", Some(&path)), None);
+    assert_eq!(find_program("top-of-nothing", Some(&path)), None);
+    assert_eq!(find_program("htop", None), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_handoff_needs_a_local_server_and_an_installed_monitor() {
+    use super::device::{DeviceView, Monitor};
+
+    let dir = scratch_path("handoff");
+    let path = dir.clone().into_os_string();
+
+    let local = DeviceView::new("http://localhost:6333");
+    assert_eq!(
+        local.handoff(Monitor::Htop, Some(&path)),
+        Ok(dir.join("htop"))
+    );
+    assert_eq!(
+        local.handoff(Monitor::Nvtop, Some(&path)),
+        Err("nvtop is not installed: not found on PATH".to_owned())
+    );
+
+    // The remote refusal wins even where the monitor is installed.
+    let remote = DeviceView::new("https://piramid.internal:6333");
+    assert_eq!(
+        remote.handoff(Monitor::Htop, Some(&path)),
+        Err(
+            "htop shows this machine, and the console watches https://piramid.internal:6333"
+                .to_owned()
+        )
+    );
+}
+
+#[test]
+fn a_remote_console_says_why_it_will_not_open_htop() {
+    let mut app = console_watching("https://piramid.internal:6333");
+    app.handle(press('3'));
+    assert_eq!(app.view, View::Device);
+
+    app.handle(press('h'));
+    assert!(app.handoff.is_none());
+    assert_eq!(
+        app.notice.as_deref(),
+        Some("htop shows this machine, and the console watches https://piramid.internal:6333")
+    );
+}
+
+/// Host readings with only the processor reading set.
+fn cpu_reading(cpu: Option<f32>) -> super::client::HostMetrics {
+    super::client::HostMetrics {
+        cpu_percent: cpu,
+        memory_used_bytes: None,
+        memory_total_bytes: None,
+        process_cpu_percent: None,
+        process_resident_bytes: None,
+    }
+}
+
+#[test]
+fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
+    use super::device::DeviceView;
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let mut view = DeviceView::new("http://localhost:6333");
+    view.record(start, Some(cpu_reading(Some(10.0))));
+    view.record(
+        start + Duration::from_secs(1),
+        Some(cpu_reading(Some(20.0))),
+    );
+    view.record(start + Duration::from_secs(2), Some(cpu_reading(None)));
+    view.record(
+        start + Duration::from_secs(3),
+        Some(cpu_reading(Some(30.0))),
+    );
+
+    let now = start + Duration::from_secs(3);
+    let runs = view.series(now, |h| h.cpu_percent.map(f64::from));
+    assert_eq!(
+        runs,
+        vec![vec![(-3.0, 10.0), (-2.0, 20.0)], vec![(-0.0, 30.0)]]
+    );
+    assert!(view
+        .series(now, |h| h.memory_used_bytes.map(|b| b as f64))
+        .is_empty());
+}
+
+/// A metrics body with one collection, the host block given, and the rest as the server sends it.
+fn metrics_body(host: &str) -> String {
+    format!(
+        r#"{{
+            "total_collections": 1,
+            "total_vectors": 3,
+            "collections": [{{
+                "name": "docs", "vector_count": 3, "index_type": "hnsw",
+                "memory_usage_bytes": 64, "insert_latency_ms": null, "search_latency_ms": 1.5,
+                "lock_read_ms": null, "lock_write_ms": null, "filter_overfetch": null,
+                "hnsw_ef_search": 64, "ivf_nprobe": null
+            }}],
+            "wal_stats": [{{
+                "collection": "docs", "last_checkpoint": null,
+                "checkpoint_age_secs": null, "wal_size_bytes": 12
+            }}],
+            "embedding": {{"requests": 0, "texts": 0, "total_tokens": 0}}
+            {host}
+        }}"#
+    )
+}
+
+/// A readiness body with one loaded collection.
+const READY_BODY: &str = r#"{
+    "ok": true, "version": "0.2.0", "data_dir": "/data", "total_collections": 1,
+    "loaded_collections": 1, "total_vectors": 3,
+    "collections": [{"name": "docs", "loaded": true, "integrity_ok": true}]
+}"#;
+
+/// A snapshot decoded from bodies shaped like the server's.
+fn snapshot_from(metrics: &str, ready: &str) -> super::client::Snapshot {
+    use super::client::parse;
+    super::client::Snapshot {
+        metrics: parse("/api/metrics", metrics).expect("the metrics body decodes"),
+        ready: parse("/api/readyz", ready).expect("the readiness body decodes"),
+    }
+}
+
+#[test]
+fn a_failed_refresh_records_a_sample_with_nothing_measured() {
+    use super::client::ClientError;
+
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert_eq!(app.device.latest().and_then(|h| h.cpu_percent), Some(42.0));
+
+    app.handle(super::types::Event::Snapshot(Box::new(Err(
+        ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
+    ))));
+    assert_eq!(app.device.samples.len(), 2);
+    assert!(app.device.latest().is_none());
+}
+
+#[test]
+fn host_fields_the_server_leaves_out_read_as_absent() {
+    use super::client::{parse, Metrics};
+
+    let metrics: Metrics = parse(
+        "/api/metrics",
+        &metrics_body(r#", "host": {"memory_total_bytes": 4096, "cpu_percent": 0.0}"#),
+    )
+    .expect("the body decodes");
+    let host = metrics.host.expect("the host block was sent");
+    assert_eq!(host.memory_total_bytes, Some(4096));
+    assert_eq!(host.cpu_percent, Some(0.0));
+    assert_eq!(host.memory_used_bytes, None);
+    assert_eq!(host.process_resident_bytes, None);
+
+    // A server that predates the host block has no host readings at all.
+    let older: Metrics = parse("/api/metrics", &metrics_body("")).expect("the body decodes");
+    assert!(older.host.is_none());
+}
+
+#[test]
+fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
+    use super::client::{parse, ClientError, CollectionHealth, Metrics, Readyz, Version};
+
+    // Readiness always sends loaded; without it the collection must not read as not loaded.
+    let error = parse::<CollectionHealth>("/api/readyz", r#"{"name": "docs"}"#)
+        .expect_err("loaded is required");
+    assert!(matches!(error, ClientError::Decode(..)), "{error:?}");
+    assert!(error.to_string().contains("loaded"), "{error}");
+
+    assert!(parse::<Readyz>("/api/readyz", "{}").is_err());
+    assert!(parse::<Version>("/api/version", "{}").is_err());
+    assert!(parse::<Metrics>("/api/metrics", r#"{"collections": []}"#).is_err());
+
+    // A null the server always sends is required as a key, not only as a value.
+    let no_latency = metrics_body("").replace(r#""search_latency_ms": 1.5,"#, "");
+    let error = parse::<Metrics>("/api/metrics", &no_latency).expect_err("the key is required");
+    assert!(error.to_string().contains("search_latency_ms"), "{error}");
+
+    // Fields the server leaves out when empty are optional.
+    let version: Version =
+        parse("/api/version", r#"{"version": "0.2.0"}"#).expect("the commit is optional");
+    assert_eq!(version.version, "0.2.0");
+}
+
+/// The text of every cell of the console drawn at 200 by 20.
+fn screen(app: &mut super::app::App) -> String {
+    let backend = ratatui::backend::TestBackend::new(200, 20);
+    let mut terminal = ratatui::Terminal::new(backend).expect("a test terminal opens");
+    terminal
+        .draw(|frame| super::ui::draw(frame, app))
+        .expect("the frame draws");
+    terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect()
+}
+
+#[test]
+fn a_decode_error_in_a_refresh_is_on_the_screen() {
+    use super::client::{parse, Readyz};
+
+    let mut app = console();
+    app.handle(press('2'));
+    let error = parse::<Readyz>("/api/readyz", r#"{"collections": [{"name": "docs"}]}"#)
+        .expect_err("loaded is required");
+    app.handle(super::types::Event::Snapshot(Box::new(Err(error))));
+
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("/api/readyz"), "{drawn}");
+    assert!(drawn.contains("missing field `loaded`"), "{drawn}");
+}
+
+#[test]
+fn a_config_response_without_the_config_key_is_an_error() {
+    use super::client::{render_config, ClientError};
+
+    let error =
+        render_config(&serde_json::json!({ "startup": {} })).expect_err("the key is required");
+    assert!(matches!(error, ClientError::Decode(..)), "{error:?}");
+    assert!(error.to_string().contains("app_config"), "{error}");
+
+    let rendered = render_config(&serde_json::json!({ "app_config": { "startup": {} } }))
+        .expect("the key is present");
+    assert!(rendered.starts_with("startup:"), "{rendered}");
+}
+
+/// A console on the collections view holding the snapshot of one collection.
+fn console_with_a_collection() -> super::app::App {
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
+        &metrics_body(""),
+        READY_BODY,
+    )))));
+    app
+}
+
+#[test]
+fn collections_messages_reach_the_status_bar() {
+    // With no collection there is nothing to act on, and the console says so.
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(press('r'));
+    assert_eq!(app.notice.as_deref(), Some("no collection selected"));
+    assert!(screen(&mut app).contains("no collection selected"));
+
+    let mut app = console_with_a_collection();
+    app.handle(press('c'));
+    assert!(app.collections.pending.is_some());
+    app.handle(press('n'));
+    assert!(app.collections.pending.is_none());
+    assert!(app.pending_action.is_none());
+    assert!(screen(&mut app).contains("cancelled"));
+
+    app.handle(press('r'));
+    app.handle(press('y'));
+    assert_eq!(
+        app.pending_action,
+        Some(super::collections::Pending::Rebuild("docs".into()))
+    );
+    assert!(screen(&mut app).contains("rebuild of docs running"));
+
+    app.handle(super::types::Event::Acted(Err(
+        "rebuild of docs failed: /api/collections/docs/index/rebuild returned 500: boom".into(),
+    )));
+    assert!(screen(&mut app).contains("rebuild of docs failed"));
+    app.handle(super::types::Event::Acted(Ok(
+        "compaction of docs done".into()
+    )));
+    assert!(screen(&mut app).contains("compaction of docs done"));
+}
+
+#[test]
+fn a_probe_failure_shows_its_reason() {
+    use super::types::{Health, Probe};
+
+    let mut app = console();
+    app.handle(super::types::Event::Health(Box::new(Health {
+        live: Probe::Down("Connection refused".into()),
+        ready: Probe::Down("Connection refused".into()),
+        web: Probe::Degraded("502 Bad Gateway: upstream".into()),
+    })));
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("server: Connection refused"), "{drawn}");
+    assert!(drawn.contains("web: 502 Bad Gateway"), "{drawn}");
+
+    app.handle(super::types::Event::ProbesStopped(
+        "health probes are off: http client: no TLS backend".into(),
+    ));
+    assert!(screen(&mut app).contains("health probes are off"));
+}
+
+#[test]
+fn the_reload_key_asks_for_the_configuration_again() {
+    use super::types::ConfigState;
+
+    let mut app = console();
+    app.handle(super::types::Event::Config(Ok("startup: {}".into())));
+    assert_eq!(app.config, Some(ConfigState::Loaded("startup: {}".into())));
+    app.handle(press('3'));
+    app.handle(press('R'));
+    // The loop fetches whenever the configuration is None.
+    assert!(app.config.is_none());
+
+    app.handle(super::types::Event::Config(Err("/api/config: boom".into())));
+    assert!(screen(&mut app).contains("/api/config: boom"));
+}
+
+type ServeTask = tokio::task::JoinHandle<Result<(), piramid_serving::http::serve::ServeError>>;
+
+/// A server on a loopback port that requires key, the sender that stops it, and its task.
+async fn server_requiring(
+    key: &str,
+    name: &str,
+) -> (String, tokio::sync::oneshot::Sender<()>, ServeTask) {
+    let dir = std::env::temp_dir().join(format!("piramid-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut config = piramid_core::config::Config::default();
+    config.startup.data_dir = dir.to_string_lossy().into_owned();
+    config.startup.http.auth.api_key =
+        Some(piramid_core::config::ApiKey::new(key.to_owned()).unwrap());
+    let state = std::sync::Arc::new(
+        piramid_serving::state::AppState::new(
+            config,
+            piramid_model::embeddings::EmbeddingsManager::disabled(),
+        )
+        .unwrap(),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let task = tokio::spawn(piramid_serving::http::serve::serve(
+        state,
+        listener,
+        async move {
+            let _ = rx.await;
+        },
+    ));
+    (base, tx, task)
+}
+
+#[tokio::test]
+async fn a_rejected_key_is_reported_as_an_authentication_failure_not_as_unreachable() {
+    use super::client::{Client, ClientError};
+    use piramid_core::config::ApiKey;
+
+    let (base, stop, task) = server_requiring("console-test-key", "console_auth").await;
+    let timeout = std::time::Duration::from_secs(5);
+
+    let missing = Client::new(&base, timeout, None).unwrap();
+    let error = missing.snapshot().await.unwrap_err();
+    assert!(
+        matches!(error, ClientError::Unauthorized { .. }),
+        "{error:?}"
+    );
+    assert!(error.to_string().contains("PIRAMID_API_KEY"), "{error}");
+
+    let wrong = Client::new(&base, timeout, Some(ApiKey::new("nope".into()).unwrap())).unwrap();
+    assert!(matches!(
+        wrong.snapshot().await.unwrap_err(),
+        ClientError::Unauthorized { .. }
+    ));
+
+    let right = Client::new(
+        &base,
+        timeout,
+        Some(ApiKey::new("console-test-key".into()).unwrap()),
+    )
+    .unwrap();
+    right.snapshot().await.unwrap();
+    right.config().await.unwrap();
+
+    stop.send(()).unwrap();
+    task.await.unwrap().unwrap();
+    let dir = std::env::temp_dir().join(format!("piramid-console_auth-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_console_sends_the_key_the_environment_set() {
+    let mut config = piramid_core::config::Config::default();
+    assert!(Settings::from_config(&config).api_key.is_none());
+
+    let key = piramid_core::config::ApiKey::new("from-env".into()).unwrap();
+    config.startup.http.auth.api_key = Some(key.clone());
+    assert_eq!(Settings::from_config(&config).api_key, Some(key));
 }

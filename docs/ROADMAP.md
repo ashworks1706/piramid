@@ -2,21 +2,25 @@
 
 ## v0.3.0 — a retrieval path worth measuring
 
-- [ ] route the IVF posting-list scan through the batch kernels, as the flat scan and the
-      rerank already are
-- [ ] settle the execution modes against the bench: keep what wins, drop what doesn't
+- [ ] route the IVF posting-list scan through the batch kernels without a gather copy: either a
+      batch over the store slab by row index, or posting lists that own their rows
+- [x] settle the execution modes against the bench: keep what wins, drop what doesn't
 - [ ] a real CUDA device — allocate, upload, run a batch kernel, take the top-k on the device
 - [ ] keep the candidate set device-resident across queries, and measure it against per-call upload
 - [ ] quantize on the device, with recall reported alongside the speedup
 - [ ] choose the index family per device: IVF where a device runs it, HNSW on the host
-- [ ] the server reports its device in `/api/metrics` and `/metrics`: GPU memory, utilisation and
-      temperature, host CPU and memory. What the build can't measure is absent, never zero
-- [ ] a device view in the console graphing those over time, against a local or remote server,
-      with a key that hands the terminal to nvtop or htop for the local machine
-- [ ] make `serve` safe to expose — graceful shutdown, authentication, rate limiting, and a test
+- [x] the server reports host CPU and memory in `/api/metrics` and `/metrics`, absent when the
+      build can't measure them
+- [ ] GPU memory, utilisation and temperature beside the host readings, absent when unmeasured
+- [x] a device view in the console graphing host readings over time, against a local or remote
+      server, with keys that hand the terminal to htop or nvtop for the local machine
+- [ ] GPU readings graphed in the device view
+- [x] make `serve` safe to expose — graceful shutdown, authentication, rate limiting, and a test
       that actually starts the server
-- [ ] clear the dependency debt: bincode 2.x with a read path for existing data, off the archived
-      YAML parser, and either implement the unimplemented quantization levels or drop them
+- [x] clear the dependency debt: bincode 2.x with a read path for existing data, off the archived
+      YAML parser
+- [ ] implement the quantization levels or drop them; until then every quantization key is refused
+      at its default
 
 ## v0.4.0 — the integrated baseline
 
@@ -63,7 +67,32 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 
 ## Housekeeping
 
-- [ ] backfill doc comments so `missing_docs` can move from `allow` to `warn`
-- [ ] make `runtime:` reload reach a running collection, or document that it doesn't
-- [ ] test config reload against a running server, not just the loader
+- [x] backfill doc comments so `missing_docs` can move from `allow` to `warn`
+- [x] make `runtime:` reload reach a running collection, or document that it doesn't
+- [x] test config reload against a running server, not just the loader
+
+## Unscheduled
+
+- [ ] GPU settings are accepted and read by nothing: `gpu_memory_budget_bytes`, `gpu.*`, `vram.*`
+- [ ] inference sub-settings (batching, kv_cache, sampling, fusion, document_kv, dtype, model_path)
+      are accepted while inference is off and read by nothing
+- [ ] the `auto` hardware profile means the same as `cpu-only` until something detects a GPU
+- [x] an `auto` index picks its family when the collection opens and keeps it as the collection
+      grows past the thresholds
+- [ ] behind a reverse proxy every client shares one rate-limit bucket; forwarded headers are not
+      read
+- [ ] `/api/readyz` is unauthenticated and names the data directory and every collection
+- [ ] requests still running when the drain timeout expires continue after shutdown begins
+- [ ] bincode is unmaintained upstream at every version (RUSTSEC-2025-0141); moving off it is a
+      format change
+- [ ] the embedding token total counts a provider that reports no usage as zero tokens
+- [ ] the MSRV is not checked in CI against the new dependencies
+- [ ] `/api/collections` and `/api/metrics` list open collections only, while `/api/readyz` also
+      lists collections on disk; after a restart the list is empty until something opens them
+- [ ] the cluster router and node health are scaffolding nothing reads
+- [ ] compaction renames the new record file before the offset sidecar is saved, so a crash in
+      between leaves offsets pointing into the wrong file
+- [ ] about sixteen error variants are never constructed
+- [ ] `model::embeddings`, `database::index` and `core::observability` re-export other modules'
+      items, against the one-canonical-path rule
 

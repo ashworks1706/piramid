@@ -11,22 +11,27 @@ use super::{CollectionConfig, ConsoleConfig, RuntimeConfig, StartupConfig};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
+    /// Settings applied once at boot.
     pub startup: StartupConfig,
+    /// Settings re-read on reload.
     pub runtime: RuntimeConfig,
+    /// Settings for the terminal UI.
     pub console: ConsoleConfig,
 }
 
 impl Config {
+    /// Validate every block and reject a GPU profile paired with any execution mode but gpu.
     pub fn validate(&self) -> Result<(), String> {
         self.startup.validate()?;
         self.runtime.validate()?;
         self.console.validate()?;
         if self.startup.hardware.gpu_enabled()
-            && matches!(self.runtime.execution, super::ExecutionMode::Scalar)
+            && self.runtime.execution != super::ExecutionMode::Gpu
         {
-            return Err(
-                "startup.hardware.gpu_enabled conflicts with runtime.execution 'scalar'".into(),
-            );
+            return Err(format!(
+                "startup.hardware.profile: gpu requires runtime.execution: gpu, not '{}'",
+                self.runtime.execution.as_str()
+            ));
         }
         Ok(())
     }

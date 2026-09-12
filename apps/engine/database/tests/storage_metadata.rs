@@ -3,6 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
+//! The collection manifest and the offset index on disk.
 
 use piramid_database::storage::CollectionMetadata;
 use std::thread;

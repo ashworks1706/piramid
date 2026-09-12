@@ -36,17 +36,20 @@ impl Drop for ObservabilityGuard {
 
 /// Installs telemetry from configuration. Call once, early in main.
 ///
-/// Returns None when logging is disabled or a subscriber is already installed.
-pub fn install(logging: LoggingConfig, telemetry: &TelemetryConfig) -> Option<ObservabilityGuard> {
+/// Returns None when logging is disabled or a subscriber is already installed, and an error when
+/// a configured exporter cannot start.
+pub fn install(
+    logging: LoggingConfig,
+    telemetry: &TelemetryConfig,
+) -> crate::error::Result<Option<ObservabilityGuard>> {
     static INSTALLED: OnceLock<()> = OnceLock::new();
-    if INSTALLED.get().is_some() {
-        return None;
+    if INSTALLED.set(()).is_err() {
+        return Ok(None);
     }
-    INSTALLED.set(()).ok();
     if !logging.enabled {
-        return None;
+        return Ok(None);
     }
-    Some(init(telemetry, filter_for(logging), logging.json))
+    init(telemetry, filter_for(logging), logging.json).map(Some)
 }
 
 /// Turn a [LoggingConfig] into a filter. RUST_LOG replaces the level but not the per-target
@@ -86,7 +89,11 @@ fn level_directive(level: LogLevel) -> &'static str {
 }
 
 /// Installs the tracing subscriber and any configured exporters.
-fn init(config: &TelemetryConfig, filter: EnvFilter, json: bool) -> ObservabilityGuard {
+fn init(
+    config: &TelemetryConfig,
+    filter: EnvFilter,
+    json: bool,
+) -> crate::error::Result<ObservabilityGuard> {
     // One line per finished operation.
     let span_events = if config.span_events {
         FmtSpan::CLOSE
@@ -110,38 +117,26 @@ fn init(config: &TelemetryConfig, filter: EnvFilter, json: bool) -> Observabilit
     let registry = tracing_subscriber::registry().with(filter).with(console);
 
     #[cfg(feature = "otel")]
-    let otel_provider = {
-        match config.otlp.as_ref().map(build_otel) {
-            Some(Ok((layer, provider))) => {
-                registry.with(layer).init();
-                Some(provider)
-            }
-            Some(Err(error)) => {
-                registry.init();
-                tracing::error!(
-                    target: "piramid::observability",
-                    %error,
-                    "OTLP exporter failed to start; continuing without it"
-                );
-                None
-            }
-            None => {
-                registry.init();
-                None
-            }
+    let otel_provider = match config.otlp.as_ref() {
+        Some(otlp) => {
+            let (layer, provider) = build_otel(otlp).map_err(|error| {
+                crate::error::PiramidError::other(format!(
+                    "OTLP exporter for {} failed to start: {error}",
+                    otlp.endpoint
+                ))
+            })?;
+            registry.with(layer).init();
+            Some(provider)
+        }
+        None => {
+            registry.init();
+            None
         }
     };
 
+    // Startup validation refuses an OTLP block on a build without the otel feature.
     #[cfg(not(feature = "otel"))]
-    {
-        registry.init();
-        if config.otlp.is_some() {
-            tracing::warn!(
-                target: "piramid::observability",
-                "PIRAMID_OTLP_ENDPOINT is set but this build lacks the `otel` feature"
-            );
-        }
-    }
+    registry.init();
 
     // Report what resolved.
     tracing::info!(
@@ -152,10 +147,10 @@ fn init(config: &TelemetryConfig, filter: EnvFilter, json: bool) -> Observabilit
         "observability_ready"
     );
 
-    ObservabilityGuard {
+    Ok(ObservabilityGuard {
         #[cfg(feature = "otel")]
         otel: otel_provider,
-    }
+    })
 }
 
 /// Builds the OTLP span-export layer and the provider that owns its background batcher.

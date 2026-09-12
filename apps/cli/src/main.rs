@@ -78,16 +78,10 @@ fn main() {
             data_dir,
         }) => {
             animate();
-            if let Some(path) = config {
-                std::env::set_var("CONFIG_FILE", path);
-            }
-            if let Some(port) = port {
-                std::env::set_var("PORT", port.to_string());
-            }
-            if let Some(dir) = data_dir {
-                std::env::set_var("DATA_DIR", dir);
-            }
-            run_or_exit(start_server_inline, "Failed to start the server");
+            let source = config_source(config, port, data_dir);
+            let config =
+                piramid::config::loader::load_from(&source).unwrap_or_else(exit_on_config_error);
+            run_or_exit(|| start_server_inline(config, source), "piramid serve");
         }
         // No subcommand opens the console. Inside a checkout it can drive the repo as well as
         // the server; an installed binary gets the views that need only a server.
@@ -112,25 +106,31 @@ fn exit_on_config_error<T>(error: piramid::error::ConfigError) -> T {
     std::process::exit(1);
 }
 
+/// The configuration source the command-line flags name.
+fn config_source(
+    file: Option<PathBuf>,
+    port: Option<u16>,
+    data_dir: Option<PathBuf>,
+) -> piramid::config::loader::ConfigSource {
+    piramid::config::loader::ConfigSource {
+        file,
+        port,
+        data_dir: data_dir.map(|dir| dir.to_string_lossy().into_owned()),
+    }
+}
+
 fn support_bundle(
     output: PathBuf,
     config: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 ) -> std::io::Result<()> {
-    if let Some(path) = config {
-        std::env::set_var("CONFIG_FILE", path);
-    }
-    if let Some(dir) = data_dir {
-        std::env::set_var("DATA_DIR", dir);
-    }
-
-    let config = piramid::config::loader::load().unwrap_or_else(exit_on_config_error);
+    let config = piramid::config::loader::load_from(&config_source(config, None, data_dir))
+        .unwrap_or_else(exit_on_config_error);
     let state = std::sync::Arc::new(
         AppState::new(config.clone(), embeddings::EmbeddingsManager::disabled())
             .map_err(std::io::Error::other)?,
     );
-    // A broken collection is ignored so the bundle is still written.
-    let _ = preload_collections_for_metrics(&state);
+    preload_collections_for_metrics(&state)?;
 
     let path = support::write(&config, &state, Some(output))?;
     println!("wrote {}", path.display());
@@ -138,22 +138,31 @@ fn support_bundle(
     Ok(())
 }
 
+/// Open every collection on disk so the bundle reports it, naming each one that fails to open.
 fn preload_collections_for_metrics(state: &std::sync::Arc<AppState>) -> std::io::Result<()> {
-    for collection_name in state.collection_manager.discover_on_disk() {
+    let names = state
+        .collection_manager
+        .discover_on_disk()
+        .map_err(std::io::Error::other)?;
+    for collection_name in names {
         if let Err(error) = state.get_existing_collection(&collection_name) {
-            eprintln!("Skipping collection '{collection_name}' while building metrics: {error}");
+            eprintln!(
+                "Collection '{collection_name}' failed to open and is not in the bundle: {error}"
+            );
         }
     }
     Ok(())
 }
 
-fn start_server_inline() -> std::io::Result<()> {
+fn start_server_inline(
+    config: piramid::config::Config,
+    source: piramid::config::loader::ConfigSource,
+) -> std::io::Result<()> {
     let rt = Runtime::new().map_err(std::io::Error::other)?;
     rt.block_on(async {
-        let config = piramid::config::loader::load().unwrap_or_else(exit_on_config_error);
-
         let _observability =
-            observability::install(config.startup.logging, &config.startup.telemetry);
+            observability::install(config.startup.logging, &config.startup.telemetry)
+                .map_err(std::io::Error::other)?;
         init_thread_pool(&config.startup);
         if config.startup.logging.config {
             tracing::info!(
@@ -175,22 +184,52 @@ fn start_server_inline() -> std::io::Result<()> {
         };
         let addr = config.startup.bind.clone();
         let data_dir = config.startup.data_dir.clone();
-        let state =
-            std::sync::Arc::new(AppState::new(config, embeddings).map_err(std::io::Error::other)?);
+        let state = std::sync::Arc::new(
+            AppState::new(config, embeddings)
+                .map_err(std::io::Error::other)?
+                .with_config_source(source),
+        );
 
-        let app = server::create_router(state);
         tracing::info!(
             target: "piramid::config",
             address = addr.as_str(),
             data_dir = data_dir.as_str(),
             "server_starting"
         );
+        let shutdown = shutdown_signal()?;
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
-            .map_err(|e| std::io::Error::other(format!("bind failed: {e}")))?;
-        axum::serve(listener, app)
+            .map_err(|e| std::io::Error::other(format!("bind {addr} failed: {e}")))?;
+        server::serve::serve(state, listener, shutdown)
             .await
             .map_err(std::io::Error::other)
+    })
+}
+
+/// A future that completes on the first SIGINT or SIGTERM.
+///
+/// The handlers are installed before it is returned, so a failure to install one is an error.
+#[cfg(unix)]
+fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut terminate = signal(SignalKind::terminate())?;
+    Ok(async move {
+        let name = tokio::select! {
+            _ = interrupt.recv() => "SIGINT",
+            _ = terminate.recv() => "SIGTERM",
+        };
+        tracing::info!(target: "piramid::shutdown", signal = name, "shutdown_signal_received");
+    })
+}
+
+/// A future that completes on the first Ctrl-C.
+#[cfg(not(unix))]
+fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    Ok(async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            tracing::error!(target: "piramid::shutdown", %error, "shutdown_signal_failed");
+        }
     })
 }
 

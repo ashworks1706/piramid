@@ -5,16 +5,22 @@ use uuid::Uuid;
 
 use crate::metadata::Metadata;
 
+/// A stored record: a vector, the text it was made from, and its metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
+    /// Identifier, unique within a collection.
     pub id: Uuid,
+    /// The embedding searched against.
     pub vector: Vec<f32>,
+    /// Source text the vector represents.
     pub text: String,
+    /// Key-value fields filters are evaluated against.
     #[serde(default)]
     pub metadata: Metadata,
 }
 
 impl Document {
+    /// A document with a fresh random id and empty metadata.
     pub fn new(vector: Vec<f32>, text: String) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -24,6 +30,7 @@ impl Document {
         }
     }
 
+    /// A document with a fresh random id and the given metadata.
     pub fn with_metadata(vector: Vec<f32>, text: String, metadata: Metadata) -> Self {
         Self {
             id: Uuid::new_v4(),

@@ -1,18 +1,20 @@
 //! The event loop: terminal setup, the tasks that feed it, and the draw cycle.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 use std::time::Duration;
 
 use crossterm::event::{Event as TermEvent, EventStream, KeyEventKind};
 use futures::StreamExt;
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::task::JoinHandle;
 
 use crate::console::app::App;
 use crate::console::client::Client;
 use crate::console::collections::Pending;
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
-use crate::console::types::{Event, Profile};
+use crate::console::types::{ConfigState, Event, Profile};
 use crate::console::{health, ui};
 use piramid_core::config::Config;
 
@@ -28,11 +30,14 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
         let mut app = App::new(settings.clone(), profile, root.clone(), &tx)?;
 
         // Read once. The build does not change while the console is open.
-        if let Ok(version) = app.collections.client.version().await {
-            app.collections.version = match version.git_commit {
-                Some(commit) => format!("v{} {commit}", version.version),
-                None => format!("v{}", version.version),
-            };
+        match app.collections.client.version().await {
+            Ok(version) => {
+                app.collections.version = match version.git_commit {
+                    Some(commit) => format!("v{} {commit}", version.version),
+                    None => format!("v{}", version.version),
+                };
+            }
+            Err(e) => app.notice = Some(format!("server version unknown: {e}")),
         }
 
         tokio::spawn(health::poll(
@@ -46,7 +51,7 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             tokio::spawn(services(root, tx.clone()));
         }
         tokio::spawn(ticker(tx.clone()));
-        tokio::spawn(keys(tx.clone()));
+        let mut input = tokio::spawn(keys(tx.clone()));
 
         // The terminal is restored before a panic message is printed.
         let original_hook = std::panic::take_hook();
@@ -55,7 +60,7 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             original_hook(info);
         }));
         let mut terminal = ratatui::init();
-        let outcome = drive(&mut terminal, &mut app, &mut rx, &tx).await;
+        let outcome = drive(&mut terminal, &mut app, &mut rx, &tx, &mut input).await;
         app.shutdown();
         ratatui::restore();
         outcome
@@ -67,6 +72,7 @@ async fn drive(
     app: &mut App,
     rx: &mut mpsc::UnboundedReceiver<Event>,
     tx: &UnboundedSender<Event>,
+    input: &mut JoinHandle<()>,
 ) -> std::io::Result<()> {
     refresh(app, tx);
     fetch_config(app, tx);
@@ -83,12 +89,45 @@ async fn drive(
         if let Some(pending) = app.pending_action.take() {
             act(app.collections.client.clone(), tx.clone(), pending);
         }
+        if let Some((monitor, program)) = app.handoff.take() {
+            let outcome = hand_over(terminal, &program, input, tx).await;
+            app.handed_back(monitor, outcome);
+        }
         if app.collections.refresh_due() {
             refresh(app, tx);
+        }
+        if app.config.is_none() {
+            fetch_config(app, tx);
         }
         terminal.draw(|frame| ui::draw(frame, app))?;
     }
     Ok(())
+}
+
+/// Runs program in the foreground with the terminal it needs, then takes the terminal back.
+///
+/// The key reader is stopped for the duration so it does not consume the input meant for program.
+async fn hand_over(
+    terminal: &mut ratatui::DefaultTerminal,
+    program: &Path,
+    input: &mut JoinHandle<()>,
+    tx: &UnboundedSender<Event>,
+) -> std::io::Result<ExitStatus> {
+    input.abort();
+    let _ = (&mut *input).await;
+    ratatui::restore();
+    let status = tokio::process::Command::new(program).status().await;
+    let resumed = resume_terminal(terminal);
+    *input = tokio::spawn(keys(tx.clone()));
+    resumed?;
+    status
+}
+
+/// Puts the terminal back into the raw alternate screen the console draws on.
+fn resume_terminal(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<()> {
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
+    terminal.clear()
 }
 
 async fn services(root: PathBuf, tx: UnboundedSender<Event>) {
@@ -141,7 +180,7 @@ fn refresh(app: &mut App, tx: &UnboundedSender<Event>) {
 
 /// Reads the configuration the server resolved, rather than a file on this machine.
 fn fetch_config(app: &mut App, tx: &UnboundedSender<Event>) {
-    app.config = Some(Ok(String::new()));
+    app.config = Some(ConfigState::Loading);
     let client = app.collections.client.clone();
     let tx = tx.clone();
     tokio::spawn(async move {

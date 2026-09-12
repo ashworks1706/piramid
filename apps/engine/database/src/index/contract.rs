@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use piramid_core::config::SearchConfig;
 use piramid_core::error::Result;
 use piramid_core::metadata::{Filter, Metadata};
+use piramid_hardware::compute::{ExecutionMode, Metric};
 use uuid::Uuid;
 
 use super::serialize::SerializableIndex;
@@ -82,6 +83,12 @@ pub trait VectorIndex: Send + Sync {
 
     /// Which family this index belongs to.
     fn index_type(&self) -> IndexType;
+
+    /// The metric the index orders candidates by.
+    fn metric(&self) -> Metric;
+
+    /// Set the strategy that runs the math of this index.
+    fn set_execution(&mut self, mode: ExecutionMode);
 
     /// Convert into the persistable form.
     fn to_serializable(&self) -> SerializableIndex;

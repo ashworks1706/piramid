@@ -1,3 +1,5 @@
+//! Liveness, embedding availability and metrics endpoints.
+
 use axum::{extract::State, http::StatusCode, response::Json};
 
 use crate::http::ApiResult as Result;
@@ -5,10 +7,12 @@ use crate::services::admin;
 use crate::services::api::{HealthResponse, MetricsResponse};
 use crate::state::SharedState;
 
+/// GET /api/health: reports that the process is up.
 pub async fn health() -> Json<HealthResponse> {
     Json(admin::health())
 }
 
+/// GET /api/health/embeddings: 200 when an embedding provider is configured, 503 otherwise.
 pub async fn health_embeddings(State(state): State<SharedState>) -> StatusCode {
     if admin::embeddings_available(&state) {
         StatusCode::OK
@@ -17,6 +21,7 @@ pub async fn health_embeddings(State(state): State<SharedState>) -> StatusCode {
     }
 }
 
+/// GET /api/metrics: returns the server-wide metrics snapshot as JSON.
 pub async fn metrics(State(state): State<SharedState>) -> Result<Json<MetricsResponse>> {
     Ok(Json(admin::metrics(&state)?))
 }

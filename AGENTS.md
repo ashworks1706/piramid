@@ -52,8 +52,8 @@ folder and neither is hardware.
 apps/engine/core            errors (every one the app wraps), config (the whole surface), the
                             document and hit shapes, metadata and its filters, validation, stats,
                             observability (subscriber, OTLP, Prometheus)
-apps/engine/hardware        compute (distance kernels, strategy registry, quantization) and
-                            gpu (device, buffer, stream, module, kernels)
+apps/engine/hardware        compute (distance kernels, strategy registry, quantization),
+                            gpu (device, buffer, stream, module, kernels) and host (CPU, memory)
 apps/engine/database        storage (records, WAL, sidecars, mmap), index (flat, hnsw, ivf),
                             search (planning, filtering, ranking, near-duplicates), cache,
                             document (what is done to one), and collection (the object composing
@@ -61,7 +61,7 @@ apps/engine/database        storage (records, WAL, sidecars, mmap), index (flat,
 apps/engine/model           inference (forward pass, kv_cache, batching, sampling), fusion (the
                             RetrievalHook seam), embeddings (openai wire format; ollama)
 apps/engine/serving         http (axum only, handlers and routes), services (operations, wire
-                            shapes, conversion), state, disk, cluster
+                            shapes, conversion), state, machine, disk, cluster
 apps/cli                    the piramid binary and the umbrella piramid facade crate
 apps/website                piramiddb.com, blog content and images included
 apps/sdk                    npm and python clients

@@ -2,7 +2,7 @@
 
 use piramid_core::observability::prometheus::{MetricType, Registry};
 
-use crate::services::api::MetricsResponse;
+use crate::services::api::{HostMetricsResponse, MetricsResponse};
 
 /// Render a metrics snapshot in the Prometheus text format.
 pub fn render(metrics: &MetricsResponse) -> String {
@@ -131,14 +131,104 @@ pub fn render(metrics: &MetricsResponse) -> String {
         MetricType::Counter,
         metrics.embedding.total_tokens as f64,
     );
-    if let Some(latency) = metrics.embedding.avg_latency_ms {
-        registry.metric(
-            "piramid_embedding_latency_ms",
-            "Mean embedding request latency in milliseconds.",
-            MetricType::Gauge,
-            f64::from(latency),
-        );
-    }
+    registry.optional_metric(
+        "piramid_embedding_latency_ms",
+        "Mean embedding request latency in milliseconds.",
+        MetricType::Gauge,
+        metrics.embedding.avg_latency_ms.map(f64::from),
+    );
+
+    render_host(&mut registry, &metrics.host);
 
     registry.render()
+}
+
+/// Write the host readings, leaving out each one the server could not measure.
+fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
+    registry.optional_metric(
+        "piramid_host_cpu_percent",
+        "Processor use across every logical CPU of the host, from 0 to 100.",
+        MetricType::Gauge,
+        host.cpu_percent.map(f64::from),
+    );
+    registry.optional_metric(
+        "piramid_host_memory_used_bytes",
+        "Physical memory in use on the host.",
+        MetricType::Gauge,
+        host.memory_used_bytes.map(|bytes| bytes as f64),
+    );
+    registry.optional_metric(
+        "piramid_host_memory_total_bytes",
+        "Physical memory installed on the host.",
+        MetricType::Gauge,
+        host.memory_total_bytes.map(|bytes| bytes as f64),
+    );
+    registry.optional_metric(
+        "piramid_process_cpu_percent",
+        "Processor use of the server process as a share of every logical CPU of the host, from 0 to 100.",
+        MetricType::Gauge,
+        host.process_cpu_percent.map(f64::from),
+    );
+    registry.optional_metric(
+        "piramid_process_resident_memory_bytes",
+        "Resident memory of the server process.",
+        MetricType::Gauge,
+        host.process_resident_bytes.map(|bytes| bytes as f64),
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HOST_FAMILIES: [&str; 5] = [
+        "piramid_host_cpu_percent",
+        "piramid_host_memory_used_bytes",
+        "piramid_host_memory_total_bytes",
+        "piramid_process_cpu_percent",
+        "piramid_process_resident_memory_bytes",
+    ];
+
+    fn rendered(host: &HostMetricsResponse) -> String {
+        let mut registry = Registry::new();
+        render_host(&mut registry, host);
+        registry.render()
+    }
+
+    #[test]
+    fn an_unmeasured_host_writes_no_family() {
+        assert_eq!(rendered(&HostMetricsResponse::default()), "");
+    }
+
+    #[test]
+    fn a_measured_host_writes_every_family() {
+        let out = rendered(&HostMetricsResponse {
+            cpu_percent: Some(12.5),
+            memory_used_bytes: Some(1024),
+            memory_total_bytes: Some(4096),
+            process_cpu_percent: Some(0.0),
+            process_resident_bytes: Some(512),
+        });
+        for family in HOST_FAMILIES {
+            assert!(
+                out.contains(&format!("# TYPE {family} gauge\n")),
+                "{family} in {out}"
+            );
+        }
+        assert!(out.contains("piramid_host_cpu_percent 12.5\n"));
+        assert!(out.contains("piramid_host_memory_total_bytes 4096\n"));
+        assert!(out.contains("piramid_process_cpu_percent 0\n"));
+    }
+
+    #[test]
+    fn only_the_measured_fields_are_written() {
+        let out = rendered(&HostMetricsResponse {
+            memory_total_bytes: Some(4096),
+            ..HostMetricsResponse::default()
+        });
+        assert!(out.contains("piramid_host_memory_total_bytes 4096\n"));
+        assert!(!out.contains("piramid_host_cpu_percent"));
+        assert!(!out.contains("piramid_host_memory_used_bytes"));
+        assert!(!out.contains("piramid_process_"));
+    }
 }

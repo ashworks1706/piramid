@@ -19,30 +19,8 @@ const SECRET_MARKERS: &[&str] = &[
     "AUTH",
 ];
 
-/// Environment variables worth reporting, beyond the resolved config.
-const REPORTED_PREFIXES: &[&str] = &[
-    "PIRAMID__",
-    "PIRAMID_",
-    "EMBEDDING_",
-    "OPENAI_",
-    "LOG_",
-    "CACHE_",
-    "INDEX_",
-    "SEARCH_",
-    "WAL_",
-    "MEMORY_",
-    "QUANTIZATION_",
-    "HARDWARE_",
-    "LIMIT_",
-    "DISK_",
-    "EXECUTION_",
-    "RUST_LOG",
-    "DATA_DIR",
-    "PORT",
-    "CONFIG_FILE",
-    "NUM_THREADS",
-    "PARALLEL_SEARCH",
-];
+/// Environment variables Piramid reads, by prefix, reported beside the resolved config.
+const REPORTED_PREFIXES: &[&str] = &["PIRAMID_", "CONFIG_FILE", "OPENAI_API_KEY", "RUST_LOG"];
 
 /// Clone the config with the embedding API key replaced by a redaction marker.
 fn redacted(config: &Config) -> Config {
@@ -113,7 +91,7 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
     let _ = writeln!(
         out,
         "slow_query_ms       {}",
-        config.startup.logging.slow_query_ms()
+        config.startup.logging.slow_query_ms
     );
     let _ = writeln!(
         out,
@@ -204,7 +182,7 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
 
     let _ = writeln!(out, "## Resolved configuration");
     let _ = writeln!(out);
-    match serde_yaml::to_string(&redacted(config)) {
+    match yaml_serde::to_string(&redacted(config)) {
         Ok(yaml) => {
             let _ = writeln!(out, "```yaml");
             let _ = write!(out, "{yaml}");
