@@ -50,8 +50,11 @@ pub enum PiramidError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] bincode::Error),
+    #[error("Encoding error: {0}")]
+    Encode(#[from] bincode::error::EncodeError),
+
+    #[error("Decoding error: {0}")]
+    Decode(#[from] bincode::error::DecodeError),
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
@@ -74,7 +77,8 @@ impl PiramidError {
             Self::Storage(_)
             | Self::Index(_)
             | Self::Io(_)
-            | Self::Serialization(_)
+            | Self::Encode(_)
+            | Self::Decode(_)
             | Self::Json(_)
             | Self::Other(_) => ErrorKind::Internal,
         }

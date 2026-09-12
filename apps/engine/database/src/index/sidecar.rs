@@ -5,7 +5,7 @@ use piramid_core::error::Result;
 use std::fs;
 use std::path::Path;
 
-use crate::storage::SidecarManager;
+use crate::storage::{codec, SidecarManager};
 
 /// Sidecar path for the index of a collection, owned by [SidecarManager].
 fn get_index_file_path(collection_path: &str) -> String {
@@ -16,7 +16,7 @@ fn get_index_file_path(collection_path: &str) -> String {
 pub fn save_vector_index(collection_path: &str, index: &dyn VectorIndex) -> Result<()> {
     let serializable = index.to_serializable();
 
-    let bytes = bincode::serialize(&serializable)?;
+    let bytes = codec::encode(&serializable)?;
     let index_path = get_index_file_path(collection_path);
     fs::write(index_path, bytes)?;
     Ok(())
@@ -31,6 +31,6 @@ pub fn load_vector_index(collection_path: &str) -> Result<Option<Box<dyn VectorI
     }
 
     let bytes = fs::read(index_path)?;
-    let serializable: SerializableIndex = bincode::deserialize(&bytes)?;
+    let serializable: SerializableIndex = codec::decode(&bytes)?;
     Ok(Some(serializable.to_trait_object()))
 }

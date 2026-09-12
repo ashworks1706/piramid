@@ -204,7 +204,7 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
 
     let _ = writeln!(out, "## Resolved configuration");
     let _ = writeln!(out);
-    match serde_yaml::to_string(&redacted(config)) {
+    match yaml_serde::to_string(&redacted(config)) {
         Ok(yaml) => {
             let _ = writeln!(out, "```yaml");
             let _ = write!(out, "{yaml}");

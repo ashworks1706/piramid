@@ -14,7 +14,7 @@ fn example() -> String {
 
 #[test]
 fn the_example_file_parses_and_is_exactly_the_defaults() {
-    let parsed: Config = serde_yaml::from_str(&example()).unwrap();
+    let parsed: Config = yaml_serde::from_str(&example()).unwrap();
 
     assert_eq!(
         parsed,
@@ -27,7 +27,7 @@ fn the_example_file_parses_and_is_exactly_the_defaults() {
 #[test]
 fn the_example_file_documents_every_key() {
     let text = example();
-    let yaml = serde_yaml::to_string(&Config::default()).unwrap();
+    let yaml = yaml_serde::to_string(&Config::default()).unwrap();
 
     let missing: Vec<&str> = yaml
         .lines()

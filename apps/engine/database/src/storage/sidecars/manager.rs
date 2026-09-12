@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::offsets::EntryPointer;
+use crate::storage::codec;
 use crate::storage::manifest::{CollectionMetadata, SCHEMA_VERSION};
 use piramid_core::error::{Result, StorageError};
 
@@ -92,7 +93,7 @@ impl<'a> SidecarManager<'a> {
         let Some(data) = Self::read_optional(&path)? else {
             return Ok(HashMap::new());
         };
-        bincode::deserialize(&data).map_err(|e| {
+        codec::decode(&data).map_err(|e| {
             StorageError::CorruptedIndex(format!("failed to decode {path}: {e}")).into()
         })
     }
@@ -108,7 +109,7 @@ impl<'a> SidecarManager<'a> {
         let Some(bytes) = Self::read_optional(&path)? else {
             return Ok(None);
         };
-        let metadata: CollectionMetadata = bincode::deserialize(&bytes)
+        let metadata: CollectionMetadata = codec::decode(&bytes)
             .map_err(|e| StorageError::CorruptedData(format!("failed to read manifest: {e}")))?;
         if metadata.schema_version != SCHEMA_VERSION {
             return Err(StorageError::CorruptedData(format!(
@@ -145,7 +146,7 @@ impl<'a> SidecarManager<'a> {
 
     /// Serializes a value with bincode and writes it to a path.
     fn write_bincode<T: Serialize>(path: &str, value: &T) -> Result<()> {
-        fs::write(path, bincode::serialize(value)?)?;
+        fs::write(path, codec::encode(value)?)?;
         Ok(())
     }
 
