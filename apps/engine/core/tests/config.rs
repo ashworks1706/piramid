@@ -13,8 +13,8 @@ use piramid_hardware::compute::Metric;
 #[test]
 fn the_default_config_round_trips_through_yaml() {
     let cfg = Config::default();
-    let yaml = serde_yaml::to_string(&cfg).unwrap();
-    let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
+    let yaml = yaml_serde::to_string(&cfg).unwrap();
+    let parsed: Config = yaml_serde::from_str(&yaml).unwrap();
 
     assert_eq!(cfg, parsed);
     assert!(yaml.contains("startup:"));
@@ -23,7 +23,7 @@ fn the_default_config_round_trips_through_yaml() {
 
 #[test]
 fn an_empty_file_is_all_defaults() {
-    let cfg: Config = serde_yaml::from_str("{}").unwrap();
+    let cfg: Config = yaml_serde::from_str("{}").unwrap();
 
     assert_eq!(cfg, Config::default());
     assert_eq!(cfg.startup.bind, "0.0.0.0:6333");
@@ -43,7 +43,7 @@ runtime:
   search:
     filter_overfetch: 3
 ";
-    let cfg: Config = serde_yaml::from_str(yaml).unwrap();
+    let cfg: Config = yaml_serde::from_str(yaml).unwrap();
 
     assert_eq!(cfg.startup.bind, "127.0.0.1:7000");
     assert_eq!(cfg.runtime.search.filter_overfetch, 3);
@@ -59,7 +59,7 @@ runtime:
   search:
     filter_overfech: 3
 ";
-    let err = serde_yaml::from_str::<Config>(yaml)
+    let err = yaml_serde::from_str::<Config>(yaml)
         .unwrap_err()
         .to_string();
     assert!(err.contains("filter_overfech"), "{err}");
@@ -71,7 +71,7 @@ fn a_setting_in_the_wrong_block_is_an_error() {
 runtime:
   bind: 127.0.0.1:7000
 ";
-    assert!(serde_yaml::from_str::<Config>(yaml).is_err());
+    assert!(yaml_serde::from_str::<Config>(yaml).is_err());
 }
 
 #[test]
@@ -203,7 +203,7 @@ fn a_memory_class_profile_supplies_the_memory_budget() {
 fn memory_class_profiles_round_trip_through_yaml() {
     for name in ["auto", "cpu-only", "gpu", "8gb", "16gb", "32gb"] {
         let yaml = format!("startup:\n  hardware:\n    profile: {name}\n");
-        let cfg: Config = serde_yaml::from_str(&yaml).unwrap();
+        let cfg: Config = yaml_serde::from_str(&yaml).unwrap();
         assert_eq!(cfg.startup.hardware.profile.as_str(), name);
     }
 }

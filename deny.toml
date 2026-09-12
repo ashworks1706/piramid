@@ -5,8 +5,8 @@ all-features = true
 version = 2
 yanked = "warn"
 ignore = [
-  # bincode 1.x unmaintained, no safe upgrade. It defines our on-disk format, so 2.x is a
-  # migration, not a bump. See docs/ROADMAP.md.
+  # bincode is unmaintained in every version, 2.x included, and there is no patched release.
+  # It defines our on-disk format. The advisory is informational, not a vulnerability.
   "RUSTSEC-2025-0141",
 ]
 

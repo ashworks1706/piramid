@@ -2,6 +2,7 @@ use memmap2::MmapMut;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 
+use crate::storage::codec;
 use crate::storage::sidecars::{
     create_mmap, ensure_file_size, grow_mmap_if_needed, warm_mmap, EntryPointer,
 };
@@ -54,7 +55,7 @@ impl RecordStore {
     }
 
     pub fn encode_document(document: &Document) -> Result<Vec<u8>> {
-        Ok(bincode::serialize(document)?)
+        codec::encode(document)
     }
 
     pub fn append_batch(&mut self, entries: &[(uuid::Uuid, Vec<u8>)]) -> Result<Vec<EntryPointer>> {
@@ -79,7 +80,7 @@ impl RecordStore {
                 pointer.offset, pointer.length
             ))
         })?;
-        bincode::deserialize(&bytes).map_err(|e| {
+        codec::decode(&bytes).map_err(|e| {
             StorageError::CorruptedData(format!(
                 "failed to decode document at offset {} length {}: {e}",
                 pointer.offset, pointer.length

@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-use serde_yaml::{Mapping, Value};
+use yaml_serde::{Mapping, Value};
 
 use crate::config::Config;
 use crate::error::ConfigError;
@@ -34,7 +34,7 @@ pub fn load_with(
     apply_secret_env(&mut document)?;
 
     let mut config: Config =
-        serde_yaml::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
+        yaml_serde::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
     adjust(&mut config);
 
     config.validate().map_err(ConfigError::Invalid)?;
@@ -50,7 +50,7 @@ fn load_file(path: Option<String>) -> Result<Value, ConfigError> {
         .map_err(|e| ConfigError::File(format!("failed to read CONFIG_FILE '{path}': {e}")))?;
 
     let parsed = if path.ends_with(".yaml") || path.ends_with(".yml") {
-        serde_yaml::from_str::<Value>(&data)
+        yaml_serde::from_str::<Value>(&data)
             .map_err(|e| ConfigError::File(format!("failed to parse YAML '{path}': {e}")))?
     } else if path.ends_with(".json") {
         serde_json::from_str::<Value>(&data)
@@ -88,7 +88,7 @@ fn apply_env_overrides(document: &mut Value) -> Result<(), ConfigError> {
             });
         }
         // Values are parsed as YAML scalars. Anything that does not parse stays a string.
-        let value = serde_yaml::from_str::<Value>(&raw).unwrap_or_else(|_| Value::String(raw));
+        let value = yaml_serde::from_str::<Value>(&raw).unwrap_or_else(|_| Value::String(raw));
         insert_at(document, &path, value).map_err(|reason| ConfigError::Env { name, reason })?;
     }
     Ok(())

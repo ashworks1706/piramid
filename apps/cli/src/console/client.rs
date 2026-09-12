@@ -163,7 +163,7 @@ impl Client {
     pub async fn config(&self) -> Result<String, ClientError> {
         let value: serde_json::Value = self.get("/api/config").await?;
         let config = value.get("app_config").unwrap_or(&value);
-        serde_yaml::to_string(config)
+        yaml_serde::to_string(config)
             .map_err(|e| ClientError::Decode("/api/config".to_owned(), e.to_string()))
     }
 
