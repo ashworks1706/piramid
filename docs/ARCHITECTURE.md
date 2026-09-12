@@ -238,8 +238,9 @@ Three rules keep the surface legible:
 
 Environment variables are overrides only, spelled mechanically from the path:
 `runtime.cache.max_bytes` is `PIRAMID__RUNTIME__CACHE__MAX_BYTES`, parsed as YAML so `8`, `true` and
-`null` mean what they do in the file. `OPENAI_API_KEY` is the one environment-only setting, so a key
-never lands in a file that gets shared, and the support bundle redacts it.
+`null` mean what they do in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are the
+environment-only settings, so a key never lands in a file that gets shared, and the support bundle
+redacts them.
 
 ## Errors
 

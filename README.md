@@ -71,14 +71,22 @@ cargo install piramid
 piramid serve --data-dir ./data
 ```
 
-Listens on `0.0.0.0:6333`. Data goes to `~/.piramid` unless `startup.data_dir` says otherwise. Every
+Listens on `127.0.0.1:6333`. Data goes to `~/.piramid` unless `startup.data_dir` says otherwise. Every
 setting is listed in [`.env.example`](.env.example).
 
 Or with Docker:
 
 ```bash
-docker run -p 6333:6333 -v piramid-data:/data ghcr.io/ashworks1706/piramid:main
+docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY="$(openssl rand -hex 32)" \
+  ghcr.io/ashworks1706/piramid:main
 ```
+
+A server bound to anything other than loopback refuses to start without an API key. Set
+`PIRAMID_API_KEY` and send it as `Authorization: Bearer <key>` on every request except
+`/api/health` and `/api/readyz`, or set `startup.http.auth.allow_unauthenticated: true` to serve
+without one. Each client gets a token bucket of 100 requests per second with a burst of 200,
+tuned under `startup.http.rate_limit`. SIGINT or SIGTERM drains in-flight requests for up to 30
+seconds, checkpoints every open collection, and exits.
 
 `piramid` with no subcommand opens the console, described below. `piramid serve` runs the server
 in the foreground and `piramid support-bundle` writes diagnostics for a bug report.
@@ -86,6 +94,8 @@ in the foreground and `piramid support-bundle` writes diagnostics for a bug repo
 ## Usage
 
 ```bash
+# With PIRAMID_API_KEY set, add -H "Authorization: Bearer $PIRAMID_API_KEY" to each request.
+
 # Create a collection
 curl -X POST http://localhost:6333/api/collections \
   -H "Content-Type: application/json" \

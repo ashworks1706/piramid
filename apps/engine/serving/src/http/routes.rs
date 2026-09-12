@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::http::HeaderValue;
 use axum::{
     extract::DefaultBodyLimit,
@@ -8,15 +10,16 @@ use axum::{
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::set_header::SetResponseHeaderLayer;
 
+use super::auth::require_api_key;
 use super::handlers;
+use super::rate_limit::RateLimit;
 use super::request_id::assign_request_id;
 use crate::state::SharedState;
 
+/// Every API route except liveness and readiness.
 fn api_router(state: SharedState) -> Router<SharedState> {
     Router::new()
-        .route("/health", get(handlers::health))
         .route("/health/embeddings", get(handlers::health_embeddings))
-        .route("/readyz", get(handlers::readyz))
         .route("/metrics", get(handlers::metrics))
         .route("/version", get(handlers::version))
         .route("/collections", get(handlers::list_collections))
@@ -97,19 +100,36 @@ fn api_router(state: SharedState) -> Router<SharedState> {
 }
 
 /// Build the router: API routes under /api, the Prometheus endpoint, and middleware.
-pub fn create_router(state: SharedState) -> Router {
+///
+/// When the process booted with an API key, every route except /api/health and /api/readyz
+/// requires it. A rate limit keys on peer addresses, so the router is served with connect info.
+pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
     // The API is mounted at one prefix, with no version segment.
-    Router::<SharedState>::new()
+    let mut router = Router::<SharedState>::new()
         .nest("/api", api_router(state.clone()))
         // The Prometheus endpoint sits outside the API prefix.
-        .route("/metrics", get(handlers::prometheus_metrics))
+        .route("/metrics", get(handlers::prometheus_metrics));
+    if let Some(key) = state.http_config().auth.api_key.clone() {
+        router = router.route_layer(middleware::from_fn_with_state(
+            Arc::new(key),
+            require_api_key,
+        ));
+    }
+    // Routes added after the authentication layer are served without a key.
+    let mut router = router
+        .route("/api/health", get(handlers::health))
+        .route("/api/readyz", get(handlers::readyz))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB for batch operations
-        .layer(cors)
+        .layer(cors);
+    if let Some(rate_limit) = rate_limit {
+        router = router.layer(rate_limit.layer());
+    }
+    router
         .layer(middleware::from_fn(assign_request_id))
         .layer(SetResponseHeaderLayer::if_not_present(
             axum::http::header::HeaderName::from_static("x-api-version"),

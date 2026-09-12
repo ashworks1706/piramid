@@ -87,7 +87,7 @@ fn main() {
             if let Some(dir) = data_dir {
                 std::env::set_var("DATA_DIR", dir);
             }
-            run_or_exit(start_server_inline, "Failed to start the server");
+            run_or_exit(start_server_inline, "piramid serve");
         }
         // No subcommand opens the console. Inside a checkout it can drive the repo as well as
         // the server; an installed binary gets the views that need only a server.
@@ -178,19 +178,46 @@ fn start_server_inline() -> std::io::Result<()> {
         let state =
             std::sync::Arc::new(AppState::new(config, embeddings).map_err(std::io::Error::other)?);
 
-        let app = server::create_router(state);
         tracing::info!(
             target: "piramid::config",
             address = addr.as_str(),
             data_dir = data_dir.as_str(),
             "server_starting"
         );
+        let shutdown = shutdown_signal()?;
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
-            .map_err(|e| std::io::Error::other(format!("bind failed: {e}")))?;
-        axum::serve(listener, app)
+            .map_err(|e| std::io::Error::other(format!("bind {addr} failed: {e}")))?;
+        server::serve::serve(state, listener, shutdown)
             .await
             .map_err(std::io::Error::other)
+    })
+}
+
+/// A future that completes on the first SIGINT or SIGTERM.
+///
+/// The handlers are installed before it is returned, so a failure to install one is an error.
+#[cfg(unix)]
+fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut terminate = signal(SignalKind::terminate())?;
+    Ok(async move {
+        let name = tokio::select! {
+            _ = interrupt.recv() => "SIGINT",
+            _ = terminate.recv() => "SIGTERM",
+        };
+        tracing::info!(target: "piramid::shutdown", signal = name, "shutdown_signal_received");
+    })
+}
+
+/// A future that completes on the first Ctrl-C.
+#[cfg(not(unix))]
+fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    Ok(async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            tracing::error!(target: "piramid::shutdown", %error, "shutdown_signal_failed");
+        }
     })
 }
 

@@ -96,8 +96,12 @@ impl App {
             .into_iter()
             .map(|unit| UnitState::new(unit, settings.log_lines))
             .collect();
-        let client = Client::new(&settings.base_url, std::time::Duration::from_secs(15))
-            .map_err(std::io::Error::other)?;
+        let client = Client::new(
+            &settings.base_url,
+            std::time::Duration::from_secs(15),
+            settings.api_key.clone(),
+        )
+        .map_err(std::io::Error::other)?;
         Ok(Self {
             profile,
             view: profile

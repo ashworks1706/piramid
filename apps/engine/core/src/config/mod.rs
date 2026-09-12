@@ -10,6 +10,7 @@ mod disk;
 mod embedding;
 mod file;
 mod hardware;
+mod http;
 mod index;
 mod index_params;
 mod inference;
@@ -32,6 +33,7 @@ pub use disk::DiskConfig;
 pub use embedding::EmbeddingConfig;
 pub use file::Config;
 pub use hardware::{GpuConfig, HardwareConfig, HardwareProfile, VramSplit};
+pub use http::{ApiKey, AuthConfig, HttpConfig, RateLimitConfig, API_KEY_ENV};
 pub use index::{AutoIndexConfig, IndexConfig, IndexKind};
 pub use index_params::{FlatConfig, HnswConfig, IvfConfig};
 pub use inference::{

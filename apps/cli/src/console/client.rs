@@ -6,6 +6,8 @@
 
 use std::time::Duration;
 
+use piramid_core::config::{ApiKey, API_KEY_ENV};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::Deserialize;
 
 /// Everything one refresh collects.
@@ -110,6 +112,14 @@ pub enum ClientError {
     /// The server could not be reached, or did not answer in time.
     #[error("{0} unreachable: {1}")]
     Unreachable(String, String),
+    /// The server refused the request for a missing or wrong API key.
+    #[error("{path} was refused: {reason}")]
+    Unauthorized {
+        /// The request path.
+        path: String,
+        /// What to change.
+        reason: String,
+    },
     /// The server answered with a status other than 2xx.
     #[error("{0} returned {1}: {2}")]
     Status(String, u16, String),
@@ -126,19 +136,33 @@ pub enum ClientError {
 pub struct Client {
     http: reqwest::Client,
     base: String,
+    keyed: bool,
 }
 
 impl Client {
     /// A client for base, with a request timeout so a hung server does not freeze the UI.
-    pub fn new(base: &str, timeout: Duration) -> Result<Self, ClientError> {
+    ///
+    /// A key is sent as a bearer token on every request.
+    pub fn new(base: &str, timeout: Duration, key: Option<ApiKey>) -> Result<Self, ClientError> {
+        let mut headers = HeaderMap::new();
+        if let Some(key) = &key {
+            let mut value =
+                HeaderValue::from_str(&format!("Bearer {}", key.expose())).map_err(|_| {
+                    ClientError::Build(format!("{API_KEY_ENV} is not a valid header value"))
+                })?;
+            value.set_sensitive(true);
+            headers.insert(AUTHORIZATION, value);
+        }
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(2))
             .timeout(timeout)
+            .default_headers(headers)
             .build()
             .map_err(|e| ClientError::Build(e.to_string()))?;
         Ok(Self {
             http,
             base: base.trim_end_matches('/').to_owned(),
+            keyed: key.is_some(),
         })
     }
 
@@ -194,7 +218,7 @@ impl Client {
             .send()
             .await
             .map_err(|e| ClientError::Unreachable(path.to_owned(), root_cause(&e)))?;
-        Self::decode(path, response).await
+        self.decode(path, response).await
     }
 
     async fn post_empty(&self, path: &str) -> Result<(), ClientError> {
@@ -205,15 +229,27 @@ impl Client {
             .send()
             .await
             .map_err(|e| ClientError::Unreachable(path.to_owned(), root_cause(&e)))?;
-        let _: serde_json::Value = Self::decode(path, response).await?;
+        let _: serde_json::Value = self.decode(path, response).await?;
         Ok(())
     }
 
     async fn decode<T: serde::de::DeserializeOwned>(
+        &self,
         path: &str,
         response: reqwest::Response,
     ) -> Result<T, ClientError> {
         let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            let reason = if self.keyed {
+                format!("the server rejected the key in {API_KEY_ENV}")
+            } else {
+                format!("the server requires an API key; set {API_KEY_ENV}")
+            };
+            return Err(ClientError::Unauthorized {
+                path: path.to_owned(),
+                reason,
+            });
+        }
         let body = response
             .text()
             .await

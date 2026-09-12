@@ -9,8 +9,8 @@ use std::sync::{
 use crate::cluster::{
     ClusterRouter, LocalClusterRouter, NodeCapabilities, NodeId, NodeRuntimeState, RouteDecision,
 };
-use piramid_core::config::{Config, StartupConfig};
-use piramid_core::error::{Result, ServerError};
+use piramid_core::config::{Config, HttpConfig, StartupConfig};
+use piramid_core::error::{PiramidError, Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
 use piramid_model::embeddings::EmbeddingsManager;
 
@@ -76,6 +76,11 @@ impl AppState {
         })
     }
 
+    /// Authentication, rate limiting and shutdown settings the process booted with.
+    pub fn http_config(&self) -> &HttpConfig {
+        &self.booted_with.http
+    }
+
     /// Milliseconds above which a query is logged at warn level.
     pub fn slow_query_ms(&self) -> u128 {
         u128::from(self.booted_with.logging.slow_query_ms())
@@ -117,13 +122,20 @@ impl AppState {
         self.collection_manager.get_or_create(name)
     }
 
-    pub fn checkpoint_all(&self) -> Result<()> {
-        for (_, storage) in self.collection_manager.loaded_collections() {
+    /// Checkpoints and flushes every loaded collection, returning the name and error of each that
+    /// failed.
+    pub fn checkpoint_all(&self) -> Vec<(String, PiramidError)> {
+        let mut failures = Vec::new();
+        for (name, storage) in self.collection_manager.loaded_collections() {
             let mut storage_guard = storage.write();
-            storage_guard.checkpoint()?;
-            storage_guard.flush()?;
+            if let Err(error) = storage_guard
+                .checkpoint()
+                .and_then(|()| storage_guard.flush())
+            {
+                failures.push((name, error));
+            }
         }
-        Ok(())
+        failures
     }
 
     /// Re-read configuration from disk and environment, swapping it in atomically.

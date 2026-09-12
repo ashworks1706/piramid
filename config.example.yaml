@@ -20,8 +20,9 @@
 # and turning one on fails loudly rather than being ignored.
 
 startup:
-  # address:port to listen on
-  bind: 0.0.0.0:6333
+  # address:port to listen on. A non-loopback address, such as 0.0.0.0:6333, needs an API key
+  # or startup.http.auth.allow_unauthenticated, or the server refuses to start.
+  bind: 127.0.0.1:6333
 
   # root directory for collection data; each collection gets a subdirectory
   data_dir: ./data
@@ -86,6 +87,21 @@ startup:
     min_free_bytes: null
     # drop to read-only at the threshold instead of failing each write
     readonly_on_low_space: true
+
+  http:
+    # With PIRAMID_API_KEY set, every route except /api/health and /api/readyz requires
+    # Authorization: Bearer <key>. The key is read from the environment only, never from this file.
+    auth:
+      # serve a non-loopback bind with no key; setting this while PIRAMID_API_KEY is set is an error
+      allow_unauthenticated: false
+    # Per-client token bucket, keyed by peer address; a request over it gets 429 with
+    # Retry-After. null disables it. Behind a reverse proxy every client shares one bucket.
+    rate_limit:
+      requests_per_second: 100
+      burst: 200
+    # seconds in-flight requests get to finish after SIGINT or SIGTERM, before every open
+    # collection is checkpointed and the process exits
+    drain_timeout_secs: 30
 
   # embedding provider, built once at boot; null disables server-side embedding.
   # Set the key with OPENAI_API_KEY rather than writing it here.

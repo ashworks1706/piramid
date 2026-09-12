@@ -15,21 +15,31 @@ Pre-1.0, so only the latest release gets fixes.
 
 ## Threat model
 
-Piramid has no authentication, no authorization, and no rate limiting. Any client that can reach
-the port can read, write, and delete every collection.
+Piramid has one API key and no authorization beyond it. A client holding the key can read, write,
+and delete every collection.
 
-It's built to run on a trusted network: localhost, a private subnet, or behind a gateway that
-terminates auth. Don't expose port 6333 to the internet.
+- With `PIRAMID_API_KEY` set, every route except `/api/health` and `/api/readyz` requires
+  `Authorization: Bearer <key>`, compared in constant time. The key is read from the environment
+  only; a configuration file cannot hold it.
+- With no key, the server serves only a loopback address. Binding anything else fails at startup
+  unless `startup.http.auth.allow_unauthenticated` is set, and that switch together with a key is
+  also an error.
+- Each client IP gets a token bucket (`startup.http.rate_limit`, 100 requests per second with a
+  burst of 200 by default). Behind a reverse proxy every client shares the proxy's bucket.
+
+Run it on a trusted network or behind a gateway that terminates TLS.
 
 Specifically:
 
 - CORS is wide open (`allow_origin(Any)`), so any web page can call the API from a browser.
-  Combined with no auth, someone visiting a hostile page while a local Piramid is running can have
-  their data read or destroyed. Restrict this in your reverse proxy.
+  Without a key, someone visiting a hostile page while a local Piramid is running can have their
+  data read or destroyed. Set `PIRAMID_API_KEY` even on localhost if that matters, or restrict
+  origins in your reverse proxy.
 - There's no transport encryption. Terminate TLS upstream.
 - Collections are not a security boundary.
-- The body limit is 100 MB and there's no request rate limit, so an unauthenticated caller can
-  exhaust memory or disk. `DISK_MIN_FREE_BYTES` bounds the disk case only.
+- The body limit is 100 MB, so a caller within its rate limit can still exhaust memory or disk.
+  `startup.disk.min_free_bytes` bounds the disk case only.
+- `/api/readyz` is unauthenticated and names the data directory and every collection.
 
 ## Telemetry
 
@@ -52,8 +62,8 @@ The bundle still contains your configuration and collection names. Read it befor
 
 ## Handling secrets
 
-`OPENAI_API_KEY` and other provider credentials come from the environment and belong in `.env`,
-which is gitignored. They're never logged. Don't put them in a compose file or an image.
+`PIRAMID_API_KEY`, `OPENAI_API_KEY` and other provider credentials come from the environment and
+belong in `.env`, which is gitignored. They're never logged. Don't put them in a compose file or an image.
 
 ## Dependencies
 
