@@ -48,10 +48,13 @@ impl Wal {
         })
     }
 
-    /// Bytes currently on disk, or None when logging is disabled.
-    pub fn size_bytes(&self) -> Option<u64> {
-        self.file.as_ref()?;
-        std::fs::metadata(&self.path).ok().map(|meta| meta.len())
+    /// Bytes currently on disk, or None when logging is disabled. Errors when the log file
+    /// cannot be inspected.
+    pub fn size_bytes(&self) -> Result<Option<u64>> {
+        if self.file.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(std::fs::metadata(&self.path)?.len()))
     }
 
     /// Replay entries with a seq greater than min_seq.

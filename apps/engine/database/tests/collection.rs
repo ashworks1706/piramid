@@ -670,3 +670,33 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
     drop(storage);
     cleanup_test_files(&files);
 }
+
+// The interval trigger counts from the open, so it fires before any other trigger has run a
+// first checkpoint.
+#[test]
+fn the_checkpoint_interval_runs_from_the_open() {
+    use piramid_core::config::CollectionConfig;
+
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_wal_interval.db");
+    for suffix in [
+        "",
+        ".offsets.db",
+        ".wal.db",
+        ".vecindex.db",
+        ".manifest.db",
+        ".wal.meta",
+    ] {
+        let _ = fs::remove_file(format!("{path}{suffix}"));
+    }
+
+    let mut config = CollectionConfig::default();
+    config.wal.checkpoint_frequency = 10_000;
+    config.wal.checkpoint_interval_secs = Some(0);
+
+    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
+    assert_eq!(collection.checkpoint.last_checkpoint(), None);
+    collection
+        .insert(Document::new(vec![1.0, 0.0], "doc".to_string()))
+        .unwrap();
+    assert!(collection.checkpoint.last_checkpoint().is_some());
+}

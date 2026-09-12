@@ -176,7 +176,7 @@ runtime:
     enabled: true
     # checkpoint after this many operations
     checkpoint_frequency: 1000
-    # also checkpoint after this many seconds, if set
+    # also checkpoint at the first write this many seconds after the open or the last checkpoint
     checkpoint_interval_secs: null
     # rotate once the log passes this many bytes
     max_log_size: 104857600

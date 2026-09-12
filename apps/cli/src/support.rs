@@ -19,30 +19,8 @@ const SECRET_MARKERS: &[&str] = &[
     "AUTH",
 ];
 
-/// Environment variables worth reporting, beyond the resolved config.
-const REPORTED_PREFIXES: &[&str] = &[
-    "PIRAMID__",
-    "PIRAMID_",
-    "EMBEDDING_",
-    "OPENAI_",
-    "LOG_",
-    "CACHE_",
-    "INDEX_",
-    "SEARCH_",
-    "WAL_",
-    "MEMORY_",
-    "QUANTIZATION_",
-    "HARDWARE_",
-    "LIMIT_",
-    "DISK_",
-    "EXECUTION_",
-    "RUST_LOG",
-    "DATA_DIR",
-    "PORT",
-    "CONFIG_FILE",
-    "NUM_THREADS",
-    "PARALLEL_SEARCH",
-];
+/// Environment variables Piramid reads, by prefix, reported beside the resolved config.
+const REPORTED_PREFIXES: &[&str] = &["PIRAMID_", "CONFIG_FILE", "OPENAI_API_KEY", "RUST_LOG"];
 
 /// Clone the config with the embedding API key replaced by a redaction marker.
 fn redacted(config: &Config) -> Config {

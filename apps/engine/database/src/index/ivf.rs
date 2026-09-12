@@ -200,16 +200,17 @@ impl VectorIndex for IvfIndex {
         let mut candidates: Vec<(Uuid, f32)> = Vec::new();
 
         for (cluster_id, _) in centroid_distances.iter().take(nprobe) {
-            if let Some(vector_ids) = self.inverted_lists.get(*cluster_id) {
-                for id in vector_ids {
-                    let vector = vectors.get(id).ok_or_else(|| {
-                        IndexError::SearchFailed(format!(
-                            "IVF index references missing vector {id}"
-                        ))
-                    })?;
-                    let score = self.config.metric.calculate(query, vector, kernels);
-                    candidates.push((*id, score));
-                }
+            let vector_ids = self.inverted_lists.get(*cluster_id).ok_or_else(|| {
+                IndexError::SearchFailed(format!(
+                    "IVF centroid {cluster_id} has no inverted list; the index needs a rebuild"
+                ))
+            })?;
+            for id in vector_ids {
+                let vector = vectors.get(id).ok_or_else(|| {
+                    IndexError::SearchFailed(format!("IVF index references missing vector {id}"))
+                })?;
+                let score = self.config.metric.calculate(query, vector, kernels);
+                candidates.push((*id, score));
             }
         }
 

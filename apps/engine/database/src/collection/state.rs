@@ -30,7 +30,7 @@ pub struct Collection {
 impl Collection {
     pub(crate) fn track_operation(&mut self) -> Result<()> {
         let now = piramid_core::clock::unix_secs();
-        if self.checkpoint.should_checkpoint(&self.config.wal, now) {
+        if self.checkpoint.should_checkpoint(&self.config.wal, now)? {
             super::checkpoint::checkpoint(self)?;
             self.checkpoint.reset_counter();
         }
