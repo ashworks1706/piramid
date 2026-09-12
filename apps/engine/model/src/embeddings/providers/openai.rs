@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::time::Duration;
 
 use crate::embeddings::embedder::{Embedder, EmbeddingResponse, EmbeddingResult};
@@ -16,9 +16,19 @@ pub struct OpenAIEmbedder {
     api_key: Option<String>,
     model: String,
     base_url: String,
+    options: serde_json::Map<String, serde_json::Value>,
 }
 
 impl OpenAIEmbedder {
+    /// The JSON body for one text: the configured options, then the fields the provider sets.
+    fn request_body(&self, text: &str) -> serde_json::Map<String, serde_json::Value> {
+        let mut request = self.options.clone();
+        request.insert("model".into(), self.model.clone().into());
+        request.insert("input".into(), text.into());
+        request.insert("encoding_format".into(), "float".into());
+        request
+    }
+
     // The key reaches config from OPENAI_API_KEY in the loader.
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let base_url = config
@@ -40,6 +50,7 @@ impl OpenAIEmbedder {
             api_key: config.api_key.clone(),
             model: config.model.clone(),
             base_url,
+            options: super::options::request_options(&config.options)?,
         })
     }
 }
@@ -47,11 +58,7 @@ impl OpenAIEmbedder {
 #[async_trait]
 impl Embedder for OpenAIEmbedder {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
-        let request = OpenAIEmbeddingRequest {
-            model: self.model.clone(),
-            input: text.to_string(),
-            encoding_format: Some("float".to_string()),
-        };
+        let request = self.request_body(text);
 
         let mut post = self
             .client
@@ -114,14 +121,6 @@ impl Embedder for OpenAIEmbedder {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct OpenAIEmbeddingRequest {
-    model: String,
-    input: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    encoding_format: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 struct OpenAIEmbeddingResponse {
     data: Vec<EmbeddingData>,
@@ -137,4 +136,28 @@ struct EmbeddingData {
 #[derive(Debug, Deserialize)]
 struct Usage {
     total_tokens: u32,
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "a failed assertion is the point of a test"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn options_are_merged_into_the_request_body() {
+        let config: EmbeddingConfig = serde_json::from_value(serde_json::json!({
+            "provider": "openai",
+            "model": "text-embedding-3-small",
+            "options": { "dimensions": 256, "user": "docs" }
+        }))
+        .unwrap();
+        let body = OpenAIEmbedder::new(&config).unwrap().request_body("hello");
+        assert_eq!(body["dimensions"], 256);
+        assert_eq!(body["user"], "docs");
+        assert_eq!(body["model"], "text-embedding-3-small");
+        assert_eq!(body["input"], "hello");
+    }
 }

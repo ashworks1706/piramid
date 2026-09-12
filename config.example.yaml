@@ -96,7 +96,12 @@ startup:
   #   model: text-embedding-3-small
   #   base_url: null          # for self-hosted or proxied endpoints
   #   timeout: null           # request timeout in seconds
-  #   options: {}             # passed through to the provider verbatim
+  #   options: {}             # openai: merged into the request body; ollama: sent as options
+  #   cache:
+  #     # Identical text is not sent to the provider twice. Size this above your corpus, or the
+  #     # tail is re-embedded on every pass.
+  #     enabled: true
+  #     entries: 10000
   #
   # provider: piramid — an in-process encoder reusing the device retrieval holds.
   # Not implemented (roadmap v0.4.0).
@@ -106,7 +111,7 @@ runtime:
     # auto | flat | hnsw | ivf. `auto` picks a family from the collection's size; the others
     # take that family's parameters inline (see the commented examples below).
     type: auto
-    # cosine | euclidean | dotproduct
+    # cosine | euclidean | dot
     metric: cosine
     auto:
       # under this many vectors, scan exhaustively
@@ -205,11 +210,6 @@ runtime:
       # Byte budget for cached metadata across every loaded collection; past it the largest
       # metadata caches are cleared. null is unbounded.
       max_bytes: null
-    embeddings:
-      # Identical text is not sent to a provider twice. Size this above your corpus, or the tail
-      # is re-embedded on every pass.
-      enabled: true
-      entries: 10000
 
   # auto | scalar | simd | parallel | gpu. The one place a distance strategy is chosen.
   # `gpu` is rejected at startup until GPU distance kernels exist.

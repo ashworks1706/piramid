@@ -252,3 +252,25 @@ fn a_gpu_block_size_that_is_not_a_warp_multiple_is_rejected() {
     let error = cfg.validate().unwrap_err();
     assert!(error.contains("distance_block_size"), "{error}");
 }
+
+#[test]
+fn embedding_options_and_cache_are_validated() {
+    let parse = |yaml: &str| yaml_serde::from_str::<Config>(yaml).unwrap().validate();
+
+    let base = "startup:\n  embedding:\n    provider: openai\n    model: m\n";
+    parse(base).unwrap();
+    parse(&format!("{base}    options:\n      dimensions: 256\n")).unwrap();
+    assert!(parse(&format!("{base}    options: [1, 2]\n"))
+        .unwrap_err()
+        .contains("options"));
+    assert!(parse(&format!("{base}    options:\n      model: other\n"))
+        .unwrap_err()
+        .contains("'model'"));
+    assert!(parse(&format!("{base}    cache:\n      entries: 0\n"))
+        .unwrap_err()
+        .contains("cache.entries"));
+    parse(&format!(
+        "{base}    cache:\n      enabled: false\n      entries: 0\n"
+    ))
+    .unwrap();
+}

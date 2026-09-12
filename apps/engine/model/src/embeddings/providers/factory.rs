@@ -11,11 +11,6 @@ use crate::embeddings::embedder::{Embedder, EmbeddingResult};
 use piramid_core::config::EmbeddingConfig;
 use piramid_core::error::embedding::EmbeddingError;
 
-/// Entries kept per embedder.
-// The unwrap is evaluated in a const context.
-#[allow(clippy::unwrap_used, reason = "const context; checked at compile time")]
-const CACHE_CAPACITY: NonZeroUsize = NonZeroUsize::new(10_000).unwrap();
-
 /// Providers this build can construct.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmbeddingProvider {
@@ -36,7 +31,7 @@ impl FromStr for EmbeddingProvider {
     }
 }
 
-/// Build the embedder named by config, wrapped in the response cache.
+/// Build the embedder named by config, wrapped in the response cache when the config enables it.
 pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embedder>> {
     let provider = config.provider.parse::<EmbeddingProvider>().map_err(|_| {
         EmbeddingError::ConfigError(format!(
@@ -44,15 +39,24 @@ pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embe
             config.provider
         ))
     })?;
+    let capacity = if config.cache.enabled {
+        Some(NonZeroUsize::new(config.cache.entries).ok_or_else(|| {
+            EmbeddingError::ConfigError(
+                "startup.embedding.cache.entries: must be >= 1, or set enabled: false".to_string(),
+            )
+        })?)
+    } else {
+        None
+    };
 
-    Ok(match provider {
-        EmbeddingProvider::OpenAI => Arc::new(CachedEmbedder::new(
-            OpenAIEmbedder::new(config)?,
-            CACHE_CAPACITY,
-        )),
-        EmbeddingProvider::Ollama => Arc::new(CachedEmbedder::new(
-            OllamaEmbedder::new(config)?,
-            CACHE_CAPACITY,
-        )),
+    Ok(match (provider, capacity) {
+        (EmbeddingProvider::OpenAI, Some(capacity)) => {
+            Arc::new(CachedEmbedder::new(OpenAIEmbedder::new(config)?, capacity))
+        }
+        (EmbeddingProvider::OpenAI, None) => Arc::new(OpenAIEmbedder::new(config)?),
+        (EmbeddingProvider::Ollama, Some(capacity)) => {
+            Arc::new(CachedEmbedder::new(OllamaEmbedder::new(config)?, capacity))
+        }
+        (EmbeddingProvider::Ollama, None) => Arc::new(OllamaEmbedder::new(config)?),
     })
 }

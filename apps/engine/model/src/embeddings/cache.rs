@@ -7,9 +7,15 @@ use std::num::NonZeroUsize;
 
 use super::embedder::{Embedder, EmbeddingResponse, EmbeddingResult};
 
+/// An embedding and the model the provider said produced it.
+struct CachedEmbedding {
+    embedding: Vec<f32>,
+    model: String,
+}
+
 pub struct CachedEmbedder<E: Embedder> {
     inner: E,
-    cache: Mutex<LruCache<String, Vec<f32>>>,
+    cache: Mutex<LruCache<String, CachedEmbedding>>,
 }
 
 impl<E: Embedder> CachedEmbedder<E> {
@@ -26,11 +32,12 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
         {
             let mut cache = self.cache.lock();
-            if let Some(embedding) = cache.get(text) {
+            // A hit sends nothing to the provider, so it consumes no tokens.
+            if let Some(hit) = cache.get(text) {
                 return Ok(EmbeddingResponse {
-                    embedding: embedding.clone(),
+                    embedding: hit.embedding.clone(),
                     tokens: None,
-                    model: self.inner.model_name().to_string(),
+                    model: hit.model.clone(),
                 });
             }
         }
@@ -39,7 +46,13 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
 
         {
             let mut cache = self.cache.lock();
-            cache.put(text.to_string(), response.embedding.clone());
+            cache.put(
+                text.to_string(),
+                CachedEmbedding {
+                    embedding: response.embedding.clone(),
+                    model: response.model.clone(),
+                },
+            );
         }
 
         Ok(response)

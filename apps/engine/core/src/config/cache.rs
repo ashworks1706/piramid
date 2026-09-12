@@ -1,6 +1,7 @@
 //! What is held in memory, and what gives when the budget is reached.
 //!
-//! Vectors, metadata and embeddings are each configured separately.
+//! Vectors and metadata are configured separately. The embedding cache belongs to the embedding
+//! provider, in startup.embedding.cache.
 
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +11,6 @@ use serde::{Deserialize, Serialize};
 pub struct CacheConfig {
     pub vectors: VectorCacheConfig,
     pub metadata: MetadataCacheConfig,
-    pub embeddings: EmbeddingCacheConfig,
 }
 
 impl CacheConfig {
@@ -28,8 +28,7 @@ impl CacheConfig {
     /// Reject anything the build cannot honour.
     pub fn validate(&self) -> Result<(), String> {
         self.vectors.validate()?;
-        self.metadata.validate()?;
-        self.embeddings.validate()
+        self.metadata.validate()
     }
 }
 
@@ -139,10 +138,11 @@ impl Default for EmbeddingCacheConfig {
 }
 
 impl EmbeddingCacheConfig {
-    fn validate(&self) -> Result<(), String> {
+    /// Reject a cache that is on with no room.
+    pub fn validate(&self) -> Result<(), String> {
         if self.enabled && self.entries == 0 {
             return Err(
-                "runtime.cache.embeddings.entries: must be >= 1, or set enabled: false".into(),
+                "startup.embedding.cache.entries: must be >= 1, or set enabled: false".into(),
             );
         }
         Ok(())

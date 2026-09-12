@@ -20,9 +20,14 @@ pub struct EmbeddingConfig {
     #[serde(default)]
     pub base_url: Option<String>,
 
-    /// Provider-specific options passed through verbatim.
+    /// Extra request fields. For openai they are merged into the request body; for ollama they
+    /// are sent as the options object of the request. Null or an object.
     #[serde(default)]
     pub options: serde_json::Value,
+
+    /// Embeddings kept so identical text is not sent to the provider twice.
+    #[serde(default)]
+    pub cache: super::EmbeddingCacheConfig,
 
     /// Request timeout in seconds.
     #[serde(default)]
@@ -31,6 +36,24 @@ pub struct EmbeddingConfig {
 
 impl EmbeddingConfig {
     pub fn validate(&self) -> Result<(), String> {
+        self.cache.validate()?;
+        match &self.options {
+            serde_json::Value::Null => {}
+            serde_json::Value::Object(fields) => {
+                if self.provider == "openai" {
+                    if let Some(reserved) = ["model", "input", "encoding_format"]
+                        .into_iter()
+                        .find(|name| fields.contains_key(*name))
+                    {
+                        return Err(format!(
+                            "startup.embedding.options: '{reserved}' is set by the provider and \
+                             cannot be overridden"
+                        ));
+                    }
+                }
+            }
+            _ => return Err("startup.embedding.options: must be null or a mapping".into()),
+        }
         match self.provider.as_str() {
             "openai" | "ollama" => Ok(()),
             "piramid" => {

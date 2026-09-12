@@ -59,3 +59,23 @@ async fn cache_hits_and_eviction() {
     cached.embed("hello").await.unwrap(); // hello likely evicted, another call
     assert!(call_count.load(Ordering::SeqCst) >= 4);
 }
+
+// A hit returns the model the provider reported when the text was embedded, and no token count,
+// since nothing was sent.
+#[tokio::test]
+async fn a_hit_reports_what_the_provider_said() {
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let cached = CachedEmbedder::new(
+        MockEmbedder {
+            call_count: call_count.clone(),
+        },
+        std::num::NonZeroUsize::new(4).unwrap(),
+    );
+
+    let miss = cached.embed("hello").await.unwrap();
+    let hit = cached.embed("hello").await.unwrap();
+    assert_eq!(call_count.load(Ordering::SeqCst), 1);
+    assert_eq!(miss.model, "mock");
+    assert_eq!(hit.model, miss.model);
+    assert_eq!(hit.tokens, None);
+}

@@ -15,6 +15,7 @@ pub struct OllamaEmbedder {
     client: Client,
     model: String,
     base_url: String,
+    options: serde_json::Map<String, serde_json::Value>,
 }
 
 impl OllamaEmbedder {
@@ -37,6 +38,7 @@ impl OllamaEmbedder {
             client,
             model: config.model.clone(),
             base_url,
+            options: super::options::request_options(&config.options)?,
         })
     }
 }
@@ -47,6 +49,7 @@ impl Embedder for OllamaEmbedder {
         let request = OllamaEmbeddingRequest {
             model: self.model.clone(),
             prompt: text.to_string(),
+            options: (!self.options.is_empty()).then(|| self.options.clone()),
         };
 
         let url = format!("{}/api/embeddings", self.base_url);
@@ -104,6 +107,8 @@ impl Embedder for OllamaEmbedder {
 struct OllamaEmbeddingRequest {
     model: String,
     prompt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize)]
