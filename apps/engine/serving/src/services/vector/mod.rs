@@ -1,3 +1,5 @@
+//! Document insert, read, delete and search operations.
+
 mod read;
 mod search;
 mod write;

@@ -1,9 +1,12 @@
+//! Health, readiness, metrics and configuration operations.
+
 use crate::services::api::*;
 use crate::state::SharedState;
 use piramid_core::error::Result;
 use piramid_core::stats::record_lock_read;
 use piramid_database::storage::SidecarManager;
 
+/// Liveness of the process and the binary version.
 pub fn health() -> HealthResponse {
     HealthResponse {
         status: "ok",
@@ -11,10 +14,12 @@ pub fn health() -> HealthResponse {
     }
 }
 
+/// Whether an embedding provider is configured.
 pub fn embeddings_available(state: &SharedState) -> bool {
     state.embeddings.is_configured()
 }
 
+/// The configuration in effect and the time it was last loaded.
 pub fn config_status(state: &SharedState) -> Result<ConfigStatusResponse> {
     state.ensure_available()?;
     Ok(ConfigStatusResponse {
@@ -27,6 +32,7 @@ pub fn config_status(state: &SharedState) -> Result<ConfigStatusResponse> {
     })
 }
 
+/// Reload configuration from disk and environment and return the result.
 pub fn reload_config(state: &SharedState) -> Result<ConfigReloadResponse> {
     state.ensure_available()?;
     let app_config = state.reload_config()?;
@@ -41,6 +47,7 @@ pub fn reload_config(state: &SharedState) -> Result<ConfigReloadResponse> {
     })
 }
 
+/// Metrics snapshot of every loaded collection, the configuration and embedding usage.
 pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
     let mut collection_metrics = Vec::new();
     let mut wal_stats = Vec::new();
@@ -125,6 +132,7 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
     })
 }
 
+/// Readiness report covering loaded collections, collections on disk only, and disk capacity.
 pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     state.ensure_available()?;
 

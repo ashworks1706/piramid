@@ -1,3 +1,5 @@
+//! Reading stored documents by id or by page.
+
 use std::time::Instant;
 
 use uuid::Uuid;
@@ -9,6 +11,7 @@ use crate::state::SharedState;
 use piramid_core::error::{Result, ServerError};
 use piramid_core::stats::record_lock_read;
 
+/// One document of an existing collection, by UUID.
 pub fn get_vector(state: &SharedState, collection: String, id: String) -> Result<VectorResponse> {
     state.ensure_available()?;
 
@@ -34,6 +37,7 @@ pub fn get_vector(state: &SharedState, collection: String, id: String) -> Result
     })
 }
 
+/// One page of the documents of an existing collection, in unspecified order.
 pub fn list_vectors(
     state: &SharedState,
     collection: String,

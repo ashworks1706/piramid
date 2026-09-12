@@ -90,6 +90,7 @@ pub fn parse_filter(
     Ok(Some(filter))
 }
 
+/// Convert a search hit to its wire shape.
 pub fn hit_to_response(hit: Hit) -> HitResponse {
     HitResponse {
         id: hit.document.id.to_string(),
@@ -132,6 +133,7 @@ fn json_to_metadata_value(field: &str, value: serde_json::Value) -> Result<Metad
     })
 }
 
+/// Convert a JSON object to [Metadata], rejecting nested objects and out-of-range numbers.
 pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Result<Metadata> {
     json.into_iter()
         .map(|(k, v)| {
@@ -141,6 +143,7 @@ pub fn json_to_metadata(json: HashMap<String, serde_json::Value>) -> Result<Meta
         .collect()
 }
 
+/// Convert [Metadata] to a JSON object.
 pub fn metadata_to_json(metadata: &Metadata) -> HashMap<String, serde_json::Value> {
     metadata
         .iter()

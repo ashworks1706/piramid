@@ -1,3 +1,5 @@
+//! Embed and text-search endpoints.
+
 use axum::{
     extract::{Extension, Path, State},
     Json,
@@ -9,6 +11,7 @@ use crate::services::api::*;
 use crate::services::embedding;
 use crate::state::SharedState;
 
+/// POST /api/collections/{collection}/embed: embeds texts and stores them as documents.
 pub async fn embed_text(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
@@ -17,6 +20,7 @@ pub async fn embed_text(
     Ok(Json(embedding::embed_text(&state, collection, req).await?))
 }
 
+/// POST /api/collections/{collection}/search/text: embeds a query text and searches with it.
 pub async fn search_by_text(
     State(state): State<SharedState>,
     Path(collection): Path<String>,

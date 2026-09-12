@@ -1,3 +1,5 @@
+//! The route table and the middleware stack of the server.
+
 use axum::http::HeaderValue;
 use axum::{
     extract::DefaultBodyLimit,
