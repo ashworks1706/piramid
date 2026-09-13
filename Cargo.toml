@@ -74,6 +74,7 @@ rand = "0.8.6"
 
 # device and model runtimes, each confined to its backend module
 cudarc = { version = "0.19.8", default-features = false, features = ["std", "driver", "nvrtc", "cuda-version-from-build-system", "dynamic-linking"] }
+nvml-wrapper = "0.13"
 
 # storage + concurrency
 memmap2 = "0.9.11"

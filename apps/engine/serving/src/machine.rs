@@ -5,50 +5,65 @@ use std::time::Duration;
 
 use parking_lot::RwLock;
 use piramid_core::error::{Result, ServerError};
-use piramid_hardware::host::{HostReading, HostSampler};
+use piramid_hardware::host::{GpuReading, GpuSampler, HostReading, HostSampler};
 
 /// Time between machine samples.
 pub const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
+
+/// The readings of one sample.
+#[derive(Debug, Default)]
+struct Latest {
+    host: HostReading,
+    gpus: Vec<GpuReading>,
+}
 
 /// The latest readings of the machine, updated by a sampling thread.
 ///
 /// The thread stops after the last clone of this value is dropped.
 #[derive(Debug, Clone)]
 pub struct MachineReadings {
-    host: Arc<RwLock<HostReading>>,
+    latest: Arc<RwLock<Latest>>,
 }
 
 impl MachineReadings {
     /// Start a sampling thread that takes a reading every interval.
     ///
-    /// Every field of the host reading is None until the first sample lands.
+    /// Every field of the host reading is None, and there is no GPU reading, until the first
+    /// sample lands.
     pub fn start(interval: Duration) -> Result<Self> {
-        let host = Arc::new(RwLock::new(HostReading::default()));
-        let slot = Arc::downgrade(&host);
+        let latest = Arc::new(RwLock::new(Latest::default()));
+        let slot = Arc::downgrade(&latest);
         let interval = interval.max(HostSampler::MINIMUM_INTERVAL);
         std::thread::Builder::new()
             .name("piramid-machine".into())
             .spawn(move || sample_until_dropped(&slot, interval))
             .map_err(|e| ServerError::Internal(format!("start the machine sampler: {e}")))?;
-        Ok(Self { host })
+        Ok(Self { latest })
     }
 
     /// The latest host reading.
     pub fn host(&self) -> HostReading {
-        *self.host.read()
+        self.latest.read().host
+    }
+
+    /// The latest reading of each GPU. Empty when no GPU is measured.
+    pub fn gpus(&self) -> Vec<GpuReading> {
+        self.latest.read().gpus.clone()
     }
 }
 
-/// Samples the host into slot every interval until slot has no owner left.
-fn sample_until_dropped(slot: &Weak<RwLock<HostReading>>, interval: Duration) {
-    let mut sampler = HostSampler::new();
+/// Samples the host and its GPUs into slot every interval until slot has no owner left.
+fn sample_until_dropped(slot: &Weak<RwLock<Latest>>, interval: Duration) {
+    let mut host_sampler = HostSampler::new();
+    let mut gpu_sampler = GpuSampler::new();
     loop {
-        let reading = sampler.sample();
-        let Some(host) = slot.upgrade() else {
+        let host = host_sampler.sample();
+        let gpus = gpu_sampler.sample();
+        let Some(latest) = slot.upgrade() else {
             return;
         };
-        *host.write() = reading;
-        drop(host);
+        *latest.write() = Latest { host, gpus };
+        drop(latest);
         std::thread::sleep(interval);
     }
 }
@@ -65,9 +80,10 @@ mod tests {
     #[test]
     fn a_reading_is_absent_until_the_first_sample() {
         let machine = MachineReadings {
-            host: Arc::new(RwLock::new(HostReading::default())),
+            latest: Arc::new(RwLock::new(Latest::default())),
         };
         assert_eq!(machine.host(), HostReading::default());
+        assert!(machine.gpus().is_empty());
     }
 
     #[cfg(target_os = "linux")]

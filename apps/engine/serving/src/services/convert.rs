@@ -1,12 +1,12 @@
 //! Conversions between the HTTP request/response shapes and domain types.
 
-use crate::services::api::{HitResponse, HostMetricsResponse, SearchTuning};
+use crate::services::api::{GpuMetricsResponse, HitResponse, HostMetricsResponse, SearchTuning};
 use piramid_core::config::SearchConfig;
 use piramid_core::error::{Result, ServerError};
 use piramid_core::metadata::{Filter, Metadata, MetadataValue};
 use piramid_core::Hit;
 use piramid_hardware::compute::{ComputeError, Metric};
-use piramid_hardware::host::HostReading;
+use piramid_hardware::host::{GpuReading, HostReading};
 use std::collections::HashMap;
 
 /// Resolve a requested metric name against the metric a collection is indexed by.
@@ -143,6 +143,18 @@ pub fn host_to_response(reading: HostReading) -> HostMetricsResponse {
         memory_total_bytes: reading.memory_total_bytes,
         process_cpu_percent: reading.process_cpu_percent,
         process_resident_bytes: reading.process_resident_bytes,
+    }
+}
+
+/// The wire shape of a GPU reading.
+pub fn gpu_to_response(reading: GpuReading) -> GpuMetricsResponse {
+    GpuMetricsResponse {
+        index: reading.index,
+        name: reading.name,
+        memory_used_bytes: reading.memory_used_bytes,
+        memory_total_bytes: reading.memory_total_bytes,
+        utilization_percent: reading.utilization_percent,
+        temperature_celsius: reading.temperature_celsius,
     }
 }
 

@@ -39,7 +39,7 @@ Each cut is a real one:
 
 - **`hardware`** is the code that changes when the machine changes. `compute` owns what cosine means
   and which strategy runs it, `gpu` owns the device, `quantization` owns the encodings both score
-  over, `host` reads the processor and memory use of the machine itself. It is a leaf, so kernels can be benchmarked on their own and `model` can get a device
+  over, `host` reads the processor, memory and GPU use of the machine itself. It is a leaf, so kernels can be benchmarked on their own and `model` can get a device
   without reaching through retrieval math.
 - **`database`** is where vectors live and how they are found: records, WAL, mmap and sidecars; the
   ANN indexes; query planning and scoring; and `collection`, the object composing a store, a cache,
@@ -78,7 +78,7 @@ document in the same change.
 | Crate | Owns | Must not |
 |---|---|---|
 | `core` | Every error the app wraps, all configuration, the document and hit shapes, metadata and its filters, validation, `stats`, and the telemetry export those feed | Know about HTTP or end the process |
-| `hardware` | Distance math and strategy dispatch, the device runtime, quantization encodings, host readings | Depend on anything in the workspace, or let vendor types escape `gpu::backends` |
+| `hardware` | Distance math and strategy dispatch, the device runtime, quantization encodings, host readings | Depend on anything in the workspace, or let vendor types escape `gpu::backends` or `host::nvml` |
 | `database` | Records, WAL, sidecars, mmap; ANN traversal and the sidecar format; planning, filtering, scoring; the `Collection`, its caches, checkpoint and compaction | Serve HTTP |
 | `model` | Model execution, KV cache, batching, sampling; the `RetrievalHook` seam; embedding providers | Depend on `database`, or be required for retrieval to work |
 | `serving` | Routes, handlers, services, wire shapes, `AppState`, routing | Touch file formats or index internals |
@@ -100,8 +100,8 @@ sidecars, `thiserror` enums per layer (no `anyhow` in libraries — a caller has
 `lru` for shared state, `tracing` with OTLP for telemetry, `clap` for the CLI, `criterion` for
 benches. The website is separate and ships nothing: Next.js, TypeScript, Tailwind, MDX.
 
-Two features are reserved for vendor runtimes — `gpu-cuda` for `cudarc` in `gpu/backends/`, and
-`inference-candle` for `candle` in `inference/backends/`. Both are additive and off by default, so
+Two features are reserved for vendor runtimes — `gpu-cuda` for `cudarc` in `gpu/backends/` and
+`nvml-wrapper` in `host/nvml.rs`, and `inference-candle` for `candle` in `inference/backends/`. Both are additive and off by default, so
 `cargo build` needs no CUDA toolkit and no model runtime, and an unavailable strategy reports
 `false` rather than pretending. Vendor types never escape those backend modules, which is what
 allows a second backend later without touching the layers between.
@@ -255,7 +255,7 @@ newtype in the transport layer that maps a kind onto an HTTP status and renders 
 1. `hardware` depends on nothing in the workspace.
 2. No library crate calls `std::process::exit`. Configuration loading returns a `Result`.
 3. `core` never names an HTTP type.
-4. Vendor SDK types, `cudarc` and `candle`, never escape their backend module.
+4. Vendor SDK types, `cudarc`, `nvml-wrapper` and `candle`, never escape their backend module.
 5. `unsafe` appears only at the audited sites, each with a `// SAFETY:` comment.
 6. Cache and index are rebuildable from the record store.
 7. Retrieval works with no model loaded, and `model` depends on nothing in the retrieval stack.

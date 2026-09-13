@@ -19,6 +19,10 @@ pub struct MetricsResponse {
     pub embedding: EmbeddingMetricsResponse,
     /// Processor and memory use of the host and of the server process.
     pub host: HostMetricsResponse,
+    /// Memory, utilisation and temperature of each GPU the server measured. Left out when it
+    /// measured none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub gpus: Vec<GpuMetricsResponse>,
 }
 
 /// Metrics of one loaded collection.
@@ -97,6 +101,29 @@ pub struct HostMetricsResponse {
     pub process_resident_bytes: Option<u64>,
 }
 
+/// Memory, utilisation and temperature of one GPU. A field the server could not measure is left
+/// out.
+#[derive(Debug, Default, Serialize)]
+pub struct GpuMetricsResponse {
+    /// Index of the device as the driver enumerates it.
+    pub index: u32,
+    /// Product name the driver reports for the device.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Device memory in use, in bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_used_bytes: Option<u64>,
+    /// Device memory installed, in bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_total_bytes: Option<u64>,
+    /// Share of the last sample period during which a kernel ran on the device, 0 to 100.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utilization_percent: Option<f32>,
+    /// Temperature of the device die, in degrees Celsius.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature_celsius: Option<f32>,
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -121,5 +148,52 @@ mod tests {
             serde_json::to_value(HostMetricsResponse::default()).unwrap(),
             serde_json::json!({})
         );
+    }
+
+    #[test]
+    fn an_unmeasured_gpu_field_is_left_out_of_the_json() {
+        let json = serde_json::to_value(GpuMetricsResponse {
+            index: 1,
+            memory_total_bytes: Some(6_000_000_000),
+            temperature_celsius: Some(0.0),
+            ..GpuMetricsResponse::default()
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "index": 1,
+                "memory_total_bytes": 6_000_000_000_u64,
+                "temperature_celsius": 0.0
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(GpuMetricsResponse::default()).unwrap(),
+            serde_json::json!({ "index": 0 })
+        );
+    }
+
+    #[test]
+    fn a_server_that_measured_no_gpu_sends_no_gpus_key() {
+        let metrics = |gpus| MetricsResponse {
+            total_collections: 0,
+            total_vectors: 0,
+            collections: Vec::new(),
+            app_config: piramid_core::config::Config::default(),
+            wal_stats: Vec::new(),
+            embedding: EmbeddingMetricsResponse {
+                requests: 0,
+                texts: 0,
+                total_tokens: 0,
+                avg_latency_ms: None,
+            },
+            host: HostMetricsResponse::default(),
+            gpus,
+        };
+        let json = serde_json::to_value(metrics(Vec::new())).unwrap();
+        assert!(json.get("gpus").is_none(), "{json}");
+
+        let json = serde_json::to_value(metrics(vec![GpuMetricsResponse::default()])).unwrap();
+        assert_eq!(json["gpus"], serde_json::json!([{ "index": 0 }]));
     }
 }

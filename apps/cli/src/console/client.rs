@@ -34,6 +34,9 @@ pub struct Metrics {
     pub wal_stats: Vec<WalStats>,
     /// Host readings. None from a server that predates the host block.
     pub host: Option<HostMetrics>,
+    /// One entry per GPU the server measured. Empty when the server left the list out.
+    #[serde(default)]
+    pub gpus: Vec<GpuMetrics>,
 }
 
 /// Processor and memory use of the host and of the server process. An absent field is one the
@@ -45,6 +48,18 @@ pub struct HostMetrics {
     pub memory_total_bytes: Option<u64>,
     pub process_cpu_percent: Option<f32>,
     pub process_resident_bytes: Option<u64>,
+}
+
+/// Memory, utilisation and temperature of one GPU. An absent field is one the server did not
+/// measure.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct GpuMetrics {
+    pub index: u32,
+    pub name: Option<String>,
+    pub memory_used_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
+    pub utilization_percent: Option<f32>,
+    pub temperature_celsius: Option<f32>,
 }
 
 /// The counters of one collection.

@@ -494,15 +494,21 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
 
     let start = Instant::now();
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(start, Some(cpu_reading(Some(10.0))));
+    view.record(start, Some(cpu_reading(Some(10.0))), Vec::new());
     view.record(
         start + Duration::from_secs(1),
         Some(cpu_reading(Some(20.0))),
+        Vec::new(),
     );
-    view.record(start + Duration::from_secs(2), Some(cpu_reading(None)));
+    view.record(
+        start + Duration::from_secs(2),
+        Some(cpu_reading(None)),
+        Vec::new(),
+    );
     view.record(
         start + Duration::from_secs(3),
         Some(cpu_reading(Some(30.0))),
+        Vec::new(),
     );
 
     let now = start + Duration::from_secs(3);
@@ -514,6 +520,101 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
     assert!(view
         .series(now, |h| h.memory_used_bytes.map(|b| b as f64))
         .is_empty());
+}
+
+/// Readings of the GPU at index with only utilisation set.
+fn busy_reading(index: u32, busy: Option<f32>) -> super::client::GpuMetrics {
+    super::client::GpuMetrics {
+        index,
+        name: None,
+        memory_used_bytes: None,
+        memory_total_bytes: None,
+        utilization_percent: busy,
+        temperature_celsius: None,
+    }
+}
+
+#[test]
+fn an_absent_gpu_reading_is_a_gap_in_the_graph_and_never_zero() {
+    use super::device::DeviceView;
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let at = |secs| start + Duration::from_secs(secs);
+    let mut view = DeviceView::new("http://localhost:6333");
+    view.record(at(0), None, vec![busy_reading(0, Some(10.0))]);
+    view.record(at(1), None, vec![busy_reading(0, None)]);
+    view.record(at(2), None, vec![busy_reading(0, Some(20.0))]);
+    view.record(at(3), None, Vec::new());
+    view.record(
+        at(4),
+        None,
+        vec![busy_reading(1, Some(90.0)), busy_reading(0, Some(30.0))],
+    );
+
+    let now = at(4);
+    assert_eq!(
+        view.gpu_series(now, 0, |g| g.utilization_percent.map(f64::from)),
+        vec![vec![(-4.0, 10.0)], vec![(-2.0, 20.0)], vec![(-0.0, 30.0)]]
+    );
+    assert_eq!(
+        view.gpu_series(now, 1, |g| g.utilization_percent.map(f64::from)),
+        vec![vec![(-0.0, 90.0)]]
+    );
+    assert!(view
+        .gpu_series(now, 0, |g| g.temperature_celsius.map(f64::from))
+        .is_empty());
+    assert_eq!(view.gpu_indices(), vec![0, 1]);
+    assert_eq!(
+        view.latest_gpu(1).and_then(|g| g.utilization_percent),
+        Some(90.0)
+    );
+}
+
+#[test]
+fn a_server_without_gpu_readings_has_no_gpu_in_the_device_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    assert!(snapshot.metrics.gpus.is_empty());
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert!(app.device.gpu_indices().is_empty());
+
+    app.handle(press('4'));
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("cpu  host 42.0%"), "{drawn}");
+    assert!(!drawn.contains("gpu "), "{drawn}");
+}
+
+#[test]
+fn gpu_readings_are_decoded_and_drawn_in_the_device_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(
+            r#", "host": {"cpu_percent": 42.0},
+            "gpus": [{"index": 0, "name": "Test GPU", "memory_used_bytes": 1024,
+                      "temperature_celsius": 61.0}]"#,
+        ),
+        READY_BODY,
+    );
+    let gpu = snapshot
+        .metrics
+        .gpus
+        .first()
+        .cloned()
+        .expect("one gpu was sent");
+    assert_eq!(gpu.memory_used_bytes, Some(1024));
+    assert_eq!(gpu.memory_total_bytes, None);
+    assert_eq!(gpu.utilization_percent, None);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("gpu 0 Test GPU"), "{drawn}");
+    assert!(drawn.contains("busy not reported"), "{drawn}");
+    assert!(drawn.contains("temperature 61 C"), "{drawn}");
 }
 
 /// A metrics body with one collection, the host block given, and the rest as the server sends it.
