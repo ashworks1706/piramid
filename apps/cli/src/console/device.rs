@@ -1,4 +1,4 @@
-//! Device view state: host and GPU readings over time, and handing the terminal to a process
+//! Device view state: host, GPU and generation readings over time, and handing the terminal to a process
 //! monitor.
 //! Drawing is in ui, HTTP is in client.
 
@@ -8,7 +8,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::client::{GpuMetrics, HostMetrics};
+use super::client::{GpuMetrics, HostMetrics, InferenceMetrics};
 
 /// How many refreshes the graphs keep.
 const HISTORY: usize = 240;
@@ -25,6 +25,8 @@ pub struct Sample {
     pub host: Option<HostMetrics>,
     /// One entry per GPU the server measured. Empty for a refresh that failed or measured none.
     pub gpus: Vec<GpuMetrics>,
+    /// Generation readings. None for a refresh that failed or a server with no model loaded.
+    pub inference: Option<InferenceMetrics>,
 }
 
 /// A process monitor the terminal can be handed to.
@@ -71,11 +73,22 @@ impl DeviceView {
     }
 
     /// Appends one refresh, dropping the oldest once the history is full.
-    pub fn record(&mut self, at: Instant, host: Option<HostMetrics>, gpus: Vec<GpuMetrics>) {
+    pub fn record(
+        &mut self,
+        at: Instant,
+        host: Option<HostMetrics>,
+        gpus: Vec<GpuMetrics>,
+        inference: Option<InferenceMetrics>,
+    ) {
         if self.samples.len() == HISTORY {
             self.samples.pop_front();
         }
-        self.samples.push_back(Sample { at, host, gpus });
+        self.samples.push_back(Sample {
+            at,
+            host,
+            gpus,
+            inference,
+        });
     }
 
     /// The readings of the newest refresh, if it has any.
@@ -88,6 +101,13 @@ impl DeviceView {
         self.samples
             .back()
             .and_then(|sample| sample.gpus.iter().find(|gpu| gpu.index == index))
+    }
+
+    /// The generation readings of the newest refresh, if it has any.
+    pub fn latest_inference(&self) -> Option<&InferenceMetrics> {
+        self.samples
+            .back()
+            .and_then(|sample| sample.inference.as_ref())
     }
 
     /// The index of every GPU any refresh in the history reported, in ascending order.
@@ -127,6 +147,18 @@ impl DeviceView {
                 .find(|gpu| gpu.index == index)
                 .and_then(&read)
         })
+    }
+
+    /// Runs of consecutive generation readings as points of seconds before now against value.
+    ///
+    /// A refresh without generation readings or without the reading ends a run, so an absent
+    /// reading is a gap in the graph.
+    pub fn inference_series(
+        &self,
+        now: Instant,
+        read: impl Fn(&InferenceMetrics) -> Option<f64>,
+    ) -> Vec<Run> {
+        self.runs(now, |sample| sample.inference.as_ref().and_then(&read))
     }
 
     /// Runs of consecutive values read from each refresh, split wherever read gives None.

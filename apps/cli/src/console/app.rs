@@ -181,11 +181,15 @@ impl App {
             Event::Health(health) => self.health = *health,
             Event::ProbesStopped(why) => self.probes_stopped = Some(why),
             Event::Snapshot(result) => {
-                let (host, gpus) = match result.as_ref() {
-                    Ok(snapshot) => (snapshot.metrics.host, snapshot.metrics.gpus.clone()),
-                    Err(_) => (None, Vec::new()),
+                let (host, gpus, inference) = match result.as_ref() {
+                    Ok(snapshot) => (
+                        snapshot.metrics.host,
+                        snapshot.metrics.gpus.clone(),
+                        snapshot.metrics.inference.clone(),
+                    ),
+                    Err(_) => (None, Vec::new(), None),
                 };
-                self.device.record(Instant::now(), host, gpus);
+                self.device.record(Instant::now(), host, gpus, inference);
                 self.collections.snapshot(*result);
             }
             Event::Acted(Ok(note) | Err(note)) => self.notice = Some(note),

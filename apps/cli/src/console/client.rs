@@ -37,6 +37,27 @@ pub struct Metrics {
     /// One entry per GPU the server measured. Empty when the server left the list out.
     #[serde(default)]
     pub gpus: Vec<GpuMetrics>,
+    /// Generation counters and scheduler state. None when the server has no model loaded.
+    pub inference: Option<InferenceMetrics>,
+}
+
+/// Generation counters of the loaded model and the state of its scheduler and key/value cache.
+/// An absent average is one the server has not yet measured.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct InferenceMetrics {
+    pub model: String,
+    pub device: String,
+    pub avg_time_to_first_token_ms: Option<f32>,
+    pub decode_tokens_per_second: Option<f32>,
+    pub preemptions: u64,
+    pub queue_depth: u64,
+    pub running: u64,
+    pub last_batch_size: u64,
+    pub kv_blocks_total: u64,
+    pub kv_blocks_used: u64,
+    pub kv_blocks_cached: u64,
+    pub kv_evictions: u64,
+    pub prefix_hit_rate: Option<f32>,
 }
 
 /// Processor and memory use of the host and of the server process. An absent field is one the
