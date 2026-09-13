@@ -1,0 +1,4 @@
+# Toolkit root the cudarc build script links against under the gpu-cuda feature. Without it the
+# script also searches /usr/lib, which holds 32-bit driver libraries on some distributions.
+[env]
+CUDA_HOME = { value = "/usr/local/cuda", force = false }

@@ -193,7 +193,8 @@ fn every_batch_kernel_rejects_a_misshapen_slab() {
     }
 }
 
-/// Asking for the GPU is an error while no GPU distance kernels exist.
+/// Asking for the GPU is an error in a build without a GPU backend.
+#[cfg(not(feature = "gpu-cuda"))]
 #[test]
 fn the_gpu_mode_is_refused_rather_than_served_by_the_cpu() {
     assert!(for_mode(ExecutionMode::Gpu).is_err());
