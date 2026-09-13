@@ -25,7 +25,6 @@ export default async function BlogsIndex() {
   const blog = findBlog(["index"]);
   if (!blog) return null;
 
-  // Generated from the sidebar config, so it cannot drift from what exists.
   const sections = buildSidebar();
 
   const source = await fs.promises.readFile(blog.filePath, "utf8");

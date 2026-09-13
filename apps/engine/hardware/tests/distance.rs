@@ -157,8 +157,7 @@ fn every_batch_kernel_matches_the_scalar_reference() {
                 batch(kernels, &query, &candidates, dim, &mut out).unwrap();
                 for (i, (row, got)) in candidates.chunks_exact(dim).zip(&out).enumerate() {
                     let want = pair(&reference, &query, row);
-                    // Summation order differs between strategies, so the rounding bound scales
-                    // with the magnitude of the terms summed rather than with the result.
+                    // The rounding bound scales with the magnitude of the summed terms.
                     let magnitude = reference.dot(&query, &query).sqrt()
                         * reference.dot(row, row).sqrt()
                         + reference.euclidean_squared(&query, row);

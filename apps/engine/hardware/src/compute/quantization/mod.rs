@@ -1,4 +1,4 @@
-//! Compressed vector representations, beside the kernels that will score them.
+//! Compressed vector representations.
 
 mod config;
 
@@ -221,7 +221,7 @@ pub struct QuantizedVector {
     pub max: f32,
     /// The PQ payload, when kind is [QuantizationKind::Pq].
     pub pq: Option<ProductQuantizedVector>,
-    /// Which encoding the values and pq fields actually hold.
+    /// Which encoding the values and pq fields hold.
     pub kind: QuantizationKind,
 }
 

@@ -57,7 +57,6 @@ fn invalid_metric_is_rejected() {
     );
 }
 
-// A request that names no metric searches by the metric the collection is indexed by.
 #[test]
 fn an_absent_metric_is_the_indexed_metric() {
     use piramid_hardware::compute::Metric;
@@ -100,7 +99,6 @@ fn unknown_filter_operators_are_rejected() {
     assert!(piramid_serving::services::convert::parse_filter(Some(raw)).is_err());
 }
 
-// Each search tuning field on the wire overrides the config field of the same name.
 #[test]
 fn tuning_fields_match_the_config_fields_they_override() {
     let json = serde_json::json!({ "ef": 5, "nprobe": 6, "filter_overfetch": 7 });

@@ -107,7 +107,7 @@ pub struct GpuMetrics {
 
 /// The counters of one collection.
 ///
-/// The server sends every Option here as null when it has no value, so each key is required.
+/// The server sends every Option here as null when it has no value, and each key is required.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CollectionMetrics {
     pub name: String,
@@ -130,7 +130,7 @@ pub struct CollectionMetrics {
 
 /// The durability state of one collection.
 ///
-/// The server sends every Option here as null when it has no value, so each key is required.
+/// The server sends every Option here as null when it has no value, and each key is required.
 #[derive(Debug, Clone, Deserialize)]
 pub struct WalStats {
     pub collection: String,
@@ -196,7 +196,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// A client for base, with a request timeout so a hung server does not freeze the UI.
+    /// A client for base, with a request timeout.
     ///
     /// A key is sent as a bearer token on every request.
     pub fn new(base: &str, timeout: Duration, key: Option<ApiKey>) -> Result<Self, ClientError> {
@@ -238,9 +238,8 @@ impl Client {
 
     /// The configuration the server resolved, rendered as YAML.
     ///
-    /// The response nests the configuration under the app_config key, which is unwrapped here so
-    /// the view shows the same shape as the file on disk. A response without that key is a
-    /// decode error.
+    /// The configuration is unwrapped from the app_config key of the response. A response without
+    /// that key is a decode error.
     pub async fn config(&self) -> Result<String, ClientError> {
         let value: serde_json::Value = self.get(CONFIG_PATH).await?;
         render_config(&value)

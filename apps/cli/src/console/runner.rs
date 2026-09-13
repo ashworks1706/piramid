@@ -15,7 +15,7 @@ use crate::console::types::{Event, Kind, LogLine, RunnerError, ServiceState, Str
 
 const COMPOSE_FILE: &str = "deploy/compose.yml";
 
-/// Every compose profile in deploy/compose.yml, so ps and logs see optional services too.
+/// Every compose profile in deploy/compose.yml, passed to ps and logs.
 const PROFILES: [&str; 1] = ["ollama"];
 
 /// Owns the children the console started.
@@ -256,7 +256,7 @@ where
             let text = match lines.next_line().await {
                 Ok(Some(text)) => text,
                 Ok(None) => break,
-                // A capture failure is reported into the pane rather than ending silently.
+                // A capture failure is reported into the pane.
                 Err(e) => {
                     let _ = tx.send(Event::Log {
                         unit: unit.clone(),
@@ -279,7 +279,7 @@ where
     });
 }
 
-/// Strips escape sequences so coloured output from children renders as plain text.
+/// Strips escape sequences from child output, leaving plain text.
 pub fn sanitize_line(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut chars = line.chars().peekable();
@@ -305,7 +305,7 @@ pub fn sanitize_line(line: &str) -> String {
 }
 
 /// Parses the JSON output of docker compose ps: an array on older releases, one object per line
-/// on newer ones. Anything else returns an error rather than an empty set of services.
+/// on newer ones. Anything else is an error.
 pub fn parse_ps(raw: &str) -> Result<HashMap<String, ServiceState>, String> {
     #[derive(serde::Deserialize)]
     struct Row {

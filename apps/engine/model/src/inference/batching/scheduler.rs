@@ -18,7 +18,7 @@ pub struct SchedulerLimits {
     pub max_queue_depth: usize,
     /// Tokens computed in one step.
     pub max_batched_tokens: usize,
-    /// Admit into a running batch rather than waiting for it to drain.
+    /// Whether sequences are admitted into a running batch before it drains.
     pub continuous: bool,
     /// Split prefill across steps.
     pub chunked_prefill: bool,

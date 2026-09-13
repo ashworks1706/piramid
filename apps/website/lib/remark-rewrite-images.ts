@@ -1,12 +1,8 @@
 import path from "path";
 
 /**
- * Rewrites relative image paths in blog markdown to absolute /assets/... URLs.
- *
- * content/blogs/ references images relatively (e.g. `../../assets/blogs/lsm.png`) so they preview
- * in an editor, but Next.js only serves static files from public/. Matching on the `assets/` path
- * segment, rather than resolving against the filesystem, keeps this working regardless of how deep
- * the markdown file sits.
+ * Rewrites relative image paths in blog markdown to absolute URLs from the assets/ path segment
+ * onward, at any directory depth.
  */
 export function remarkRewriteImages() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,7 +15,7 @@ export function remarkRewriteImages() {
         !node.url.startsWith("http") &&
         !node.url.startsWith("/")
       ) {
-        // e.g. `../../assets/blogs/lsm.png` becomes `/assets/blogs/lsm.png`.
+        // ../../assets/blogs/lsm.png becomes /assets/blogs/lsm.png.
         const normalised = node.url.split(path.sep).join("/");
         const marker = normalised.indexOf("assets/");
         if (marker !== -1) {

@@ -75,8 +75,7 @@ impl Filter {
 
     /// Whether metadata that may be incomplete still leaves the document a candidate.
     ///
-    /// [Filter::matches] needs the whole document. This admits absent metadata, leaving the
-    /// decision to be settled against the resolved document.
+    /// Absent metadata returns true. Present metadata is checked with [Filter::matches].
     pub fn may_match(&self, metadata: Option<&Metadata>) -> bool {
         metadata.is_none_or(|metadata| self.matches(metadata))
     }

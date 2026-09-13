@@ -6,7 +6,7 @@
 //! The flat scan on its two paths to the kernel.
 //!
 //! slab hands the store's own buffer to one batch call. gathered copies each block of rows into
-//! scratch first. Same kernel, same metric, same data, so the layout is what varies.
+//! scratch first. Kernel, metric and data are the same on both.
 
 use std::collections::HashMap;
 

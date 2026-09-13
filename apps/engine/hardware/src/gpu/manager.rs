@@ -6,10 +6,7 @@ use crate::gpu::device::Device;
 use crate::gpu::error::{GpuError, GpuResult};
 use crate::gpu::stream::Stream;
 
-/// Owns device acquisition for the process.
-///
-/// Callers go through this to get a [Device]. The resources it hands out, [Device],
-/// [crate::gpu::DeviceBuffer], [Stream] and [DeviceBudget], keep their own names.
+/// Owns the process's opened [Device], its [DeviceBudget] and its [Stream]s.
 #[derive(Debug)]
 pub struct GpuManager {
     device: Device,

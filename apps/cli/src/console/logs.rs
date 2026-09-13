@@ -9,7 +9,7 @@ use crate::console::types::{LogLine, Stream};
 
 /// Persists console output in one file per unit.
 ///
-/// The file is unbounded, unlike the in-memory buffer.
+/// The file is unbounded.
 #[derive(Debug)]
 pub struct LogWriter {
     dir: PathBuf,

@@ -224,7 +224,7 @@ async fn shutdown_finishes_an_in_flight_request_and_checkpoints_the_collection()
     assert_eq!(first.status(), 200);
     assert!(find_file(&dir, ".wal.meta").is_none());
 
-    // The headers and half the body go out, so the request is in flight when shutdown starts.
+    // Sends the headers and half the body, leaving the request in flight when shutdown starts.
     let body = serde_json::json!({"vectors": [[0.0, 1.0, 0.0]], "texts": ["second"]}).to_string();
     let (head, tail) = body.split_at(body.len() / 2);
     let mut stream = TcpStream::connect(server.addr).await.unwrap();
@@ -293,9 +293,7 @@ async fn start_from_file(file: &Path) -> (Running, Arc<AppState>) {
     )
 }
 
-// A reload re-reads the file the server booted from, reaches a collection that is already open,
-// and refuses a change that only applies when a collection is opened, leaving everything as it
-// was.
+// A refused reload leaves the configuration and open collections as they were.
 #[tokio::test]
 async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
     let dir = data_dir("reload");

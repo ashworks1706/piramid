@@ -4,20 +4,14 @@ import localFont from "next/font/local";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 
-// Self-hosted by next/font, so there is no render-blocking request to Google.
+// Self-hosted by next/font.
 const mono = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-mono",
 });
 
-// Google's `latin` subset stops at U+00FF plus a little punctuation, so it carries none of the
-// box-drawing or block characters the logo is drawn with. Those glyphs fell through to whatever
-// the OS happened to pick, and the two ranges can land on *different* fallbacks — which is what
-// smeared the wordmark on Windows while leaving the pyramid roughly intact. JetBrains Mono itself
-// has all 160 of them at the same 600/1000 advance as its ASCII, so this ships exactly that block.
-// `display: "block"` because the fallback is the bug: better a beat of nothing than a beat of
-// broken art.
+// JetBrains Mono box-drawing and block glyphs, U+2500-259F, which the latin subset lacks.
 const blocks = localFont({
   src: "./fonts/jetbrains-mono-blocks.woff2",
   display: "block",
@@ -95,8 +89,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // Browser extensions add attributes to <html> before hydration; this only covers this
-    // element, so a real mismatch further down still reports.
+    // Hydration warnings are suppressed on the html element only.
     <html lang="en" className={`dark ${mono.variable} ${blocks.variable}`} suppressHydrationWarning>
       <body className="antialiased">{children}</body>
     </html>

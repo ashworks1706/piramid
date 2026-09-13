@@ -47,7 +47,7 @@ pub struct LoggingConfig {
     /// Emit events on the piramid::http target.
     #[serde(default = "crate::config::default_true")]
     pub http: bool,
-    /// Emit structured JSON lines instead of human-readable console output.
+    /// Emit structured JSON lines. Off writes human-readable console output.
     #[serde(default)]
     pub json: bool,
     /// Threshold in milliseconds above which a query is logged at warn.

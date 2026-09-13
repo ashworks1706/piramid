@@ -29,7 +29,7 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
         let (tx, mut rx) = mpsc::unbounded_channel();
         let mut app = App::new(settings.clone(), profile, root.clone(), &tx)?;
 
-        // Read once. The build does not change while the console is open.
+        // Read once.
         match app.collections.client.version().await {
             Ok(version) => {
                 app.collections.version = match version.git_commit {
@@ -45,8 +45,7 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             profile == Profile::Developer,
             tx.clone(),
         ));
-        // Compose lives in the repo, so polling it outside a checkout only produces an error
-        // about a file that was never meant to be there.
+        // Compose is polled only inside a checkout.
         if profile == Profile::Developer {
             tokio::spawn(services(root, tx.clone()));
         }
@@ -106,7 +105,7 @@ async fn drive(
 
 /// Runs program in the foreground with the terminal it needs, then takes the terminal back.
 ///
-/// The key reader is stopped for the duration so it does not consume the input meant for program.
+/// The key reader is stopped while program runs.
 async fn hand_over(
     terminal: &mut ratatui::DefaultTerminal,
     program: &Path,
@@ -178,7 +177,7 @@ fn refresh(app: &mut App, tx: &UnboundedSender<Event>) {
     });
 }
 
-/// Reads the configuration the server resolved, rather than a file on this machine.
+/// Reads the configuration the server resolved.
 fn fetch_config(app: &mut App, tx: &UnboundedSender<Event>) {
     app.config = Some(ConfigState::Loading);
     let client = app.collections.client.clone();
@@ -191,8 +190,7 @@ fn fetch_config(app: &mut App, tx: &UnboundedSender<Event>) {
 
 /// Runs a confirmed action and reports what it did.
 ///
-/// A rebuild is accepted and then runs on the server, so the outcome comes from the status
-/// endpoint rather than from the acceptance.
+/// The outcome of a rebuild is read from the rebuild status endpoint.
 fn act(client: Client, tx: UnboundedSender<Event>, pending: Pending) {
     let name = crate::console::collections::verb(&pending);
     tokio::spawn(async move {

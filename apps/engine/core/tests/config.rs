@@ -189,13 +189,13 @@ fn a_memory_class_profile_supplies_the_memory_budget() {
     cfg.startup.hardware.memory_budget_bytes = Some(4_000_000_000);
     assert_eq!(cfg.startup.hardware.memory_budget(), Some(4_000_000_000));
 
-    // The profiles that name which hardware rather than how much imply no budget.
+    // The cpu-only profile implies no budget.
     cfg.startup.hardware.memory_budget_bytes = None;
     cfg.startup.hardware.profile = HardwareProfile::CpuOnly;
     assert_eq!(cfg.startup.hardware.memory_budget(), None);
 }
 
-// Nothing enforces a host memory budget yet, so one is refused rather than accepted and ignored.
+// A host memory budget is refused, from a memory-class profile or set explicitly.
 #[test]
 fn a_memory_budget_is_refused_until_it_is_enforced() {
     use piramid_core::config::HardwareProfile;
@@ -214,7 +214,7 @@ fn a_memory_budget_is_refused_until_it_is_enforced() {
     assert!(cfg.validate().unwrap_err().contains("not enforced"));
 }
 
-// The gpu profile is a promise to run on a device, so it cannot pair with a CPU strategy.
+// The gpu profile refuses a CPU execution mode.
 #[test]
 fn the_gpu_profile_refuses_a_cpu_execution_mode() {
     use piramid_core::config::HardwareProfile;

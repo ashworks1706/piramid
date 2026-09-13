@@ -112,8 +112,7 @@ fn a_dot_product_collection_ranks_by_dot_product() {
     );
 }
 
-// Searching by a metric other than the indexed one is refused rather than reranking candidates
-// the index chose by a different measure.
+// Searching by a metric other than the indexed one is refused.
 #[test]
 fn a_search_by_another_metric_than_the_index_is_refused() {
     use piramid_core::error::{ErrorKind, IndexError, PiramidError};
@@ -192,8 +191,7 @@ fn a_range_query_fills_k_from_the_whole_qualifying_set() {
     assert!(hits.windows(2).all(|w| w[0].score >= w[1].score));
 }
 
-// A collection reopened under a configuration naming another metric refuses to open rather than
-// searching a saved index built by the old one.
+// A collection reopened under a configuration naming another metric refuses to open.
 #[test]
 fn reopening_under_another_metric_is_refused() {
     use piramid_core::config::{CollectionConfig, FlatConfig, IndexConfig};

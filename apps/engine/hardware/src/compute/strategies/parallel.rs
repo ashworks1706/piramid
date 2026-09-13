@@ -12,7 +12,7 @@ use crate::compute::strategies::simd;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ParallelStrategy;
 
-/// Floats a batch task scores at minimum, so a thread is not handed less work than its dispatch.
+/// Fewest floats a batch task scores.
 const MIN_TASK_FLOATS: usize = 1 << 15;
 
 /// Fewest rows a batch task takes at the given row width.

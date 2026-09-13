@@ -36,7 +36,7 @@ pub struct InferenceConfig {
     /// Longest prompt plus completion, in tokens.
     pub max_sequence_length: usize,
 
-    /// Run a throwaway pass at boot, allocating before the first real request.
+    /// Run a throwaway pass at boot.
     pub warmup: bool,
 
     /// How requests become forward passes.
@@ -100,7 +100,7 @@ pub struct BatchingConfig {
     /// Token ceiling per step.
     pub max_batched_tokens: usize,
 
-    /// Keep admitting into a running batch instead of draining it first.
+    /// Admit new requests into a running batch between steps.
     pub continuous: bool,
 
     /// Split a long prefill across steps.
@@ -326,9 +326,6 @@ pub enum DeadlineMiss {
 }
 
 /// Precomputed key/value states for retrieved documents, reused at prefill.
-///
-/// Position and preceding context change these states, so they are not concatenated as they
-/// stand. recompute_ratio is the fraction repaired on reuse.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct DocumentKvConfig {

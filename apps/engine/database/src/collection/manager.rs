@@ -148,7 +148,7 @@ impl CollectionManager {
         format!("{}/{}.db", self.data_dir, name)
     }
 
-    /// Warms in the background when there is a runtime to do it on; skipped otherwise.
+    /// Warms in the background on the current tokio runtime, and does nothing without one.
     fn warm_page_cache(&self, handle: CollectionHandle) {
         let Ok(runtime) = Handle::try_current() else {
             return;

@@ -11,9 +11,7 @@ use crate::compute::mode::ExecutionMode;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SimdStrategy;
 
-/// Load an exact 8-element chunk into a lane vector.
-///
-/// Callers pass a chunk from chunks_exact(8); a shorter chunk panics on the index.
+/// Load an 8-element chunk into a lane vector. Panics on a chunk shorter than 8.
 #[inline(always)]
 fn load(chunk: &[f32]) -> f32x8 {
     f32x8::new([

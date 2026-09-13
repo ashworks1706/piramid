@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check that a fresh clone has everything it needs. Run with `just doctor`.
+# Check that a fresh clone has everything it needs. Run with just doctor.
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

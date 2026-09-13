@@ -25,8 +25,7 @@ pub struct Settings {
 impl Settings {
     /// Settings from a loaded configuration.
     ///
-    /// The console reads the same file and the same environment overrides as the server, so a
-    /// deployment has one place to change and one spelling to remember.
+    /// Reads the same file and the same environment overrides as the server.
     pub fn from_config(config: &Config) -> Self {
         let console = &config.console;
         Self {

@@ -102,7 +102,7 @@ impl HnswIndex {
             node.tombstone = true;
         }
     }
-    /// Draw a layer for a new node, with exponential decay keeping upper layers sparse.
+    /// Draw a layer for a new node from an exponentially decaying distribution.
     fn random_layer(&self) -> usize {
         // floor(-ln(uniform) * ml)
         let r: f32 = rand::random();
@@ -135,7 +135,7 @@ impl HnswIndex {
             return Ok(());
         };
 
-        // Greedy descent from the entry point to find where to link.
+        // Greedy descent from the entry point to the top layer of the new node.
         let mut current_entry = vec![entry_point];
 
         for lc in ((layer as isize + 1)..=self.max_level).rev() {
@@ -180,9 +180,8 @@ impl HnswIndex {
                     if lc < neighbor.connections.len() {
                         neighbor.connections[lc].push(id);
 
-                        // Degree is capped per node, so prune the neighbour once it is over.
+                        // A neighbour over the degree cap is pruned.
                         if neighbor.connections[lc].len() > m {
-                            // Cloned to release the borrow on self.nodes before pruning.
                             let neighbor_connections = neighbor.connections[lc].clone();
                             let neighbor_vec = vectors
                                 .get(&neighbor_id)
@@ -280,9 +279,8 @@ impl HnswIndex {
 
     /// Walk one layer, returning neighbour ids nearest-first.
     ///
-    /// With admit_all set, every node is admitted regardless of filter or tombstone, which is what
-    /// the greedy descent through the upper layers uses. The layer-0 call clears it, and only
-    /// there does admission narrow.
+    /// With admit_all set, every node is admitted regardless of filter or tombstone. The descent
+    /// through the upper layers sets it, and the layer-0 call clears it.
     fn search_layer(
         &self,
         query: &[f32],
@@ -353,7 +351,7 @@ impl HnswIndex {
                         });
 
                         if nearest.len() > num_closest {
-                            nearest.pop(); // remove furthest
+                            nearest.pop();
                         }
 
                         furthest_distance = nearest.peek().map_or(f32::INFINITY, |c| c.distance);
@@ -363,12 +361,11 @@ impl HnswIndex {
         }
 
         let mut result: Vec<_> = nearest.into_iter().collect();
-        result.sort_by(|a, b| b.cmp(a)); // reverses the max-heap order back to nearest-first
+        result.sort_by(|a, b| b.cmp(a)); // Nearest first.
         result.into_iter().map(|c| c.id).collect()
     }
 
-    // The metadatas map is a bounded cache, so a miss is admitted here and settled by
-    // search::engine against the resolved document.
+    // A metadata cache miss is admitted, and search::engine filters the resolved document.
     fn passes_filter(&self, id: &Uuid, context: &SearchContext<'_>) -> bool {
         context
             .filter
@@ -494,15 +491,13 @@ impl HnswIndex {
 
 use crate::index::{IndexDetails, IndexSearchRequest, IndexStats, IndexType, VectorIndex};
 
-// Adapts the generic trait call to the inherent search, resolving ef from the per-query config
-// or the index default.
+// Resolves ef from the per-query config, or the index default.
 impl VectorIndex for HnswIndex {
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) -> Result<()> {
         self.insert(id, vector, vectors)
     }
 
     fn search(&self, request: IndexSearchRequest<'_>) -> Result<Vec<Uuid>> {
-        // Use the per-query ef override when present, otherwise the configured ef_search.
         let ef = request
             .config
             .ef

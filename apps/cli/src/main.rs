@@ -138,7 +138,7 @@ fn support_bundle(
     Ok(())
 }
 
-/// Open every collection on disk so the bundle reports it, naming each one that fails to open.
+/// Open every collection on disk, naming each one that fails to open.
 fn preload_collections_for_metrics(state: &std::sync::Arc<AppState>) -> std::io::Result<()> {
     let names = state
         .collection_manager
@@ -269,7 +269,7 @@ fn install_gpu(_manager: &piramid::GpuManager, _block_size: u32) -> std::io::Res
 
 /// A future that completes on the first SIGINT or SIGTERM.
 ///
-/// The handlers are installed before it is returned, so a failure to install one is an error.
+/// Returns an error if a handler cannot be installed.
 #[cfg(unix)]
 fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
     use tokio::signal::unix::{signal, SignalKind};

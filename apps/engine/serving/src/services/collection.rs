@@ -74,7 +74,7 @@ pub fn delete_collection(
     state: &SharedState,
     collection: String,
 ) -> Result<DeleteCollectionResponse> {
-    // Deleting frees disk space, so it is allowed while low disk space has writes disabled.
+    // Deleting is allowed while low disk space has writes disabled.
     state.ensure_available()?;
     state.collection_manager.delete(&collection)?;
     Ok(DeleteCollectionResponse { deleted: true })

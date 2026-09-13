@@ -186,7 +186,7 @@ fn index_selector_prefers_expected_types() {
     assert_eq!(cfg.select_type(500_000), IndexKind::Hnsw);
 }
 
-// HNSW evaluates filters during traversal rather than after it.
+// HNSW evaluates filters during traversal.
 #[test]
 fn hnsw_search_applies_a_filter_during_traversal() {
     use piramid_core::metadata::{metadata, Filter, Metadata};
@@ -266,8 +266,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
             ..FlatConfig::default()
         };
 
-        // Contiguous: the index owns every row the store does, so the buffer goes straight to
-        // the kernel.
+        // Contiguous: the store buffer goes straight to the kernel.
         let mut cache = CacheManager::new(CacheConfig::default());
         let mut contiguous = FlatIndex::new(config);
         for (id, vector) in &rows {
@@ -281,7 +280,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
             "the store should be offering its buffer"
         );
 
-        // Scattered: no slab, so every block is gathered before it is scored.
+        // Scattered: every block is gathered before it is scored.
         let map: HashMap<Uuid, Vec<f32>> = rows.iter().cloned().collect();
         let scattered_reader = HashMapVectorReader::new(&map);
         assert!(scattered_reader.as_slab().is_none());
@@ -290,7 +289,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
             scattered.insert(*id, vector, &scattered_reader).unwrap();
         }
 
-        // A hole withdraws the buffer, so the same index falls back mid-life.
+        // A hole withdraws the buffer, and the same index gathers instead.
         let mut holed = VectorStore::new();
         for (id, vector) in &rows {
             holed.put(*id, vector).unwrap();
@@ -333,7 +332,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
         assert_eq!(from_slab, from_gather, "{metric:?}: slab vs gather");
         assert_eq!(from_slab, from_holed, "{metric:?}: slab vs holed fallback");
 
-        // And against scoring one pair at a time.
+        // Compared against scoring one pair at a time.
         let kernels = for_mode(config.mode).unwrap();
         let mut pairwise: Vec<(Uuid, f32)> = rows
             .iter()
@@ -417,7 +416,7 @@ fn ivf_probing_every_partition_ranks_as_pairwise_scoring_does() {
 
         assert_eq!(from_scattered.len(), k);
         assert_eq!(from_scattered, from_cache, "{metric:?}: scattered vs cache");
-        // Rows repeat with period 7, so ties are compared by score rather than by id.
+        // Rows repeat with period 7, so ties are compared by score and not by id.
         let score_of = |id: &Uuid| metric.calculate(&query, &map[id], kernels);
         for (got, (_, want)) in from_scattered.iter().zip(&expected) {
             assert!(

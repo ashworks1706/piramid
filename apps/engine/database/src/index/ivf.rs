@@ -17,10 +17,10 @@ const CONVERGENCE_SIMILARITY: f32 = 0.99;
 pub struct IvfIndex {
     config: IvfConfig,
     centroids: Vec<Vec<f32>>,
-    inverted_lists: Vec<Vec<Uuid>>, // vectors[cluster_id] = [vector_ids]
+    inverted_lists: Vec<Vec<Uuid>>, // Vector ids of each cluster.
     vector_to_cluster: HashMap<Uuid, usize>,
     #[serde(default)]
-    pending_vectors: HashSet<Uuid>, // vectors not yet assigned, before the first clustering run
+    pending_vectors: HashSet<Uuid>, // Vectors not yet assigned to a cluster.
     dimensions: usize,
 }
 
@@ -37,8 +37,7 @@ impl IvfIndex {
         }
     }
 
-    /// Train centroids over the vectors with the Lloyd algorithm. Rebuilt periodically, not per
-    /// insert.
+    /// Train centroids over the vectors with the Lloyd algorithm.
     pub fn build_clusters(&mut self, vectors: &dyn VectorReader) -> Result<()> {
         if vectors.is_empty() {
             return Ok(());
@@ -77,8 +76,8 @@ impl IvfIndex {
 
                 let new_centroid = self.compute_centroid(cluster);
 
-                // Metric::calculate normalises to higher-is-closer, so this is a similarity
-                // rather than a distance. The threshold is meaningful only for a bounded metric.
+                // Metric::calculate returns a similarity, higher is closer. The threshold applies
+                // only to a bounded metric.
                 let similarity =
                     self.config
                         .metric
@@ -150,7 +149,7 @@ impl VectorIndex for IvfIndex {
             return Ok(());
         }
 
-        // Online insert assigns to the nearest existing centroid rather than retraining.
+        // An insert assigns to the nearest existing centroid without retraining.
         if self.centroids.is_empty() {
             self.pending_vectors.insert(id);
 

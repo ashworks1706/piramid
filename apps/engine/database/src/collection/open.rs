@@ -32,7 +32,7 @@ use piramid_core::Document;
 pub fn open(path: &str, options: CollectionOpenOptions) -> Result<Collection> {
     let config = options.config;
 
-    // A path with no usable file stem is an error rather than a placeholder name.
+    // A path with no usable file stem is an error.
     let collection_name = std::path::Path::new(path)
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -99,8 +99,8 @@ pub fn open(path: &str, options: CollectionOpenOptions) -> Result<Collection> {
         Vec::new()
     };
 
-    // Records exist but the ANN sidecar does not, so it is rebuilt from the record store.
-    // Skipped when the WAL is about to replay, since replay reinserts every vector.
+    // A missing ANN sidecar is rebuilt from the record store, unless the WAL is about to replay and
+    // reinsert every vector.
     if wal_entries.is_empty() && !index.is_empty() && vector_index_missing {
         rebuild_vector_index(&mut vector_index, &index, &record_store)?;
     }
@@ -146,7 +146,7 @@ fn replay_wal(collection: &mut Collection, entries: Vec<WalEntry>) -> Result<()>
                 };
                 crate::document::insert_internal(collection, document)?;
             }
-            // An update is a delete followed by an insert, so the ANN index sees the change.
+            // An update replays as a delete followed by an insert.
             WalEntry::Update {
                 id,
                 vector,
@@ -177,7 +177,6 @@ fn rebuild_vector_index(
     index: &HashMap<Uuid, crate::storage::sidecars::EntryPointer>,
     record_store: &RecordStore,
 ) -> Result<()> {
-    // Read every live record through the offset index and re-insert it.
     let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
     for (id, idx_entry) in index {
         let entry = record_store.read_document(idx_entry)?;

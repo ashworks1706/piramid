@@ -1,6 +1,4 @@
 //! Build an index from its configuration.
-//!
-//! Config types live in core::config, and this is the only place that turns them into instances.
 
 use crate::index::VectorIndex;
 use crate::index::{FlatIndex, HnswIndex, IvfIndex};

@@ -11,10 +11,8 @@ pub trait DistanceKernels: Send + Sync {
     /// Stable name for logs, metrics, and error messages.
     fn name(&self) -> &'static str;
 
-    /// Whether this strategy can actually run on this machine right now.
+    /// Whether this strategy can run on this machine.
     fn is_available(&self) -> bool;
-
-    // Pairwise. Callers guarantee equal lengths.
 
     /// Cosine similarity of two equal-length vectors.
     fn cosine(&self, a: &[f32], b: &[f32]) -> f32;
@@ -27,8 +25,6 @@ pub trait DistanceKernels: Send + Sync {
 
     /// Squared L2 distance, skipping the final sqrt.
     fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> f32;
-
-    // Batch. Every strategy implements these itself.
 
     /// Score query against every row of the row-major candidates slab.
     fn cosine_batch(

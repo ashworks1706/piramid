@@ -30,7 +30,7 @@ impl FlatIndex {
         }
     }
 
-    /// Score every vector this index owns, one batch call per block rather than one per vector.
+    /// Score every vector this index owns, one batch call per block.
     fn score_all(
         &self,
         query: &[f32],
@@ -40,8 +40,7 @@ impl FlatIndex {
         if self.vector_ids.is_empty() {
             return Ok(Vec::new());
         }
-        // The store is already the whole candidate set laid out row-major, so the buffer goes
-        // straight to the kernel.
+        // A slab covering every indexed row goes to the kernel in one call.
         if let Some(slab) = vectors.as_slab() {
             if slab.rows() == self.vector_ids.len() {
                 debug_assert!(

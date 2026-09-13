@@ -1,4 +1,4 @@
-# Contributor tasks. Run `just` to list them.
+# Contributor tasks. Run just to list them.
 #
 # Not the shipped CLI. Nothing here is needed to run Piramid.
 
@@ -113,7 +113,7 @@ bench *ARGS:
 # PIRAMID_BENCH_ARMS (closed-book, before-prefill-http, before-prefill-host,
 # before-prefill-device), PIRAMID_BENCH_SEARCH_URL (for the http arm), PIRAMID_BENCH_OUT
 # (default target/rag_e2e.json), PIRAMID_BENCH_MAX_NEW_TOKENS, PIRAMID_BENCH_KV_CACHE_BYTES,
-# PIRAMID_BENCH_WARMUP. The device arm needs ARGS="--features gpu-cuda".
+# PIRAMID_BENCH_WARMUP. The device arm needs --features gpu-cuda in ARGS.
 # End-to-end RAG benchmark: embed, search, fetch, prefill, decode per arm, results as JSON.
 bench-rag *ARGS:
     cargo bench -p piramid-serving --features inference-candle --bench rag_e2e {{ARGS}}
@@ -128,11 +128,11 @@ audit:
 web:
     cd apps/website && npm run dev
 
-# Production build. Catches type errors and prerender failures that `just web` does not.
+# Production build, including type checks and prerendering.
 web-build:
     cd apps/website && npm run build
 
-# Build and serve the production bundle. `just web` hides prerender and font problems.
+# Build and serve the production bundle.
 web-preview: web-build
     cd apps/website && npm run start
 

@@ -111,7 +111,6 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             .last_checkpoint()
             .and_then(|timestamp| piramid_core::clock::unix_secs().checked_sub(timestamp));
         wal_stats.push(WalStats {
-            // Keyed by collection name, matching every other field keyed by collection.
             collection: collection_name,
             last_checkpoint: collection_guard.checkpoint.last_checkpoint(),
             checkpoint_age_secs,

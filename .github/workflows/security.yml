@@ -6,14 +6,14 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly, so advisories surface without waiting for a PR.
+    # Weekly.
     - cron: "0 9 * * 1"
 
 permissions:
   contents: read
 
 jobs:
-  # The scheduled run has no diff to compare against, so it audits everything.
+  # A scheduled run ignores these filters and audits everything.
   changes:
     name: Changes
     runs-on: ubuntu-latest
@@ -48,7 +48,7 @@ jobs:
         with:
           command: check advisories bans licenses sources
 
-  # unsafe_code is denied workspace-wide with two audited exceptions. See SECURITY.md.
+  # unsafe_code is denied workspace-wide except at the audited sites below. See SECURITY.md.
   unsafe-audit:
     name: Unsafe audit
     needs: changes

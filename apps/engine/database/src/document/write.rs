@@ -17,7 +17,7 @@ fn check_width(collection: &Collection, vector: &[f32]) -> Result<()> {
 }
 
 /// Validate and encode one document, touching nothing. replacing is true when the document takes
-/// the place of one already stored, so the vector count does not grow.
+/// the place of one already stored, which does not grow the vector count.
 fn prepare(collection: &Collection, entry: &Document, replacing: bool) -> Result<Vec<u8>> {
     check_width(collection, entry.vector())?;
     let bytes = RecordStore::encode_document(entry)?;

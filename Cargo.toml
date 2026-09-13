@@ -16,10 +16,10 @@ license = "Apache-2.0"
 repository = "https://github.com/ashworks1706/piramid"
 homepage = "https://piramiddb.com"
 documentation = "https://docs.rs/piramid"
-rust-version = "1.87"  # `usize::is_multiple_of` / `next_multiple_of`, used by compute::kernels
+rust-version = "1.87"  # usize::is_multiple_of and next_multiple_of, used by compute::kernels
 
 [workspace.dependencies]
-# in-repo crates, so versions stay in lockstep
+# in-repo crates
 piramid-core = { path = "apps/engine/core", version = "0.2.0" }
 piramid-hardware = { path = "apps/engine/hardware", version = "0.2.0" }
 piramid-database = { path = "apps/engine/database", version = "0.2.0" }
@@ -59,7 +59,7 @@ opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "trace"] }
 
 # cli
 clap = { version = "4.5", features = ["derive", "env"] }
-# `piramid top` and the developer console
+# piramid top and the developer console
 ratatui = "0.30"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
@@ -108,7 +108,7 @@ print_stderr = "deny"
 # Tests opt back in with #[allow] at the module level.
 unwrap_used = "deny"
 expect_used = "deny"
-# Modern idioms, so the codebase does not drift back to older forms.
+# Modern idioms.
 uninlined_format_args = "deny"
 manual_let_else = "deny"
 map_unwrap_or = "deny"

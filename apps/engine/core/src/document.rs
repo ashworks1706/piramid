@@ -47,8 +47,6 @@ impl Document {
 }
 
 /// A search result: a stored document and how well it matched.
-///
-/// Holds the [Document] itself rather than restating its fields.
 #[derive(Debug, Clone)]
 pub struct Hit {
     /// Similarity, normalised so higher is closer.

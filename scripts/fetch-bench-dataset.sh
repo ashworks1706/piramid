@@ -7,7 +7,7 @@
 #   OUT        output path, default target/bench/hotpotqa-dev-distractor.jsonl
 #
 # Each output line is one question:
-#   {"id", "question", "answers": [answer], "passages": [{"id", "text", "gold"}]}
+#   id, question, answers (a list holding the answer), passages (a list of id, text, gold)
 # A passage id is its paragraph title; gold marks the titles named by supporting_facts.
 #
 # The download is checked against EXPECTED_SHA256 and the script stops on a mismatch.
@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 URL="http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json"
-# TODO(pin): replace with the sha256 of hotpot_dev_distractor_v1.json once downloaded and checked.
+# All-zero placeholder; the check fails until it holds the sha256 of hotpot_dev_distractor_v1.json.
 EXPECTED_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
 
 questions="${1:-500}"

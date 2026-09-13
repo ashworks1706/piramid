@@ -571,7 +571,7 @@ fn writes_replay_with_sync_on_write_enabled() {
 
     let mut config = CollectionConfig::default();
     config.wal.sync_on_write = true;
-    // High enough that no checkpoint fires; the WAL must carry the writes on its own.
+    // No checkpoint fires, so reopening depends on the WAL alone.
     config.wal.checkpoint_frequency = 10_000;
 
     {
@@ -649,7 +649,7 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
         })
         .collect();
 
-    // The reader is contiguous, so a batch kernel takes the whole candidate set in one copy.
+    // The reader is contiguous.
     let slab = storage
         .vector_reader()
         .as_slab()

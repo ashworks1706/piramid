@@ -27,7 +27,7 @@ pub struct EmbeddingConfig {
     #[serde(default)]
     pub options: serde_json::Value,
 
-    /// Embeddings kept so identical text is not sent to the provider twice.
+    /// Cache of embeddings keyed by input text.
     #[serde(default)]
     pub cache: super::EmbeddingCacheConfig,
 

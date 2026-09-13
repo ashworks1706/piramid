@@ -9,14 +9,10 @@ use crate::storage::vectors::{VectorReader, VectorSlab};
 
 /// Every vector of a collection, resident in memory as one contiguous buffer.
 ///
-/// Not a cache: the ANN indexes hold ids and resolve them here, and an evicted entry is a search
-/// failure. Memory is bounded by evicting the [MetadataCache](crate::MetadataCache) instead.
+/// The ANN indexes resolve ids here, so an evicted entry is a search failure.
 ///
-/// The rows are one flat float buffer at a fixed stride. Ids resolve to rows through a Uuid to
-/// u32 ordinal map, so hot structures hold a 4-byte handle rather than a 16-byte key.
-///
-/// Ordinals are stable. A removed row becomes a hole rather than being filled by moving the last
-/// row into it. Holes are reused by the next insert.
+/// Rows are one flat float buffer at a fixed stride, addressed through a Uuid to u32 ordinal map.
+/// Ordinals are stable: a removed row becomes a hole, and the next insert reuses it.
 #[derive(Default)]
 pub struct VectorStore {
     /// Row-major, dim floats per row. Holes are still allocated and their contents are stale.
@@ -25,8 +21,7 @@ pub struct VectorStore {
     dim: Option<usize>,
     /// Id to row.
     ordinals: HashMap<Uuid, u32>,
-    /// Row to id, in row order. The entry for a hole is stale. The field ordinals is the authority
-    /// on what is live, and the slab is only offered when there are no holes.
+    /// Row to id, in row order. The entry for a hole is stale; ordinals holds what is live.
     ids: Vec<Uuid>,
     /// Holes, reused before the slab grows.
     free: Vec<u32>,
@@ -43,15 +38,14 @@ impl VectorStore {
         self.dim
     }
 
-    /// Rows allocated but not live. Any of them makes [VectorReader::as_slab] return None. Inserts
-    /// reuse them, so this is non-zero only while deletes run ahead of inserts.
+    /// Rows allocated but not live. Any of them makes [VectorReader::as_slab] return None.
     pub fn holes(&self) -> usize {
         self.free.len()
     }
 
     /// Insert or replace the vector for id.
     ///
-    /// A width other than the stride of the store is an error rather than a resize.
+    /// A width other than the stride of the store is an error.
     pub fn put(&mut self, id: Uuid, vector: &[f32]) -> Result<()> {
         let dim = *self.dim.get_or_insert(vector.len());
         if vector.len() != dim {
@@ -78,8 +72,7 @@ impl VectorStore {
         self.free.push(ordinal);
     }
 
-    /// Drop every vector, and the row width with them. Only correct before a rebuild repopulates
-    /// the store, which is also the only time the width is allowed to change.
+    /// Drop every vector and the row width. Only correct before a rebuild repopulates the store.
     pub fn clear(&mut self) {
         self.slab.clear();
         self.ids.clear();
@@ -143,7 +136,7 @@ impl VectorReader for VectorStore {
 
     /// The whole slab, when every allocated row is live.
     ///
-    /// A store with holes returns None and the caller gathers instead.
+    /// A store with holes returns None.
     fn as_slab(&self) -> Option<VectorSlab<'_>> {
         let dim = self.dim?;
         self.free.is_empty().then_some(VectorSlab {
@@ -181,11 +174,9 @@ mod tests {
         assert_eq!(store.len(), 2);
         assert_eq!(VectorReader::dim(&store), Some(2));
 
-        // One buffer a device takes in one copy.
         let slab = store.as_slab().unwrap();
         assert_eq!(slab.dim, 2);
         assert_eq!(slab.data, [1.0, 2.0, 3.0, 4.0]);
-        // The ids travel with the buffer.
         assert_eq!(slab.ids, [a, b]);
         assert_eq!(slab.rows(), 2);
     }
@@ -205,7 +196,6 @@ mod tests {
     fn a_width_that_is_not_the_stride_is_refused() {
         let mut store = store(&[(Uuid::new_v4(), [1.0, 2.0])]);
 
-        // A width other than the stride is refused rather than padded or truncated.
         let error = store.put(Uuid::new_v4(), &[1.0, 2.0, 3.0]).unwrap_err();
 
         assert!(error.to_string().contains("dimension mismatch"), "{error}");
@@ -223,7 +213,7 @@ mod tests {
         assert_eq!(store.len(), 1);
         assert_eq!(store.get(&a), None);
         assert_eq!(store.holes(), 1);
-        // Row 0 still holds stale floats, so the fast path is withdrawn.
+        // A hole withdraws the slab.
         assert!(store.as_slab().is_none());
         // The ordinal of b did not move.
         assert_eq!(store.get(&b), Some([3.0, 4.0].as_slice()));
@@ -252,7 +242,6 @@ mod tests {
         expected.sort();
         assert_eq!(seen, expected);
 
-        // The fallback path an index takes while the slab is withdrawn.
         let mut out = [0.0; 4];
         store.gather_into(&[c, a], &mut out).unwrap();
         assert_eq!(out, [3.0, 3.0, 1.0, 1.0]);
@@ -268,7 +257,7 @@ mod tests {
         assert_eq!(VectorReader::dim(&store), None);
         assert!(store.as_slab().is_none());
 
-        // A rebuild is the one time the width is allowed to change.
+        // Clearing allows a new width.
         store.put(Uuid::new_v4(), &[1.0, 2.0, 3.0]).unwrap();
         assert_eq!(VectorReader::dim(&store), Some(3));
     }
@@ -277,7 +266,6 @@ mod tests {
     fn an_empty_store_offers_no_slab_rather_than_an_empty_one() {
         let store = VectorStore::new();
 
-        // dim is unknown until something is stored.
         assert!(store.as_slab().is_none());
         assert!(store.is_empty());
     }

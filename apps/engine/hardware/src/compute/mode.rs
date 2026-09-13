@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Which execution strategy should run a kernel; Auto is a request, not a strategy.
+/// Which execution strategy runs a kernel. Auto resolves to a concrete strategy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ExecutionMode {

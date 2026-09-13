@@ -94,7 +94,6 @@ fn init(
     filter: EnvFilter,
     json: bool,
 ) -> crate::error::Result<ObservabilityGuard> {
-    // One line per finished operation.
     let span_events = if config.span_events {
         FmtSpan::CLOSE
     } else {
@@ -138,7 +137,6 @@ fn init(
     #[cfg(not(feature = "otel"))]
     registry.init();
 
-    // Report what resolved.
     tracing::info!(
         target: "piramid::observability",
         otlp = config.otlp.as_ref().map_or("off", |c| c.endpoint.as_str()),

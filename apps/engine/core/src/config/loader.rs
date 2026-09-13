@@ -17,8 +17,7 @@ const ENV_SEPARATOR: &str = "__";
 
 /// Where configuration comes from: a file, and command-line values applied over it.
 ///
-/// A running server keeps the source it booted from, so a reload reads the same file and applies
-/// the same values.
+/// A reload reads the same source the server booted from.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ConfigSource {
     /// The file to read. None reads CONFIG_FILE, or no file when that is unset.
@@ -91,7 +90,7 @@ fn load_file(path: Option<String>) -> Result<Value, ConfigError> {
         )));
     };
 
-    // An empty file parses as null, which is a valid document taking every default.
+    // An empty file parses as null and takes every default.
     Ok(match parsed {
         Value::Null => Value::Mapping(Mapping::new()),
         other => other,
@@ -124,7 +123,7 @@ fn apply_env_overrides(document: &mut Value) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// Read the API key from the environment. It has no place in the configuration file.
+/// Write OPENAI_API_KEY from the environment into startup.embedding.api_key.
 fn apply_secret_env(document: &mut Value) -> Result<(), ConfigError> {
     if let Ok(key) = env::var("OPENAI_API_KEY") {
         let path = ["startup", "embedding", "api_key"].map(str::to_string);
@@ -136,7 +135,7 @@ fn apply_secret_env(document: &mut Value) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// Read the server API key from the environment. It has no place in the configuration file.
+/// Read the server API key from PIRAMID_API_KEY. None when it is unset.
 fn server_api_key() -> Result<Option<ApiKey>, ConfigError> {
     let Ok(key) = env::var(API_KEY_ENV) else {
         return Ok(None);

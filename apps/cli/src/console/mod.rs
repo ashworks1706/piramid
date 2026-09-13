@@ -1,8 +1,8 @@
 //! The developer console: run every unit in the repo, stream its output, and watch the server,
 //! from one modal terminal UI.
 //!
-//! It drives just recipes and docker compose, so it runs only inside a checkout. Outside one it
-//! prints help instead. Each action shells out to the recipe rather than reimplementing it.
+//! Inside a checkout it drives just recipes and docker compose. Outside one it offers only the
+//! views that need a server.
 
 mod app;
 mod client;

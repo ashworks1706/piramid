@@ -15,8 +15,7 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
-  # What the diff touches decides what runs. A blog post should not run the Rust
-  # matrix, and a kernel change should not run eslint.
+  # Path filters decide which jobs run.
   changes:
     name: Changes
     runs-on: ubuntu-latest
@@ -50,7 +49,6 @@ jobs:
               - 'apps/website/**'
               - '.github/workflows/ci.yml'
 
-  # The same recipe developers run locally.
   rust:
     name: Rust
     needs: changes
@@ -65,9 +63,8 @@ jobs:
       - uses: extractions/setup-just@v4
       - run: just check-rust
 
-  # Additive default-off features only break in combinations nobody builds locally.
-  # cargo check, so no GPU runner is needed. The CUDA features need nvcc present at build time to
-  # pick the toolkit version, so those rows install it.
+  # cargo check per feature combination. The CUDA rows install nvcc, which the build uses to pick
+  # the toolkit version.
   features:
     name: Features (${{ matrix.name }})
     needs: changes
@@ -104,7 +101,6 @@ jobs:
           non-cuda-sub-packages: '["libcublas-dev", "libcurand-dev"]'
       - run: cargo check --workspace --all-targets ${{ matrix.flags }}
 
-  # The declared MSRV has to actually build.
   msrv:
     name: MSRV
     needs: changes
@@ -120,7 +116,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-targets
 
-  # Broken intra-doc links are invisible until someone reads the docs.
   docs:
     name: Docs
     needs: changes
@@ -140,7 +135,7 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-  # Catches a missing include or an unversioned path dependency before release day.
+  # Fails on a missing include or an unversioned path dependency.
   package:
     name: Package
     needs: changes
@@ -152,7 +147,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo package --workspace --no-verify --allow-dirty
 
-  # Build the image on PRs, so it doesn't only break on the release that needs it.
   docker:
     name: Docker
     needs: changes

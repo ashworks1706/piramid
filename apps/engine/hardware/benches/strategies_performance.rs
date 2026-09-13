@@ -4,7 +4,7 @@
     reason = "criterion_group generates the undocumented harness functions"
 )]
 
-//! Scalar vs SIMD vs parallel vs CUDA, at the dimensions embeddings actually come in. The CUDA
+//! Scalar, SIMD, parallel and CUDA strategies at common embedding dimensions. The CUDA
 //! strategy rows include the upload of query and candidates and the download of scores; the
 //! batch_resident group scores a slab already on the device.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
@@ -19,7 +19,7 @@ const COMPARED: [ExecutionMode; 4] = [
     ExecutionMode::Gpu,
 ];
 
-/// Dimensions real embedding models emit: MiniLM, OpenAI small/ada, OpenAI large.
+/// Embedding dimensions of MiniLM, OpenAI small and ada, and OpenAI large.
 const DIMS: [usize; 4] = [384, 768, 1536, 3072];
 
 /// Candidate counts spanning one HNSW ef list up to a small flat collection.
@@ -33,7 +33,7 @@ fn vectors(count: usize, dim: usize) -> Vec<f32> {
             state = state
                 .wrapping_mul(6_364_136_223_846_793_005)
                 .wrapping_add(1);
-            // Top bits are the well-mixed ones in an LCG; map them onto [-1, 1).
+            // Maps the high bits of the LCG state onto the range -1 to 1.
             f32::from(((state >> 33) & 0xFFFF) as u16) / 32_768.0 - 1.0
         })
         .collect()
@@ -59,7 +59,7 @@ fn install_device() {
 #[cfg(not(feature = "gpu-cuda"))]
 fn install_device() {}
 
-/// Available strategies, resolved once. Auto resolves to one of these and is not listed twice.
+/// Available strategies, resolved once, excluding Auto.
 fn available() -> Vec<(&'static str, &'static dyn DistanceKernels)> {
     install_device();
     COMPARED
@@ -69,7 +69,7 @@ fn available() -> Vec<(&'static str, &'static dyn DistanceKernels)> {
         .collect()
 }
 
-/// One query against one candidate: the call every index makes per candidate today.
+/// One query against one candidate.
 fn pairwise(c: &mut Criterion) {
     let mut group = c.benchmark_group("pairwise/cosine");
 
@@ -90,7 +90,7 @@ fn pairwise(c: &mut Criterion) {
 /// One query against many candidates in a single batch call.
 fn batch(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch/cosine");
-    // Held at a mid-range embedding size so the axis being varied is candidate count alone.
+    // Dimension is fixed; candidate count varies.
     let dim = 768;
     let query = vectors(1, dim);
 

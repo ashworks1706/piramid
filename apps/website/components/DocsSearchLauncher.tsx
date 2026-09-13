@@ -9,7 +9,7 @@ type Props = {
   className?: string;
 };
 
-/** Return up to ~160 chars of text centred around the first match of `q`. */
+/** Returns up to about 160 characters of text centred on the first match of q. */
 function buildSnippet(
   text: string,
   q: string,

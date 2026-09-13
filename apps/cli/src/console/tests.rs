@@ -54,13 +54,13 @@ fn the_catalog_is_unique_and_every_unit_is_runnable() {
         .iter()
         .all(|u| u.service().is_some() || !u.args.is_empty()));
     assert!(units.iter().any(|u| u.id == "serve"));
-    // A named task keeps its name rather than its command line.
+    // A named task is identified by its name, not its command line.
     let bundle = units
         .iter()
         .find(|u| u.id == "support-bundle")
         .expect("the catalog offers a support bundle");
     assert_eq!(bundle.args, ["piramid", "support-bundle"]);
-    // The resolved configuration is a view now, not a recipe to shell out to.
+    // The resolved configuration is a view, not a recipe.
     assert!(!units.iter().any(|u| u.id == "config"));
     assert!(
         !units.iter().any(|u| u.id.starts_with("piramid ")),
@@ -205,9 +205,9 @@ fn ps_output_parses_as_an_array_or_as_lines() {
     assert_eq!(parsed["piramid"].exit_code, 1);
     assert_eq!(parsed["ollama"].status(), Status::Running);
     assert!(parse_ps("").is_ok_and(|m| m.is_empty()));
-    // A failed query returns an error rather than an empty set of services.
+    // A failed query returns an error.
     assert!(parse_ps("not json").is_err());
-    // A row without an exit code cannot say whether the service exited, so it is refused.
+    // A row without an exit code is refused.
     assert!(parse_ps(r#"{"Service":"piramid","State":"exited","Health":""}"#).is_err());
 }
 
@@ -270,8 +270,7 @@ fn console_settings_come_from_the_one_configuration_file() {
     let config = piramid_core::config::Config::default();
     let settings = Settings::from_config(&config);
 
-    // Unset, the console follows the address the server in the same file binds, so a deployment
-    // that moves the port does not have to say so twice.
+    // Unset, the console follows the address the server in the same file binds.
     assert_eq!(config.console.base_url, "");
     assert_eq!(settings.base_url, "http://127.0.0.1:6333");
     assert_eq!(settings.web_url, "http://localhost:3000");
@@ -355,8 +354,7 @@ fn an_unreachable_server_is_reported_rather_than_left_blank() {
         "Connection refused".into(),
     )));
 
-    // The status bar and the empty list both read this, so a console pointed at nothing says so
-    // instead of waiting forever.
+    // A refresh against an unreachable server records the error and leaves no rows.
     assert!(app.collections.error.is_some());
     assert!(app.collections.rows.is_empty());
 }

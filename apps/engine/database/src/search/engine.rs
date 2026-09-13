@@ -36,7 +36,7 @@ impl Default for SearchParams<'_> {
     }
 }
 
-/// What a search runs against. Borrowed views only, and the caller owns everything.
+/// What a search runs against, as borrowed views.
 pub struct SearchTarget<'a> {
     /// The ANN index to query.
     pub index: &'a dyn VectorIndex,
@@ -61,8 +61,8 @@ pub fn search(
         .search_config_override
         .unwrap_or(target.default_config);
 
-    // Anything applied after the index returns is a post-filter, so more than k candidates are
-    // requested. A score threshold narrows the set the same way a metadata predicate does.
+    // A metadata filter or a score threshold applies after the index returns, so more than k
+    // candidates are requested.
     let post_filtered = params.filter.is_some() || params.min_score.is_some();
     let base_overfetch = effective_search.filter_overfetch.max(1);
     let expansion = params
@@ -95,15 +95,14 @@ pub fn search(
     if let Some(filter) = params.filter {
         results.retain(|hit| filter.matches(&hit.document.metadata));
     }
-    // The index orders by its own traversal, and score is recomputed here.
+    // Scores are recomputed here, so the order of the index is discarded.
     rank_top_k(&mut results, k);
     Ok(results)
 }
 
 /// Resolve the candidates of the index and score them against the query in one batch call.
 ///
-/// The score is recomputed here against the stored vector, whatever the index returned.
-/// Scoring runs once over a gathered block rather than once per candidate.
+/// The score is recomputed against the stored vector, whatever the index returned.
 fn rescore(
     query: &[f32],
     ids: Vec<Uuid>,
@@ -120,7 +119,7 @@ fn rescore(
     let Some(dim) = documents.first().map(|document| document.vector().len()) else {
         return Ok(Vec::new());
     };
-    // A collection is one width, so a candidate of another width is an error.
+    // A candidate of a different width is an error.
     let mut block = Vec::with_capacity(documents.len() * dim);
     for document in &documents {
         if document.vector().len() != dim {

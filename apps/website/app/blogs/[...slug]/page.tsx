@@ -60,7 +60,7 @@ export default async function DocPage({
   if (!blog) return notFound();
 
   const raw = await fs.promises.readFile(blog.filePath, "utf8");
-  // MDX's JSX parser chokes on the `!` in `<!--`, so strip HTML comments before compiling.
+  // HTML comments are stripped; the MDX parser rejects them.
   const source = raw.replace(/<!--[\s\S]*?-->/g, "");
   const headings = extractHeadings(blog.filePath);
   const nav = blogNeighbors(blog.slug);

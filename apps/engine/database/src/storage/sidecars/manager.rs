@@ -14,7 +14,7 @@ use piramid_core::error::{Result, StorageError};
 /// The sidecar domain entry for one collection.
 ///
 /// Every file beside the base path gets its path and its serialization from here: offsets,
-/// manifest, WAL, WAL meta and vector index. A new sidecar is a new method on this type.
+/// manifest, WAL, WAL meta and vector index.
 #[derive(Clone, Copy)]
 pub struct SidecarManager<'a> {
     base: &'a str,
@@ -33,8 +33,6 @@ impl<'a> SidecarManager<'a> {
     }
 
     /// Every suffix this type appends to a base path.
-    ///
-    /// Deleting a collection and telling a data file apart from a sidecar both read this list.
     pub const SUFFIXES: [&'static str; 6] = [
         ".wal.db",
         ".wal.meta",
@@ -72,7 +70,7 @@ impl<'a> SidecarManager<'a> {
         format!("{}.manifest.db", self.base)
     }
 
-    /// Path of the ANN index sidecar. The index owns its format, and this owns its place.
+    /// Path of the ANN index sidecar.
     pub fn vector_index_path(&self) -> String {
         format!("{}.vecindex.db", self.base)
     }
@@ -150,7 +148,7 @@ impl<'a> SidecarManager<'a> {
         Ok(())
     }
 
-    /// Reads a path, treating a missing file as absent rather than an error.
+    /// Reads a path, returning None when the file is missing.
     fn read_optional(path: &str) -> Result<Option<Vec<u8>>> {
         match fs::read(path) {
             Ok(data) => Ok(Some(data)),

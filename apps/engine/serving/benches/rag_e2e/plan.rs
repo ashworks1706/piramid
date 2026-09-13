@@ -96,7 +96,7 @@ pub const DEFAULT_K: usize = 5;
 impl Plan {
     /// Read the settings through lookup, writing to default_out when PIRAMID_BENCH_OUT is unset.
     ///
-    /// The embedding response cache is turned off so every question is embedded.
+    /// The embedding response cache is turned off.
     pub fn from_lookup(
         lookup: impl Fn(&str) -> Option<String>,
         default_out: PathBuf,

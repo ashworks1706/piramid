@@ -98,7 +98,7 @@ pub struct Collections {
     pub pending: Option<Pending>,
     /// When the last refresh landed, for the elapsed-time indicator.
     pub last_refresh: Option<Instant>,
-    /// A refresh is in flight, and a second one is not started on top of it.
+    /// A refresh is in flight. No second refresh starts while one is.
     pub refreshing: bool,
     /// Time between refreshes.
     pub interval: Duration,

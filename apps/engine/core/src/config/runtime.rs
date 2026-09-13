@@ -40,7 +40,6 @@ pub struct RuntimeConfig {
 impl RuntimeConfig {
     /// Reject a setting this build cannot honour or a combination that contradicts itself.
     pub fn validate(&self) -> Result<(), String> {
-        // compute answers for whether this build can run a strategy.
         if let Err(error) = piramid_hardware::compute::strategies::compiled(self.execution) {
             return Err(format!("runtime.execution: {error}"));
         }

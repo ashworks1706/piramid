@@ -36,7 +36,7 @@ pub struct HnswConfig {
     pub m_max: usize,
     /// Candidate list width while linking a new node.
     pub ef_construction: usize,
-    /// Candidate list width while searching; the recall/speed dial.
+    /// Candidate list width while searching. Higher is better recall and slower.
     pub ef_search: usize,
     /// Layer multiplier, conventionally 1 / ln(m).
     pub ml: f32,
@@ -78,7 +78,7 @@ impl HnswConfig {
 /// Inverted-file index parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct IvfConfig {
-    /// Partition count. A common choice is the square root of the vector count.
+    /// Partition count.
     pub num_clusters: usize,
     /// Partitions scanned per query. Higher is better recall and slower.
     pub num_probes: usize,

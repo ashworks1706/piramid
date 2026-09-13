@@ -98,6 +98,6 @@ fn provider_from_str_roundtrip() {
         Ok(EmbeddingProvider::Ollama)
     );
     assert!("unknown".parse::<EmbeddingProvider>().is_err());
-    // Case is not normalized: one spelling per provider.
+    // Provider names are case-sensitive.
     assert!("OpenAI".parse::<EmbeddingProvider>().is_err());
 }

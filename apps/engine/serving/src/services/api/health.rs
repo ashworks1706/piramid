@@ -42,7 +42,7 @@ pub struct CollectionHealth {
     /// not been checked.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub integrity_ok: Option<bool>,
-    /// Why the collection is unhealthy. No check sets it yet.
+    /// Why the collection is unhealthy. No check sets it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

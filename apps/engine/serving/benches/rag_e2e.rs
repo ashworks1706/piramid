@@ -25,7 +25,7 @@
 //! PIRAMID_BENCH_OUT: results path. Default rag_e2e.json in the cargo target directory.
 //! PIRAMID_BENCH_SEARCH_URL: an /api/collections/NAME/search/text URL. Required by
 //! before-prefill-http. The harness inserts every passage, with its embedding, into that
-//! collection before the run, so the collection starts empty and the server embeds queries with
+//! collection before the run. The collection starts empty, and the server embeds queries with
 //! the same model and with its embedding cache off.
 //! PIRAMID_BENCH_MAX_NEW_TOKENS: tokens generated per question. Default 32.
 //! PIRAMID_BENCH_KV_CACHE_BYTES: key/value cache budget. Default 2 GiB.
@@ -33,9 +33,9 @@
 //!
 //! Sampling is greedy. Every passage is embedded once, stored with its dataset id in the
 //! passage_id metadata field, and each retrieving arm searches with k. Retrieved passages enter
-//! the prompt through the same system message the generate endpoint builds. The in-process search
-//! returns documents with their text, so search_ms includes reading them and fetch_ms is the time
-//! to take passage ids and texts out of the hits.
+//! the prompt through the same system message the generate endpoint builds. For the in-process
+//! arms, search_ms includes reading the returned documents and fetch_ms is the time to take
+//! passage ids and texts out of the hits.
 
 #[path = "rag_e2e/dataset.rs"]
 mod dataset;

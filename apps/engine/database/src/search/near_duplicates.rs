@@ -1,8 +1,7 @@
 //! Finding pairs of documents that are near-copies of each other.
 //!
 //! An all-pairs neighbour scan: ask the index for the neighbours of each document, score each
-//! pair once, and keep the pairs at or above a threshold. The query is every stored vector rather
-//! than one supplied by a caller.
+//! pair once, and keep the pairs at or above a threshold. Every stored vector is a query.
 
 use std::collections::HashSet;
 
@@ -51,7 +50,6 @@ pub fn near_duplicates(
         .unwrap_or(target.default_config);
 
     let ids: Vec<Uuid> = target.vectors.iter().map(|(id, _)| id).collect();
-    // The neighbour count is clamped to the number of documents stored.
     let neighbors = params.neighbors.min(ids.len().saturating_sub(1)).max(1);
 
     let mut seen = HashSet::new();
@@ -73,7 +71,7 @@ pub fn near_duplicates(
             if neighbor == *id {
                 continue;
             }
-            // Canonical order, so a pair is scored once rather than once from each end.
+            // Pairs are keyed in canonical order and scored once.
             let pair = if id < &neighbor {
                 (*id, neighbor)
             } else {

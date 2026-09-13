@@ -1,5 +1,5 @@
-# Development stack: builds from source. `just up` / `just down` / `just logs`.
-# For prebuilt GHCR images, layer compose.prod.yml on top (`just prod-up`).
+# Development stack, built from source. Run with just up, just down and just logs.
+# compose.prod.yml layers prebuilt GHCR images on top (just prod-up).
 
 services:
   piramid:
@@ -10,8 +10,8 @@ services:
       - "6333:6333"
     volumes:
       - piramid-data:/data
-    # PIRAMID_API_KEY must be set in ../.env: the server binds every interface in the container
-    # and refuses to start without a key.
+    # PIRAMID_API_KEY must be set in ../.env; the server binds every interface and refuses to
+    # start without a key.
     env_file:
       - path: ../.env
         required: false
@@ -20,7 +20,7 @@ services:
       PIRAMID__STARTUP__DATA_DIR: /data
       RUST_LOG: ${RUST_LOG:-info}
     restart: unless-stopped
-    # Longer than startup.http.drain_timeout_secs, so a stop drains and checkpoints before SIGKILL.
+    # Longer than startup.http.drain_timeout_secs.
     stop_grace_period: 45s
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:6333/api/health"]
@@ -29,8 +29,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # Local embeddings, so the /embed endpoints work without an API key.
-  # Start with: just up ollama
+  # Local embeddings for the /embed endpoints. Start with: just up ollama
   ollama:
     image: ollama/ollama:latest
     profiles: ["ollama"]

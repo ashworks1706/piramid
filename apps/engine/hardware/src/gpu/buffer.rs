@@ -141,8 +141,8 @@ impl<T> Drop for DeviceBuffer<T> {
 /// Reinterpret a typed slice as bytes for transfer.
 #[allow(unsafe_code)]
 fn as_bytes<T: Copy>(src: &[T]) -> &[u8] {
-    // SAFETY: T is Copy, so it has no drop glue or interior invariants a byte view can violate,
-    // and the returned slice borrows src for its whole lifetime with a length derived from it.
+    // SAFETY: T is Copy with no drop glue, and the returned slice borrows src for its lifetime
+    // with a length of size_of_val(src).
     unsafe { std::slice::from_raw_parts(src.as_ptr().cast::<u8>(), std::mem::size_of_val(src)) }
 }
 
@@ -150,7 +150,7 @@ fn as_bytes<T: Copy>(src: &[T]) -> &[u8] {
 #[allow(unsafe_code)]
 fn as_bytes_mut<T: Copy>(dst: &mut [T]) -> &mut [u8] {
     let size = std::mem::size_of_val(dst);
-    // SAFETY: as in as_bytes; the returned slice preserves the exclusive borrow of dst. Every
-    // element type transferred here is plain numeric data for which any byte pattern is valid.
+    // SAFETY: T is Copy plain numeric data for which any byte pattern is valid, and the returned
+    // slice holds the exclusive borrow of dst with a length of size_of_val(dst).
     unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), size) }
 }

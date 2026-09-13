@@ -1,5 +1,4 @@
 # CUDA image. Run with --gpus all and the NVIDIA container toolkit.
-# Until kernels land this behaves like the CPU image, falling back when no device is present.
 
 FROM nvidia/cuda:13.3.1-devel-ubuntu22.04 AS builder
 

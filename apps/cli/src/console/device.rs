@@ -135,7 +135,7 @@ impl DeviceView {
 
     /// Runs of consecutive host readings as points of seconds before now against value.
     ///
-    /// A refresh without the reading ends a run, so an absent reading is a gap in the graph.
+    /// A refresh without the reading ends a run.
     pub fn series(&self, now: Instant, read: impl Fn(&HostMetrics) -> Option<f64>) -> Vec<Run> {
         self.runs(now, |sample| sample.host.as_ref().and_then(&read))
     }
@@ -143,8 +143,7 @@ impl DeviceView {
     /// Runs of consecutive readings of the GPU at index, as points of seconds before now against
     /// value.
     ///
-    /// A refresh without that GPU or without the reading ends a run, so an absent reading is a gap
-    /// in the graph.
+    /// A refresh without that GPU or without the reading ends a run.
     pub fn gpu_series(
         &self,
         now: Instant,
@@ -162,8 +161,7 @@ impl DeviceView {
 
     /// Runs of consecutive generation readings as points of seconds before now against value.
     ///
-    /// A refresh without generation readings or without the reading ends a run, so an absent
-    /// reading is a gap in the graph.
+    /// A refresh without generation readings or without the reading ends a run.
     pub fn inference_series(
         &self,
         now: Instant,
@@ -194,8 +192,7 @@ impl DeviceView {
 
     /// The executable to hand the terminal to, or why the console cannot.
     ///
-    /// A monitor shows the machine it runs on, so it is refused while the console watches a
-    /// server elsewhere. path is the PATH to search.
+    /// Refused while the console watches a server on another machine. path is the PATH to search.
     pub fn handoff(&self, monitor: Monitor, path: Option<&OsStr>) -> Result<PathBuf, String> {
         let program = monitor.program();
         if !self.local {

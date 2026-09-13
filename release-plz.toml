@@ -1,12 +1,7 @@
-# release-plz owns versioning, changelogs, tags, and crates.io publishing.
-#
-# A workspace publish must happen in dependency order — piramid-hardware before piramid-core
-# before piramid-database, and so on — which is exactly the thing release-plz does natively and
-# a hand-written workflow gets wrong.
+# release-plz owns versioning, changelogs, tags, and crates.io publishing in dependency order.
 
 [workspace]
-# One version across every crate. They are released together and only ever used together;
-# independent versions would be bookkeeping with no benefit.
+# One version across every crate.
 dependencies_update = false
 git_release_enable = true
 git_tag_enable = true

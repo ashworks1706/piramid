@@ -1,5 +1,5 @@
-//! The Qwen2 and Qwen3 dense decoders on candle, forked so the driver runs one layer at a time and
-//! keys and values live in a slot-addressed page pool.
+//! The Qwen2 and Qwen3 dense decoders on candle, run one layer at a time with keys and values in a
+//! slot-addressed page pool.
 
 use candle_core::{DType, Device, Module, Tensor};
 use candle_nn::{Embedding, Linear, RmsNorm};

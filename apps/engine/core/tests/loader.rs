@@ -3,8 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! Configuration loading tests. Loading reads std::env, so these run under one lock and restore
-//! the environment afterwards.
+//! Configuration loading tests. They run under one lock and restore the environment afterwards.
 
 use std::sync::Mutex;
 

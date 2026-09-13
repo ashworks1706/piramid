@@ -81,7 +81,6 @@ fn api_router(state: SharedState) -> Router<SharedState> {
             "/collections/{collection}/upsert",
             post(handlers::upsert_vector),
         )
-        // The query vector goes in the request body.
         .route(
             "/collections/{collection}/search",
             post(handlers::search_vectors),
@@ -107,17 +106,15 @@ fn api_router(state: SharedState) -> Router<SharedState> {
 /// under /v1, and middleware.
 ///
 /// When the process booted with an API key, every route except /api/health and /api/readyz
-/// requires it. A rate limit keys on peer addresses, so the router is served with connect info.
+/// requires it. With a rate limit, the router must be served with connect info.
 pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // The API is mounted at one prefix, with no version segment.
     let mut router = Router::<SharedState>::new()
         .nest("/api", api_router(state.clone()))
-        // The Prometheus endpoint sits outside the API prefix.
         .route("/metrics", get(handlers::prometheus_metrics))
         // OpenAI-compatible clients take a base URL ending in /v1.
         .route("/v1/models", get(handlers::openai_models))
@@ -135,7 +132,7 @@ pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Rout
     let mut router = router
         .route("/api/health", get(handlers::health))
         .route("/api/readyz", get(handlers::readyz))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB for batch operations
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(cors);
     if let Some(rate_limit) = rate_limit {
         router = router.layer(rate_limit.layer());

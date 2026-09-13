@@ -1,10 +1,9 @@
-//! Single-pair distance entry points; hot-path wrappers over a caller-resolved strategy. Panics on
-//! mismatched lengths. Untrusted input uses the batch kernels on
-//! [crate::compute::DistanceKernels] instead.
+//! Single-pair distance entry points over a caller-resolved strategy. Each panics on mismatched
+//! lengths.
 
 use crate::compute::kernels::DistanceKernels;
 
-/// Assert the shared caller contract for all pairwise kernels.
+/// Panics when a and b differ in length.
 #[inline]
 fn assert_same_len(a: &[f32], b: &[f32]) {
     assert_eq!(a.len(), b.len(), "Vectors must have same length");
@@ -28,9 +27,7 @@ pub fn euclidean_distance(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -
     kernels.euclidean(a, b)
 }
 
-/// Squared L2 distance, skipping the final sqrt.
-///
-/// Prefer this when only relative ordering matters.
+/// Squared L2 distance, skipping the final sqrt. Orders pairs the same as euclidean_distance.
 pub fn euclidean_distance_squared(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
     assert_same_len(a, b);
     kernels.euclidean_squared(a, b)

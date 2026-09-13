@@ -46,9 +46,7 @@ pub trait VectorReader: Sync {
 
     /// The whole vector set as one contiguous row-major buffer, if it is stored that way.
     ///
-    /// A contiguous reader returns its buffer, which a batch kernel or a device copy takes in one
-    /// go. [VectorStore](crate::VectorStore) is stored that way. A reader over scattered
-    /// allocations returns None rather than copying.
+    /// A reader over scattered allocations returns None.
     ///
     /// A wrapper forwarding this trait forwards this method too.
     fn as_slab(&self) -> Option<VectorSlab<'_>> {

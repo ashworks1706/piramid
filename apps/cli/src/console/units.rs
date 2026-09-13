@@ -1,7 +1,7 @@
 //! The catalog: every unit the repo can run, in sidebar order.
 //!
-//! One entry per just recipe or compose service driven from here. Each entry shells out to the
-//! recipe rather than reimplementing it.
+//! One entry per just recipe or compose service driven from here. Each entry shells out to its
+//! recipe.
 
 use crate::console::types::{Group, Kind, Unit};
 

@@ -150,7 +150,7 @@ impl Collection {
         self.cache.clear_all();
     }
 
-    /// Faults frequently used files into the page cache to reduce cold-start latency.
+    /// Faults the data file, the ANN index, the offset index and the WAL into the page cache.
     pub fn warm_page_cache(&self) {
         self.record_store.warm_page_cache();
         let sidecars = SidecarManager::at(&self.path);

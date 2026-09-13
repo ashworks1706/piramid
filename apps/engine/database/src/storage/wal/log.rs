@@ -19,15 +19,15 @@ pub struct Wal {
     path: PathBuf,
     /// Sequence number the next logged entry receives.
     pub next_seq: u64,
-    /// Calls fsync after every entry. Without it a write reaches the kernel and no further.
+    /// Calls fsync after every entry.
     sync_on_write: bool,
 }
 
 impl Wal {
     /// Create a WAL writer starting at the provided sequence.
     ///
-    /// The sync_on_write flag decides whether an entry is durable when log returns. With it off
-    /// the entry sits in the kernel buffer.
+    /// With sync_on_write set an entry is durable when log returns. With it unset the entry sits in
+    /// the kernel buffer.
     pub fn new(path: PathBuf, next_seq: u64, sync_on_write: bool) -> Result<Self> {
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
         let mut wal = Wal {
@@ -40,7 +40,7 @@ impl Wal {
         Ok(wal)
     }
 
-    /// A WAL that writes nothing, for a disabled wal.
+    /// A WAL that writes nothing, used when logging is disabled.
     pub fn disabled(path: PathBuf, next_seq: u64) -> Result<Self> {
         Ok(Wal {
             file: None,
@@ -114,7 +114,6 @@ impl Wal {
             writeln!(file, "{json}")?;
             file.flush()?;
             if self.sync_on_write {
-                // flush only drains the BufWriter into the kernel, so sync_all follows it.
                 file.get_ref().sync_all()?;
             }
         }

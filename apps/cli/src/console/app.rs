@@ -36,7 +36,7 @@ pub struct UnitState {
     pub started_at: Option<Instant>,
     /// Start again once the current instance has exited.
     restart_pending: bool,
-    /// The console asked it to stop, so the exit that follows is not a failure.
+    /// The console asked it to stop, and the exit that follows is not a failure.
     stopping: bool,
 }
 

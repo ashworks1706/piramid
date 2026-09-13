@@ -1,8 +1,7 @@
 //! Settings applied once, when the process starts.
 //!
-//! Changing any of these needs a restart. The listener is bound, the thread pool built and the
-//! tracing subscriber installed before the first request, and /config/reload refuses a file whose
-//! startup block differs from the one the process booted with.
+//! Changing any of these needs a restart. /config/reload refuses a file whose startup block
+//! differs from the one the process booted with.
 
 use serde::{Deserialize, Serialize};
 

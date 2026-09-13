@@ -42,7 +42,7 @@ fn test_state_with_config(data_dir: &str, mut config: Config) -> Arc<AppState> {
     )
 }
 
-// Not a #[test] itself, so allow-panic-in-tests does not cover it.
+// allow-panic-in-tests does not cover a function outside a #[test].
 #[allow(clippy::panic)]
 fn assert_not_found<T>(result: ApiResult<T>) {
     match result {
@@ -241,7 +241,6 @@ async fn search_applies_a_metadata_filter_from_the_request() {
     }
 }
 
-// A name is validated where it becomes a path, so no route can reach outside the data directory.
 #[test]
 fn a_collection_name_that_is_not_a_plain_name_is_refused_by_the_manager() {
     let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_names");
@@ -284,7 +283,7 @@ fn deleting_removes_a_collection_that_is_only_on_disk() {
             .unwrap();
         guard.checkpoint().unwrap();
     }
-    // A fresh state has nothing open, so the collection exists only on disk.
+    // A fresh state has nothing open.
     let mut config = Config::default();
     config.startup.data_dir = data_dir.to_string();
     let fresh = AppState::new(
@@ -315,7 +314,6 @@ fn deleting_removes_a_collection_that_is_only_on_disk() {
     cleanup_dir(data_dir);
 }
 
-// Read-only on low disk space lifts at the first write that finds the space back.
 #[test]
 fn read_only_lifts_once_there_is_space_again() {
     use std::sync::atomic::Ordering;
@@ -332,8 +330,6 @@ fn read_only_lifts_once_there_is_space_again() {
     cleanup_dir(data_dir);
 }
 
-// A second rebuild of a collection whose rebuild is still running is a conflict, not a second job
-// overwriting the status of the first.
 #[tokio::test]
 async fn a_rebuild_while_one_is_running_is_a_conflict() {
     use piramid_serving::state::{RebuildJobStatus, RebuildState};

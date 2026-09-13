@@ -888,7 +888,7 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::styled(mode, Style::default().fg(Color::Black).bg(Color::White)),
     ];
-    // One digit per view, so the tabs are also their own key hints.
+    // Each tab label carries the digit that selects it.
     for (index, view) in app.profile.views().iter().enumerate() {
         let selected = *view == app.view;
         let style = if selected {
@@ -912,7 +912,7 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
     if app.profile == Profile::Developer {
         spans.push(probe_span("web", &app.health.web));
     }
-    // The notice comes first so a long line of probe reasons cannot push it off the bar.
+    // The notice is drawn before the probe reasons.
     if let Some(notice) = &app.notice {
         spans.push(Span::styled(
             format!("  {notice}"),
@@ -936,8 +936,7 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Red),
         ));
     }
-    // A failed refresh is the whole story on a console that only watches a server, so it goes in
-    // the bar rather than staying inside the view that collected it.
+    // A failed collections refresh is shown on the status bar.
     if let Some(error) = &app.collections.error {
         spans.push(Span::styled(
             format!("  {error}"),

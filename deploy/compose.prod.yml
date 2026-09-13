@@ -1,6 +1,6 @@
 # Production overlay: prebuilt GHCR images instead of a local build.
 #   PIRAMID_IMAGE_TAG=main just prod-up
-# Layered over compose.yml, so it only states what differs.
+# Layered over compose.yml; it states only what differs.
 
 services:
   piramid:
