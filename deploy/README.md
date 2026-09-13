@@ -13,7 +13,7 @@ of the contributor tooling. From inside a checkout, `just up`, `just down`, `jus
 
 ## Running a published image
 
-Nothing to check out:
+Nothing to check out. This serves collections and search:
 
 ```bash
 docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> \
@@ -35,6 +35,68 @@ before Docker kills the process.
 Images are published by `.github/workflows/cd.yml` on every push to `main`, tagged with both the
 commit SHA and `main`. Pin to a SHA rather than `main` for anything you care about.
 
+## Serving a model
+
+The published images are built without the `inference-candle` feature. They serve collections and
+search, and a configuration with `runtime.inference.enabled: true` is refused at startup. To serve
+generation from a container, build the CUDA image with the feature. In
+`docker/piramid-cuda.Dockerfile`, change the build line to
+`cargo build --release --locked --bin piramid --features gpu-cuda,inference-candle`, then build from
+the repository root:
+
+```bash
+docker build -f deploy/docker/piramid-cuda.Dockerfile -t piramid-cuda-inference .
+```
+
+Put the model checkpoint in a directory on the host, for example
+`models/Qwen2.5-0.5B-Instruct` holding `config.json`, `tokenizer.json`, `tokenizer_config.json`
+and the `.safetensors` weights. Then write `piramid.yaml` beside it. The CUDA image already sets
+`startup.hardware.profile: gpu` and `runtime.execution: gpu`, so the file only needs the model and
+an embedding provider:
+
+```yaml
+startup:
+  embedding:
+    provider: openai
+    model: text-embedding-3-small
+
+runtime:
+  inference:
+    enabled: true
+    model_path: /models/Qwen2.5-0.5B-Instruct
+```
+
+Start the container with the model and the file mounted read-only, and `CONFIG_FILE` naming the
+file:
+
+```bash
+docker run --gpus all -p 6333:6333 \
+  -v piramid-data:/data \
+  -v "$PWD/models:/models:ro" \
+  -v "$PWD/piramid.yaml:/config/piramid.yaml:ro" \
+  -e CONFIG_FILE=/config/piramid.yaml \
+  -e PIRAMID_API_KEY -e OPENAI_API_KEY \
+  piramid-cuda-inference
+```
+
+The server runs as uid 10001, so the mounted files must be readable by that user. An `-e` flag
+with a name and no value passes that variable from your shell. Once `GET /api/model` answers,
+store documents and ask a question that retrieves from them:
+
+```bash
+curl -X POST http://localhost:6333/api/collections/docs/embed \
+  -H "Authorization: Bearer $PIRAMID_API_KEY" -H "Content-Type: application/json" \
+  -d '{"texts": ["Compaction rewrites the record store without deleted documents."]}'
+
+curl -X POST http://localhost:6333/api/generate \
+  -H "Authorization: Bearer $PIRAMID_API_KEY" -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "What does compaction do?"}],
+       "retrieval": {"collection": "docs", "k": 1}}'
+```
+
+The response carries the answer in `text` and the passages it used in `retrieval`. The
+OpenAI-compatible endpoints are served at `/v1/chat/completions` and `/v1/models` on the same port.
+
 ## Compose
 
 From a checkout, building from source:
@@ -42,7 +104,7 @@ From a checkout, building from source:
 ```bash
 docker compose -f deploy/compose.yml up -d
 docker compose -f deploy/compose.yml logs -f
-docker compose -f deploy/compose.yml --profile ollama up -d    # add local embeddings
+docker compose -f deploy/compose.yml --profile ollama up -d    # add an Ollama embedding server
 docker compose -f deploy/compose.yml down
 ```
 

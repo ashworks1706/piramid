@@ -25,17 +25,16 @@ export const metadata: Metadata = {
     default: "Piramid – Inference engine for RAG",
   },
   description:
-    "Piramid is a single-binary vector database in Rust: mmap and WAL durability, HNSW, IVF and flat indexes, filter-aware search, and embedding providers. Built toward running retrieval and inference in one process.",
+    "Piramid is an inference engine for RAG on one GPU, written in Rust. Documents, model weights and the KV cache live in one process, so retrieval runs in the same process as generation. It stores and searches your documents with exact search and metadata filters, and serves generation over HTTP with piramid serve.",
   keywords: [
-    "vector database",
-    "rust",
-    "HNSW",
-    "IVF",
-    "flat index",
-    "embeddings",
+    "inference engine",
     "RAG",
-    "agentic",
-    "similarity search",
+    "retrieval-augmented generation",
+    "rust",
+    "GPU",
+    "KV cache",
+    "embeddings",
+    "LLM serving",
   ],
   authors: [{ name: "ashworks1706" }],
   creator: "ashworks1706",
@@ -57,7 +56,7 @@ export const metadata: Metadata = {
     url: "https://piramiddb.com",
     title: "Piramid – Inference engine for RAG",
     description:
-      "A single-binary vector database in Rust, built toward running retrieval and inference in one process.",
+      "An inference engine for RAG on one GPU, in Rust, with retrieval in the same process as generation.",
     siteName: "Piramid",
     images: [
       {
@@ -72,7 +71,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Piramid – Inference engine for RAG",
     description:
-      "A single-binary vector database in Rust, built toward running retrieval and inference in one process.",
+      "An inference engine for RAG on one GPU, in Rust, with retrieval in the same process as generation.",
     images: ["/logo_dark.png"],
     creator: "@piramiddb",
   },

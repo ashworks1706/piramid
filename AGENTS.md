@@ -1,11 +1,12 @@
-# Piramid — agent guide
+# Piramid: agent guide
 
-An inference engine for RAG, in Rust: one process holding documents, model weights and the KV cache
-on one device, so retrieval can run during generation rather than once before it.
+An inference engine for RAG on one GPU, in Rust, used mainly through `piramid serve`: one process
+holding documents, model weights and the KV cache on one device, so retrieval can run during
+generation rather than once before it. The documents live in collections searched by an exact scan.
 
 Read `docs/ARCHITECTURE.md` for crate boundaries and invariants, `docs/ROADMAP.md` for what we're
 building and in what order. Don't contradict either; propose an edit to the doc instead. Keep both
-at the level they're written at — objectives and boundaries, not task breakdowns or type-level
+at the level they're written at: objectives and boundaries, not task breakdowns or type-level
 detail that the code already carries.
 
 ## Commands
@@ -59,17 +60,18 @@ apps/engine/core            errors (every one the app wraps), config (the whole 
 apps/engine/hardware        compute (distance kernels, strategy registry, quantization),
                             gpu (device, buffer, stream, module, budget, kernels) and host (CPU,
                             memory, GPU readings)
-apps/engine/database        storage (records, WAL, sidecars, mmap), index (flat, hnsw, ivf),
-                            search (planning, filtering, ranking, near-duplicates), cache,
-                            document (what is done to one), and collection (the object composing
-                            them: state, open, checkpoint, compact, limits, manager)
+apps/engine/database        storage (records, manifest, WAL, sidecars, mmap), resident (the
+                            vectors and metadata of every live document, held in memory), search
+                            (the exact scan: scoring, filtering, top k), document (what is done
+                            to one), and collection (the object composing them: state, open,
+                            checkpoint, compact, limits, manager)
 apps/engine/model           inference (architecture, forward driver, kv_cache pages, batching
                             scheduler and engine thread, sampling, tokenizer, candle backend),
                             fusion (the RetrievalHook seam), embeddings (openai wire format;
                             ollama; piramid, in-process)
 apps/engine/serving         http (axum only, handlers and routes, /api and OpenAI-compatible /v1),
                             services (operations, wire shapes, conversion, generation), state,
-                            machine, disk, cluster
+                            machine, disk
 apps/cli                    the piramid binary and the umbrella piramid facade crate
 apps/website                piramiddb.com, blog content and images included
 apps/sdk                    npm and python clients
@@ -102,18 +104,21 @@ loaded. A hook implementation is its own crate depending on both.
 
 Everything else is infrastructure for these. Change them deliberately.
 
-`compute::DistanceKernels` — one strategy per file in `compute/strategies/`, one arm in the registry.
+`compute::DistanceKernels` is how distances are computed: one strategy per file in
+`compute/strategies/`, one arm in the registry.
 "Backends" means the vendor layer and lives only in `gpu` and `inference`.
 Batch methods take a contiguous row-major slab and a caller-owned `out`, because that shape
 uploads to a device in one copy. A slice of `Vec`s can't, and forces a gather on every call that
 costs more than the kernel saves. Don't reintroduce it.
 
-`storage::vectors::VectorReader` — how indexes read vectors they don't own. `as_slab()` is the
-fast path and `gather_into()` the fallback. Both have defaults, so a new reader costs nothing.
+`storage::vectors::VectorReader` is how search reads vectors it doesn't own. The exact scan scores
+the query against every stored vector through it. `as_slab()` is the fast path, one contiguous
+buffer handed to the batch kernels, and `gather_into()` the fallback that copies rows into a
+caller-owned buffer. Both have defaults, so a new reader costs nothing.
 
-`model::fusion::RetrievalHook` — where retrieval enters the forward pass. Defined before
+`model::fusion::RetrievalHook` is where retrieval enters the forward pass. Defined before
 anything can call it, because a driver written without the seam is hard to retrofit with one. A
-strategy that queries an index belongs in its own crate; `inference` must never depend on the
+strategy that queries a collection belongs in its own crate; `inference` must never depend on the
 retrieval stack.
 
 ## Rules
@@ -161,7 +166,8 @@ retrieval stack.
   See `.claude/skills/comment-style`.
 - One name, one meaning. Before naming a module, check the word isn't already used for something
   else in the tree. Repeating a word is fine when it means the same thing at each layer, as with
-  `config/index.rs` and `error/index.rs`, and a problem when it doesn't. See `docs/decisions`.
+  `config/embedding.rs` and `error/embedding.rs`, and a problem when it doesn't. See
+  `docs/decisions`.
 - Traits are named for the capability, not the implementation. Strategies and backends are named
   for the technology, one file each, so new hardware is a new file rather than a new match arm.
 - `mod.rs` and `lib.rs` re-export; they don't define types. A domain's manager lives in its
@@ -184,4 +190,6 @@ decision. `/check` is the gate.
 
 ## Out of scope
 
-See the same section in `docs/ROADMAP.md`. Don't build toward those without an explicit decision.
+See the same section in `docs/ROADMAP.md`: approximate nearest neighbour indexes, clustering,
+near-duplicate and range search, and other vector database features that do not serve retrieval
+for generation. Don't build toward those without an explicit decision.

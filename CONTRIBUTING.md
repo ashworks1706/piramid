@@ -41,12 +41,27 @@ a design conversation, so open an issue first.
 | HTTP-specific | `apps/engine/serving/src/http` |
 | A user-facing operation | `apps/engine/serving/src/services` |
 | One collection's state | `apps/engine/database` |
-| Bytes, mmap, WAL, sidecars | `apps/engine/database/src/storage` |
-| An ANN implementation detail | `apps/engine/database/src/index` |
+| Bytes, mmap, WAL, sidecars, the manifest | `apps/engine/database/src/storage` |
+| Vectors and metadata held in memory for search | `apps/engine/database/src/resident` |
+| Scoring, filtering and ranking a query | `apps/engine/database/src/search` |
 | Distance math or backend dispatch | `apps/engine/hardware` |
 | Device memory, streams, kernels | `apps/engine/hardware/src/gpu` |
 | Model execution | `apps/engine/model` |
 | Shared vocabulary | `apps/engine/core` |
+
+## Changing retrieval
+
+Search is one exact scan. It scores the query against every stored vector, then keeps the best `k`
+hits that pass the metadata filter. The scan lives in `apps/engine/database/src/search`, and the
+vectors it reads come through the `VectorReader` trait in
+`apps/engine/database/src/storage/vectors`. A change to how hits are scored, filtered or ranked
+goes in `search`. A change that makes the scan faster on some hardware goes in a compute strategy,
+described next. A change to where retrieval enters generation goes behind the `RetrievalHook`
+trait in `apps/engine/model/src/fusion`, with any implementation that queries a collection in its
+own crate.
+
+Piramid has no approximate nearest neighbour index, such as HNSW or IVF, and adding one is out of
+scope. The full list is in the Out of scope section of [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Adding a compute strategy
 
@@ -54,8 +69,8 @@ One file in `apps/engine/hardware/src/compute/strategies/` implementing `Distanc
 arm in the registry in `strategies/mod.rs`. Nothing else changes; that's what the trait is for.
 
 The batch methods take a contiguous row-major slab and a caller-owned `out`. Don't change that to
-`&[Vec<f32>]` — scattered rows can't be uploaded to a device without a per-call gather that costs
-more than the kernel saves.
+`&[Vec<f32>]`, because scattered rows can't be uploaded to a device without a per-call gather that
+costs more than the kernel saves.
 
 New strategies need a parity test against `ScalarStrategy` and a bench against it.
 

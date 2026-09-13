@@ -32,7 +32,7 @@ At minimum, run:
 - `cargo clippy --all-targets --all-features`
 - `cargo test --locked`
 
-For storage/search/index behavior changes, add or extend tests in `tests/` (or the nearest module test area). Prefer small, focused changes over broad rewrites.
+For changes to storage, search or generation behavior, add or extend tests in the crate's `tests/` directory. Prefer small, focused changes over broad rewrites.
 
 Code style-wise: prefer `tracing` over `println!`, keep names explicit, and add comments only where intent is non-obvious. Avoid `unsafe` unless there is a measured need and a clear justification.
 
@@ -42,7 +42,7 @@ Also if you think the changes you made deserve to be in the blogs, please feel f
 
 ## Scope notes
 
-Current focus is search/index quality and performance. SDK changes are welcome only when discussed first.
+Current focus is the inference engine: generation on one GPU, with retrieval from the document store running in the same process. SDK changes are welcome only when discussed first.
 
 ## Security / reporting
 

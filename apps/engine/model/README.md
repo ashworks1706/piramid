@@ -16,9 +16,9 @@ from `join` so retrieval can run on its own stream while the model computes.
 itself and any server implementing it, Ollama, and `piramid`, a Qwen3 embedding checkpoint run in
 this process. LRU-cached and retried.
 
-This crate depends on nothing in the retrieval stack, which is what keeps a collection queryable
-with no model loaded. A hook implementation that queries an index is a separate crate depending on
-both this one and `piramid-database`.
+This crate depends on nothing in `piramid-database`, which is what keeps a collection searchable
+with no model loaded. A hook implementation that searches a collection during generation is a
+separate crate depending on both this one and `piramid-database`.
 
 Part of [Piramid](https://github.com/ashworks1706/piramid). See
 [`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md) for how the crates fit together.

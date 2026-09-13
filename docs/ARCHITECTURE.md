@@ -32,9 +32,9 @@ apps/                     everything we author
   engine/                 the library crates, one folder each
     core/                 errors, config, document, metadata, validation, stats, observability
     hardware/             compute (with quantization), gpu, host
-    database/             storage, index, search, cache, document, collection
+    database/             storage, resident, search, document, collection
     model/                inference, fusion, embeddings
-    serving/              http, services, state, machine, disk, cluster
+    serving/              http, services, state, machine, disk
   cli/                    the piramid binary, and a library with the console, the support
                           bundle and the piramid umbrella re-exports
   website/                piramiddb.com, with blog content and images inside it
@@ -53,8 +53,8 @@ and the strategies that run them, and holds the quantization encodings. `gpu` ow
 runtime: opening a device, memory, streams, compiled kernels, and the device memory budget. `host`
 reads processor, memory and GPU use for the console and metrics. `hardware` cannot see core's
 configuration, so its quantization encoders and its GPU manager take plain values. It depends on
-nothing else in the workspace, so kernels can be benchmarked on their own and both retrieval and the model can use a
-device without going through each other.
+nothing else in the workspace, so kernels can be benchmarked on their own and both retrieval and
+the model can use a device without going through each other.
 
 `core` is the vocabulary everything shares: every error the app wraps, the whole configuration
 surface, the document and hit shapes, metadata and its filters, validation, and the counters the
@@ -67,14 +67,27 @@ carry, such as `ExecutionMode`, `Metric` and the compute and GPU error types. `c
 the engine measures, held as plain atomics so any crate can record into it. `core::observability` is
 where those numbers go: the tracing subscriber, OTLP export and the Prometheus text format.
 
-`database` is where vectors live and how they are found. `storage` holds records, the write-ahead
-log (WAL), mmap and sidecars. `index` holds the flat, HNSW and IVF families. `search` plans a query,
-asks an index for candidates, scores, filters and ranks them. `collection` composes a record store,
-its caches, a checkpoint policy and an index into one queryable object. Its `state.rs` holds what a
-collection owns, the files beside it are operations on that state such as open, checkpoint and
-compact, and `manager.rs` holds the `CollectionManager` that opens and caches collections by name.
-`search` takes a `SearchTarget` of borrowed views rather than a `Collection`, which keeps scoring
-below collection lifecycle instead of circular with it.
+`database` is the corpus retrieval reads from: collections of documents, each an id, an embedding,
+text and metadata. `storage` holds the record file, the write-ahead log (WAL), mmap, the manifest
+and the other sidecars, which are the small files kept beside the record file. `resident` holds what
+a collection keeps in memory for as long as it is open: every live vector in one contiguous buffer,
+and the metadata of every live document. Both are filled at open from the record store and updated
+on every insert, upsert, metadata update and delete. Nothing in them is evicted and there is no
+memory budget for them, so a metadata filter never has to read a document from disk.
+
+`search` is one exact scan. It scores the query against every stored vector with the collection's
+metric, then keeps the best `k` in a single pass that also applies the metadata filter, so a
+filtered query returns `k` hits whenever at least `k` documents match. A score that is NaN never
+ranks. There is no approximate index. `search` takes a `SearchTarget` of borrowed views, the vectors
+and the metadata, rather than a `Collection`, which keeps scoring below collection lifecycle instead
+of circular with it.
+
+`collection` composes a record store, its resident state and a checkpoint policy into one queryable
+object. Its `state.rs` holds what a collection owns, the files beside it are operations on that
+state such as open, checkpoint and compact, and `manager.rs` holds the `CollectionManager` that opens
+and caches collections by name. The metric belongs to the collection: a new collection takes
+`runtime.search.metric`, the manifest stores it, and a search that names a different metric is
+refused.
 
 `model` runs the model and turns text into vectors. It does not depend on `database`, so a
 collection stays queryable with no model loaded. Inside `inference`:
@@ -132,15 +145,15 @@ the same change.
 |---|---|---|
 | `hardware` | Distance math and strategy dispatch, quantization encodings, the device runtime and memory budget, device kernels, host readings | Depend on anything in the workspace, or let vendor types leave `gpu/backends` or `host/nvml.rs` |
 | `core` | Every error the app wraps, all configuration, document and hit shapes, metadata and filters, validation, stats, telemetry export | Name an HTTP type or end the process |
-| `database` | Records, WAL, sidecars, mmap; index traversal and the index sidecar format; planning, filtering, scoring; the `Collection`, its caches, checkpoint and compaction | Serve HTTP |
+| `database` | Records, WAL, sidecars, mmap; resident vectors and metadata; exact scoring, filtering and ranking; the `Collection`, its checkpoint and compaction | Serve HTTP |
 | `model` | Model execution, KV cache bookkeeping, scheduling, sampling, tokenization; the `RetrievalHook` seam; embedding providers | Depend on `database`, or be required for retrieval to work |
-| `serving` | Routes, handlers, services, wire shapes, `AppState` | Touch file formats, index internals or model internals |
+| `serving` | Routes, handlers, services, wire shapes, `AppState` | Touch file formats, search internals or model internals |
 | `apps/cli` | Argument parsing, boot order, process lifecycle, terminal output | Contain domain logic |
 
 ## What it is built on
 
-Rust 1.87, edition 2021. One binary with no services to install beside it: the storage engine, the
-indexes, the model runtime and the HTTP server are all in-process.
+Rust 1.87, edition 2021. One binary with no services to install beside it: the storage engine,
+search, the model runtime and the HTTP server are all in-process.
 
 `axum` and `tower-http` on `tokio` serve HTTP. `serde` handles JSON on the wire and YAML in the
 configuration file, and `bincode` encodes the sidecars. Errors are `thiserror` enums per layer;
@@ -196,24 +209,25 @@ asked for one strategy and silently got another has no way to know where its num
 
 The CUDA strategy runs on the device the GPU manager opened at boot, on the first of its streams. It
 uploads the query and candidates, runs the distance kernels, and downloads the scores on every call,
-reserving those bytes from the index pool of the device budget while it runs. Keeping candidates on
+reserving those bytes from the vectors pool of the device budget while it runs. Keeping candidates on
 the device across queries is a roadmap item.
 
 ### `storage::vectors::VectorReader`
 
-How an index reads vectors it does not own, so the backing store can change without touching any
-index. `as_slab()` is the fast path: the whole set as one contiguous buffer. A reader over scattered
+How search reads vectors it does not own, so the backing store can change without touching search.
+`as_slab()` is the fast path: the whole set as one contiguous buffer. A reader over scattered
 allocations returns `None` rather than silently copying, so the cost stays visible. `gather_into()`
 copies chosen rows into a caller buffer and works for any reader. Both have default implementations,
 so a new reader costs nothing, but a wrapper that forwards the trait must forward every method or it
 hides a capability the reader underneath has.
 
-`cache::VectorStore` is the contiguous reader behind a collection's vector cache, which is the
-reader the collection hands its index: one `Vec<f32>` at a fixed stride, with a map from `Uuid` to a
-`u32` row ordinal. Ordinals are stable: a removed row becomes a hole instead of being filled by
-moving the last row, and the next insert reuses it. A hole holds stale floats that a batch kernel
-cannot skip, so `as_slab` returns `None` while any hole exists, until an insert fills it or
-compaction rebuilds the store. The indexes themselves refer to vectors by `Uuid`, not by ordinal.
+`resident::VectorStore` is the reader a collection hands to search: one `Vec<f32>` at a fixed
+stride, with a map from `Uuid` to a `u32` row ordinal. Ordinals are stable: a removed row becomes a
+hole instead of being filled by moving the last row, and the next insert reuses it. `as_slab`
+returns the whole buffer with the id and a liveness flag for each row. A hole holds stale floats, so
+the batch kernel still scores it and search drops its score before ranking. Search scores the slab
+in one batch call when `as_slab` returns one, and otherwise gathers the rows that pass the filter in
+chunks through `gather_into` and scores each chunk.
 
 ### `model::fusion::RetrievalHook`
 
@@ -261,9 +275,9 @@ sequenceDiagram
 ```
 
 When `wants` returns false, as it always does for `NoopRetrievalHook`, the driver does nothing at
-that point. The binary always passes the no-op hook. A hook that actually queries an index depends
-on `search`, so it belongs in its own crate depending on both `model` and `database`. That keeps
-`inference` free of the retrieval stack.
+that point. The binary always passes the no-op hook. A hook that actually searches a collection
+depends on `database`, so it belongs in its own crate depending on both `model` and `database`.
+That keeps `inference` free of the retrieval stack.
 
 ## Retrieval request flow
 
@@ -275,8 +289,7 @@ sequenceDiagram
     participant M as CollectionManager
     participant Col as Collection
     participant Se as search
-    participant Idx as index
-    participant Ca as cache
+    participant R as resident
     participant St as storage
 
     C->>H: HTTP request
@@ -284,12 +297,13 @@ sequenceDiagram
     S->>M: get_existing or get_or_create
     M-->>S: handle, opening the collection if it is not loaded
     S->>Col: search under the collection read lock
+    Col->>Col: refuse a metric other than the collection's
     Col->>Se: SearchTarget, SearchParams and a document resolver
-    Se->>Idx: IndexSearchRequest
-    Idx->>Ca: read vectors through VectorReader
-    Idx-->>Se: candidate ids
-    Se->>St: resolve each candidate to its stored document
-    Se->>Se: rescore in one batch kernel call, filter, rank
+    Se->>R: read every vector through VectorReader
+    Se->>Se: score in a batch kernel call
+    Se->>R: check each candidate against resident metadata
+    Se->>Se: keep the best k that match
+    Se->>St: resolve each kept id to its stored document
     Se-->>Col: ranked hits
     Col-->>S: hits
     S-->>H: response shape
@@ -297,9 +311,9 @@ sequenceDiagram
 ```
 
 Each conversion has one place: HTTP in `serving::http`, operational decisions and wire shapes in
-`serving::services`, domain mutation on the `Collection`, bytes and files in `storage`. The index
-reads vectors from the in-memory cache; the scores returned to the caller are recomputed from the
-documents read back from the record store.
+`serving::services`, domain mutation on the `Collection`, bytes and files in `storage`. Scores come
+from the resident vectors; only the `k` documents that are returned are read from the record store.
+Text search embeds the query with the configured provider first and then runs the same search.
 
 ## Generation request flow
 
@@ -536,11 +550,11 @@ flowchart TD
     cap --> usable["usable: cap minus startup.hardware.gpu.reserve_bytes"]
     usable --> weights["weights pool: reserved once at model load"]
     usable --> kv["kv_cache pool: reserved once when the page pool is sized"]
-    usable --> index["index pool: reserved per call by the CUDA distance strategy"]
+    usable --> vectors["vectors pool: retrieval vectors, reserved per call by the CUDA distance strategy"]
 ```
 
 With `startup.hardware.vram.enabled`, each pool's capacity is its share of the usable bytes, set by
-`vram.weights_ratio`, `vram.kv_ratio` and `vram.index_ratio`, and one pool cannot take another's
+`vram.weights_ratio`, `vram.kv_ratio` and `vram.vectors_ratio`, and one pool cannot take another's
 space. With it off, all three draw from one shared total, first come first served.
 `gpu.reserve_bytes` covers what the budget does not see, such as library workspaces and
 fragmentation. The `piramid` embedding provider loads its own model and does not reserve from the
@@ -558,22 +572,57 @@ the text search routes both use this provider.
 
 ## Durability
 
-The record store and sidecars are the source of truth. Caches and indexes are acceleration
-structures and must stay rebuildable from stored records.
+The record file and its sidecars are the source of truth. The resident vectors and metadata are
+copies kept in memory and must stay rebuildable from stored records. There is no index file; a
+collection holds its record file, the offsets sidecar mapping each id to its bytes in the record
+file, the manifest, the WAL and its checkpoint bookkeeping.
 
-A write checks the vector width, encodes the document and checks collection limits, logs a WAL
-entry, appends the record, updates the offset index, then the vector cache, the index and the
-metadata cache. After the write, a checkpoint condition on operation count, elapsed time or log size
-may trigger a checkpoint. A checkpoint saves the manifest, offset and index sidecars, and only then
-writes a checkpoint entry to the WAL, records the last sequence number and rotates the log.
-Byte-level serialization stays in `storage`, except that an index owns its own sidecar format.
+A write checks the vector against the collection's width and metric, encodes the document and
+checks collection limits, logs a WAL entry, appends the record, updates the offsets, then the
+manifest and the resident vector and metadata. After the write, a checkpoint condition on operation
+count, elapsed time or log size may trigger a checkpoint. A checkpoint syncs the record file, saves
+the manifest and the offsets, and only then writes a checkpoint entry to the WAL, records the last
+sequence number and rotates the log. Every sidecar is written to a temporary file, synced and renamed
+into place, and the directory is synced after the rename. Byte-level serialization stays in
+`storage`.
 
-Opening a collection loads the offset sidecar, opens the record store, loads the manifest and the
-index sidecar, refuses stored documents with no manifest, refuses an index whose metric differs from
-the configured one, opens the WAL and reads entries past the last checkpoint. A missing index
-sidecar, or one built with a different family or parameters than the configured index, is rebuilt
-from the record store before replay; replayed entries are then inserted into the index as they
-apply. When entries were replayed, the collection checkpoints before it is returned.
+Opening a collection loads the manifest, finishes or discards an interrupted compaction, and loads
+the offsets. A manifest at schema version 1 is refused with an error naming the collection and
+saying it was written by Piramid 0.2 and must be re-ingested; nothing in it is read or migrated.
+Stored documents with no manifest are refused. A collection with neither is new: it gets a schema 2
+manifest carrying `runtime.search.metric`, written at once. Open then opens the record file and the
+WAL, reads the resident vectors and metadata of every document the offsets name, and replays WAL
+entries past the last checkpoint. When entries were replayed, the collection checkpoints before it is
+returned. A `.vecindex.db` file left by Piramid 0.2 is never read, but deleting a collection still
+removes it.
+
+### Compaction
+
+Compaction rewrites the record file without the space dead and replaced records take up. It holds
+the collection's write lock throughout, and a crash at any step leaves a collection that opens with
+every live document. Three extra files beside the record file make that possible: `.compact`, the
+new record file; `.compact.offsets`, its offsets; and `.compact.commit`, an empty marker whose
+presence means the compaction is committed.
+
+```mermaid
+flowchart TD
+    a["settle any earlier compaction, then checkpoint"] --> b["write live documents to .compact and sync it"]
+    b --> c["write .compact.offsets"]
+    c --> d["create .compact.commit"]
+    d --> e["rename .compact over the record file"]
+    e --> f["rename .compact.offsets over the offsets"]
+    f --> g["remove .compact.commit"]
+    recover{"open finds .compact.commit?"} -->|no| discard["delete .compact and .compact.offsets"]
+    recover -->|yes| finish["rename whichever compact files remain, then remove the marker"]
+```
+
+Before the marker exists, the old record file and offsets are untouched, so open discards the
+compacted files. Once it exists, the compacted files are complete and synced, so open moves any that
+are still present into place, in the same order compaction does, and removes the marker. Each rename
+is followed by a directory sync. The checkpoint at the start empties the WAL, so replay after a
+finished compaction has nothing that points into the old record file. If a committed compaction
+cannot be finished in the running process, the collection refuses every write and checkpoint until
+it is opened again, where open finishes it.
 
 ## Configuration
 
@@ -594,7 +643,9 @@ nothing. A reload now compares the incoming startup block with the one the proce
 refuses if it differs. It applies the runtime settings an open collection reads as it runs, and
 refuses a change to one a collection reads only when it opens, naming the key. `runtime.inference`
 is the exception inside the runtime block: the model is loaded with it at boot, so a reload that
-changes it is refused with a message saying a restart is needed.
+changes it is refused with a message saying a restart is needed. `runtime.search.metric` is not
+refused, but it is only read when a collection is created: an existing collection keeps the metric
+its manifest stores, so a change affects only collections created afterwards.
 
 Three rules keep the surface legible:
 
@@ -604,16 +655,15 @@ Three rules keep the surface legible:
   other than the default, naming the key. Today that is every key under `runtime.inference.fusion`
   except `chunk_tokens`, every key under `runtime.inference.document_kv`,
   `runtime.inference.kv_cache.preemption: swap`, `startup.hardware.vram.retrieval_bandwidth_share`
-  and every key under `runtime.quantization`. Unknown keys inside `runtime.index` are refused too,
-  which needs a hand-written deserializer because that block is tagged by `type`.
+  and every key under `runtime.quantization`.
 - The example is tested. `config.example.yaml` is the whole surface at its defaults, and tests assert
   it deserializes to exactly `Config::default()` and that every key appears in it.
 
 Environment variables are overrides only, spelled mechanically from the path:
 `runtime.wal.max_log_size` is `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`, parsed as YAML so `8`, `true`
-and `null` mean what they mean in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are read only from the
-environment, never from the file or an override, so a key is never written into a file that gets
-shared. `OPENAI_API_KEY` is read only when `startup.embedding.provider` is `openai`. A variable that
+and `null` mean what they mean in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are read only
+from the environment, never from the file or an override, so a key is never written into a file
+that gets shared. `OPENAI_API_KEY` is read only when `startup.embedding.provider` is `openai`. A variable that
 is not valid UTF-8 is an error rather than being treated as unset. The support bundle lists which
 variables are set and redacts credential values.
 
@@ -634,10 +684,10 @@ generation arrive as a `Failed` event and are rendered inside the stream.
 4. Vendor SDK types, `cudarc`, `nvml-wrapper`, `candle` and `tokenizers`, never leave their backend
    modules: `hardware::gpu::backends`, `hardware::host::nvml` and `model::inference::backends`.
 5. `unsafe` appears only at the audited sites, each with a `// SAFETY:` comment.
-6. Caches and indexes are rebuildable from the record store.
+6. The resident vectors and metadata are rebuildable from the record store.
 7. Retrieval works with no model loaded, and `model` depends on nothing in the retrieval stack.
-   `model::fusion` holds the trait and the no-op hook; a hook that queries an index is a separate
-   crate.
+   `model::fusion` holds the trait and the no-op hook; a hook that searches a collection is a
+   separate crate.
 8. Default builds are CPU-only and need no vendor toolchain and no model runtime.
 9. Telemetry speaks protocols, not products. Nothing is sent to this project under any
    configuration.
@@ -650,14 +700,14 @@ generation arrive as a `Failed` event and are rendered inside the stream.
 |---|---|
 | Routes and handlers | `serving/src/http` |
 | Wire shapes, and coordinating a user-facing operation | `serving/src/services` |
-| Collection state, records, WAL, sidecars, index internals | `database` |
+| Collection state, records, WAL, sidecars, resident state, search | `database` |
 | Distance math, strategy dispatch, device memory, device kernels, host readings | `hardware` |
 | A distance strategy | one file in `hardware/src/compute/strategies` and one arm in its registry |
 | A kernel the forward pass launches on model memory | `hardware/src/gpu/kernels`, called from `model/src/inference/backends` |
 | A model architecture | `model/src/inference/architecture` for the spec, `model/src/inference/backends` for the implementation |
 | Scheduling, KV cache policy, sampling, tokenization | `model/src/inference` |
 | An embedding provider | `model/src/embeddings/providers` |
-| A retrieval hook that queries an index | a new crate depending on `model` and `database`, added to `scripts/check-deps.sh` and this document |
+| A retrieval hook that searches a collection | a new crate depending on `model` and `database`, added to `scripts/check-deps.sh` and this document |
 | Shared vocabulary: errors, config, metadata | `core` |
 | A site or a client library | `apps/` |
 | A container image or compose file | `deploy/` |
