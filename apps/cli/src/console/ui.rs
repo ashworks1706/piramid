@@ -134,7 +134,11 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
         Some(row) => {
             let title = match &row.metrics {
                 Some(metrics) => {
-                    format!(" {} {} vectors ", row.name, thousands(metrics.vector_count))
+                    format!(
+                        " {} {} documents ",
+                        row.name,
+                        thousands(metrics.vector_count)
+                    )
                 }
                 None => format!(" {} not open ", row.name),
             };
@@ -204,7 +208,21 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
         )));
         return lines;
     };
-    lines.push(heading("storage"));
+    lines.push(heading("collection"));
+    lines.push(field(
+        "dimension",
+        &match (&row.info, row.dimension()) {
+            (_, Some(width)) => thousands(width),
+            (Some(_), None) => "none, no vector stored yet".to_owned(),
+            (None, None) => unmeasured(),
+        },
+        18,
+    ));
+    lines.push(field(
+        "metric",
+        &row.metric().map_or_else(unmeasured, str::to_owned),
+        18,
+    ));
     lines.push(field(
         "memory",
         &bytes(metrics.memory_usage_bytes as u64),
@@ -235,9 +253,7 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
     lines
 }
 
-/// Host processor and memory of the watched server, each of its GPUs, and generation on its
-/// loaded model, graphed over the refresh history, with the device memory budget of the newest
-/// refresh.
+/// Host, GPU and generation stats of the watched server, graphed over the refresh history.
 fn device(frame: &mut Frame, app: &App, area: Rect) {
     let view = &app.device;
     let inference = view.latest_inference();
@@ -400,8 +416,7 @@ const POOL_LABEL: usize = 8;
 /// Colours of the pools of the device memory budget, in the order the server sends them.
 const POOL_COLORS: [Color; 3] = [ACCENT, Color::Magenta, Color::Yellow];
 
-/// The device memory budget of the newest refresh: under a shared budget one bar of every pool
-/// against the usable bytes, and under a split budget one bar per pool against its capacity.
+/// The device memory budget of the newest refresh, one bar per pool.
 fn device_memory(frame: &mut Frame, budget: &GpuBudget, area: Rect) {
     let used: Vec<u64> = budget.pools.iter().map(|pool| pool.used_bytes).collect();
     let total_used = used
@@ -510,8 +525,7 @@ const GENERATION_HEIGHT: u16 = 7;
 /// Terminal widths below this stack the generation chart above the key/value cache panel.
 const KV_BESIDE: u16 = 100;
 
-/// Decode rate and time to first token graphed over the refresh history, beside the key/value
-/// cache and scheduler state of the newest refresh.
+/// Decode rate, time to first token, key/value cache and scheduler state, graphed over history.
 fn generation(
     frame: &mut Frame,
     view: &DeviceView,
@@ -639,8 +653,7 @@ pub fn kv_cells(used: u64, cached: u64, total: u64, width: usize) -> [usize; 3] 
     }
 }
 
-/// Cells of a bar width wide given to each of parts out of total, followed by the cells left
-/// free. Parts are stacked in order and clipped at total, and the cells sum to width.
+/// Cells of a bar width wide given to each part out of total, then the cells left free.
 pub fn stacked_cells(parts: &[u64], total: u64, width: usize) -> Vec<usize> {
     let mut cells = Vec::with_capacity(parts.len() + 1);
     if total == 0 {
@@ -666,7 +679,6 @@ pub fn stacked_cells(parts: &[u64], total: u64, width: usize) -> Vec<usize> {
 }
 
 /// Utilisation, temperature and memory of the GPU at index, graphed over the refresh history.
-/// Utilisation and temperature are drawn in compute_area and device memory in memory_area.
 fn gpu(
     frame: &mut Frame,
     view: &DeviceView,
@@ -887,7 +899,6 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::styled(mode, Style::default().fg(Color::Black).bg(Color::White)),
     ];
-    // Each tab label carries the digit that selects it.
     for (index, view) in app.profile.views().iter().enumerate() {
         let selected = *view == app.view;
         let style = if selected {
@@ -911,7 +922,6 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
     if app.profile == Profile::Developer {
         spans.push(probe_span("web", &app.health.web));
     }
-    // The notice is drawn before the probe reasons.
     if let Some(notice) = &app.notice {
         spans.push(Span::styled(
             format!("  {notice}"),
@@ -935,7 +945,6 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Red),
         ));
     }
-    // A failed collections refresh is shown on the status bar.
     if let Some(error) = &app.collections.error {
         spans.push(Span::styled(
             format!("  {error}"),
@@ -946,8 +955,6 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 /// The probes whose reason goes on the status bar, by name.
-///
-/// Readiness is left out while liveness is down or degraded.
 fn probe_problems(app: &App) -> Vec<(&'static str, &Probe)> {
     let mut problems = Vec::new();
     match &app.health.live {
@@ -1102,7 +1109,6 @@ fn logs(frame: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn bottom_line(frame: &mut Frame, app: &App, area: Rect) {
-    // A confirmation takes the line over, whichever view raised it.
     if let Some(pending) = &app.collections.pending {
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -1143,7 +1149,7 @@ fn bottom_line(frame: &mut Frame, app: &App, area: Rect) {
                     ("o", "open url"),
                 ],
                 View::Collections => &[("j/k", "move"), ("c", "compact"), ("R", "refresh")],
-                View::Config => &[("j/k", "scroll"), ("g", "top"), ("R", "reload")],
+                View::Config => &[("j/k", "scroll"), ("g", "top"), ("R", "re-read")],
                 View::Device => &[("h", "htop"), ("n", "nvtop"), ("R", "refresh")],
             };
             for (key, what) in hints.iter().copied().chain([("?", "help"), ("q", "quit")]) {

@@ -11,8 +11,7 @@ pub struct InsertRequest {
     pub vectors: Vec<Vec<f32>>,
     /// Text of each document, the same length as the vector list.
     pub texts: Vec<String>,
-    /// One map per vector. Empty means no metadata on any of them; otherwise it must be the same
-    /// length as the vector list.
+    /// One map per vector. Empty means no metadata on any of them.
     #[serde(default)]
     pub metadata: Vec<HashMap<String, serde_json::Value>>,
     /// Whether each vector is scaled to unit length before storing. False when omitted.

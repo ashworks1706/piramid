@@ -60,8 +60,8 @@ described next. A change to where retrieval enters generation goes behind the `R
 trait in `apps/engine/model/src/fusion`, with any implementation that queries a collection in its
 own crate.
 
-Piramid has no approximate nearest neighbour index, such as HNSW or IVF, and adding one is out of
-scope. The full list is in the Out of scope section of [docs/ROADMAP.md](docs/ROADMAP.md).
+Search stays an exact scan, and an approximate index is out of scope. The full list is in the Out
+of scope section of [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Adding a compute strategy
 
@@ -76,9 +76,9 @@ New strategies need a parity test against `ScalarStrategy` and a bench against i
 
 ## Good first issues
 
-`docs/ROADMAP.md` has the open todos. Wiring the existing PQ implementation into the search
-path, and backfilling doc comments so `missing_docs` can move from `allow` to `deny`, are both
-self-contained.
+`docs/ROADMAP.md` has the open todos, and its Unscheduled section lists smaller known problems.
+Backfilling doc comments so `missing_docs` can move from `warn` to `deny` in every crate, as it
+already is in `hardware`, is self-contained.
 
 ## Commits and PRs
 
@@ -92,9 +92,10 @@ forecloses an option gets a numbered record in `docs/decisions/`.
 
 ## Reporting bugs
 
-Run `piramid support-bundle` and attach the file. It collects version, platform, build features,
-resolved configuration, and collection state in one pass, with credential-shaped values redacted.
-Read it before sharing.
+Run `piramid support-bundle` with the same configuration as the server, and attach the file it
+writes. It collects the version, platform, build, hardware, inference and embedding settings, the
+resolved configuration and collection state in one pass, with credentials redacted. Read it before
+sharing.
 
-Add the smallest reproduction you can manage. For a search-correctness bug, the collection size
-and `k` matter.
+Add the smallest reproduction you can manage. For a search bug, the collection size, the filter and
+`k` matter. For a generation bug, include the model, the device and the request body.

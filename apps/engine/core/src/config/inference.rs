@@ -1,7 +1,4 @@
 //! Model execution: the forward pass, its memory, and how retrieval enters it.
-//!
-//! Fusion and document key/value reuse are not implemented; [InferenceConfig::validate] refuses
-//! any of their settings away from its default, except fusion.chunk_tokens.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,23 +14,19 @@ pub struct InferenceConfig {
     /// Directory or file holding the weights.
     pub model_path: Option<String>,
 
-    /// Name clients address the model by, the OpenAI model id. None is the model_path directory
-    /// name.
+    /// Name clients address the model by, the OpenAI model id. None uses the model_path name.
     pub model_name: Option<String>,
 
-    /// Directory holding tokenizer.json and tokenizer_config.json, when it is not the checkpoint
-    /// directory.
+    /// Directory holding tokenizer.json and tokenizer_config.json, if not the checkpoint directory.
     pub tokenizer_path: Option<String>,
 
     /// Which forked model file drives the pass. None reads it from the checkpoint.
     pub architecture: Option<String>,
 
-    /// Device to load onto: cpu or cuda:N. None is cuda at startup.hardware.gpu.device_ordinal
-    /// under the gpu profile and cpu otherwise.
+    /// Device to load onto: cpu or cuda:N. None picks cuda under the gpu profile, else cpu.
     pub device: Option<String>,
 
-    /// Precision weights are held at. Auto is the checkpoint precision on a GPU and fp32 on the
-    /// cpu.
+    /// Precision weights are held at. Auto is checkpoint precision on a GPU, fp32 on the cpu.
     pub dtype: Dtype,
 
     /// Longest prompt plus completion, in tokens.
@@ -134,8 +127,7 @@ impl Default for BatchingConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct KvCacheConfig {
-    /// Total budget across every live sequence. Required on the cpu; on a GPU it caps the
-    /// device_fraction share.
+    /// Total budget across every live sequence. Required on the cpu; caps device_fraction on a GPU.
     pub max_bytes: Option<u64>,
 
     /// Tokens per page. Pages are the unit of allocation and eviction.
@@ -370,8 +362,7 @@ pub enum DocumentKvStorage {
 }
 
 impl InferenceConfig {
-    /// The device the model loads onto: device when set, otherwise cuda at the configured ordinal
-    /// under the gpu profile and cpu under any other.
+    /// The device the model loads onto: device when set, else cuda under the gpu profile, else cpu.
     pub fn resolved_device(&self, hardware: &HardwareConfig) -> String {
         match &self.device {
             Some(device) => device.clone(),
@@ -381,9 +372,6 @@ impl InferenceConfig {
     }
 
     /// Reject anything the build cannot honour.
-    ///
-    /// A fusion setting other than chunk_tokens, or a document_kv setting, away from its default
-    /// is an error naming the roadmap version that will implement it.
     pub fn validate(&self) -> Result<(), String> {
         if self.enabled && self.model_path.is_none() {
             return Err("runtime.inference.model_path: required when inference is enabled".into());
@@ -470,9 +458,7 @@ pub enum DeviceSelection {
 }
 
 impl DeviceSelection {
-    /// Parse cpu or cuda:N.
-    ///
-    /// Returns an error for any other name.
+    /// Parse cpu or cuda:N, erroring on any other name.
     pub fn parse(name: &str) -> Result<Self, String> {
         if name == "cpu" {
             return Ok(Self::Cpu);
@@ -486,10 +472,6 @@ impl DeviceSelection {
 
 impl SamplingConfig {
     /// Check sampling settings, naming the field that is out of range.
-    ///
-    /// Returns an error for a negative or non-finite temperature, a top_p outside (0, 1], a zero
-    /// top_k or max_new_tokens, a non-positive or non-finite repetition_penalty, an empty stop
-    /// string, or top_p, top_k or seed set with temperature 0.
     pub fn validate(&self) -> Result<(), String> {
         if !(self.temperature >= 0.0 && self.temperature.is_finite()) {
             return Err(format!(

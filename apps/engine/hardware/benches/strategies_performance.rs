@@ -4,9 +4,7 @@
     reason = "criterion_group generates the undocumented harness functions"
 )]
 
-//! Scalar, SIMD, parallel and CUDA strategies at common embedding dimensions. The CUDA
-//! strategy rows include the upload of query and candidates and the download of scores; the
-//! batch_resident group scores a slab already on the device.
+//! Scalar, SIMD, parallel and CUDA strategies at common embedding dimensions.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
 

@@ -1,8 +1,4 @@
-//! The developer console: run every unit in the repo, stream its output, and watch the server,
-//! from one modal terminal UI.
-//!
-//! Inside a checkout it drives just recipes and docker compose. Outside one it offers only the
-//! views that need a server.
+//! The developer console: runs every unit in the repo, streams its output, watches the server.
 
 pub mod app;
 pub mod client;

@@ -6,10 +6,7 @@ use crate::gpu::device::Device;
 use crate::gpu::error::{GpuError, GpuResult};
 use crate::gpu::stream::Stream;
 
-/// A typed region of device memory, generic over a numeric [DeviceElement] type.
-///
-/// An owned buffer frees its allocation on drop. A borrowed buffer names memory another runtime
-/// on the same device owns, and never frees it.
+/// A typed region of device memory; owned frees on drop, borrowed never does.
 #[derive(Debug)]
 pub struct DeviceBuffer<T> {
     device: Device,
@@ -70,10 +67,7 @@ impl<T: DeviceElement> DeviceBuffer<T> {
         Ok(buffer)
     }
 
-    /// Name len elements of device memory at ptr that another runtime on this device owns.
-    ///
-    /// The caller keeps that memory alive and unaliased for as long as the returned buffer is
-    /// used; the buffer never frees it.
+    /// Name len elements of device memory at ptr, owned and kept alive by another runtime.
     pub fn borrowed(device: &Device, ptr: u64, len: usize) -> GpuResult<Self> {
         let size_bytes = len
             .checked_mul(std::mem::size_of::<T>())
@@ -157,8 +151,7 @@ impl<T> Drop for DeviceBuffer<T> {
 /// Reinterpret a typed slice as bytes for transfer.
 #[allow(unsafe_code)]
 fn as_bytes<T: DeviceElement>(src: &[T]) -> &[u8] {
-    // SAFETY: T is a primitive numeric type with no padding, so every byte of src is initialized,
-    // and the returned slice borrows src for its lifetime with a length of size_of_val(src).
+    // SAFETY: T has no padding and every byte of src is initialized, so this cast is valid.
     unsafe { std::slice::from_raw_parts(src.as_ptr().cast::<u8>(), std::mem::size_of_val(src)) }
 }
 
@@ -166,7 +159,6 @@ fn as_bytes<T: DeviceElement>(src: &[T]) -> &[u8] {
 #[allow(unsafe_code)]
 fn as_bytes_mut<T: DeviceElement>(dst: &mut [T]) -> &mut [u8] {
     let size = std::mem::size_of_val(dst);
-    // SAFETY: T is a primitive numeric type for which any byte pattern is valid, and the returned
-    // slice holds the exclusive borrow of dst with a length of size_of_val(dst).
+    // SAFETY: T allows any byte pattern and dst is exclusively borrowed for this length.
     unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), size) }
 }

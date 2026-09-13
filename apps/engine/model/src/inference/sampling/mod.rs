@@ -1,5 +1,4 @@
-//! Turning logits into tokens: repetition penalty, then greedy selection or temperature, top-k
-//! and top-p sampling from a seeded generator.
+//! Turns logits into tokens: repetition penalty, then greedy or temperature/top-k/top-p sampling.
 
 use std::collections::HashSet;
 
@@ -43,9 +42,7 @@ impl Sampler {
         })
     }
 
-    /// Choose the next token from logits, given the tokens the sequence already holds.
-    ///
-    /// logits is rewritten in place by the penalty.
+    /// Choose the next token from logits, rewritten in place by the penalty, given the history.
     pub fn sample(&mut self, logits: &mut [f32], history: &[u32]) -> Result<u32, InferenceError> {
         if logits.is_empty() {
             return Err(InferenceError::Runtime("empty logits".to_string()));
@@ -143,8 +140,7 @@ impl Sampler {
     }
 }
 
-/// Index of the largest logit that is not NaN; the first one on a tie. None when every logit is
-/// NaN.
+/// Index of the largest logit that is not NaN, first on a tie; None when every logit is NaN.
 fn argmax(logits: &[f32]) -> Option<u32> {
     let mut best: Option<(usize, f32)> = None;
     for (index, &logit) in logits.iter().enumerate() {

@@ -33,8 +33,7 @@ pub fn all() -> Vec<&'static dyn DistanceKernels> {
     ]
 }
 
-/// Whether this build can serve a mode at all: a CPU mode on its target, or the gpu mode with a
-/// GPU backend compiled in. A gpu mode still needs a device installed before [for_mode] serves it.
+/// Whether this build can serve a mode: a CPU mode on its target, or gpu with a backend built in.
 pub fn compiled(mode: ExecutionMode) -> ComputeResult<()> {
     match mode.resolve() {
         ExecutionMode::Gpu => {

@@ -7,10 +7,7 @@ use uuid::Uuid;
 
 use crate::storage::vectors::{VectorReader, VectorSlab};
 
-/// Every vector of a collection, resident in memory as one contiguous buffer.
-///
-/// Rows are one flat float buffer at a fixed stride, addressed through a Uuid to u32 ordinal map.
-/// Ordinals are stable: a removed row becomes a hole, and the next insert reuses it.
+/// Every vector of a collection, resident in memory as one contiguous buffer at a fixed stride.
 #[derive(Default)]
 pub struct VectorStore {
     /// Row-major, dim floats per row. Holes are still allocated and their contents are stale.
@@ -43,9 +40,7 @@ impl VectorStore {
         self.free.len()
     }
 
-    /// Insert or replace the vector for id.
-    ///
-    /// A width other than the stride of the store is an error.
+    /// Inserts or replaces the vector for id; a width other than the store's stride is an error.
     pub fn put(&mut self, id: Uuid, vector: &[f32]) -> Result<()> {
         let dim = *self.dim.get_or_insert(vector.len());
         if vector.len() != dim {

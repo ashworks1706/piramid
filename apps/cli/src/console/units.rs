@@ -1,7 +1,4 @@
 //! The catalog: every unit the repo can run, in sidebar order.
-//!
-//! One entry per just recipe or compose service driven from here. Each entry shells out to its
-//! recipe.
 
 use crate::console::types::{Group, Kind, Unit};
 
@@ -19,7 +16,7 @@ fn processes(server_url: &str) -> Vec<Unit> {
         process(
             "serve",
             &["serve"],
-            "the engine and its HTTP surface",
+            "piramid serve, default build: HTTP API, no model backend",
             Some(server_url),
         ),
         process(
@@ -36,13 +33,13 @@ fn services() -> Vec<Unit> {
         service(
             "piramid",
             None,
-            "the server in a container, built from source",
+            "CPU image built from source, no model backend",
             Some("http://localhost:6333"),
         ),
         service(
             "ollama",
             Some("ollama"),
-            "local embeddings, so /embed works with no API key",
+            "Ollama, an embedding provider needing no API key",
             Some("http://localhost:11434"),
         ),
     ]
@@ -62,15 +59,28 @@ fn tasks() -> Vec<Unit> {
         task_static(&["fmt"], "format every unit in place"),
         task_static(
             &["check-features"],
-            "gpu-cuda, inference-candle, all-features",
+            "compile-check gpu-cuda, inference-candle, all features",
         ),
         task_static(&["doc"], "rustdoc, warnings are errors"),
         task_static(&["bench"], "criterion, results in target/criterion"),
+        task_static(
+            &["bench-rag"],
+            "end-to-end RAG benchmark; PIRAMID_BENCH_MODEL, _DATASET, _EMBEDDING",
+        ),
+        task_static(
+            &["test-model"],
+            "generation on the checkpoint in PIRAMID_TEST_MODEL",
+        ),
+        task_static(
+            &["test-model-gpu"],
+            "test-model with gpu-cuda, on the local CUDA device",
+        ),
+        task_static(&["test-gpu"], "device tests on the local CUDA device"),
         task_static(&["audit"], "advisories, bans, licences, sources"),
         named(
             "support-bundle",
             &["piramid", "support-bundle"],
-            "diagnostics for a bug report",
+            "diagnostics for a serve bug report",
         ),
         task_static(&["web-build"], "production build of the website"),
         task_static(&["web-shots"], "screenshots into target/screenshots"),
@@ -82,7 +92,7 @@ fn deploys() -> Vec<Unit> {
         deploy(&["up"], "dev stack: build locally and start", false),
         deploy(&["down"], "stop the stack", false),
         deploy(&["logs"], "follow every container", true),
-        deploy(&["images"], "build the piramid image locally", false),
+        deploy(&["images"], "build the CPU piramid image locally", false),
         deploy(
             &["prod-up"],
             "pull GHCR images (PIRAMID_IMAGE_TAG) and start",
@@ -110,8 +120,6 @@ fn task_static(args: &[&str], hint: &str) -> Unit {
 }
 
 /// A task whose name is not its command line.
-///
-/// The sidebar and the start command take the name; args carries the recipe line.
 fn named(id: &str, args: &[&str], hint: &str) -> Unit {
     Unit {
         id: id.into(),

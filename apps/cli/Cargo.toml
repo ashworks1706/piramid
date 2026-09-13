@@ -1,8 +1,8 @@
 [package]
 name = "piramid"
-description = "Inference engine for retrieval systems: one binary for vector storage, search, and retrieval-fused inference."
+description = "Inference engine for RAG on one GPU: documents, model weights and the KV cache in one process, served over HTTP."
 readme = "../../README.md"
-keywords = ["vector-database", "rag", "embeddings", "search", "inference"]
+keywords = ["rag", "llm", "embeddings", "search", "inference"]
 categories = ["database-implementations", "command-line-utilities"]
 version.workspace = true
 edition.workspace = true

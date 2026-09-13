@@ -1,5 +1,4 @@
-//! The Qwen decoders on candle: rotary embedding layout, cache slot runs, cache checks and a
-//! real checkpoint against the transformers reference.
+//! Qwen decoder tests on candle: rotary layout, cache slot runs, and a real checkpoint.
 #![cfg(feature = "inference-candle")]
 #![allow(
     clippy::unwrap_used,

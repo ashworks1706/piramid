@@ -14,11 +14,12 @@ the single executable users install.
 
 **`apps/engine/` for the library tree.** `crates/` names Rust's compilation model rather than the
 product. Everything authored lives under `apps/`, the SDKs included, and reaching a crate is two
-levels with no grouping folders — a folder hierarchy that doesn't match the dependency rule is a
+levels with no grouping folders. A folder hierarchy that doesn't match the dependency rule is a
 second model to keep in your head.
 
-**Storage, index, search and collections share one crate.** Separating them is a cycle: a collection
-is built on search, search on storage, and storage holds a collection's bytes.
+**Storage, search and collections share one crate.** Separating them is a cycle: a collection is
+built on search, search reads storage, and storage holds a collection's bytes. The resident vectors
+and metadata a collection keeps in memory live in the same crate for the same reason.
 
 **Strategy-first compute dispatch.** One file per strategy, each implementing the whole
 `DistanceKernels` trait. Adding hardware is a new file, not a new match arm in every kernel.
@@ -26,15 +27,15 @@ is built on search, search on storage, and storage holds a collection's bytes.
 **`gpu` owns the device, `compute` owns the math.** Two subsystems need a device, and neither should
 depend on the other to allocate memory.
 
-**Commit to the fusion seam, not to a mechanism.** The alternative — picking chunked cross-attention
-or residual-stream gating now — bakes one answer into the driver before any of them has been
+**Commit to the fusion seam, not to a mechanism.** Picking chunked cross-attention or
+residual-stream gating now would bake one answer into the driver before any of them has been
 measured. `NoopRetrievalHook` is the control arm.
 
 **Errors carry a kind, not a status code.** Every error crossing a crate boundary must be reachable
 from `PiramidError`, so nothing has to be stringified to travel.
 
-**One name, one meaning.** Folders are named for what they hold, never for a Rust construct — no
-`types/`, no `utils/`. Repeating a word is fine when it means the same thing at each layer and a bug
+**One name, one meaning.** Folders are named for what they hold, never for a Rust construct, so there
+is no `types/` and no `utils/`. Repeating a word is fine when it means the same thing at each layer and a bug
 when it doesn't.
 
 **Open standards only.** Prometheus and OTLP are protocols; a vendor's product is not. Telemetry

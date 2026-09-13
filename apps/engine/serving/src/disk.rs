@@ -2,9 +2,7 @@
 
 use piramid_core::error::{Result, ServerError};
 
-/// Total and available bytes on the filesystem backing path.
-///
-/// Returns (None, None) on non-Unix targets, where statvfs does not exist.
+/// Total and available bytes on the filesystem backing path, or (None, None) off Unix.
 #[cfg_attr(not(target_family = "unix"), allow(unused_variables))]
 pub fn stats(path: &str) -> Result<(Option<u64>, Option<u64>)> {
     #[cfg(target_family = "unix")]
@@ -14,10 +12,7 @@ pub fn stats(path: &str) -> Result<(Option<u64>, Option<u64>)> {
         let c_path = CString::new(path)
             .map_err(|_| ServerError::Internal("data_dir contains an interior NUL byte".into()))?;
 
-        // SAFETY: statvfs is a struct of integers, for which all-zero is a valid bit pattern.
-        // statvfs(3) overwrites every field before any field is read. The pointer comes from a
-        // CString that outlives the call. A non-zero return takes the error path without
-        // reading the struct.
+        // SAFETY: statvfs(3) fills every field before it is read, and c_path outlives the call.
         #[allow(unsafe_code)]
         let (rc, stat) = unsafe {
             let mut stat: libc::statvfs = std::mem::zeroed();
@@ -26,8 +21,7 @@ pub fn stats(path: &str) -> Result<(Option<u64>, Option<u64>)> {
         };
 
         if rc == 0 {
-            // fsblkcnt_t and f_frsize are u64 on Linux and narrower on other targets
-            // (32-bit musl, macOS).
+            // fsblkcnt_t and f_frsize are u64 on Linux and narrower on other targets.
             #[allow(clippy::unnecessary_cast)]
             let (total, available) = {
                 let frsize = stat.f_frsize as u64;

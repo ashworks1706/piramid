@@ -1,5 +1,4 @@
-//! Single-pair distance entry points over a caller-resolved strategy. Each returns an error on
-//! mismatched lengths.
+//! Single-pair distance entry points over a caller-resolved strategy.
 
 use crate::compute::error::ComputeResult;
 use crate::compute::kernels::DistanceKernels;

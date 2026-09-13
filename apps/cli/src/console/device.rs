@@ -1,6 +1,4 @@
-//! Device view state: host, GPU, device memory budget and generation readings over time, and
-//! handing the terminal to a process monitor.
-//! Drawing is in ui, HTTP is in client.
+//! Device view state: host, GPU, memory budget and generation readings, and handing off a monitor.
 
 use std::collections::VecDeque;
 use std::ffi::OsStr;
@@ -134,16 +132,11 @@ impl DeviceView {
     }
 
     /// Runs of consecutive host readings as points of seconds before now against value.
-    ///
-    /// A refresh without the reading ends a run.
     pub fn series(&self, now: Instant, read: impl Fn(&HostMetrics) -> Option<f64>) -> Vec<Run> {
         self.runs(now, |sample| sample.host.as_ref().and_then(&read))
     }
 
-    /// Runs of consecutive readings of the GPU at index, as points of seconds before now against
-    /// value.
-    ///
-    /// A refresh without that GPU or without the reading ends a run.
+    /// Runs of consecutive readings of the GPU at index, as points of seconds before now vs value.
     pub fn gpu_series(
         &self,
         now: Instant,
@@ -160,8 +153,6 @@ impl DeviceView {
     }
 
     /// Runs of consecutive generation readings as points of seconds before now against value.
-    ///
-    /// A refresh without generation readings or without the reading ends a run.
     pub fn inference_series(
         &self,
         now: Instant,
@@ -190,9 +181,7 @@ impl DeviceView {
         runs
     }
 
-    /// The executable to hand the terminal to, or why the console cannot.
-    ///
-    /// Refused while the console watches a server on another machine. path is the PATH to search.
+    /// The executable to hand the terminal to, or why the console cannot, searching path.
     pub fn handoff(&self, monitor: Monitor, path: Option<&OsStr>) -> Result<PathBuf, String> {
         let program = monitor.program();
         if !self.local {

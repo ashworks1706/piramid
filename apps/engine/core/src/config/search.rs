@@ -8,8 +8,7 @@ use piramid_hardware::compute::Metric;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct SearchConfig {
-    /// Metric a collection takes when it is created. A collection keeps the metric it was
-    /// created with.
+    /// Metric a collection is created with. A collection keeps the metric it was created with.
     pub metric: Metric,
 
     /// Fan a batch of queries across the worker threads.

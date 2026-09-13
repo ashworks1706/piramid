@@ -1,7 +1,4 @@
-//! Attention key/value cache bookkeeping: device memory is a pool of fixed-size pages, each
-//! sequence holds a [BlockTable] naming its pages in order, and full pages with identical
-//! prefixes are shared between sequences. The backend holds the page storage; this module decides
-//! which slot each token is written to.
+//! Page bookkeeping for the attention key/value cache: which slot each token lands in.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, VecDeque};
@@ -23,9 +20,7 @@ pub struct KvLayout {
 }
 
 impl KvLayout {
-    /// Bytes one token occupies across every layer's keys and values.
-    ///
-    /// Saturates at usize::MAX.
+    /// Bytes one token occupies across every layer's keys and values, saturating at usize::MAX.
     pub fn bytes_per_token(&self) -> usize {
         self.checked_bytes_per_token().unwrap_or(usize::MAX)
     }
@@ -125,9 +120,7 @@ pub struct BlockAllocator {
 }
 
 impl BlockAllocator {
-    /// A pool of num_blocks pages of block_size tokens each.
-    ///
-    /// The pool holds at most as many pages as keep every slot addressable by a u32.
+    /// A pool of num_blocks pages of block_size tokens each, capped so every slot fits a u32.
     pub fn new(num_blocks: usize, block_size: usize, prefix_sharing: bool) -> Self {
         let block_size = block_size.max(1);
         let slot_limit = u64::from(u32::MAX) + 1;
@@ -177,10 +170,7 @@ impl BlockAllocator {
         }
     }
 
-    /// Start a table for a prompt, sharing every full prefix page already cached.
-    ///
-    /// Returns the table and how many leading tokens are already in the cache. The last prompt
-    /// token is never shared, so at least one token is always computed.
+    /// Starts a table for a prompt, sharing cached prefix pages, and returns tokens already cached.
     pub fn start_sequence(&mut self, prompt: &[u32]) -> (BlockTable, usize) {
         let mut table = BlockTable::default();
         if !self.prefix_sharing || prompt.len() < 2 {
@@ -261,9 +251,7 @@ impl BlockAllocator {
             .collect()
     }
 
-    /// Make every full page of a table reusable by later prompts with the same prefix.
-    ///
-    /// tokens is the full token sequence the table holds.
+    /// Makes every full page of a table reusable by later prompts sharing its full token sequence.
     pub fn publish_prefix(&mut self, table: &BlockTable, tokens: &[u32]) {
         if !self.prefix_sharing {
             return;
@@ -292,8 +280,7 @@ impl BlockAllocator {
         }
     }
 
-    /// Return every page of a table to the pool. Pages carrying a published prefix stay
-    /// reusable until a new allocation evicts them.
+    /// Returns every page of a table to the pool; published prefix pages stay reusable until evicted.
     pub fn release(&mut self, table: BlockTable) {
         for block in table.blocks.into_iter().rev() {
             let count = &mut self.refcounts[block as usize];

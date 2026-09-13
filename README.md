@@ -186,8 +186,8 @@ message, and generates. The response holds the answer in `text`, token counts an
 ```
 
 A request can give `prompt` instead of `messages` to send raw text without the chat template, and
-`"stream": true` to receive server-sent events: one `retrieval` event, a `token` event per token,
-and a final `done` event.
+`"stream": true` to receive server-sent events: a `retrieval` event when the request retrieves, a
+`token` event per token, and a final `done` event, or an `error` event if generation fails.
 
 ### 7. Use an OpenAI client
 
@@ -246,6 +246,13 @@ drains in-flight requests for up to 30 seconds, checkpoints every open collectio
 
 For containers, see [deploy/README.md](deploy/README.md).
 
+### Reading more
+
+[`config.example.yaml`](config.example.yaml) lists every setting with its default and what it does.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how a search and a generation move through the
+server, how the KV cache and the scheduler work, and what keeps a collection safe across a crash.
+[docs/ROADMAP.md](docs/ROADMAP.md) says what is being built next and what is out of scope.
+
 ## The console
 
 ```bash
@@ -253,17 +260,18 @@ piramid
 ```
 
 With no subcommand, `piramid` opens a terminal UI over a running server. Its views are selected
-with digits. `collections` lists every collection on disk and, for an open one, its memory, search
-and insert latency, lock wait, time since the last checkpoint and WAL size, with search latency as a
-sparkline. `config` shows the configuration as the server resolved it. `device` graphs the host,
+with digits. `collections` lists every collection on disk and, for an open one, its vector
+dimension, memory, search and insert latency, lock wait, time since the last checkpoint and WAL
+size, with search latency as a sparkline. `config` shows the configuration as the server resolved it. `device` graphs the host,
 each GPU, the device memory budget, and generation on the loaded model. In `collections`, `c`
 compacts the selected collection after a `y` or `n`, and `?` lists every key.
 
 ```
  piramid  NORMAL  1 collections  2 config  3 device  v0.2.0  * server * ready
-+-- collections 2 ---------------++-- docs 12,430 vectors ---------------------+
-| * docs                 12,430  ||  storage                                   |
-| o notes                   902  ||  memory            41.2 MB                 |
++-- collections 2 ---------------++-- docs 12,430 documents -------------------+
+| * docs                 12,430  ||  collection                                |
+| o notes                   902  ||  dimension         768                     |
+|                                ||  memory            41.2 MB                 |
 |                                ||                                            |
 |                                ||  latency                                   |
 |                                ||  search            0.31 ms                 |
@@ -278,9 +286,9 @@ compacts the selected collection after a `y` or `n`, and `?` lists every key.
  j/k move  c compact  R refresh  ? help  q quit
 ```
 
-The console reads the same configuration file as the server, under `console:`. `console.base_url`
-is empty by default and follows `startup.bind`, so it finds a server on a changed port without a
-second setting. Run inside a checkout, it also shows a `units` view for contributors, described in
+The console reads its settings from the file `CONFIG_FILE` names, under `console:`.
+`console.base_url` is empty by default and follows `startup.bind`, so it finds a server on a
+changed port without a second setting. Run inside a checkout, it also shows a `units` view for contributors, described in
 [Working on Piramid](#working-on-piramid).
 
 `piramid support-bundle` writes diagnostics to attach to a bug report, for a host where you cannot

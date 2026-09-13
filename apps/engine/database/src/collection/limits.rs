@@ -1,8 +1,7 @@
 use super::Collection;
 use piramid_core::error::{Result, ServerError};
 
-/// Refuse one entry of entry_bytes that would pass a limit. replacing is true when the entry takes
-/// the place of a stored one, which does not grow the vector count.
+/// Refuses an entry of entry_bytes that would pass a limit; replacing skips the vector count check.
 pub(crate) fn enforce_single(
     collection: &Collection,
     entry_bytes: usize,

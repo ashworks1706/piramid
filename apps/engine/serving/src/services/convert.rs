@@ -8,10 +8,7 @@ use piramid_hardware::compute::{ComputeError, Metric};
 use piramid_hardware::host::{GpuReading, HostReading};
 use std::collections::HashMap;
 
-/// Resolve a requested metric name against the metric of a collection.
-///
-/// An absent metric is the collection's metric. An unknown name is a bad request, and a known name
-/// other than the collection's metric is refused by the search itself.
+/// Resolve a requested metric name against the collection's; absent means the collection's metric.
 pub fn parse_metric(metric: Option<String>, collection: Metric) -> Result<Metric> {
     let Some(name) = metric else {
         return Ok(collection);

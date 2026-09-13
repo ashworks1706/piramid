@@ -1,9 +1,6 @@
 import path from "path";
 
-/**
- * Rewrites relative image paths in blog markdown to absolute URLs from the assets/ path segment
- * onward, at any directory depth.
- */
+/** Rewrites relative image paths in blog markdown to absolute URLs from the assets/ segment on. */
 export function remarkRewriteImages() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return () => (tree: any) => {

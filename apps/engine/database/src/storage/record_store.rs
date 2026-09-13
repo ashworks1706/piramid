@@ -60,8 +60,7 @@ impl RecordStore {
         Ok(EntryPointer::new(offset, length))
     }
 
-    /// The bytes a document is stored as. A document whose bytes a pointer cannot address is an
-    /// error.
+    /// Encodes a document to the bytes it is stored as; errors if a pointer could not address them.
     pub fn encode_document(document: &Document) -> Result<Vec<u8>> {
         let bytes = codec::encode(document)?;
         record_length(bytes.len())?;

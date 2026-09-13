@@ -6,8 +6,7 @@ use crate::compute::error::{ComputeError, ComputeResult};
 use crate::compute::kernels::DistanceKernels;
 use crate::compute::pairwise::{cosine_similarity, dot_product, euclidean_distance};
 
-/// How similarity between two vectors is measured. [Metric::calculate] gives closer vectors a
-/// higher score.
+/// How similarity between two vectors is measured; [Metric::calculate] scores closer as higher.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Metric {
@@ -36,10 +35,7 @@ impl Metric {
         })
     }
 
-    /// Score query against every row of the row-major candidates slab, into out.
-    ///
-    /// Row i of out is exactly [Metric::calculate] against row i of the slab, including the
-    /// Euclidean higher-is-closer transform.
+    /// Scores query against every row of the row-major candidates slab, into out.
     pub fn calculate_batch(
         &self,
         query: &[f32],

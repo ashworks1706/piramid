@@ -659,8 +659,7 @@ fn gpu_readings_are_decoded_and_drawn_in_the_device_view() {
     assert!(drawn.contains("temperature 61 C"), "{drawn}");
 }
 
-/// Generation readings of a model on cuda:0 with only decode rate and time to first token set
-/// among the averages.
+/// Generation readings of a model on cuda:0 with only decode rate and time to first token set.
 fn generation_reading(
     decode: Option<f32>,
     first_token: Option<f32>,
@@ -1002,12 +1001,26 @@ const READY_BODY: &str = r#"{
     "collections": [{"name": "docs", "loaded": true, "integrity_ok": true}]
 }"#;
 
-/// A snapshot decoded from bodies shaped like the server's.
+/// A collection list body with one euclidean collection of width 384.
+const LIST_BODY: &str = r#"{
+    "collections": [
+        {"name": "docs", "count": 3, "created_at": 1, "updated_at": 2, "dimensions": 384,
+         "metric": "euclidean"}
+    ]
+}"#;
+
+/// A snapshot decoded from bodies shaped like the server's, with the list of LIST_BODY.
 fn snapshot_from(metrics: &str, ready: &str) -> piramid::console::client::Snapshot {
+    snapshot_with(metrics, ready, LIST_BODY)
+}
+
+/// A snapshot decoded from metrics, readiness and collection list bodies.
+fn snapshot_with(metrics: &str, ready: &str, list: &str) -> piramid::console::client::Snapshot {
     use piramid::console::client::parse;
     piramid::console::client::Snapshot {
         metrics: parse("/api/metrics", metrics).expect("the metrics body decodes"),
         ready: parse("/api/readyz", ready).expect("the readiness body decodes"),
+        list: parse("/api/collections", list).expect("the list body decodes"),
     }
 }
 
@@ -1492,4 +1505,132 @@ fn settings_refuse_a_console_section_that_fails_validation() {
     let mut config = piramid_core::config::Config::default();
     config.console.log_lines = 0;
     assert!(Settings::from_config(&config).is_err());
+}
+
+#[test]
+fn the_collection_detail_shows_documents_dimension_and_no_index() {
+    let mut app = console_with_a_collection();
+    assert_eq!(
+        app.collections.current().and_then(|row| row.dimension()),
+        Some(384)
+    );
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(drawn.contains(" docs 3 documents "), "{drawn}");
+    assert!(drawn.contains("dimension"), "{drawn}");
+    assert!(drawn.contains("384"), "{drawn}");
+    for stale in ["index", "rebuild", "hnsw", "ivf", "nprobe"] {
+        assert!(!drawn.to_lowercase().contains(stale), "{stale} in {drawn}");
+    }
+}
+
+#[test]
+fn an_open_collection_with_no_vector_has_no_dimension() {
+    let mut app = console();
+    app.handle(press('2'));
+    let list = r#"{"collections": [{"name": "docs", "count": 0, "created_at": 1,
+        "updated_at": 1, "dimensions": null, "metric": "cosine"}]}"#;
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot_with(&metrics_body(r#", "host": {}"#), READY_BODY, list),
+    ))));
+    assert_eq!(
+        app.collections.current().and_then(|row| row.dimension()),
+        None
+    );
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(drawn.contains("none, no vector stored yet"), "{drawn}");
+}
+
+#[test]
+fn a_collection_list_without_the_dimensions_key_is_a_decode_error() {
+    use piramid::console::client::{parse, ClientError, CollectionList};
+
+    let error =
+        parse::<CollectionList>("/api/collections", r#"{"collections": [{"name": "docs"}]}"#)
+            .expect_err("dimensions is required");
+    assert!(matches!(error, ClientError::Decode(..)), "{error:?}");
+    assert!(error.to_string().contains("dimensions"), "{error}");
+}
+
+#[test]
+fn the_collection_detail_shows_the_metric_beside_the_dimension() {
+    let mut app = console_with_a_collection();
+    assert_eq!(
+        app.collections.current().and_then(|row| row.metric()),
+        Some("euclidean")
+    );
+    let drawn = screen_of(&mut app, 200, 30);
+    let at = |text: &str| drawn.find(text).expect("the detail pane draws the field");
+    let (dimension, metric, memory) = (
+        at("dimension         384"),
+        at("metric            euclidean"),
+        at("memory"),
+    );
+    assert!(dimension < metric && metric < memory, "{drawn}");
+}
+
+#[test]
+fn a_collection_list_without_the_metric_key_is_a_decode_error() {
+    use piramid::console::client::{parse, ClientError, CollectionList};
+
+    let error = parse::<CollectionList>(
+        "/api/collections",
+        r#"{"collections": [{"name": "docs", "dimensions": 3}]}"#,
+    )
+    .expect_err("metric is required");
+    assert!(matches!(error, ClientError::Decode(..)), "{error:?}");
+    assert!(error.to_string().contains("metric"), "{error}");
+}
+
+#[test]
+fn the_catalog_offers_the_model_recipes_and_says_what_serve_builds() {
+    let units = catalog("http://localhost:6333");
+    let hint = |id: &str| {
+        units
+            .iter()
+            .find(|unit| unit.id == id)
+            .map(|unit| unit.hint.clone())
+            .unwrap_or_else(|| panic!("the catalog has {id}"))
+    };
+    assert!(hint("serve").contains("no model backend"));
+    assert!(hint("piramid").contains("no model backend"));
+    assert!(hint("bench-rag").contains("PIRAMID_BENCH_MODEL"));
+    assert!(hint("test-model").contains("PIRAMID_TEST_MODEL"));
+    assert!(hint("test-model-gpu").contains("CUDA"));
+    assert!(hint("test-gpu").contains("CUDA"));
+    for unit in &units {
+        let hint = unit.hint.to_lowercase();
+        for stale in ["index", "rebuild", "tuning", "vector database"] {
+            assert!(!hint.contains(stale), "{}: {}", unit.id, unit.hint);
+        }
+    }
+}
+
+#[test]
+fn every_key_hint_on_the_bottom_line_is_a_key_the_help_lists() {
+    let mut app = console();
+    for (digit, keys) in [
+        ('2', &["j/k", "c", "R"][..]),
+        ('3', &["j/k", "g", "R"][..]),
+        ('4', &["h", "n", "R"][..]),
+    ] {
+        app.handle(press(digit));
+        let bottom = screen_of(&mut app, 200, 30);
+        app.handle(press('?'));
+        let help = screen_of(&mut app, 200, 30);
+        app.handle(press('x'));
+        for key in keys {
+            assert!(
+                bottom.contains(&format!(" {key} ")),
+                "{key} not hinted in view {digit}"
+            );
+            let spaced = key.replace('/', " / ");
+            assert!(
+                help.contains(&format!("  {spaced} ")),
+                "{key} hinted in view {digit} but missing from its help: {help}"
+            );
+        }
+    }
+    app.handle(press('3'));
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(drawn.contains(" R re-read"), "{drawn}");
 }

@@ -548,8 +548,7 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
     cleanup_test_files(&files);
 }
 
-// The interval trigger counts from the open, so it fires before any other trigger has run a
-// first checkpoint.
+// The interval trigger counts from the open, so it fires before any other trigger runs.
 #[test]
 fn the_checkpoint_interval_runs_from_the_open() {
     use piramid_core::config::CollectionConfig;
@@ -618,8 +617,7 @@ fn remove_collection_files(path: &str) {
     }
 }
 
-// A write refused for its width or a limit leaves nothing behind: not stored, not counted, and not
-// in the log to be replayed on the next open.
+// A refused write leaves nothing behind: not stored, not counted, not in the log.
 #[test]
 fn a_refused_write_leaves_nothing_behind() {
     let path = fresh_path("test_refused_write.db");
@@ -716,25 +714,20 @@ fn offsets_without_a_manifest_are_refused_at_open() {
     assert!(error.to_string().contains("no manifest"), "{error}");
 }
 
-/// A manager over a fresh directory holding empty files with the given names.
-fn manager_over_files(dir_name: &str, file_names: &[&str]) -> piramid_database::CollectionManager {
+/// A fresh directory holding empty files with the given names.
+fn dir_of_files(dir_name: &str, file_names: &[&str]) -> String {
     let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(dir_name);
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     for name in file_names {
         fs::write(dir.join(name), b"").unwrap();
     }
-    piramid_database::CollectionManager::new(
-        dir.to_string_lossy().into_owned(),
-        std::sync::Arc::new(parking_lot::RwLock::new(
-            piramid_core::config::Config::default(),
-        )),
-    )
+    dir.to_string_lossy().into_owned()
 }
 
 #[test]
 fn sidecars_are_not_collections() {
-    let manager = manager_over_files(
+    let dir = dir_of_files(
         "manager-sidecars",
         &[
             "docs.db",
@@ -746,33 +739,26 @@ fn sidecars_are_not_collections() {
             "docs.db.manifest.db",
         ],
     );
-    assert_eq!(manager.discover_on_disk().unwrap(), ["docs"]);
+    assert_eq!(piramid_database::collection_names(&dir).unwrap(), ["docs"]);
 }
 
 #[test]
 fn unrelated_files_are_ignored() {
-    let manager = manager_over_files(
+    let dir = dir_of_files(
         "manager-unrelated",
         &["notes.txt", ".db", "docs.db.wal.meta", "docs.db.compact"],
     );
-    assert!(manager.discover_on_disk().unwrap().is_empty());
+    assert!(piramid_database::collection_names(&dir).unwrap().is_empty());
 }
 
 #[test]
 fn an_unreadable_data_directory_is_an_error_not_an_empty_listing() {
     let missing = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("piramid-missing-data-dir/does-not-exist");
-    let manager = piramid_database::CollectionManager::new(
-        missing.to_string_lossy().into_owned(),
-        std::sync::Arc::new(parking_lot::RwLock::new(
-            piramid_core::config::Config::default(),
-        )),
-    );
-    assert!(manager.discover_on_disk().is_err());
+    assert!(piramid_database::collection_names(&missing.to_string_lossy()).is_err());
 }
 
-// Every live document has resident metadata after insert, batch insert, upsert, metadata update,
-// delete, reopen and WAL replay.
+// Every live document has resident metadata after every mutation, reopen and WAL replay.
 #[test]
 fn metadata_is_resident_for_every_live_document() {
     let path = fresh_path("test_resident_metadata.db");
@@ -819,8 +805,7 @@ fn metadata_is_resident_for_every_live_document() {
     assert_eq!(reopened.vector_reader().len(), 2);
 }
 
-// A new collection takes the configured metric and stores it; a reopen under another configured
-// metric keeps the stored one.
+// A reopen keeps the metric stored at creation even under a different configured metric.
 #[test]
 fn the_metric_is_stored_in_the_manifest_and_survives_a_config_change() {
     let path = fresh_path("test_metric_persisted.db");
@@ -865,8 +850,7 @@ fn a_setting_that_needs_a_reopen_is_refused_live() {
     assert!(error.to_string().contains("runtime.wal.enabled"), "{error}");
 }
 
-// A schema 1 manifest is refused with an error naming the collection, and nothing beside it is
-// touched.
+// A schema 1 manifest is refused with an error naming the collection, nothing else touched.
 #[test]
 fn a_schema_1_manifest_is_refused() {
     use piramid_core::error::{PiramidError, StorageError};
@@ -914,8 +898,7 @@ fn copy_collection(from: &str, to: &str) {
     }
 }
 
-/// A checkpointed collection with deleted documents at a path named after name, its live ids,
-/// and a compacted copy of it at a second path.
+/// Builds a checkpointed collection with deleted documents, plus a compacted copy of it.
 fn collection_before_and_after_compaction(name: &str) -> (String, String, Vec<uuid::Uuid>) {
     let before = fresh_path(&format!("{name}.db"));
     let after = fresh_path(&format!("{name}_compacted.db"));
@@ -946,8 +929,7 @@ fn collection_before_and_after_compaction(name: &str) -> (String, String, Vec<uu
     (before, after, live)
 }
 
-/// Open the collection at path and assert it holds exactly the live documents, searchable, with
-/// no compaction files left.
+/// Opens the collection at path and asserts it holds exactly the live documents, searchable.
 fn assert_opens_with(path: &str, live: &[uuid::Uuid]) {
     let collection = Collection::open(path).unwrap();
     assert_eq!(collection.count(), live.len());
@@ -975,8 +957,7 @@ fn assert_opens_with(path: &str, live: &[uuid::Uuid]) {
     }
 }
 
-// A crash while the compacted records are being written leaves a partial record file and no
-// commit marker. Open discards it and keeps the original.
+// A crash while writing the compacted records leaves a partial file; open discards it.
 #[test]
 fn a_compaction_interrupted_while_writing_records_is_discarded() {
     let (before, _, live) = collection_before_and_after_compaction("crash_records");
@@ -986,8 +967,7 @@ fn a_compaction_interrupted_while_writing_records_is_discarded() {
     assert_opens_with(&before, &live);
 }
 
-// A crash while the compacted offsets are being written leaves a complete record file, a partial
-// offsets file and no commit marker. Open discards both.
+// A crash while writing the compacted offsets leaves a partial offsets file; open discards both.
 #[test]
 fn a_compaction_interrupted_while_writing_offsets_is_discarded() {
     let (before, after, live) = collection_before_and_after_compaction("crash_offsets");
@@ -998,8 +978,7 @@ fn a_compaction_interrupted_while_writing_offsets_is_discarded() {
     assert_opens_with(&before, &live);
 }
 
-// A crash after both compacted files are durable and before the commit marker exists discards
-// the compaction.
+// A crash before the commit marker exists discards the compaction.
 #[test]
 fn a_compaction_interrupted_before_its_commit_is_discarded() {
     let (before, after, live) = collection_before_and_after_compaction("crash_before_commit");
@@ -1015,8 +994,7 @@ fn a_compaction_interrupted_before_its_commit_is_discarded() {
     assert_opens_with(&before, &live);
 }
 
-// A crash right after the commit marker is created, before any file moves, finishes the
-// compaction at open.
+// A crash right after the commit marker is created finishes the compaction at open.
 #[test]
 fn a_committed_compaction_with_no_file_moved_is_finished() {
     let (before, after, live) = collection_before_and_after_compaction("crash_after_commit");
@@ -1037,8 +1015,7 @@ fn a_committed_compaction_with_no_file_moved_is_finished() {
     );
 }
 
-// A crash after the record file is moved and before the offsets are finishes the compaction at
-// open.
+// A crash after only the record file is moved finishes the compaction at open.
 #[test]
 fn a_committed_compaction_with_only_the_records_moved_is_finished() {
     let (before, after, live) = collection_before_and_after_compaction("crash_records_moved");
@@ -1054,8 +1031,7 @@ fn a_committed_compaction_with_only_the_records_moved_is_finished() {
     assert_opens_with(&before, &live);
 }
 
-// A crash after both files are moved and before the commit marker is removed opens the compacted
-// collection and removes the marker.
+// A crash before the commit marker is removed opens the compacted collection and removes it.
 #[test]
 fn a_committed_compaction_with_both_files_moved_is_finished() {
     let (before, after, live) = collection_before_and_after_compaction("crash_both_moved");
@@ -1067,8 +1043,7 @@ fn a_committed_compaction_with_both_files_moved_is_finished() {
     assert_opens_with(&before, &live);
 }
 
-// A compaction that completes leaves the collection usable in memory and on disk, and writes after
-// it replay on the next open.
+// A completed compaction leaves the collection usable, and writes after it replay on reopen.
 #[test]
 fn a_completed_compaction_reopens_and_accepts_writes() {
     let (_, after, live) = collection_before_and_after_compaction("compaction_complete");
@@ -1097,9 +1072,7 @@ fn a_completed_compaction_reopens_and_accepts_writes() {
     assert_opens_with(&after, &expected);
 }
 
-// A compaction whose commit marker exists but whose files cannot be moved into place leaves the
-// open collection refusing writes, checkpoints and further compactions, and the collection opens
-// again with every live document once the obstacle is gone.
+// A compaction that cannot move its files into place refuses writes until the obstacle is gone.
 #[test]
 fn a_committed_compaction_that_cannot_finish_refuses_writes_until_reopen() {
     use piramid_core::error::{PiramidError, StorageError};

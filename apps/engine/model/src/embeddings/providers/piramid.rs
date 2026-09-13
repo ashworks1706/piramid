@@ -1,5 +1,4 @@
-//! The in-process provider: a Qwen3 embedding checkpoint run by this process's model runtime, on
-//! the same device as generation. Last-token pooling, L2-normalised.
+//! The in-process provider: a Qwen3 embedding checkpoint run on this process's model runtime.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -112,8 +111,7 @@ pub fn token_count(tokens: usize, max_tokens: usize) -> EmbeddingResult<u32> {
         .map_err(|_| EmbeddingError::InvalidInput(format!("{tokens} tokens exceed u32::MAX")))
 }
 
-/// The embedding error for a model failure: a refused request is invalid input, anything else an
-/// invalid response.
+/// Maps a model failure to an embedding error: a refusal is invalid input, else a bad response.
 pub fn model_error(error: InferenceError) -> EmbeddingError {
     match error {
         InferenceError::InvalidRequest(message) => EmbeddingError::InvalidInput(message),

@@ -1,7 +1,4 @@
 //! Starts, stops and streams the output of units.
-//!
-//! Host processes run under setsid, and a stop signals the whole process group. Compose services
-//! are driven through docker compose and followed with its logs command.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -57,8 +54,6 @@ impl Runner {
     }
 
     /// Stops a unit. Host trees get SIGTERM, services get a compose stop.
-    ///
-    /// Returns an error for a host process or task with no process group this runner started.
     pub fn stop(&mut self, unit: &Unit) -> Result<(), RunnerError> {
         match &unit.kind {
             Kind::Service { service, profile } => {
@@ -169,8 +164,7 @@ impl Runner {
         cmd
     }
 
-    /// Spawns, streams both outputs as log lines and reports the exit. Setting track records
-    /// the process group for a later stop.
+    /// Spawns, streams both outputs as log lines and reports the exit.
     fn spawn_streaming(
         &mut self,
         unit_id: &str,
@@ -314,8 +308,7 @@ pub fn sanitize_line(line: &str) -> String {
     out
 }
 
-/// Parses the JSON output of docker compose ps: an array on older releases, one object per line
-/// on newer ones. Anything else is an error.
+/// Parses the JSON output of docker compose ps: an array of objects, or one object per line.
 pub fn parse_ps(raw: &str) -> Result<HashMap<String, ServiceState>, String> {
     #[derive(serde::Deserialize)]
     struct Row {

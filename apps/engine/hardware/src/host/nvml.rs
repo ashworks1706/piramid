@@ -19,8 +19,7 @@ impl Library {
             .map_err(|error| error.to_string())
     }
 
-    /// One reading per device the library counts, or the reason the devices could not be
-    /// counted. A device that cannot be opened is listed with every field absent.
+    /// One reading per device the library counts; an unopenable device gets every field absent.
     pub(crate) fn sample(&self) -> Result<Vec<GpuReading>, String> {
         let count = self
             .nvml

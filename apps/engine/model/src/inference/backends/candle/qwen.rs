@@ -1,5 +1,4 @@
-//! The Qwen2 and Qwen3 dense decoders on candle, run one layer at a time with keys and values in a
-//! slot-addressed page pool.
+//! The Qwen2 and Qwen3 dense decoders on candle, run one layer at a time with a page-pooled cache.
 
 use candle_core::{DType, Device, Module, Tensor};
 use candle_nn::{Embedding, Linear, RmsNorm};
@@ -305,9 +304,7 @@ impl QwenModel {
         Ok(())
     }
 
-    /// Hand contiguous f32 rows held on a CUDA device to visit in place, as a borrowed device buffer
-    /// covering every element of rows, queued on the per-thread stream candle uses. Returns None on
-    /// the CPU, where rows are visited on the host.
+    /// Visit contiguous f32 rows in place on the device buffer backing them; None means CPU rows.
     #[cfg(feature = "gpu-cuda")]
     fn device_rows(
         &self,
@@ -360,8 +357,7 @@ impl QwenModel {
         Ok(None)
     }
 
-    /// The normalised last-token hidden state of every sequence that asked for logits, one row per
-    /// sequence, or None when none asked.
+    /// The normalised last-token hidden state of every sequence that asked for logits.
     fn last_token_states(&self, pass: &QwenPass) -> Result<Option<Tensor>, InferenceError> {
         let last = pass
             .sequences

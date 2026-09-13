@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
-# Download the HotpotQA dev distractor set and convert a subset of it into the question file the
-# end-to-end benchmark reads (apps/engine/serving/benches/rag_e2e.rs).
-#
-# Usage: scripts/fetch-bench-dataset.sh [QUESTIONS] [OUT]
-#   QUESTIONS  questions kept from the start of the file, default 500
-#   OUT        output path, default target/bench/hotpotqa-dev-distractor.jsonl
-#
-# Each output line is one question:
-#   id, question, answers (a list holding the answer), passages (a list of id, text, gold)
-# A passage id is its paragraph title; gold marks the titles named by supporting_facts.
-#
-# The download is checked against EXPECTED_SHA256 and the script stops on a mismatch.
+# Downloads HotpotQA dev distractor and converts a subset into the benchmark question file.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

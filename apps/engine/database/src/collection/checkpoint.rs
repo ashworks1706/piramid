@@ -16,8 +16,7 @@ pub struct CheckpointManager {
 }
 
 impl CheckpointManager {
-    /// A manager over wal with no operations counted and no checkpoint recorded. Errors when the
-    /// clock reads before 1970.
+    /// A manager over wal with no operations counted and no checkpoint recorded.
     pub fn new(wal: Wal) -> Result<Self> {
         Ok(Self {
             wal,
@@ -27,10 +26,7 @@ impl CheckpointManager {
         })
     }
 
-    /// Whether this operation should be followed by a checkpoint.
-    ///
-    /// Three independent triggers: operation count, time since the interval began, and log size.
-    /// Errors when the log size cannot be read.
+    /// Whether this operation should be followed by a checkpoint, checking count, time and log size.
     pub fn should_checkpoint(
         &mut self,
         cfg: &piramid_core::config::WalConfig,
@@ -60,8 +56,7 @@ impl CheckpointManager {
         self.operation_count = 0;
     }
 
-    /// Record ts, in Unix seconds, as the time of the last checkpoint and the start of the next
-    /// checkpoint interval.
+    /// Records ts, in Unix seconds, as the last checkpoint time and the start of the next interval.
     pub fn record_checkpoint(&mut self, ts: u64) {
         self.last_checkpoint_ts = Some(ts);
         self.interval_start_ts = ts;

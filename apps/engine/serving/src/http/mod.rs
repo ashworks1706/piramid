@@ -1,8 +1,4 @@
-//! HTTP transport: routes, handlers, request ids, error mapping, the scrape endpoint,
-//! authentication, rate limiting, and the serve loop with graceful shutdown.
-//!
-//! Handlers parse the request, call a service, and serialize the result. DTOs live in
-//! services::api.
+//! HTTP transport: routes, handlers, auth, rate limiting, and the serve loop.
 
 pub mod auth;
 pub mod error;

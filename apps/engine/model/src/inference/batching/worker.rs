@@ -1,5 +1,4 @@
-//! The engine thread: receives requests, plans steps, runs them through the driver, samples and
-//! streams tokens, and finishes sequences.
+//! The engine thread: plans steps, runs the driver, samples, streams tokens, finishes sequences.
 
 use std::collections::HashSet;
 use std::sync::Arc;

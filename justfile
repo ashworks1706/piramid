@@ -85,7 +85,7 @@ check-features: check-gpu check-inference
 serve *ARGS:
     cargo run -p piramid -- serve {{ARGS}}
 
-# The console: units, collections and config in one terminal UI
+# The console: units, collections, config and device in one terminal UI
 cli:
     cargo run -p piramid
 
@@ -180,7 +180,7 @@ down:
 logs *ARGS:
     docker compose -f deploy/compose.yml logs -f {{ARGS}}
 
-# Production images from GHCR (PIRAMID_IMAGE_TAG=main|<sha>)
+# Production images from GHCR (PIRAMID_IMAGE_TAG=main|sha-<short>)
 prod-up *ARGS:
     docker compose -f deploy/compose.yml -f deploy/compose.prod.yml pull
     docker compose -f deploy/compose.yml -f deploy/compose.prod.yml up -d {{ARGS}}

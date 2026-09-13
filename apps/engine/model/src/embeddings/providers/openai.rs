@@ -28,8 +28,7 @@ impl OpenAIEmbedder {
         request
     }
 
-    /// A client for the configured model. base_url is the full endpoint URL; unset is the OpenAI
-    /// endpoint.
+    /// A client for the configured model; unset base_url falls back to the OpenAI endpoint.
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let base_url = config
             .base_url

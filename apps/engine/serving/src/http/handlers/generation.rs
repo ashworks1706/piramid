@@ -1,5 +1,4 @@
-//! Generation endpoints: /api/generate, /api/model, and the OpenAI-compatible
-//! /v1/chat/completions and /v1/models.
+//! Generation endpoints: /api/generate, /api/model, and OpenAI-compatible /v1 routes.
 
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -23,8 +22,7 @@ pub async fn model(State(state): State<SharedState>) -> Result<Json<ModelRespons
     Ok(Json(generation::model(&state)?))
 }
 
-/// POST /api/generate: generate from a prompt or conversation, optionally after retrieval, as one
-/// JSON body or as server-sent events.
+/// POST /api/generate: generate from a prompt or conversation, as JSON or server-sent events.
 pub async fn generate(
     State(state): State<SharedState>,
     Json(request): Json<GenerateRequest>,

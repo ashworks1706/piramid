@@ -1,5 +1,4 @@
-//! What the engine measures about itself: latency, lock contention, embedding throughput,
-//! generation.
+//! Counters the engine keeps about itself: latency, locks, embeddings and generation.
 
 pub mod embed;
 pub mod inference;

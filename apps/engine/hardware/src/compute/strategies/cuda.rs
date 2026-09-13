@@ -1,6 +1,4 @@
-//! CUDA strategy: every call uploads the query and candidates to the installed device, runs the
-//! distance kernels there, and downloads the scores, holding the bytes in the vectors pool of the
-//! device budget meanwhile. A single pair is scored as a batch of one row.
+//! CUDA strategy: uploads query and candidates, runs the kernels on device, downloads the scores.
 
 use std::sync::OnceLock;
 
@@ -22,8 +20,7 @@ struct State {
 
 static STATE: OnceLock<State> = OnceLock::new();
 
-/// Serve the gpu mode from a manager's device, on its first stream, compiling the kernels at
-/// block_size threads per block. A process installs one device.
+/// Serve the gpu mode from a manager's device and first stream, compiled at block_size threads.
 pub fn install_gpu(manager: &GpuManager, block_size: u32) -> ComputeResult<()> {
     let stream = manager.streams().first().cloned().ok_or_else(|| {
         failed(GpuError::Runtime(

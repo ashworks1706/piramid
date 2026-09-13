@@ -23,16 +23,7 @@ use crate::storage::SidecarManager;
 use piramid_core::error::{Result, StorageError};
 use piramid_core::Document;
 
-/// Open the collection at path, finishing or discarding an interrupted compaction and replaying
-/// the WAL.
-///
-/// A new collection takes its metric from config.search.metric and writes its manifest at once.
-/// An existing collection keeps the metric of its manifest, whatever the configuration says.
-///
-/// # Errors
-///
-/// Errors when the path has no file stem, when the manifest is schema 1 or corrupt, when stored
-/// documents have no manifest, or when a file cannot be read or written.
+/// Opens the collection at path, finishing an interrupted compaction and replaying the WAL.
 pub fn open(path: &str, options: CollectionOpenOptions) -> Result<Collection> {
     let config = options.config;
 

@@ -1,14 +1,4 @@
-//! Compaction: rewrite the record store without dead entries, and finish or discard a compaction
-//! a crash interrupted.
-//!
-//! A compaction finishes or discards an earlier one, checkpoints, writes every live document to the
-//! compact record file and its offsets to the compact offsets file, syncs both, and then creates
-//! the commit marker. With the marker present the compacted files are moved over the record file
-//! and the offsets, and the marker is removed. Open finishes those moves when it finds the marker,
-//! and deletes the compacted files when it does not.
-//!
-//! Once the commit marker may exist, the open collection either adopts the compacted files or
-//! refuses every write and checkpoint until it is opened again.
+//! Rewrites the record store without dead entries, resuming any compaction a crash interrupted.
 
 use std::collections::HashMap;
 
@@ -20,14 +10,7 @@ use crate::storage::sidecars::{
 use crate::storage::SidecarManager;
 use piramid_core::error::Result;
 
-/// Compact a collection by rewriting its live documents into a fresh record file.
-///
-/// # Errors
-///
-/// Errors when the collection refuses writes, when a document cannot be read, or when a file
-/// cannot be written, synced or renamed. The collection on disk then opens with every live
-/// document. An error once the commit marker may exist also leaves the open collection refusing
-/// writes and checkpoints until it is opened again.
+/// Compacts a collection by rewriting its live documents into a fresh record file.
 pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     collection.ensure_writable()?;
     let base = collection.path.clone();
@@ -73,8 +56,7 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     })
 }
 
-/// Finish the committed compaction on disk and point the collection at the compacted record file
-/// and offsets. The resident vectors and metadata are unchanged.
+/// Finishes the committed compaction on disk and points the collection at the compacted files.
 fn adopt_committed(
     collection: &mut Collection,
     offsets: HashMap<uuid::Uuid, EntryPointer>,
@@ -85,11 +67,7 @@ fn adopt_committed(
     Ok(())
 }
 
-/// Finish a committed compaction of the collection at base, or discard an uncommitted one.
-///
-/// # Errors
-///
-/// Errors when a compaction file cannot be inspected, renamed or removed.
+/// Finishes a committed compaction of the collection at base, or discards an uncommitted one.
 pub(crate) fn recover(base: &str) -> Result<()> {
     let sidecars = SidecarManager::at(base);
     if std::fs::exists(sidecars.compact_commit_path())? {
@@ -104,8 +82,7 @@ pub(crate) fn recover(base: &str) -> Result<()> {
     }
 }
 
-/// Move the compacted record file and offsets that are still present into place, then remove the
-/// commit marker.
+/// Moves the compacted files that are still present into place, then removes the commit marker.
 fn finish_committed(sidecars: &SidecarManager<'_>, base: &str) -> Result<()> {
     let compact_path = sidecars.compact_path();
     if std::fs::exists(&compact_path)? {

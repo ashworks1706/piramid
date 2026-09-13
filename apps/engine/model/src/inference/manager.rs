@@ -1,5 +1,4 @@
-//! The inference domain entry: loads a model from configuration, runs its engine thread, and
-//! hands out streamed generations.
+//! Loads a model from configuration, runs its engine thread, and hands out streamed generations.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -116,11 +115,7 @@ pub struct ModelInfo {
 }
 
 impl InferenceManager {
-    /// Load the model configuration names and start its engine thread. On a GPU, gpu is the
-    /// process's device manager, and the weights and key/value cache are reserved from its budget.
-    ///
-    /// Errors when the configuration fails validation, the build has no model runtime, the
-    /// checkpoint cannot be read, or the device or its budget cannot hold the model.
+    /// Load the model configuration names and start its engine thread.
     pub fn load(
         config: &InferenceConfig,
         hardware: &HardwareConfig,
@@ -274,8 +269,7 @@ fn checkpoint_dir(config: &InferenceConfig) -> Result<PathBuf, InferenceError> {
     Ok(dir.to_path_buf())
 }
 
-/// The directory tokenizer.json and tokenizer_config.json are read from: tokenizer_path when set,
-/// otherwise the checkpoint directory.
+/// The directory tokenizer.json and tokenizer_config.json are read from.
 fn tokenizer_dir(config: &InferenceConfig, checkpoint: &Path) -> Result<PathBuf, InferenceError> {
     let Some(path) = config.tokenizer_path.as_deref() else {
         return Ok(checkpoint.to_path_buf());
@@ -453,8 +447,7 @@ fn start(
     })
 }
 
-/// The token ids that end a generation: those the checkpoint names and the chat template's
-/// eos_token. Errors when the eos_token is not in the vocabulary or the set is empty.
+/// The token ids that end a generation: the checkpoint's plus the chat template's eos_token.
 #[cfg(feature = "inference-candle")]
 pub fn eos_set(
     checkpoint: &[u32],
@@ -478,9 +471,7 @@ pub fn eos_set(
     Ok(ids)
 }
 
-/// Bytes the key/value cache may take. On a GPU: device_fraction of free device memory, capped
-/// by what the budget's key/value pool has left and by max_bytes. On the host, max_bytes is
-/// required.
+/// Bytes the key/value cache may take.
 #[cfg(feature = "inference-candle")]
 fn kv_budget(
     config: &InferenceConfig,

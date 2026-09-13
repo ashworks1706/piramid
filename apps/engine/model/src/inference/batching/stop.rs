@@ -1,5 +1,4 @@
-//! Stop strings over streamed text: text that could begin a stop string is held back until it
-//! either completes one or cannot.
+//! Stop strings over streamed text: a possible prefix is held back until it resolves.
 
 /// Watches streamed text for any of a set of stop strings.
 #[derive(Debug, Clone, Default)]

@@ -1,7 +1,4 @@
 //! Configuration, resolved from defaults, an optional file, then the environment.
-//!
-//! The file has two blocks: [StartupConfig] is fixed at boot, [RuntimeConfig] is re-read on
-//! reload. config.example.yaml carries the whole surface.
 
 mod collection;
 mod console;

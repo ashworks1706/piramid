@@ -3,9 +3,6 @@
 use serde::{Deserialize, Serialize};
 
 /// Which hardware to run on, and at what memory class.
-///
-/// The memory-class profiles set the host memory budget when memory_budget_bytes is unset.
-/// Validation refuses them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum HardwareProfile {
@@ -26,9 +23,7 @@ pub enum HardwareProfile {
 }
 
 impl HardwareProfile {
-    /// Host memory this profile assumes, when it names one.
-    ///
-    /// None for cpu-only and gpu.
+    /// Host memory this profile assumes, when it names one. None for cpu-only and gpu.
     pub fn memory_class_bytes(&self) -> Option<u64> {
         const GB: u64 = 1024 * 1024 * 1024;
         match self {
@@ -94,8 +89,7 @@ pub struct GpuConfig {
     /// Threads per block for distance kernels.
     pub distance_block_size: u32,
 
-    /// Independent streams opened with the device. Retrieval kernels queue on the first; the
-    /// model queues on the per-thread stream.
+    /// Independent streams opened with the device; retrieval queues on the first.
     pub streams: usize,
 
     /// Device bytes held back for fragmentation and library workspaces.

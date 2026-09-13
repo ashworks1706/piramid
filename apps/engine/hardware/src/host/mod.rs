@@ -1,5 +1,4 @@
-//! The host: processor and memory readings for the machine and for this process, and readings of
-//! its GPUs.
+//! The host: processor, memory and GPU readings for the machine and this process.
 
 #[cfg(feature = "gpu-cuda")]
 mod nvml;

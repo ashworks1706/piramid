@@ -1,5 +1,4 @@
-//! The GPU domain entry: opens a device, holds its memory budget and streams, and hands out the
-//! handles everything else borrows.
+//! Opens a device and holds its memory budget and streams for everything else to borrow.
 
 use crate::gpu::budget::{BudgetSettings, DeviceBudget};
 use crate::gpu::device::Device;
@@ -15,8 +14,7 @@ pub struct GpuManager {
 }
 
 impl GpuManager {
-    /// Open the device at an ordinal with a memory budget and a number of independent streams.
-    /// Errors when no GPU backend is compiled in, none is present, or the budget is impossible.
+    /// Opens the device at an ordinal with a memory budget and a number of independent streams.
     pub fn open(ordinal: usize, budget: BudgetSettings, streams: usize) -> GpuResult<Self> {
         if streams == 0 {
             return Err(GpuError::Runtime(

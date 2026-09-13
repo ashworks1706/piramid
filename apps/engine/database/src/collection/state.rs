@@ -22,8 +22,7 @@ pub struct Collection {
     pub(crate) record_store: RecordStore,
     pub(crate) offsets: HashMap<Uuid, EntryPointer>,
     pub(crate) resident: ResidentManager,
-    /// Configuration the collection runs with. search.metric is the metric a new collection is
-    /// created with; [Collection::metric] is the metric this collection scores with.
+    /// Config the collection runs with; search.metric is not the metric it scores with.
     pub config: piramid_core::config::CollectionConfig,
     /// Name, metric, width, counts and timestamps.
     pub manifest: CollectionMetadata,
@@ -31,8 +30,7 @@ pub struct Collection {
     pub path: String,
     /// Write-ahead log and checkpoint counters.
     pub checkpoint: CheckpointManager,
-    /// Why a committed compaction could not be finished in memory. While set, every write and
-    /// checkpoint is refused until the collection is opened again.
+    /// Why a committed compaction could not finish in memory; while set, writes are refused.
     pub(crate) unfinished_compaction: Option<String>,
 }
 
@@ -46,10 +44,7 @@ impl Collection {
         Ok(())
     }
 
-    /// The first setting in next that differs from this collection and takes effect only when
-    /// the collection is opened, named by its config path. None when next can be applied live.
-    ///
-    /// search.metric is not compared: a collection keeps the metric it was created with.
+    /// First setting in next that needs a reopen, named by its path; None if next applies live.
     pub fn setting_needing_reopen(
         &self,
         next: &piramid_core::config::CollectionConfig,
@@ -75,12 +70,7 @@ impl Collection {
         .find_map(|(differs, name)| differs.then_some(name))
     }
 
-    /// Apply the settings an open collection reads as it runs: search.parallel, limits, WAL
-    /// checkpoint thresholds and the execution mode. The metric of the collection is unchanged.
-    ///
-    /// # Errors
-    ///
-    /// Errors, changing nothing, when next differs in a setting that needs a reopen.
+    /// Applies live settings (parallel, limits, WAL, execution); errors if next needs a reopen.
     pub fn apply_live_settings(
         &mut self,
         next: &piramid_core::config::CollectionConfig,
@@ -151,11 +141,7 @@ impl Collection {
         &self.config
     }
 
-    /// Up to limit documents in id order, skipping the first offset. Only the page is read.
-    ///
-    /// # Errors
-    ///
-    /// Errors when the offsets name a document the record store cannot return.
+    /// Up to limit documents in id order, skipping offset; errors on an offset with no document.
     pub fn page(&self, offset: usize, limit: usize) -> Result<Vec<Document>> {
         let mut ids: Vec<&Uuid> = self.offsets.keys().collect();
         ids.sort_unstable();
@@ -254,14 +240,7 @@ impl Collection {
         crate::document::update_vector(self, id, vector)
     }
 
-    /// The k best hits for query among the documents matching the filter of params.
-    ///
-    /// An Auto mode in params scores with the configured execution mode of the collection.
-    ///
-    /// # Errors
-    ///
-    /// Errors when metric is not the metric of the collection, when the query cannot be scored
-    /// under it, or as [crate::search::search] does.
+    /// The k best hits for query matching the filter in params; errors if metric is wrong for it.
     pub fn search(
         &self,
         query: &[f32],

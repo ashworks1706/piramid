@@ -1,5 +1,4 @@
-//! Compiled kernel modules: [KernelModule] is a loaded image, [LaunchConfig] the geometry of one
-//! launch, [KernelArg] one bound argument.
+//! Compiled kernel modules, launch geometry and bound kernel arguments.
 
 use crate::gpu::buffer::DeviceBuffer;
 use crate::gpu::device::Device;
@@ -18,8 +17,7 @@ pub struct LaunchConfig {
 }
 
 impl LaunchConfig {
-    /// One-dimensional geometry covering n elements at the given threads per block. A zero block
-    /// size, and a block count that does not fit the grid, are errors.
+    /// One-dimensional geometry covering n elements at the given threads per block.
     pub fn for_elements(n: usize, block_size: u32) -> GpuResult<Self> {
         if block_size == 0 {
             return Err(GpuError::Launch("block size is zero".to_string()));

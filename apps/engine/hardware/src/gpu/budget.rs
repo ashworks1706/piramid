@@ -1,6 +1,4 @@
-//! Device memory accounting: a budget of usable bytes, divided into pools for model weights, the
-//! key/value cache and stored vectors, or shared by all three when no split is set. A [Reservation]
-//! holds bytes until it is dropped.
+//! Device memory budget split into pools for weights, kv cache and vectors, or shared by all three.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

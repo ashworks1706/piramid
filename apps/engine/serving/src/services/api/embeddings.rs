@@ -11,8 +11,7 @@ use super::search::default_k;
 pub struct EmbedRequest {
     /// Texts to embed, one document per text. Must not be empty.
     pub texts: Vec<String>,
-    /// One map per text. Empty means no metadata on any of them; otherwise it must be the same
-    /// length as the text list.
+    /// One map per text; empty means no metadata, otherwise must match the text list length.
     #[serde(default)]
     pub metadata: Vec<HashMap<String, serde_json::Value>>,
 }
@@ -24,8 +23,7 @@ pub struct EmbedResponse {
     pub ids: Vec<String>,
     /// Embedding of each text, in request order.
     pub embeddings: Vec<Vec<f32>>,
-    /// Tokens consumed across all texts, as reported by the provider. Null when the provider
-    /// reports no count for any one of the texts.
+    /// Tokens consumed across all texts; null if any text went uncounted.
     pub total_tokens: Option<u32>,
 }
 

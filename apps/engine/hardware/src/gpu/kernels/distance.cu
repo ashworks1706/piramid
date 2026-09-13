@@ -63,10 +63,7 @@ __global__ void euclidean_squared_rows(const float* query, const float* slab, fl
     out[row] = sum;
 }
 
-// One thread per chunk of the input. Each writes the k highest scores of its chunk, in
-// descending order, to out_scores and out_index at offset chunk_id * k. Slots past the end of a
-// short chunk hold the lowest finite float and index 0xFFFFFFFF. When has_index is zero the position in
-// scores is the index; otherwise in_index maps positions to indices.
+// One thread per chunk; writes its k highest scores, descending, at offset chunk_id * k.
 __global__ void select_top_k(const float* scores, const unsigned int* in_index, unsigned int has_index,
                   unsigned int n, unsigned int chunk, unsigned int k, float* out_scores,
                   unsigned int* out_index) {

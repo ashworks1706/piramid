@@ -8,9 +8,7 @@ use std::path::PathBuf;
 
 use crate::console::types::{LogLine, Stream};
 
-/// Persists console output in one file per unit.
-///
-/// The file is unbounded.
+/// Persists console output in one file per unit. The file is unbounded.
 #[derive(Debug)]
 pub struct LogWriter {
     dir: PathBuf,
@@ -115,8 +113,7 @@ impl LogBuffer {
         self.lines.clear();
     }
 
-    /// Index of the next line containing needle, case-insensitively, after from and wrapping
-    /// around. Setting backwards searches toward older lines.
+    /// Index of the next line containing needle, case-insensitively, after from.
     pub fn find(&self, needle: &str, from: usize, backwards: bool) -> Option<usize> {
         if needle.is_empty() || self.lines.is_empty() {
             return None;

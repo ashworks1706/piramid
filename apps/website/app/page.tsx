@@ -10,7 +10,10 @@ export default function Home() {
         <p className="landing-tagline">Inference engine for RAG</p>
 
         <div className="landing-actions">
-          <code className="landing-install select-all">cargo install piramid</code>
+          <code className="landing-install select-all">
+            cargo install --git https://github.com/ashworks1706/piramid piramid --locked --features
+            inference-candle,gpu-cuda
+          </code>
           <a href="https://github.com/ashworks1706/piramid" className="landing-link">
             github
           </a>

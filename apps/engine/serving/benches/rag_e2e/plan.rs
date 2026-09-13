@@ -1,5 +1,4 @@
-//! What one run of the end-to-end benchmark measures: its arms and the settings read from the
-//! environment.
+//! What one run of the end-to-end benchmark measures: its arms and settings from the environment.
 
 use std::path::PathBuf;
 
@@ -94,10 +93,7 @@ pub const DEFAULT_KV_CACHE_BYTES: u64 = 2 << 30;
 pub const DEFAULT_K: usize = 5;
 
 impl Plan {
-    /// Read the settings through lookup, writing to default_out when PIRAMID_BENCH_OUT is unset.
-    /// lookup returns None for an unset variable and an error for one it cannot read.
-    ///
-    /// The embedding response cache is turned off.
+    /// Reads settings through lookup, defaulting out when PIRAMID_BENCH_OUT is unset.
     pub fn from_lookup(
         lookup: impl Fn(&str) -> Result<Option<String>, String>,
         default_out: PathBuf,
@@ -171,8 +167,7 @@ impl Plan {
         })
     }
 
-    /// Refuse an arm this build or these settings cannot run. gpu_compiled is whether the build
-    /// has the gpu-cuda feature.
+    /// Refuse an arm this build or these settings cannot run.
     pub fn check_arms(&self, gpu_compiled: bool) -> Result<(), String> {
         for arm in &self.arms {
             match arm {

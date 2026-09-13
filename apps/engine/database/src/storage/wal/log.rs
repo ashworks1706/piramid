@@ -25,9 +25,6 @@ pub struct Wal {
 
 impl Wal {
     /// Create a WAL writer starting at the provided sequence.
-    ///
-    /// With sync_on_write set an entry is durable when log returns. With it unset the entry sits in
-    /// the kernel buffer.
     pub fn new(path: PathBuf, next_seq: u64, sync_on_write: bool) -> Result<Self> {
         let file = OpenOptions::new().create(true).append(true).open(&path)?;
         let mut wal = Wal {
@@ -50,8 +47,7 @@ impl Wal {
         }
     }
 
-    /// Bytes currently on disk, or None when logging is disabled. Errors when the log file
-    /// cannot be inspected.
+    /// Bytes currently on disk, or None when logging is disabled.
     pub fn size_bytes(&self) -> Result<Option<u64>> {
         if self.file.is_none() {
             return Ok(None);

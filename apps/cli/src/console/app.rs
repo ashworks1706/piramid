@@ -224,8 +224,7 @@ impl App {
                 return;
             };
             let note = match state.unit.kind {
-                // A compose up exit reports the request finishing, not the container stopping.
-                // Container state arrives from the compose ps poll.
+                // Container state arrives from the compose ps poll, not this exit code.
                 Kind::Service { .. } => {
                     if let Some(code) = code.filter(|code| *code != 0) {
                         state.status = Status::Failed(format!("compose exited {code}"));
@@ -507,8 +506,7 @@ impl App {
         };
     }
 
-    /// Follows the container logs of a running service when it is selected, including containers
-    /// the console did not start.
+    /// Follows the container logs of a running service when selected.
     fn on_select(&mut self) {
         self.search_hit = None;
         let state = self.current();
@@ -709,8 +707,6 @@ impl UnitState {
 }
 
 /// Parses the text typed on the command line.
-///
-/// Anything the console does not recognise is passed to just.
 pub fn parse_command(text: &str) -> Command {
     let mut words = text.split_whitespace();
     let Some(head) = words.next() else {

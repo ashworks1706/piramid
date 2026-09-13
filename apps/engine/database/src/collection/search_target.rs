@@ -1,5 +1,4 @@
-//! Collection-level search: checks a query against the collection and runs it over its resident
-//! state.
+//! Collection-level search: checks a query against the collection, then runs it.
 
 use crate::search::{SearchParams, SearchTarget};
 use piramid_core::error::SearchError;

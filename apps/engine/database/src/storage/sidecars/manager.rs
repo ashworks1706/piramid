@@ -12,10 +12,7 @@ use crate::storage::codec;
 use crate::storage::manifest::CollectionMetadata;
 use piramid_core::error::{Result, StorageError};
 
-/// The sidecar domain entry for one collection.
-///
-/// Every file beside the base path gets its path and its serialization from here: offsets,
-/// manifest, WAL, WAL meta and the files of an interrupted compaction.
+/// Owns the path and serialization for every file beside a collection's base path.
 #[derive(Clone, Copy)]
 pub struct SidecarManager<'a> {
     base: &'a str,
@@ -33,8 +30,7 @@ impl<'a> SidecarManager<'a> {
         Self { base }
     }
 
-    /// Every suffix this type appends to a base path, including the index sidecar Piramid 0.2
-    /// wrote, which this build never reads.
+    /// Every suffix this type appends to a base path, including the index sidecar from Piramid 0.2.
     pub const SUFFIXES: [&'static str; 8] = [
         ".wal.db",
         ".wal.meta",
@@ -84,8 +80,7 @@ impl<'a> SidecarManager<'a> {
         format!("{}.compact.offsets", self.base)
     }
 
-    /// Path of the marker whose presence commits a compaction: open moves the compacted files into
-    /// place when it exists and discards them when it does not.
+    /// Path of the marker whose presence commits a compaction.
     pub fn compact_commit_path(&self) -> String {
         format!("{}.compact.commit", self.base)
     }
@@ -116,8 +111,7 @@ impl<'a> SidecarManager<'a> {
         Self::write_bincode(&self.manifest_path(), metadata)
     }
 
-    /// Load the manifest, refusing one written under a different schema version as
-    /// [CollectionMetadata::decode] does.
+    /// Load the manifest, refusing one written under a different schema version.
     pub fn load_manifest(&self) -> Result<Option<CollectionMetadata>> {
         let path = self.manifest_path();
         let Some(bytes) = Self::read_optional(&path)? else {

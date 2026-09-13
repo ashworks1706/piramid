@@ -3,8 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! Starts the real server on a loopback port and talks to it over TCP, and checks the
-//! authentication, rate limit and shutdown rules it serves under.
+//! Starts the real server on a loopback port and checks auth, rate limit and shutdown over TCP.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};

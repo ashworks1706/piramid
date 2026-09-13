@@ -1,5 +1,4 @@
-//! Shared foundation for every Piramid crate: errors, configuration, metadata, validation,
-//! the counters the engine keeps about itself, and where those counters go.
+//! Shared foundation for every Piramid crate: errors, configuration, metadata, validation, stats.
 
 pub mod clock;
 pub mod config;

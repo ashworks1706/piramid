@@ -76,9 +76,7 @@ impl CollectionManager {
         Ok(handle)
     }
 
-    /// Close a collection if it is open and delete its data file and sidecars.
-    ///
-    /// Errors with not found when the collection is neither open nor on disk.
+    /// Closes a collection if it is open and deletes its data file and sidecars.
     pub fn delete(&self, name: &str) -> Result<()> {
         piramid_core::validation::validate_collection_name(name)?;
         self.latency_trackers.remove(name);
@@ -96,24 +94,6 @@ impl CollectionManager {
             return Err(ServerError::NotFound(format!("collection '{name}' not found")).into());
         }
         Ok(())
-    }
-
-    /// Collection names present in the data directory, loaded or not.
-    ///
-    /// A collection is the base {name}.db file. Every other .db file beside it is a sidecar.
-    ///
-    /// Errors when the data directory or one of its entries cannot be read.
-    pub fn discover_on_disk(&self) -> Result<Vec<String>> {
-        let mut names = Vec::new();
-        for entry in std::fs::read_dir(&self.data_dir)? {
-            let entry = entry?;
-            if let Some(name) = entry.file_name().to_str().and_then(collection_name_of) {
-                names.push(name);
-            }
-        }
-        names.sort();
-        names.dedup();
-        Ok(names)
     }
 
     /// Whether the named collection is open.
@@ -145,7 +125,7 @@ impl CollectionManager {
     }
 
     fn collection_path(&self, name: &str) -> String {
-        format!("{}/{}.db", self.data_dir, name)
+        record_path(&self.data_dir, name)
     }
 
     /// Warms in the background on the current tokio runtime, and does nothing without one.
@@ -158,6 +138,25 @@ impl CollectionManager {
             guard.warm_page_cache();
         });
     }
+}
+
+/// Collection names present in the data directory, read from file names without opening any.
+pub fn collection_names(data_dir: &str) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(data_dir)? {
+        let entry = entry?;
+        if let Some(name) = entry.file_name().to_str().and_then(collection_name_of) {
+            names.push(name);
+        }
+    }
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+/// Path of the record file of the named collection in the data directory.
+pub fn record_path(data_dir: &str, name: &str) -> String {
+    format!("{data_dir}/{name}.db")
 }
 
 /// The collection a data file belongs to, or None if it is a sidecar or unrelated.

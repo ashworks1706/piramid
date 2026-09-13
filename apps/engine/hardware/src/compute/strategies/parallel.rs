@@ -1,5 +1,4 @@
-//! Rayon-parallel CPU strategy: batch rows fanned across cores and scored by the SIMD kernels. A
-//! single pair runs the SIMD kernel on the calling thread.
+//! Rayon-parallel CPU strategy: batch rows fanned across cores and scored by the SIMD kernels.
 
 use rayon::prelude::*;
 

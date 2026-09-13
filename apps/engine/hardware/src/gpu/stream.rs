@@ -1,5 +1,4 @@
-//! Execution streams: a [Stream] is an ordered queue of device work, and separate streams
-//! overlap.
+//! Execution streams: a [Stream] is an ordered queue of device work, and separate streams overlap.
 
 use crate::gpu::device::Device;
 use crate::gpu::error::GpuResult;

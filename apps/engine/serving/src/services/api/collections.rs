@@ -15,6 +15,8 @@ pub struct CollectionInfo {
     pub updated_at: Option<u64>,
     /// Vector width of the collection. Null until the first vector is stored.
     pub dimensions: Option<usize>,
+    /// The metric every search of the collection scores with, as the configuration names it.
+    pub metric: String,
 }
 
 /// The collections currently loaded in memory.

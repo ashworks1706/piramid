@@ -1,5 +1,4 @@
-//! Scores of one generation: answer match, retrieval recall, decode rate, and latency
-//! percentiles across generations.
+//! Scores of one generation: answer match, retrieval recall, decode rate, and latency percentiles.
 
 use std::time::Duration;
 

@@ -33,9 +33,7 @@ pub struct EmbeddingConfig {
     #[serde(default)]
     pub base_url: Option<String>,
 
-    /// Extra request fields. For openai they are merged into the request body; for ollama they
-    /// are sent as the options object of the request; for piramid they are
-    /// [PiramidEmbeddingOptions]. Null or an object.
+    /// Extra request fields, merged into the provider's request. Null or an object.
     #[serde(default)]
     pub options: serde_json::Value,
 
@@ -102,8 +100,6 @@ fn default_max_tokens() -> usize {
 
 impl EmbeddingConfig {
     /// The options as request fields: the object, or no fields for null.
-    ///
-    /// Returns an error when options is neither null nor an object.
     pub fn request_options(&self) -> Result<serde_json::Map<String, serde_json::Value>, String> {
         match &self.options {
             serde_json::Value::Null => Ok(serde_json::Map::new()),
@@ -113,9 +109,6 @@ impl EmbeddingConfig {
     }
 
     /// The options parsed as those of the piramid provider.
-    ///
-    /// Returns an error for an unknown key, a device other than cpu or cuda:N, or a zero
-    /// max_tokens.
     pub fn piramid_options(&self) -> Result<PiramidEmbeddingOptions, String> {
         let fields = serde_json::Value::Object(self.request_options()?);
         let options = PiramidEmbeddingOptions::deserialize(&fields)

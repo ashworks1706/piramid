@@ -83,11 +83,7 @@ fn api_router(state: SharedState) -> Router<SharedState> {
         .with_state(state)
 }
 
-/// Build the router: API routes under /api, the Prometheus endpoint, the OpenAI-compatible routes
-/// under /v1, and middleware.
-///
-/// When the process booted with an API key, every route except /api/health and /api/readyz
-/// requires it. With a rate limit, the router must be served with connect info.
+/// Builds the router: /api, the Prometheus endpoint, the OpenAI-compatible /v1 routes, middleware.
 pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)

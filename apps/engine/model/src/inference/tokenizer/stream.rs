@@ -1,5 +1,4 @@
-//! Incremental detokenization: text is released only once the tokens behind it decode to
-//! complete characters.
+//! Incremental detokenization: text is released only once its tokens decode to full characters.
 
 use piramid_core::error::InferenceError;
 

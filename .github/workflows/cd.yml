@@ -53,7 +53,7 @@ jobs:
             type=sha,prefix=sha-
           labels: |
             org.opencontainers.image.title=Piramid
-            org.opencontainers.image.description=Inference engine for retrieval systems.
+            org.opencontainers.image.description=Inference engine for RAG on one GPU.
             org.opencontainers.image.licenses=Apache-2.0
       - id: build
         uses: docker/build-push-action@v7

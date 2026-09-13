@@ -19,9 +19,7 @@ pub struct Latest {
     pub gpus: Vec<GpuReading>,
 }
 
-/// The latest readings of the machine, updated by a sampling thread.
-///
-/// The thread stops after the last clone of this value is dropped.
+/// The latest readings of the machine, updated by a sampling thread until its last clone drops.
 #[derive(Debug, Clone)]
 pub struct MachineReadings {
     /// The most recent sample, shared with the sampling thread.
@@ -29,10 +27,7 @@ pub struct MachineReadings {
 }
 
 impl MachineReadings {
-    /// Start a sampling thread that takes a reading every interval.
-    ///
-    /// Every field of the host reading is None, and there is no GPU reading, until the first
-    /// sample lands. Errors when interval is below the host sampler minimum.
+    /// Starts a sampling thread that takes a reading every interval; errors below the minimum.
     pub fn start(interval: Duration) -> Result<Self> {
         if interval < HostSampler::MINIMUM_INTERVAL {
             return Err(ServerError::Internal(format!(

@@ -1,5 +1,4 @@
-//! Generation request and response shapes: the native /api/generate endpoint and the
-//! OpenAI-compatible chat completion endpoint.
+//! Generation request and response shapes for /api/generate and the OpenAI chat endpoint.
 
 use serde::{Deserialize, Serialize};
 
@@ -92,8 +91,7 @@ pub struct GenerationUsageDto {
     pub cached_prompt_tokens: usize,
     /// Tokens generated.
     pub completion_tokens: usize,
-    /// From admission to the first generated token, in milliseconds. Absent when no token was
-    /// generated.
+    /// From admission to the first generated token, in milliseconds; absent when none was generated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_to_first_token_ms: Option<f64>,
     /// From admission to the end, in milliseconds.

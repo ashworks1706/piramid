@@ -2,7 +2,7 @@
 
 | File | Purpose |
 |---|---|
-| `docker/piramid.Dockerfile` | CPU image. cargo-chef caches dependency builds in their own layer. |
+| `docker/piramid.Dockerfile` | CPU image, built with no features. cargo-chef caches dependency builds in their own layer. |
 | `docker/piramid-cuda.Dockerfile` | CUDA image, built with `--features gpu-cuda`. Needs `--gpus all`. |
 | `compose.yml` | Dev stack, builds from source. |
 | `compose.prod.yml` | Overlay that swaps in GHCR images. |
@@ -11,9 +11,13 @@ Commands here are plain `docker compose`, since deploying does not assume a repo
 of the contributor tooling. From inside a checkout, `just up`, `just down`, `just logs`,
 `just prod-up`, and `just prod-down` are shorthands for the same things.
 
+Piramid is used through `piramid serve`, which the images run by default. The steps below start
+with a published image, which stores documents and searches them, and then build an image that
+also loads a model and answers questions with retrieval.
+
 ## Running a published image
 
-Nothing to check out. This serves collections and search:
+Nothing to check out. This serves collections and search, with no model:
 
 ```bash
 docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> \
@@ -32,8 +36,9 @@ Stop with `docker stop -t 45`, which leaves time for in-flight requests to drain
 `startup.http.drain_timeout_secs`, 30 by default) and for every open collection to checkpoint
 before Docker kills the process.
 
-Images are published by `.github/workflows/cd.yml` on every push to `main`, tagged with both the
-commit SHA and `main`. Pin to a SHA rather than `main` for anything you care about.
+Images are published by `.github/workflows/cd.yml` on every push to `main`, as
+`ghcr.io/ashworks1706/piramid` and `ghcr.io/ashworks1706/piramid-cuda`, each tagged `main` and
+`sha-<short commit>`. Pin to a `sha-` tag rather than `main` for anything you care about.
 
 ## Serving a model
 
@@ -95,7 +100,11 @@ curl -X POST http://localhost:6333/api/generate \
 ```
 
 The response carries the answer in `text` and the passages it used in `retrieval`. The
-OpenAI-compatible endpoints are served at `/v1/chat/completions` and `/v1/models` on the same port.
+OpenAI-compatible endpoints are served at `/v1/chat/completions` and `/v1/models` on the same port,
+with the key sent as the client's API key. They do not retrieve; use `/api/generate` with
+`retrieval` when the answer should draw on a collection. The
+[README quickstart](../README.md#quickstart) walks through the same requests in more detail,
+including metadata, streaming and an OpenAI client.
 
 ## Compose
 
@@ -124,7 +133,15 @@ Both compose files read `../.env` if it exists. See `.env.example` for every var
 `PIRAMID_API_KEY` is required: without it the container exits at startup and restarts.
 
 The console reads the same variable, so `PIRAMID_API_KEY=<key> piramid` watches a server that
-requires it.
+requires it. Set `console.base_url` in its configuration file, or
+`PIRAMID__CONSOLE__BASE_URL=http://host:6333`, when the server is not on the address `startup.bind`
+names.
+
+When something goes wrong, `piramid support-bundle` writes a diagnostic report from the binary,
+the configuration and the data directory, with secrets redacted. It reads collection manifests
+without opening a collection or writing to the data directory, so run it beside the server with
+the same configuration and data volume the server uses. Read the file and attach it to the bug
+report.
 
 ## Notes
 

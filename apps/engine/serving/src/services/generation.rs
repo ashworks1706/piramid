@@ -1,5 +1,4 @@
-//! Generation use cases: building the prompt, retrieving passages before prefill, merging
-//! sampling overrides, and turning engine events into API shapes.
+//! Generation use cases: building the prompt, retrieving passages, and queuing the run.
 
 use std::sync::Arc;
 use std::time::Instant;

@@ -1,5 +1,4 @@
-//! Explicitly vectorized CPU strategy using the f32x8 type from wide, compiled to the instruction
-//! set the build targets.
+//! Explicitly vectorized CPU strategy using the f32x8 type from wide.
 
 use wide::f32x8;
 

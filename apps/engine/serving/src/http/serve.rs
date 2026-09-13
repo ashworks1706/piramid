@@ -59,11 +59,7 @@ pub fn check_exposure(address: SocketAddr, auth: &AuthConfig) -> Result<(), Serv
     })
 }
 
-/// Serves until shutdown completes, then drains in-flight requests and checkpoints every open
-/// collection.
-///
-/// Draining waits at most startup.http.drain_timeout_secs. Requests that arrive on the process
-/// after the drain are refused as unavailable.
+/// Serves until shutdown, then drains in-flight requests and checkpoints every open collection.
 pub async fn serve<F>(
     state: SharedState,
     listener: TcpListener,

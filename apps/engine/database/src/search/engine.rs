@@ -40,17 +40,7 @@ pub struct SearchTarget<'a> {
     pub metadata: &'a HashMap<Uuid, Metadata>,
 }
 
-/// The k best hits for query under metric among the documents matching the filter of params,
-/// best first.
-///
-/// Every stored vector is scored, and slab rows marked as holes are skipped. A NaN score never ranks. Fewer than k hits come back only when
-/// fewer than k documents match. resolve reads the document behind a ranked id.
-///
-/// # Errors
-///
-/// Errors when the strategy is unavailable, when the query width differs from the stored width,
-/// when scoring fails, or with [StorageError::CorruptedData] when a stored id has no vector or a
-/// ranked id does not resolve to a document.
+/// The k best hits for query under metric among matching documents, best first.
 pub fn search(
     target: &SearchTarget<'_>,
     query: &[f32],
@@ -123,12 +113,7 @@ pub fn search(
         .collect()
 }
 
-/// Run [search] for each query, in parallel across queries when parallel is set. One hit list
-/// per query, in query order.
-///
-/// # Errors
-///
-/// Errors when any query errors as [search] does.
+/// Runs [search] for each query, in parallel when parallel is set, results in query order.
 pub fn search_batch(
     target: &SearchTarget<'_>,
     queries: &[Vec<f32>],

@@ -27,8 +27,7 @@ pub enum ComputeError {
         /// What it received.
         got: usize,
     },
-    /// The encoding of a quantized vector is internally inconsistent and cannot be decoded, or
-    /// a quantization level has no encoder.
+    /// A quantized vector's encoding cannot be decoded, or its level has no encoder.
     #[error("invalid quantized encoding: {0}")]
     InvalidEncoding(String),
     /// The underlying vendor strategy ran but failed.

@@ -21,15 +21,13 @@ pub struct CollectionHealth {
     /// Number of stored documents. Absent when not loaded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<usize>,
-    /// Time of the last checkpoint since the collection was opened, in seconds since the Unix
-    /// epoch. Absent when not loaded or not yet checkpointed.
+    /// Time of the last checkpoint, in seconds since the Unix epoch. Absent when not checkpointed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_checkpoint: Option<u64>,
     /// Seconds since the last checkpoint. Absent whenever last_checkpoint is absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub checkpoint_age_secs: Option<u64>,
-    /// Size of the write-ahead log file, in bytes. Absent when not loaded or the file does not
-    /// exist.
+    /// Size of the write-ahead log file, in bytes. Absent when not loaded or missing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wal_size_bytes: Option<u64>,
     /// Schema version from the collection manifest. Absent when not loaded.

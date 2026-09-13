@@ -16,7 +16,7 @@ Pre-1.0, so only the latest release gets fixes.
 ## Threat model
 
 Piramid has one API key and no authorization beyond it. A client holding the key can read, write,
-and delete every collection.
+and delete every collection, and run generation on the loaded model.
 
 - With `PIRAMID_API_KEY` set, every route except `/api/health` and `/api/readyz` requires
   `Authorization: Bearer <key>`, compared in constant time. The key is read from the environment
@@ -44,19 +44,17 @@ Specifically:
 ## Telemetry
 
 Nothing is transmitted to this project under any configuration. The exporters in
-`core::observability` points at endpoints you supply, and `PIRAMID_LOG_SPANS` only writes to your
-own logs.
+`core::observability` point at endpoints you supply, and `startup.telemetry.span_events` only
+writes to your own logs.
 
 Span fields carry collection names and request ids. They never carry vector contents, document
 text, or metadata values.
 
 ## Diagnostic bundles
 
-`piramid support-bundle` writes version, platform, build features, resolved configuration, and
-collection state to a file for attaching to a bug report. Variables whose names look like
-credentials — containing `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `DSN`, `CREDENTIAL`, or `AUTH` —
-are reported as `<redacted, N chars>`, since whether a key is set is diagnostic but its value
-never is.
+`piramid support-bundle` writes a diagnostic file to attach to a bug report: the version, the
+platform and build, the resolved configuration, and the state of the collections on disk.
+Credential values are redacted; the bundle says whether a credential is set, never what it is.
 
 The bundle still contains your configuration and collection names. Read it before sharing.
 
@@ -76,5 +74,6 @@ as `just audit`. Dependabot proposes updates weekly.
 `as_bytes_mut` in `apps/engine/hardware/src/gpu/buffer.rs`, which reinterpret a typed slice as
 bytes for device transfer; the CUDA backend in `apps/engine/hardware/src/gpu/backends/cudarc.rs`,
 which allocates, frees and copies raw device memory and launches kernels;
-`database::storage::sidecars::mmap::create_mmap`; and `serving::disk`. Each carries a `// SAFETY:` comment stating its precondition. A PR introducing
-`unsafe` anywhere else fails CI.
+`database::storage::sidecars::mmap::create_mmap`, which maps the record file; and
+`serving::disk`, which asks the filesystem for free space. Each carries a `// SAFETY:` comment
+stating its precondition. A PR introducing `unsafe` anywhere else fails CI.

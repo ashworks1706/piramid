@@ -1,5 +1,4 @@
-//! The question file of the end-to-end benchmark: one JSON question per line, each carrying its
-//! answers and the passages it is retrieved against.
+//! The question file of the end-to-end benchmark: one JSON question per line.
 
 use std::collections::HashSet;
 

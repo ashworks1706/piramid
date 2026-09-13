@@ -20,16 +20,14 @@ pub struct EmbedMetricsSnapshot {
     pub requests: u64,
     /// Texts embedded across all requests.
     pub texts: u64,
-    /// Tokens the providers reported, summed over the requests that reported a count. None
-    /// before any request reported one.
+    /// Tokens the providers reported, summed; None before any request reports a count.
     pub total_tokens: Option<u64>,
     /// Mean latency per request in milliseconds. None before any request is recorded.
     pub avg_latency_ms: Option<f32>,
 }
 
 impl EmbedMetrics {
-    /// Add counts and elapsed time to the totals. token_count is None when the provider reported
-    /// no token count.
+    /// Adds counts and elapsed time to the totals.
     pub fn record(
         &self,
         request_count: u64,

@@ -1,9 +1,4 @@
-//! The view the dashboard takes of a running server.
-//!
-//! Deserialization mirrors of the wire shapes in serving::services::api, holding only the fields
-//! the dashboard draws. An unknown field is ignored. A field the server always sends is required,
-//! so a body without it is a decode error. A field the server leaves out when it has no value is
-//! an Option, and reads as None only when it is absent.
+//! The view the dashboard takes of a running server, mirroring serving::services::api wire shapes.
 
 use std::time::Duration;
 
@@ -18,6 +13,8 @@ pub struct Snapshot {
     pub metrics: Metrics,
     /// The readiness response.
     pub ready: Readyz,
+    /// The collection list response.
+    pub list: CollectionList,
 }
 
 /// The version response, read once at startup.
@@ -47,8 +44,7 @@ pub struct Metrics {
     pub inference: Option<InferenceMetrics>,
 }
 
-/// Generation counters of the loaded model and the state of its scheduler and key/value cache.
-/// An absent average is one the server has not yet measured.
+/// Generation counters and scheduler and key/value cache state. Absent averages are unmeasured.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct InferenceMetrics {
     /// Checkpoint name of the loaded model.
@@ -101,8 +97,7 @@ pub struct GpuPool {
     pub used_bytes: u64,
 }
 
-/// Processor and memory use of the host and of the server process. An absent field is one the
-/// server did not measure.
+/// Processor and memory use of the host and the server process. Absent fields are unmeasured.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct HostMetrics {
     /// Processor use of the whole host, 0 to 100.
@@ -117,8 +112,7 @@ pub struct HostMetrics {
     pub process_resident_bytes: Option<u64>,
 }
 
-/// Memory, utilisation and temperature of one GPU. An absent field is one the server did not
-/// measure.
+/// Memory, utilisation and temperature of one GPU. Absent fields are unmeasured.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct GpuMetrics {
     /// The device ordinal.
@@ -146,9 +140,7 @@ pub struct Compacted {
     pub bytes_after: u64,
 }
 
-/// The counters of one collection.
-///
-/// The server sends every Option here as null when it has no value, and each key is required.
+/// The counters of one collection. The server sends every Option here as null, not omitted.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CollectionMetrics {
     /// The collection name.
@@ -171,9 +163,7 @@ pub struct CollectionMetrics {
     pub lock_write_ms: Option<f32>,
 }
 
-/// The durability state of one collection.
-///
-/// The server sends every Option here as null when it has no value, and each key is required.
+/// The durability state of one collection. Every Option here is null, not omitted.
 #[derive(Debug, Clone, Deserialize)]
 pub struct WalStats {
     /// The collection name.
@@ -184,6 +174,25 @@ pub struct WalStats {
     /// Size of the write-ahead log file, in bytes.
     #[serde(deserialize_with = "Option::deserialize")]
     pub wal_size_bytes: Option<u64>,
+}
+
+/// The collection list response: a summary of each open collection.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CollectionList {
+    /// One summary per open collection.
+    pub collections: Vec<CollectionInfo>,
+}
+
+/// The summary of one open collection. Every Option here is null, not omitted.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CollectionInfo {
+    /// The collection name.
+    pub name: String,
+    /// Vector width of the collection, null until the first vector is stored.
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub dimensions: Option<usize>,
+    /// The metric every search of the collection scores with, as the configuration names it.
+    pub metric: String,
 }
 
 /// The readiness response.
@@ -240,9 +249,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// A client for base, with a request timeout.
-    ///
-    /// A key is sent as a bearer token on every request.
+    /// A client for base, with a request timeout and an optional bearer key.
     pub fn new(base: &str, timeout: Duration, key: Option<ApiKey>) -> Result<Self, ClientError> {
         let mut headers = HeaderMap::new();
         if let Some(key) = &key {
@@ -271,19 +278,21 @@ impl Client {
         self.get("/api/version").await
     }
 
-    /// One refresh. Metrics and readiness are requested concurrently.
+    /// One refresh. Metrics, readiness and the collection list are requested concurrently.
     pub async fn snapshot(&self) -> Result<Snapshot, ClientError> {
-        let (metrics, ready) = tokio::join!(self.get("/api/metrics"), self.get("/api/readyz"));
+        let (metrics, ready, list) = tokio::join!(
+            self.get("/api/metrics"),
+            self.get("/api/readyz"),
+            self.get("/api/collections")
+        );
         Ok(Snapshot {
             metrics: metrics?,
             ready: ready?,
+            list: list?,
         })
     }
 
-    /// The configuration the server resolved, rendered as YAML.
-    ///
-    /// The configuration is unwrapped from the app_config key of the response. A response without
-    /// that key is a decode error.
+    /// The configuration the server resolved, rendered as YAML from the app_config key.
     pub async fn config(&self) -> Result<String, ClientError> {
         let value: serde_json::Value = self.get(CONFIG_PATH).await?;
         render_config(&value)

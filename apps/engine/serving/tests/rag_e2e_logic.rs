@@ -1,5 +1,4 @@
-//! The pure parts of the end-to-end benchmark in benches/rag_e2e: dataset parsing, settings,
-//! scoring and the report, run as ordinary tests.
+//! The pure parts of the end-to-end benchmark in benches/rag_e2e, run as ordinary tests.
 
 #[allow(dead_code, reason = "the benchmark uses items these tests do not")]
 #[path = "../benches/rag_e2e/dataset.rs"]

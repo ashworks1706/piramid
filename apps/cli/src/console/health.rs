@@ -29,9 +29,6 @@ impl Targets {
 }
 
 /// Probes forever on the configured interval, sending each result to the UI.
-///
-/// The website probe is skipped where there is no checkout to serve one from. An HTTP client that
-/// cannot be built is sent to the UI as the reason no probe runs.
 pub async fn poll(targets: Targets, probe_web: bool, tx: UnboundedSender<Event>) {
     let http = match reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(2))

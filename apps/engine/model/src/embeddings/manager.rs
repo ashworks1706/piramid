@@ -23,8 +23,7 @@ impl EmbeddingsManager {
         }
     }
 
-    /// Wrap an embedder the caller built, such as a provider this crate cannot construct, in the
-    /// retry layer.
+    /// Wraps a caller-built embedder, such as a provider this crate cannot construct, in retries.
     pub fn with_embedder(embedder: Arc<dyn Embedder>) -> Self {
         Self {
             embedder: Some(Arc::new(RetryEmbedder::new(embedder))),

@@ -7,8 +7,7 @@ use serde::Serialize;
 pub struct ConfigStatusResponse {
     /// The full configuration currently in effect.
     pub app_config: piramid_core::config::Config,
-    /// Time of the last successful reload, or of startup when none has happened, in seconds since
-    /// the Unix epoch.
+    /// Time of the last successful reload, or of startup when none has happened.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reloaded_at: Option<u64>,
 }

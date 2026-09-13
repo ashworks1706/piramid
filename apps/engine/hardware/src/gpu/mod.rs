@@ -1,5 +1,4 @@
-//! Device runtime: contexts, memory, streams, and compiled kernels, shared by compute and
-//! inference over one [Device].
+//! Device runtime: contexts, memory, streams, and compiled kernels, shared by compute and inference.
 
 pub mod backends;
 pub mod budget;

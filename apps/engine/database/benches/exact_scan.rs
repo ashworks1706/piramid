@@ -3,10 +3,7 @@
     missing_docs,
     reason = "criterion_group generates the undocumented harness functions"
 )]
-//! The exact scan on its two paths to the kernel.
-//!
-//! slab hands the store's own buffer to one batch call. gathered copies each block of rows into
-//! scratch first. Kernel, metric and data are the same on both.
+//! The exact scan on its two paths: slab hands the buffer straight in, gathered copies rows first.
 
 use std::collections::HashMap;
 

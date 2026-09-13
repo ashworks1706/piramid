@@ -2,7 +2,7 @@
 
 | Skill | Purpose | Origin |
 |---|---|---|
-| `check` | The gate: fmt, clippy, tests, dependency rule | ours |
+| `check` | The gate: fmt, clippy, tests, dependency rule, website lint | ours |
 | `kernel-authoring` | Adding a compute backend or GPU kernel; layout and transfer rules | ours |
 | `adr` | Write a decision record in `docs/decisions/` | ours |
 | `roadmap` | Progress against `docs/ROADMAP.md` | ours |

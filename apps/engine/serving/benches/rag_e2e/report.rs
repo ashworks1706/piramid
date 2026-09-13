@@ -1,5 +1,4 @@
-//! Measurements of one question under one arm, their per-arm summary, and the markdown table
-//! rendered from it.
+//! Measurements of one question under one arm, their per-arm summary, and the markdown table.
 
 use serde::Serialize;
 
@@ -14,17 +13,15 @@ pub struct Record {
     pub arm: &'static str,
     /// Embedding the question, in milliseconds. None when no retrieval ran in process.
     pub embed_ms: Option<f64>,
-    /// Searching the collection, in milliseconds. For the HTTP arm, the search time the server
-    /// reports, in whole milliseconds.
+    /// Searching the collection, in milliseconds.
     pub search_ms: Option<f64>,
     /// Reading passage ids and texts out of the hits, in milliseconds.
     pub fetch_ms: Option<f64>,
-    /// From the question to passages in hand, in milliseconds. For the HTTP arm, the round trip.
+    /// From the question to passages in hand, in milliseconds.
     pub retrieval_ms: Option<f64>,
     /// From admission by the engine to the first token, in milliseconds.
     pub prefill_ms: Option<f64>,
-    /// From the question to the first token, in milliseconds, retrieval and prompt building
-    /// included.
+    /// From the question to the first token, in milliseconds.
     pub ttft_ms: Option<f64>,
     /// Tokens per second after the first token.
     pub decode_tokens_per_sec: Option<f64>,
@@ -32,8 +29,7 @@ pub struct Record {
     pub prompt_tokens: usize,
     /// Tokens generated.
     pub completion_tokens: usize,
-    /// Whether a gold passage was retrieved. None when no retrieval ran or the question has no
-    /// gold passage.
+    /// Whether a gold passage was retrieved, when the question has one.
     pub recall: Option<bool>,
     /// Whether a normalized answer appears in the normalized output.
     pub exact_match: bool,

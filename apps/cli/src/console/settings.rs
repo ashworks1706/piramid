@@ -27,10 +27,6 @@ pub struct Settings {
 
 impl Settings {
     /// Settings from a loaded configuration.
-    ///
-    /// Reads the same file and the same environment overrides as the server.
-    ///
-    /// Returns an error if the console section fails validation.
     pub fn from_config(config: &Config) -> Result<Self, String> {
         let console = &config.console;
         console.validate()?;
@@ -64,8 +60,6 @@ impl Settings {
 }
 
 /// Walks up from start to the directory holding the justfile of the repo.
-///
-/// Returns None outside a checkout, where there is no justfile to drive.
 pub fn repo_root(start: &Path) -> Option<PathBuf> {
     start
         .ancestors()

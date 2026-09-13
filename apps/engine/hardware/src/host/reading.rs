@@ -1,8 +1,6 @@
 //! One reading of host processor and memory use.
 
-/// Processor and memory use of the host and of this process at one instant.
-///
-/// A field is None when this platform or this sample could not measure it.
+/// Processor and memory use of the host and this process at one instant; None when unmeasurable.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct HostReading {
     /// Processor use across every logical CPU of the host, from 0 to 100.
@@ -17,9 +15,7 @@ pub struct HostReading {
     pub process_resident_bytes: Option<u64>,
 }
 
-/// Memory, utilisation and temperature of one GPU at one instant.
-///
-/// A field is None when the driver could not measure it for this device.
+/// Memory, utilisation and temperature of one GPU at one instant; None when the driver can't tell.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GpuReading {
     /// Index of the device as the driver enumerates it.

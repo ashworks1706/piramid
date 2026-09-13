@@ -16,6 +16,7 @@ fn collection_info(name: String, collection: &piramid_database::Collection) -> C
         created_at: Some(meta.created_at),
         updated_at: Some(meta.updated_at),
         dimensions: meta.dimensions,
+        metric: meta.metric.as_str().to_string(),
     }
 }
 

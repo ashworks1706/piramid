@@ -5,8 +5,9 @@ tools: Read, Grep, Glob, Bash
 ---
 
 You review performance-critical code in `apps/engine/hardware`, `apps/engine/hardware/src/gpu`, and the vector layout in
-`apps/engine/database/src/storage/vectors`. Read `.claude/skills/kernel-authoring/SKILL.md` and ADRs 0003, 0004,
-and 0005 first.
+`apps/engine/database/src/storage/vectors` and `apps/engine/database/src/resident`. Read
+`.claude/skills/kernel-authoring/SKILL.md`, the three seams in `docs/ARCHITECTURE.md`, and
+`docs/decisions/README.md` first.
 
 Check, in priority order:
 
@@ -17,7 +18,7 @@ Check, in priority order:
    with the data already on device while the real query path would not? A speedup that excludes
    the upload is not the speedup the user gets.
 3. **Boundary.** Vendor types (`cudarc`) outside `apps/engine/hardware/src/gpu/backends/`. Math semantics leaking
-   into `apps/engine/hardware/src/gpu`. Either leaf crate gaining a workspace dependency.
+   into `apps/engine/hardware/src/gpu`. `hardware`, the leaf crate, gaining a workspace dependency.
 4. **Correctness under fallback.** Does `is_available` tell the truth? A backend that reports
    available but is not produces wrong answers where an honest one produces a warning. Does any
    path panic instead of degrading?

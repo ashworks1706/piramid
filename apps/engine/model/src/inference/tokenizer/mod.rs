@@ -1,5 +1,4 @@
-//! Text to tokens and back: the [Tokenizer] contract a backend implements, the checkpoint's chat
-//! template, and incremental decoding for streamed output.
+//! Text to tokens and back: the [Tokenizer] contract, chat template, and streamed decoding.
 
 pub mod chat;
 pub mod stream;
@@ -14,8 +13,7 @@ pub trait Tokenizer: Send + Sync {
     /// Token ids of text. Special tokens written in the text are recognised as special tokens.
     fn encode(&self, text: &str) -> Result<Vec<u32>, InferenceError>;
 
-    /// Token ids of text with the tokenizer's own post-processing applied, such as an appended
-    /// end-of-text token.
+    /// Token ids of text with the tokenizer's own post-processing applied.
     fn encode_with_template(&self, text: &str) -> Result<Vec<u32>, InferenceError>;
 
     /// Text of token ids, with special tokens left out when skip_special is set.

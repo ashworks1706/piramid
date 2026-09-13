@@ -22,10 +22,10 @@ at someone *using* Piramid, show `piramid ...` or `docker ...`, never `just ...`
 just doctor | env | hooks | bootstrap   first run
 just check              the gate: fmt, clippy, tests, layering, website
 just check-rust         cargo fmt --check, clippy -D warnings, test, scripts/check-deps.sh
-just check-features     compile-check --features gpu-cuda, inference-candle, otel
+just check-features     compile-check gpu-cuda, inference-candle, and --all-features
 just fmt                format everything in place
 just serve              run the server on :6333
-just cli                the console: units, collections, config in one terminal UI
+just cli                the console: units, collections, config, device in one terminal UI
 just piramid support-bundle     diagnostics to attach to a bug report
 just doc                rustdoc, warnings are errors
 just bench              criterion
@@ -135,7 +135,7 @@ retrieval stack.
 - A library never ends the process. No `std::process::exit` outside `apps/cli`. Loading
   configuration returns a `Result` and the binary decides what to do with it.
 - `core` is transport-agnostic. `PiramidError` exposes an `ErrorKind`, never a `StatusCode`. HTTP
-  mapping lives in `server::http::ApiError`.
+  mapping lives in `serving::http::ApiError`.
 - Vendor SDK types stay inside their backend module: `gpu/backends/`, `host/nvml.rs` and
   `inference/backends/`. Nothing above imports `cudarc`, `nvml-wrapper`, `candle` or `tokenizers`.
 - Telemetry speaks open standards only. Prometheus and OTLP are protocols; a vendor's product is

@@ -104,8 +104,6 @@ async fn drive(
 }
 
 /// Runs program in the foreground with the terminal it needs, then takes the terminal back.
-///
-/// The key reader is stopped while program runs.
 async fn hand_over(
     terminal: &mut ratatui::DefaultTerminal,
     program: &Path,

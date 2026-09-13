@@ -1,5 +1,4 @@
-//! The forward-pass driver: runs a [DecoderModel] one layer at a time over a step batch and calls
-//! the retrieval hook at every point it asks for.
+//! The forward-pass driver: runs a [DecoderModel] over a step batch and calls the retrieval hook.
 
 use std::sync::Arc;
 
@@ -49,8 +48,7 @@ impl<M: DecoderModel> Driver<M> {
         &mut self.model
     }
 
-    /// Run one step. progress holds one entry per batch sequence, in batch order. Returns the
-    /// last-token logits of every sequence that asked for them, in batch order.
+    /// Runs one step, returning the last-token logits of sequences that asked for them.
     pub fn step(
         &mut self,
         batch: &StepBatch,

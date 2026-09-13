@@ -177,11 +177,11 @@ impl Profile {
 pub enum View {
     /// Repo units: the server, the website, containers, recipes.
     Units,
-    /// Collections on a running server, with storage and latency.
+    /// Collections on a running server, with dimension, memory, latency and durability.
     Collections,
     /// The configuration as the server resolved it.
     Config,
-    /// Host processor and memory of the server over time.
+    /// Host, GPU, device memory budget and generation readings of the server over time.
     Device,
 }
 

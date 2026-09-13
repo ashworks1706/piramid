@@ -34,10 +34,7 @@ impl Drop for ObservabilityGuard {
     }
 }
 
-/// Installs telemetry from configuration. Call once, early in main.
-///
-/// Returns None when logging is disabled or a subscriber is already installed, and an error when
-/// a configured exporter cannot start.
+/// Installs telemetry from configuration; call once, early in main.
 pub fn install(
     logging: LoggingConfig,
     telemetry: &TelemetryConfig,

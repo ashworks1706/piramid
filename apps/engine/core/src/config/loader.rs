@@ -1,5 +1,4 @@
-//! Loading: defaults, then the file, then environment overrides, then secrets from the
-//! environment.
+//! Loading: defaults, then the file, then environment overrides, then secrets from the environment.
 
 use std::env::{self, VarError};
 use std::fs;
@@ -13,14 +12,11 @@ use crate::error::ConfigError;
 /// Name of the environment variable holding the key for the openai embedding provider.
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 
-/// Prefix and separator for overrides. PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE=1024 sets
-/// runtime.wal.max_log_size.
+/// Prefix and separator for overrides, e.g. PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE=1024.
 const ENV_PREFIX: &str = "PIRAMID__";
 const ENV_SEPARATOR: &str = "__";
 
 /// Where configuration comes from: a file, and command-line values applied over it.
-///
-/// A reload reads the same source the server booted from.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ConfigSource {
     /// The file to read. None reads CONFIG_FILE, or no file when that is unset.
@@ -31,14 +27,12 @@ pub struct ConfigSource {
     pub data_dir: Option<String>,
 }
 
-/// Read CONFIG_FILE, apply PIRAMID__ overrides, read PIRAMID_API_KEY, and OPENAI_API_KEY for the
-/// openai provider, then validate.
+/// Read CONFIG_FILE, apply PIRAMID__ overrides, read the API keys, then validate.
 pub fn load() -> Result<Config, ConfigError> {
     load_from(&ConfigSource::default())
 }
 
-/// Read the file of a source, apply PIRAMID__ overrides and the values of the source, read the
-/// secrets from the environment, then validate.
+/// Read the file of a source, apply PIRAMID__ overrides and its values, read secrets, then validate.
 pub fn load_from(source: &ConfigSource) -> Result<Config, ConfigError> {
     let path = match &source.file {
         Some(path) => Some(path.clone()),

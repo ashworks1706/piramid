@@ -145,8 +145,7 @@ impl AppState {
         self.collection_manager.get_or_create(name)
     }
 
-    /// Checkpoints and flushes every loaded collection, returning the name and error of each that
-    /// failed.
+    /// Checkpoints and flushes every loaded collection, returning each failure's name and error.
     pub fn checkpoint_all(&self) -> Vec<(String, PiramidError)> {
         let mut failures = Vec::new();
         for (name, storage) in self.collection_manager.loaded_collections() {
@@ -161,11 +160,7 @@ impl AppState {
         failures
     }
 
-    /// Re-read configuration from the boot source, and apply its runtime block to the process
-    /// and to every open collection.
-    ///
-    /// A changed startup block, or a change an open collection can take only when it is opened,
-    /// refuses the reload and changes nothing.
+    /// Re-reads config from the boot source and applies its runtime block to open collections.
     pub fn reload_config(&self) -> Result<Config> {
         let new_cfg = piramid_core::config::loader::load_from(&self.config_source)
             .map_err(|e| ServerError::InvalidRequest(e.to_string()))?;
@@ -224,8 +219,7 @@ impl AppState {
         super::disk::free_bytes(&self.data_dir)
     }
 
-    /// Error with 503 when shutting down or below the free-space floor. With read-only on low
-    /// space enabled the server stays read-only until the first write that finds the space back.
+    /// Error with 503 when shutting down or below the free-space floor.
     pub fn ensure_write_allowed(&self) -> Result<()> {
         self.ensure_available()?;
         let Some(min_free) = self.disk_min_free_bytes() else {

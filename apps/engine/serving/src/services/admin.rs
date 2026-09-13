@@ -207,7 +207,7 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
     }
 
     // Collections load lazily. One present on disk but not yet opened is listed with loaded false.
-    for name in state.collection_manager.discover_on_disk()? {
+    for name in piramid_database::collection_names(&state.data_dir)? {
         if state.collection_manager.contains_loaded(&name) {
             continue;
         }

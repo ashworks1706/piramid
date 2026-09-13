@@ -1,5 +1,4 @@
-//! Device runtime round-trips and distance kernel parity with the scalar strategy. Needs a CUDA
-//! device; run with just test-gpu.
+//! Device runtime round-trips and distance kernel parity with the scalar strategy.
 #![cfg(feature = "gpu-cuda")]
 #![allow(
     clippy::unwrap_used,

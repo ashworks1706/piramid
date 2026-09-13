@@ -143,6 +143,29 @@ async fn read_endpoint_loads_existing_collection_from_disk() {
     cleanup_dir(data_dir);
 }
 
+// The collection summary names the metric it was created with, as the configuration spells it.
+#[tokio::test]
+async fn the_collection_summary_names_its_metric() {
+    let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_metric");
+    let mut config = Config::default();
+    config.runtime.search.metric = piramid_hardware::compute::Metric::DotProduct;
+    let state = test_state_with_config(data_dir, config);
+    state.get_or_create_collection("docs").unwrap();
+
+    let list = collections::list_collections(State(state.clone()))
+        .await
+        .unwrap();
+    let body = serde_json::to_value(&list.0).unwrap();
+    assert_eq!(body["collections"][0]["metric"], "dot", "{body}");
+
+    let one = collections::get_collection(State(state.clone()), Path("docs".to_string()))
+        .await
+        .unwrap();
+    assert_eq!(serde_json::to_value(&one.0).unwrap()["metric"], "dot");
+
+    cleanup_dir(data_dir);
+}
+
 #[tokio::test]
 async fn search_applies_a_metadata_filter_from_the_request() {
     let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_filter");
@@ -216,8 +239,7 @@ fn a_collection_name_that_is_not_a_plain_name_is_refused_by_the_manager() {
     cleanup_dir(data_dir);
 }
 
-// A collection on disk that is not open is deleted with its files, and one that exists nowhere
-// is not found.
+// A collection only on disk is deleted with its files; one that exists nowhere is not found.
 #[test]
 fn deleting_removes_a_collection_that_is_only_on_disk() {
     let data_dir = concat!(
@@ -243,14 +265,12 @@ fn deleting_removes_a_collection_that_is_only_on_disk() {
     .unwrap();
     assert!(!fresh.collection_manager.contains_loaded("docs"));
     assert_eq!(
-        fresh.collection_manager.discover_on_disk().unwrap(),
+        piramid_database::collection_names(data_dir).unwrap(),
         vec!["docs".to_string()]
     );
 
     fresh.collection_manager.delete("docs").unwrap();
-    assert!(fresh
-        .collection_manager
-        .discover_on_disk()
+    assert!(piramid_database::collection_names(data_dir)
         .unwrap()
         .is_empty());
     assert!(

@@ -1,5 +1,4 @@
-//! NVIDIA CUDA backend, built on cudarc; compiled only under the gpu-cuda feature. cudarc types
-//! never leave this file.
+//! NVIDIA CUDA backend on cudarc, compiled only under gpu-cuda; cudarc types never leave this file.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -93,8 +92,7 @@ impl DeviceRuntime for CudaRuntime {
         if size_bytes == 0 {
             return Ok(DeviceAllocation { ptr: 0, size_bytes });
         }
-        // SAFETY: the context is bound to this thread, and the returned address is owned by the
-        // DeviceAllocation until free releases it.
+        // SAFETY: the context is bound to this thread and free releases the returned address later.
         let ptr = unsafe { result::malloc_sync(size_bytes) }
             .map_err(|e| GpuError::Allocation(format!("{size_bytes} bytes: {e}")))?;
         Ok(DeviceAllocation { ptr, size_bytes })
@@ -107,8 +105,7 @@ impl DeviceRuntime for CudaRuntime {
         }
         self.bind()?;
         self.synchronize()?;
-        // SAFETY: the address came from allocate on this context, is freed once by the owning
-        // buffer, and every stream has finished using it after the synchronize above.
+        // SAFETY: the address came from allocate on this context and every stream is done with it.
         unsafe { result::free_sync(allocation.ptr) }.map_err(runtime)
     }
 
@@ -126,8 +123,7 @@ impl DeviceRuntime for CudaRuntime {
         }
         let stream = self.stream(stream)?;
         self.bind()?;
-        // SAFETY: dst is a live device region of at least src.len() bytes on this context, and
-        // src stays borrowed until the stream synchronize below has completed the copy.
+        // SAFETY: dst is a live device region of at least src.len() bytes on this context.
         unsafe { result::memcpy_htod_async(dst.ptr, src, stream.cu_stream()) }
             .map_err(|e| GpuError::Transfer(e.to_string()))?;
         stream.synchronize().map_err(runtime)
@@ -147,8 +143,7 @@ impl DeviceRuntime for CudaRuntime {
         }
         let stream = self.stream(stream)?;
         self.bind()?;
-        // SAFETY: src is a live device region of at least dst.len() bytes on this context, and
-        // dst stays exclusively borrowed until the stream synchronize below has completed the copy.
+        // SAFETY: src is a live device region of at least dst.len() bytes on this context.
         unsafe { result::memcpy_dtoh_async(dst, src.ptr, stream.cu_stream()) }
             .map_err(|e| GpuError::Transfer(e.to_string()))?;
         stream.synchronize().map_err(runtime)
@@ -225,10 +220,7 @@ impl DeviceRuntime for CudaRuntime {
             block_dim: config.block,
             shared_mem_bytes: config.shared_memory_bytes,
         };
-        // SAFETY: func was loaded from a module on this context, every argument is borrowed from
-        // args for the whole call in the order the kernel declares, and every pointer argument
-        // names device memory on this context that the caller keeps alive until the stream has
-        // executed the launch.
+        // SAFETY: func loaded from a module on this context; pointer args name live device memory.
         unsafe { builder.launch(config) }
             .map(|_| ())
             .map_err(|e| GpuError::Launch(format!("{function}: {e}")))

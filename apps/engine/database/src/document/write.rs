@@ -25,8 +25,7 @@ fn check_scorable(collection: &Collection, vector: &[f32]) -> Result<()> {
     }
 }
 
-/// Validate and encode one document, touching nothing. replacing is true when the document takes
-/// the place of one already stored, which does not grow the vector count.
+/// Validate and encode one document, touching nothing; replacing is true when it overwrites one.
 fn prepare(collection: &Collection, entry: &Document, replacing: bool) -> Result<Vec<u8>> {
     check_width(collection, entry.vector())?;
     let bytes = RecordStore::encode_document(entry)?;

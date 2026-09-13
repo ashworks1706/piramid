@@ -19,15 +19,13 @@ pub struct MetricsResponse {
     pub embedding: EmbeddingMetricsResponse,
     /// Processor and memory use of the host and of the server process.
     pub host: HostMetricsResponse,
-    /// Memory, utilisation and temperature of each GPU the server measured. Left out when it
-    /// measured none.
+    /// Memory, utilisation and temperature of each GPU the server measured.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub gpus: Vec<GpuMetricsResponse>,
     /// How the device memory budget is divided and used. Left out when no GPU is open.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_budget: Option<GpuBudgetResponse>,
-    /// Generation counters and the state of the scheduler and key/value cache. Left out when no
-    /// model is loaded.
+    /// Generation counters and the state of the scheduler and key/value cache.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference: Option<InferenceMetricsResponse>,
 }
@@ -130,8 +128,7 @@ pub struct CollectionMetrics {
 pub struct WalStats {
     /// Collection name.
     pub collection: String,
-    /// Time of the last checkpoint since the collection was opened, in seconds since the Unix
-    /// epoch. Null when not yet checkpointed.
+    /// Time of the last checkpoint, in seconds since the Unix epoch. Null when not yet checkpointed.
     pub last_checkpoint: Option<u64>,
     /// Seconds since the last checkpoint. Null whenever last_checkpoint is null.
     pub checkpoint_age_secs: Option<u64>,
@@ -154,8 +151,7 @@ pub struct EmbeddingMetricsResponse {
     pub avg_latency_ms: Option<f32>,
 }
 
-/// Processor and memory use of the host and of the server process. A field the server could not
-/// measure is left out.
+/// Processor and memory use of the host and of the server process.
 #[derive(Debug, Default, Serialize)]
 pub struct HostMetricsResponse {
     /// Processor use of the whole host, 0 to 100.
@@ -175,8 +171,7 @@ pub struct HostMetricsResponse {
     pub process_resident_bytes: Option<u64>,
 }
 
-/// Memory, utilisation and temperature of one GPU. A field the server could not measure is left
-/// out.
+/// Memory, utilisation and temperature of one GPU.
 #[derive(Debug, Default, Serialize)]
 pub struct GpuMetricsResponse {
     /// Index of the device as the driver enumerates it.

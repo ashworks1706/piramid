@@ -39,7 +39,7 @@ just doctor       # checks every tool above
 ## Run
 
 ```bash
-just cli                      # the console: units, collections, config
+just cli                      # the console: units, collections, config, device
 just serve                    # just the server, on http://127.0.0.1:6333
 just piramid support-bundle   # diagnostics for a bug report
 ```
@@ -66,18 +66,19 @@ changes touch. `git commit --no-verify` skips it once.
 Settings resolve in this order, with later winning:
 
 1. defaults in `apps/engine/core/src/config`
-2. a YAML or JSON file named by `CONFIG_FILE`
-3. environment variables
-4. `piramid serve --config`, `--port` and `--data-dir`, which name the file, replace the port of
-   `startup.bind` and replace `startup.data_dir`
+2. a YAML or JSON file, named by `piramid serve --config` or, without that flag, by `CONFIG_FILE`
+3. `PIRAMID__` environment variables
+4. `piramid serve --port` and `--data-dir`, which replace the port of `startup.bind` and
+   `startup.data_dir`
 
 [`config.example.yaml`](../config.example.yaml) is the whole surface, every value at its default,
 and a test asserts it stays that way. `startup.logging.config: true` logs what actually resolved.
 
-The file has two blocks, split by when a setting takes effect. `startup:` is applied once at
+The file has three blocks, split by when a setting takes effect. `startup:` is applied once at
 boot, so changing a startup setting needs a restart, and `POST /api/config/reload` refuses a file
 whose startup block differs from the running one. `runtime:` is re-read on reload, from the same
-file and flags the server started with.
+file and flags the server started with. `console:` is read when `piramid` starts with no
+subcommand and opens the console.
 
 Not every runtime setting reaches a collection that is already open. `search.parallel`, `limits`,
 the WAL checkpoint thresholds (`checkpoint_frequency`, `checkpoint_interval_secs`,
@@ -165,6 +166,13 @@ On the CPU, `runtime.inference.kv_cache.max_bytes` is required. On a GPU, set
 `startup.hardware.profile: gpu` and `runtime.execution: gpu`; the model then loads onto
 `cuda:N` at `startup.hardware.gpu.device_ordinal`. A build without `inference-candle` refuses
 `runtime.inference.enabled: true` at startup. `GET /api/model` shows what loaded.
+
+From there the path is the one a user follows. `POST /api/collections/{collection}/embed` embeds
+texts with the configured provider and stores them, `POST /api/generate` with a `retrieval` block
+searches a collection and answers from the passages it finds, and `POST /v1/chat/completions` serves
+the same model to OpenAI clients without retrieval. Steps 5 to 7 of the
+[README quickstart](../README.md#quickstart) show each request and its response. `just cli` opens
+the console on the running server.
 
 Generation on a real checkpoint has its own tests, marked ignored so the normal gate does not need
 a model. `PIRAMID_TEST_MODEL` names the checkpoint directory:

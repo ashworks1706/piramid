@@ -1,5 +1,4 @@
-//! Generation through the public manager on a real checkpoint. Needs PIRAMID_TEST_MODEL pointing
-//! at a Qwen2.5-0.5B-Instruct directory; run with just test-model.
+//! Generation through the public manager on a real checkpoint; run with just test-model.
 #![cfg(feature = "inference-candle")]
 #![allow(
     clippy::unwrap_used,

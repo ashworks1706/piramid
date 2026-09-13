@@ -11,8 +11,7 @@ use crate::services::api::*;
 use crate::services::vector;
 use crate::state::SharedState;
 
-/// POST /api/collections/{collection}/vectors: inserts documents, creating the collection
-/// if needed.
+/// POST /api/collections/{collection}/vectors: inserts documents, creating the collection.
 pub async fn insert_vector(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
@@ -70,8 +69,7 @@ pub async fn search_vectors(
     )?))
 }
 
-/// POST /api/collections/{collection}/upsert: inserts or replaces one document, creating the
-/// collection if needed.
+/// POST /api/collections/{collection}/upsert: inserts or replaces one document.
 pub async fn upsert_vector(
     State(state): State<SharedState>,
     Path(collection): Path<String>,

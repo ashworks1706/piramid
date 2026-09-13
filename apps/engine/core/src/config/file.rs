@@ -5,10 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{CollectionConfig, ConsoleConfig, DeviceSelection, RuntimeConfig, StartupConfig};
 
-/// The whole of config.yaml.
-///
-/// [StartupConfig] is baked into the process at boot, [RuntimeConfig] is re-read on reload, and
-/// [ConsoleConfig] is read by the terminal UI when it starts.
+/// The whole of config.yaml: startup settings, runtime settings, and console settings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
@@ -21,8 +18,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Validate every block, and reject a GPU profile paired with any execution mode but gpu, gpu
-    /// execution without the GPU profile, and an inference device the profile does not open.
+    /// Validates every block and checks the GPU profile and execution mode agree.
     pub fn validate(&self) -> Result<(), String> {
         if let Some(Ok(DeviceSelection::Cuda(ordinal))) = self
             .runtime

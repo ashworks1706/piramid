@@ -4,10 +4,7 @@
     reason = "assertions in tests"
 )]
 
-//! Offsets and documents written by bincode 1.3 decode with the storage codec and re-encode byte
-//! for byte, and a manifest written by bincode 1.3 is schema 1 and refused.
-//!
-//! The files under tests/fixtures/bincode1 were written by bincode 1.3.3 with bincode::serialize.
+//! Fixtures under tests/fixtures/bincode1, written by bincode 1.3.3, still decode fine.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

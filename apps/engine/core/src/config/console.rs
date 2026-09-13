@@ -6,9 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct ConsoleConfig {
-    /// Server to watch. Empty means the address [StartupConfig::bind] names.
-    ///
-    /// [StartupConfig::bind]: super::StartupConfig::bind
+    /// Server to watch. Empty means the address [super::StartupConfig::bind] names.
     pub base_url: String,
     /// Website to probe, shown only inside a checkout.
     pub web_url: String,
@@ -34,8 +32,6 @@ impl Default for ConsoleConfig {
 
 impl ConsoleConfig {
     /// The server to watch: base_url when set, otherwise the address bind names.
-    ///
-    /// A wildcard or empty bind host resolves to localhost on the same port.
     pub fn resolved_base_url(&self, bind: &str) -> String {
         if !self.base_url.is_empty() {
             return self.base_url.clone();

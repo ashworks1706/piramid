@@ -1,5 +1,4 @@
-//! Use cases behind the HTTP handlers: admission checks, lock acquisition, metrics, and the API
-//! shapes they take and return.
+//! Use cases behind the HTTP handlers, and the API shapes they take and return.
 
 pub mod admin;
 pub mod api;

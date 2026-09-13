@@ -4,11 +4,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 use crate::host::reading::{GpuReading, HostReading};
 
-/// Reads host processor and memory use.
-///
-/// Processor use is the change between two samples, so the first sample carries no processor
-/// fields. Samples taken closer together than [HostSampler::MINIMUM_INTERVAL] measure too short a
-/// span to be accurate.
+/// Reads host processor and memory use; the first sample carries no processor fields.
 #[derive(Debug)]
 pub struct HostSampler {
     system: System,
@@ -88,9 +84,6 @@ pub fn share_of_host(percent_of_one_cpu: f32, cpus: usize) -> f32 {
 }
 
 /// Reads memory, utilisation and temperature of every GPU the driver reports.
-///
-/// A build without the gpu-cuda feature, a machine without the NVIDIA Management Library, and a
-/// driver that reports no device all give no readings. The reason is logged once.
 #[derive(Debug)]
 pub struct GpuSampler {
     #[cfg(feature = "gpu-cuda")]

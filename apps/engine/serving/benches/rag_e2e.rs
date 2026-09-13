@@ -1,43 +1,4 @@
-//! End-to-end retrieval-augmented generation: embed, search, fetch, prefill and decode for every
-//! question of a dataset under each selected arm, written as JSON with a markdown table.
-//!
-//! Arms:
-//!
-//! closed-book: the question alone.
-//! before-prefill-http: passages from a separate piramid server through its search/text
-//! endpoint, placed before prefill.
-//! before-prefill-host: passages from an in-process collection scored by the host strategy.
-//! before-prefill-device: passages from an in-process collection scored on the GPU. Refused
-//! unless the build has the gpu-cuda feature and PIRAMID_BENCH_DEVICE is cuda:N, the device
-//! search runs on.
-//!
-//! Environment:
-//!
-//! PIRAMID_BENCH_MODEL: checkpoint directory. Required.
-//! PIRAMID_BENCH_DATASET: question file, one JSON object per line with id, question, answers,
-//! and passages of id, text and gold. Required.
-//! PIRAMID_BENCH_EMBEDDING: embedding provider as a JSON object with provider (openai or
-//! ollama), model and base_url. Required. The response cache is off.
-//! OPENAI_API_KEY: key sent to the openai provider. Unset sends none.
-//! PIRAMID_BENCH_DEVICE: cpu or cuda:N. Default cpu.
-//! PIRAMID_BENCH_QUESTIONS: questions read from the file. Default every question.
-//! PIRAMID_BENCH_K: passages retrieved per question. Default 5.
-//! PIRAMID_BENCH_ARMS: comma-separated arms, run in the order given. Default closed-book and
-//! before-prefill-host.
-//! PIRAMID_BENCH_OUT: results path. Default rag_e2e.json in the cargo target directory.
-//! PIRAMID_BENCH_SEARCH_URL: an /api/collections/NAME/search/text URL. Required by
-//! before-prefill-http. The harness inserts every passage, with its embedding, into that
-//! collection before the run. The collection starts empty, and the server embeds queries with
-//! the same model and with its embedding cache off.
-//! PIRAMID_BENCH_MAX_NEW_TOKENS: tokens generated per question. Default 32.
-//! PIRAMID_BENCH_KV_CACHE_BYTES: key/value cache budget. Default 2 GiB.
-//! PIRAMID_BENCH_WARMUP: questions run per arm before recording. Default 1.
-//!
-//! Sampling is greedy. Every passage is embedded once, stored with its dataset id in the
-//! passage_id metadata field, and each retrieving arm searches with k. Retrieved passages enter
-//! the prompt through the same system message the generate endpoint builds. For the in-process
-//! arms, search_ms includes reading the returned documents and fetch_ms is the time to take
-//! passage ids and texts out of the hits.
+//! End-to-end RAG benchmark: embed, search, prefill and decode per question, set by env vars.
 
 #[path = "rag_e2e/dataset.rs"]
 mod dataset;

@@ -14,6 +14,7 @@ use piramid::{console, support};
 use piramid::{embeddings, http};
 use tokio::runtime::Runtime;
 
+/// Piramid, an inference engine for RAG on one GPU
 #[derive(Parser)]
 #[command(author, version)]
 struct Cli {
@@ -23,28 +24,28 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run the server in the foreground, with no terminal UI
+    /// Run the server in the foreground: the HTTP API, and the model when inference is enabled
     Serve {
-        /// Config file to load
+        /// Config file to load, .yaml, .yml or .json. Defaults to CONFIG_FILE when set
         #[arg(long)]
         config: Option<PathBuf>,
-        /// Port to bind
+        /// Port to bind, replacing the port of startup.bind
         #[arg(long)]
         port: Option<u16>,
-        /// Data directory
+        /// Directory holding the collections, replacing startup.data_dir
         #[arg(long)]
         data_dir: Option<PathBuf>,
     },
 
-    /// Write a diagnostic bundle to attach to a bug report. Secrets are redacted, review it first
+    /// Write a diagnostic report to attach to a bug report about a serve deployment
     SupportBundle {
-        /// Where to write the bundle
+        /// Where to write the report
         #[arg(long, short, default_value = "piramid-support-bundle.md")]
         output: PathBuf,
-        /// Config file to load
+        /// Config file to load, the one serve uses. Defaults to CONFIG_FILE when set
         #[arg(long)]
         config: Option<PathBuf>,
-        /// Data directory to inspect
+        /// Data directory to inspect, replacing startup.data_dir
         #[arg(long)]
         data_dir: Option<PathBuf>,
     },
@@ -82,8 +83,7 @@ fn main() {
                 piramid::config::loader::load_from(&source).unwrap_or_else(exit_on_config_error);
             run_or_exit(|| start_server_inline(config, source), "piramid serve");
         }
-        // No subcommand opens the console. Inside a checkout it can drive the repo as well as
-        // the server; an installed binary gets the views that need only a server.
+        // No subcommand opens the console.
         None => {
             let config = piramid::config::loader::load().unwrap_or_else(exit_on_config_error);
             let cwd = match std::env::current_dir() {
@@ -131,40 +131,19 @@ fn support_bundle(
 ) -> std::io::Result<()> {
     let source = config_source(config, None, data_dir);
     let config = piramid::config::loader::load_from(&source).unwrap_or_else(exit_on_config_error);
-    let state = std::sync::Arc::new(
-        AppState::new(config.clone(), embeddings::EmbeddingsManager::disabled())
-            .map_err(std::io::Error::other)?,
-    );
-    let failed = preload_collections_for_metrics(&state)?;
+    let config_file = source
+        .file
+        .clone()
+        .or_else(|| std::env::var_os("CONFIG_FILE").map(PathBuf::from));
 
     let bundle = support::Bundle {
         config: &config,
-        config_file: source.file.as_deref(),
-        state: &state,
-        failed_collections: &failed,
+        config_file: config_file.as_deref(),
     };
     support::write(&bundle, &output)?;
     println!("wrote {}", output.display());
-    println!("Review it before sharing — it contains your configuration and collection names.");
+    println!("Review it before sharing. It contains your configuration and collection names.");
     Ok(())
-}
-
-/// Open every collection on disk and return the name and error of each one that fails to open.
-fn preload_collections_for_metrics(
-    state: &std::sync::Arc<AppState>,
-) -> std::io::Result<Vec<(String, String)>> {
-    let names = state
-        .collection_manager
-        .discover_on_disk()
-        .map_err(std::io::Error::other)?;
-    let mut failed = Vec::new();
-    for collection_name in names {
-        if let Err(error) = state.get_existing_collection(&collection_name) {
-            eprintln!("Collection '{collection_name}' failed to open: {error}");
-            failed.push((collection_name, error.to_string()));
-        }
-    }
-    Ok(failed)
 }
 
 fn start_server_inline(
@@ -289,8 +268,6 @@ fn install_gpu(_manager: &piramid::gpu::GpuManager, _block_size: u32) -> std::io
 }
 
 /// A future that completes on the first SIGINT or SIGTERM.
-///
-/// Returns an error if a handler cannot be installed.
 #[cfg(unix)]
 fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
     use tokio::signal::unix::{signal, SignalKind};
@@ -316,8 +293,6 @@ fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
 }
 
 /// Build the global rayon pool. Called once, before any collection opens.
-///
-/// Returns an error if the global pool cannot be built.
 fn init_thread_pool(startup: &StartupConfig) -> std::io::Result<()> {
     rayon::ThreadPoolBuilder::new()
         .num_threads(startup.num_threads())

@@ -154,8 +154,7 @@ fn filler(count: usize, seed: u64) -> Vec<f32> {
         .collect()
 }
 
-/// Every available strategy scores a batch within 1e-5 of the scalar reference, row for row,
-/// at widths with and without a lane remainder and with a zero row in the slab.
+/// Every available strategy scores a batch within 1e-5 of the scalar reference, row for row.
 #[test]
 fn every_batch_kernel_matches_the_scalar_reference() {
     use piramid_hardware::compute::strategies::{all, ScalarStrategy};

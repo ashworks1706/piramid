@@ -1,5 +1,4 @@
-//! Packing sequences into forward steps: decode tokens first, then prefill chunks of sequences
-//! already running, then newly admitted prompts, within the batch, token and page limits.
+//! Packs sequences into forward steps under the batch, token and page limits.
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -94,8 +93,7 @@ pub struct PlannedEntry {
     pub samples: bool,
 }
 
-/// A step ready to run, the sequences preempted to make room for it, and the sequences that could
-/// not be planned.
+/// A step ready to run, plus the sequences preempted or dropped to make room for it.
 #[derive(Debug)]
 pub struct PlannedStep<P> {
     /// The batch for the driver.
@@ -305,9 +303,7 @@ impl<P> Scheduler<P> {
         self.waiting.push_front(sequence);
     }
 
-    /// Reserve pages for the sequence at index to hold needed tokens, preempting the most recently
-    /// arrived running sequences outside the step until it fits. Returns the sequence's index after
-    /// preemption, or None when preempting every other sequence cannot make room.
+    /// Reserves pages for the sequence at index, preempting others until it fits, or None if it can't.
     fn make_room(
         &mut self,
         mut index: usize,
@@ -337,9 +333,7 @@ impl<P> Scheduler<P> {
         }
     }
 
-    /// Add count tokens of the sequence at index to the step. When its pages cannot take them, the
-    /// sequence is removed from running with its pages released and moved to the step's failed
-    /// list. Returns whether the entry was added.
+    /// Adds count tokens of the sequence at index to the step, returning whether it was added.
     fn push_entry(&mut self, index: usize, count: usize, step: &mut PlannedStep<P>) -> bool {
         let sequence = &mut self.running[index];
         let start = sequence.computed;
@@ -391,8 +385,7 @@ impl<P> Scheduler<P> {
         }
     }
 
-    /// Remove a running or waiting sequence, releasing its pages. Its computed prefix becomes
-    /// shareable with later prompts.
+    /// Removes a running or waiting sequence, releasing its pages and publishing its prefix for reuse.
     pub fn remove(&mut self, id: u64) -> Option<Sequence<P>> {
         let mut sequence = if let Some(index) = self.running.iter().position(|s| s.id == id) {
             self.running.remove(index)

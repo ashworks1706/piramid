@@ -1,9 +1,4 @@
 //! Settings re-read after POST /config/reload.
-//!
-//! A reload applies batch search parallelism, limits, WAL checkpoint thresholds and the execution
-//! mode to collections already open. A change to runtime.search.metric applies to collections
-//! created afterwards. A change to a setting read only when a collection
-//! opens refuses the reload while any collection is open.
 
 use serde::{Deserialize, Serialize};
 

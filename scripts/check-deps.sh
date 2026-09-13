@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Verify the workspace dependency rule from docs/ARCHITECTURE.md.
-# Run by just check-rust, the pre-commit hook, and CI.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -25,8 +24,7 @@ piramid -> piramid-serving
 EOF
 )
 
-# Every in-repo edge Cargo actually sees (path dependencies between workspace members). A crate's
-# dev-dependency on itself turns on its test-support feature and is not an edge.
+# Every in-repo edge Cargo actually sees (path dependencies between workspace members).
 ACTUAL=$(cargo metadata --format-version 1 --no-deps \
   | jq -r '.packages[] | .name as $from | .dependencies[]
            | select(.path != null)

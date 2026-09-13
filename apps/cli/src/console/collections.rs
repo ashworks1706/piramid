@@ -5,7 +5,9 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use super::client::{Client, ClientError, CollectionHealth, CollectionMetrics, Snapshot, WalStats};
+use super::client::{
+    Client, ClientError, CollectionHealth, CollectionInfo, CollectionMetrics, Snapshot, WalStats,
+};
 
 /// How many samples the latency sparkline keeps per collection.
 const HISTORY: usize = 240;
@@ -19,6 +21,8 @@ pub struct Row {
     pub metrics: Option<CollectionMetrics>,
     /// Durability, from the same response.
     pub wal: Option<WalStats>,
+    /// Summary from the collection list, absent for a collection that is not open.
+    pub info: Option<CollectionInfo>,
     /// What readiness says about it.
     pub health: Option<CollectionHealth>,
 }
@@ -27,6 +31,16 @@ impl Row {
     /// Vectors held, or None for a collection that has not been opened.
     pub fn vectors(&self) -> Option<usize> {
         self.metrics.as_ref().map(|m| m.vector_count)
+    }
+
+    /// Vector width, or None when the collection is not open or stores no vector yet.
+    pub fn dimension(&self) -> Option<usize> {
+        self.info.as_ref().and_then(|info| info.dimensions)
+    }
+
+    /// The metric the collection scores with, or None when the collection is not open.
+    pub fn metric(&self) -> Option<&str> {
+        self.info.as_ref().map(|info| info.metric.as_str())
     }
 
     /// Whether the server has this collection open.
@@ -153,9 +167,7 @@ impl Collections {
         }
     }
 
-    /// Folds metrics, WAL stats and readiness into one row per collection.
-    ///
-    /// Readiness decides which collections exist; metrics fills in the ones already open.
+    /// Folds metrics, WAL stats, the collection list and readiness into one row per collection.
     fn rebuild_rows(&mut self, snapshot: &Snapshot) {
         let selected = self.current().map(|r| r.name.clone());
         let mut rows: HashMap<String, Row> = HashMap::new();
@@ -173,10 +185,15 @@ impl Collections {
             }
             row.metrics = Some(metrics.clone());
         }
-        // A durability stat attaches to an existing row and never creates one.
+        // A durability stat or a summary attaches to an existing row and never creates one.
         for wal in &snapshot.metrics.wal_stats {
             if let Some(row) = rows.get_mut(&wal.collection) {
                 row.wal = Some(wal.clone());
+            }
+        }
+        for info in &snapshot.list.collections {
+            if let Some(row) = rows.get_mut(&info.name) {
+                row.info = Some(info.clone());
             }
         }
         let mut rows: Vec<Row> = rows

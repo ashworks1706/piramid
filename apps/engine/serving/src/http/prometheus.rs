@@ -309,8 +309,7 @@ fn render_inference(registry: &mut Registry, inference: &InferenceMetricsRespons
     }
 }
 
-/// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
-/// server could not measure.
+/// Writes one GPU reading per device labelled by its index, skipping ones it could not measure.
 pub fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
     let by_device = |extract: fn(&GpuMetricsResponse) -> Option<f64>| {
         gpus.iter()

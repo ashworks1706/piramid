@@ -1,5 +1,4 @@
-//! Batched distance kernels: one query against a contiguous slab of candidates, and top-k
-//! selection over the scores, all on the device. The device code is distance.cu beside this file.
+//! Batched distance kernels: one query against a slab of candidates, plus top-k selection.
 
 use crate::gpu::buffer::DeviceBuffer;
 use crate::gpu::device::Device;
@@ -97,8 +96,7 @@ impl DistanceModule {
         self.module.device()
     }
 
-    /// Queue the batched cosine-similarity kernel. query_norm_squared is the sum of squares of
-    /// the query. A row scores NaN when it or the query has zero magnitude.
+    /// Queue the batched cosine-similarity kernel; scores NaN when a row or the query is zero.
     pub fn cosine_batch(
         &self,
         launch: DistanceLaunch<'_>,
@@ -161,8 +159,7 @@ impl DistanceModule {
         )
     }
 
-    /// Select the k highest of the first rows scores, on the device. NaN scores are never
-    /// selected.
+    /// Select the k highest of the first rows scores, on the device; NaN scores are never picked.
     pub fn top_k(
         &self,
         scores: &DeviceBuffer<f32>,

@@ -26,15 +26,19 @@ I care a lot about quality of writing in PRs and docs. Please include citations/
 
 ## Development expectations
 
-At minimum, run:
+At minimum, run `just check` from the repository root. It runs the same gate as CI:
 
-- `cargo fmt`
-- `cargo clippy --all-targets --all-features`
-- `cargo test --locked`
+- `cargo fmt --all --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo test --workspace`
+- `scripts/check-deps.sh`, which enforces the dependency rule between crates
+- the website lint
+
+None of these needs a CUDA toolkit. `just check-features` compile-checks the `gpu-cuda` and `inference-candle` builds as well, and that one does.
 
 For changes to storage, search or generation behavior, add or extend tests in the crate's `tests/` directory. Prefer small, focused changes over broad rewrites.
 
-Code style-wise: prefer `tracing` over `println!`, keep names explicit, and add comments only where intent is non-obvious. Avoid `unsafe` unless there is a measured need and a clear justification.
+Code style-wise: use `tracing` rather than `println!`, keep names explicit, give every public item a `///` comment saying what it is, and follow the rules in [AGENTS.md](https://github.com/ashworks1706/piramid/blob/main/AGENTS.md). `unsafe` is denied outside five audited sites, and a new one needs a strong case.
 
 If you change API behavior, update docs accordingly and call out breaking changes directly in the PR description.
 
@@ -42,8 +46,8 @@ Also if you think the changes you made deserve to be in the blogs, please feel f
 
 ## Scope notes
 
-Current focus is the inference engine: generation on one GPU, with retrieval from the document store running in the same process. SDK changes are welcome only when discussed first.
+Current focus is the inference engine: generation on one GPU, with retrieval from the document collections running in the same process. Approximate nearest neighbour indexes, clustering, and other vector database features are out of scope. SDK changes are welcome only when discussed first.
 
 ## Security / reporting
 
-For security concerns, please contact the maintainer directly via GitHub profile instead of opening a public vulnerability issue.
+Report vulnerabilities through [GitHub Security Advisories](https://github.com/ashworks1706/piramid/security/advisories/new) instead of opening a public issue. [SECURITY.md](https://github.com/ashworks1706/piramid/blob/main/SECURITY.md) has the details.

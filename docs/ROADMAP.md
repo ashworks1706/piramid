@@ -16,7 +16,7 @@ One model, one GPU, batch size one, no HTTP.
 - [x] prove the model runtime and our device runtime can share one device with no host round trip
 - [x] run a model on the same device retrieval uses
 - [ ] the first real `RetrievalHook` implementation, in its own crate
-- [ ] an end-to-end benchmark: embed, search, fetch, prefill, decode, reporting TTFT,
+- [x] an end-to-end benchmark: embed, search, fetch, prefill, decode, reporting TTFT,
       tokens/sec and recall
 - [ ] report TTFT, tokens/sec and retrieval-hook latency as metrics, graphed in the device view
 - [ ] measure the configurations that matter against it, with retrieval-before-prefill as control

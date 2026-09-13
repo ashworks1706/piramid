@@ -3,9 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! The generation endpoints over TCP, and the prompt and sampling rules behind them. Without a
-//! model they answer 503; with PIRAMID_TEST_MODEL naming a Qwen2.5-0.5B-Instruct directory, the
-//! ignored tests generate for real.
+//! The generation endpoints over TCP, and the prompt and sampling rules behind them.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};

@@ -1,5 +1,4 @@
-//! Generation counters: requests, tokens, time to first token, decode speed, and the state of the
-//! scheduler and key/value cache.
+//! Generation counters: requests, tokens, latency, decode speed, scheduler and cache state.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -122,8 +121,7 @@ impl InferenceMetrics {
             .fetch_add(saturating_nanos(elapsed), Ordering::Relaxed);
     }
 
-    /// Record one forward step: how many tokens were prefill and decode, and how long it took.
-    /// The time is split between the two in proportion to their tokens.
+    /// Record one forward step: prefill and decode token counts, time split between them by count.
     pub fn record_step(
         &self,
         batch_size: u64,

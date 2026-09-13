@@ -39,8 +39,7 @@ struct ManifestHeader {
 }
 
 impl CollectionMetadata {
-    /// A manifest for an empty collection measured by metric, created now. Errors when the clock
-    /// reads before 1970.
+    /// A manifest for an empty collection measured by metric, created now.
     pub fn new(name: String, metric: Metric) -> Result<Self> {
         let now = piramid_core::clock::unix_secs()?;
 
@@ -55,11 +54,7 @@ impl CollectionMetadata {
         })
     }
 
-    /// Decode a manifest from its stored bytes.
-    ///
-    /// Errors with [StorageError::LegacyManifest] for a schema 1 manifest, with
-    /// [StorageError::UnsupportedManifest] for any other version than [SCHEMA_VERSION], and with
-    /// [StorageError::CorruptedData] for bytes that do not decode.
+    /// Decode a manifest from its stored bytes, erroring on a legacy, unsupported, or corrupt one.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
         let header: ManifestHeader = codec::decode_prefix(bytes)
             .map_err(|e| StorageError::CorruptedData(format!("failed to read manifest: {e}")))?;
@@ -101,8 +96,7 @@ impl CollectionMetadata {
         }
     }
 
-    /// Set the live document count and touch the manifest. Errors when the clock reads before
-    /// 1970, leaving the manifest unchanged.
+    /// Set the live document count and touch the manifest.
     pub fn update_vector_count(&mut self, count: usize) -> Result<()> {
         self.touch()?;
         self.vector_count = count;

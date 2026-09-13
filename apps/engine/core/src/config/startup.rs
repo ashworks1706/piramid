@@ -1,7 +1,4 @@
-//! Settings applied once, when the process starts.
-//!
-//! Changing any of these needs a restart. /config/reload refuses a file whose startup block
-//! differs from the one the process booted with.
+//! Settings applied once at boot; changing any of these needs a restart.
 
 use serde::{Deserialize, Serialize};
 
@@ -59,8 +56,7 @@ impl StartupConfig {
         self.threads.unwrap_or_else(num_cpus::get)
     }
 
-    /// Reject an unparseable bind address, zero threads, an OTLP block this build or logging cannot
-    /// export, an unenforced memory budget, or an invalid embedding, GPU or HTTP setting.
+    /// Reject a bad bind address, zero threads, an unusable OTLP setup, or an invalid sub-config.
     pub fn validate(&self) -> Result<(), String> {
         if self.bind.parse::<std::net::SocketAddr>().is_err() {
             return Err(format!(

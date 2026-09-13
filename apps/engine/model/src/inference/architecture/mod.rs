@@ -1,5 +1,4 @@
-//! Model architectures and the contract a backend implements to run one: [ModelSpec] is what a
-//! checkpoint declares, [DecoderModel] is one loaded model driven layer by layer.
+//! Model architectures: [ModelSpec] is what a checkpoint declares, [DecoderModel] runs one.
 
 use std::path::Path;
 
@@ -252,8 +251,7 @@ impl ModelSpec {
         })
     }
 
-    /// Weight elements the checkpoint holds for this architecture, counting a tied output
-    /// projection once.
+    /// Weight elements the checkpoint holds, counting a tied output projection once.
     pub fn parameter_count(&self) -> u64 {
         let h = self.hidden_size as u64;
         let head_dim = self.head_dim as u64;
@@ -344,8 +342,7 @@ pub trait DecoderModel: Send {
     /// Run one decoder layer over the pass, writing its keys and values to the cache.
     fn layer(&mut self, pass: &mut Self::Pass, layer: usize) -> Result<(), InferenceError>;
 
-    /// Hand the hidden states of one sequence of the pass to visit, which may change them. On a
-    /// device, visit also receives the stream the model's work is queued on.
+    /// Hand one sequence's hidden states to visit, which may change them, plus the device stream.
     fn with_hidden(
         &mut self,
         pass: &mut Self::Pass,
@@ -356,7 +353,6 @@ pub trait DecoderModel: Send {
     /// Normalise and project, returning the last-token logits of every sequence that asked.
     fn finish(&mut self, pass: Self::Pass) -> Result<Vec<Vec<f32>>, InferenceError>;
 
-    /// Normalise, returning the last-token hidden state of every sequence that asked, without the
-    /// output projection.
+    /// Like finish but returns the hidden state instead of running the output projection.
     fn pool(&mut self, pass: Self::Pass) -> Result<Vec<Vec<f32>>, InferenceError>;
 }

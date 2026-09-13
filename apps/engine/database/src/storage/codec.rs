@@ -1,5 +1,4 @@
-//! The binary encoding of every record and sidecar: bincode with fixed-width little-endian
-//! integers and u64 length prefixes.
+//! The binary encoding of every record and sidecar: bincode, fixed-width little-endian.
 
 use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 use serde::de::DeserializeOwned;

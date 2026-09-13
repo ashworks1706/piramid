@@ -21,8 +21,6 @@ pub enum RetrievalPoint {
 }
 
 /// Where the hidden state for the current position lives.
-///
-/// A hook that implements only one of the two paths returns an error on the other.
 #[derive(Debug)]
 pub enum HiddenState<'a> {
     /// Host memory, laid out as batch by hidden_dim. The CPU path.
@@ -31,8 +29,7 @@ pub enum HiddenState<'a> {
     Device(&'a mut DeviceBuffer<f32>),
 }
 
-/// Read-only view handed to [RetrievalHook::launch]. Carries enough to build a query, and no
-/// access to the hidden state.
+/// Read-only view handed to [RetrievalHook::launch]. No access to the hidden state.
 #[derive(Debug)]
 pub struct RetrievalRequest<'a> {
     /// Where in the pass this invocation sits.
@@ -41,14 +38,11 @@ pub struct RetrievalRequest<'a> {
     pub tokens: &'a [u32],
     /// Width of the hidden dimension.
     pub hidden_dim: usize,
-    /// The stream that model work is queued on, when running on a device. A hook that issues
-    /// device work uses a stream of its own, and orders against this one in
-    /// [PendingRetrieval::join].
+    /// The stream that model work is queued on, when running on a device.
     pub stream: Option<&'a Stream>,
 }
 
-/// Mutable view of the forward pass, handed to [PendingRetrieval::join] when the result is
-/// needed.
+/// Mutable view of the forward pass, handed to [PendingRetrieval::join] when the result is needed.
 #[derive(Debug)]
 pub struct ForwardContext<'a> {
     /// Where in the pass this invocation sits.
@@ -62,13 +56,8 @@ pub struct ForwardContext<'a> {
 }
 
 /// Retrieval that has been started and not yet fused.
-///
-/// Held by the driver across whatever model work it can do in the meantime.
 pub trait PendingRetrieval: Send {
-    /// Wait for the result and fuse it into the hidden state carried by ctx.
-    ///
-    /// On a device this orders the model stream against the hook stream without synchronizing the
-    /// host.
+    /// Waits for the result and fuses it into the hidden state carried by ctx.
     fn join(self: Box<Self>, ctx: &mut ForwardContext<'_>) -> Result<()>;
 }
 

@@ -1,9 +1,14 @@
 # Piramid configuration.
 #
 # Every value below is the default, so an empty file and this file behave identically. Point the
-# server at one with CONFIG_FILE=config.yaml, and read what resolved from GET /api/config.
+# server at one with piramid serve --config config.yaml or CONFIG_FILE=config.yaml, and read what
+# resolved from GET /api/config.
 #
-# There are two blocks, split by when a setting takes effect:
+# A minimal file for serving RAG sets startup.embedding, runtime.inference.enabled and
+# runtime.inference.model_path, plus startup.hardware.profile: gpu and runtime.execution: gpu on a
+# GPU, or runtime.inference.kv_cache.max_bytes on the cpu.
+#
+# There are three blocks, split by when a setting takes effect:
 #
 #   startup:  applied once at boot. Changing one needs a restart, and POST /api/config/reload
 #             refuses a file whose startup block differs from the running one.
@@ -11,6 +16,7 @@
 #             checkpoint thresholds and execution reach open collections; a change to anything
 #             read when a collection opens is refused while one is open. search.metric applies
 #             to collections created afterwards.
+#   console:  read when piramid starts with no subcommand and opens the terminal UI.
 #
 # Any key can also be set from the environment, spelled from its path:
 # runtime.wal.max_log_size is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so

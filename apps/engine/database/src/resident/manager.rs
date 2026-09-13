@@ -7,9 +7,7 @@ use crate::storage::vectors::VectorReader;
 use piramid_core::metadata::Metadata;
 use uuid::Uuid;
 
-/// The resident state of one collection.
-///
-/// Owns the [VectorStore] and the [MetadataStore]. Every live document has an entry in both.
+/// The resident state of one collection: a [VectorStore] and [MetadataStore] with matching entries.
 #[derive(Default)]
 pub struct ResidentManager {
     store: VectorStore,

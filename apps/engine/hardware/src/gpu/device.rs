@@ -19,8 +19,7 @@ pub struct DeviceCapabilities {
     pub total_memory_bytes: u64,
 }
 
-/// The contract a device runtime satisfies, implemented per vendor backend under
-/// [crate::gpu::backends]. Streams and modules are named by the identifiers the runtime hands out.
+/// The contract a device runtime satisfies, implemented per vendor backend.
 pub trait DeviceRuntime: Send + Sync + std::fmt::Debug {
     /// Backend name, such as cudarc.
     fn name(&self) -> &'static str;

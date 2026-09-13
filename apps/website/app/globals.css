@@ -60,8 +60,7 @@ body {
 
 .cli-animation {
   font-family: var(--mono);
-  /* 83 columns at a 0.6em advance are 49.8em wide. Capped at 16px. The vw line applies where cqi
-     is unsupported. */
+  /* 83 columns at a 0.6em advance are 49.8em wide, capped at 16px; vw is the fallback for cqi. */
   font-size: min(16px, calc((100vw - 2.5rem) / 49.8));
   font-size: min(16px, calc(100cqi / 49.8));
   line-height: 1.2;
@@ -100,7 +99,8 @@ body {
   background: var(--navy);
   color: var(--fg);
   padding: 0.5rem 0.95rem;
-  white-space: nowrap;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .landing-install::before {

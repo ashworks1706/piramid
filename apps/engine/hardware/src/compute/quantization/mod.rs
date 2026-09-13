@@ -97,8 +97,7 @@ pub struct ProductQuantizedVector {
 }
 
 impl ProductQuantizedVector {
-    /// Quantize block-by-block into the requested number of blocks with per-block ranges. A block
-    /// count of zero, or one larger than the dimension of a non-empty vector, is an error.
+    /// Quantizes block by block into the requested number of blocks, erroring on a bad count.
     pub fn from_f32(vector: &[f32], subquantizers: usize) -> ComputeResult<Self> {
         if vector.is_empty() {
             return Ok(ProductQuantizedVector {
@@ -239,8 +238,7 @@ impl QuantizedVector {
         }
     }
 
-    /// Quantize block by block into subquantizers blocks. A block count of zero, or one larger
-    /// than the dimension of a non-empty vector, is an error.
+    /// Quantizes block by block into subquantizers blocks, erroring on a bad count.
     pub fn pq(vector: &[f32], subquantizers: usize) -> ComputeResult<Self> {
         let pq = ProductQuantizedVector::from_f32(vector, subquantizers)?;
         Ok(QuantizedVector {

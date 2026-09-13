@@ -235,8 +235,7 @@ fn reopening_under_another_metric_keeps_the_stored_metric() {
     );
 }
 
-/// Documents on a half circle, where only every tenth carries lang rust, so the best-scoring
-/// documents for a query along the x axis carry lang python.
+/// Documents on a half circle; only every tenth carries lang rust, so top scores are lang python.
 fn ring_documents() -> Vec<Document> {
     (0..200)
         .map(|i| {
@@ -251,8 +250,7 @@ fn ring_documents() -> Vec<Document> {
         .collect()
 }
 
-// A filtered search returns k matches even when every best-scoring document fails the filter,
-// before and after a delete leaves a hole in the slab.
+// Filtered search still returns k matches when the top scores fail the filter, hole or not.
 #[test]
 fn a_filtered_search_fills_k_when_the_best_documents_do_not_match() {
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_filter_fills_k.db");
@@ -325,8 +323,7 @@ fn a_filter_matching_fewer_than_k_returns_every_match() {
         .is_empty());
 }
 
-/// The contiguous slab, a scattered map and a store with a hole reach the kernel by different
-/// paths, and every one of them ranks a collection as scoring one pair at a time does.
+/// Slab, scattered map and holed store all reach the kernel differently but rank the same.
 #[test]
 fn every_scoring_path_ranks_a_collection_the_same_way() {
     let dim = 16;
@@ -398,8 +395,7 @@ fn document_with_id(id: Uuid, vector: &[f32]) -> Document {
     document
 }
 
-// A stored zero vector scores NaN under cosine and is never ranked, on the contiguous path and the
-// gathered one.
+// A stored zero vector scores NaN under cosine and is never ranked, slab or gathered.
 #[test]
 fn a_nan_score_is_not_ranked() {
     let mut vectors = HashMap::new();

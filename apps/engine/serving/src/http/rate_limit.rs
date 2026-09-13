@@ -25,8 +25,7 @@ pub struct RateLimit {
 }
 
 impl RateLimit {
-    /// A limiter for the configured rate and burst. A zero rate or burst, or a rate above one
-    /// request per nanosecond, is an error.
+    /// Builds a limiter for the configured rate and burst; errors on zero or an inhuman rate.
     pub fn new(config: &RateLimitConfig) -> Result<Self, String> {
         config.validate()?;
         let period_nanos = 1_000_000_000 / u64::from(config.requests_per_second);

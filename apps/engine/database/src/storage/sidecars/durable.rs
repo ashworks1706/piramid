@@ -26,8 +26,7 @@ pub(crate) fn tmp_path(path: &str) -> String {
     format!("{path}.tmp")
 }
 
-/// Write bytes to path through a synced temporary file and a durable rename, so path holds either
-/// its old contents or bytes.
+/// Replaces the file at path atomically, so a crash leaves either the old or the new bytes.
 pub(crate) fn write_atomic(path: &str, bytes: &[u8]) -> Result<()> {
     let tmp_path = tmp_path(path);
     let file = fs::File::create(&tmp_path)?;
