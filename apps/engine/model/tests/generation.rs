@@ -10,6 +10,7 @@
 use std::sync::Arc;
 
 use piramid_core::config::{HardwareConfig, InferenceConfig, SamplingConfig};
+use piramid_hardware::gpu::{BudgetSettings, GpuManager};
 use piramid_model::fusion::NoopRetrievalHook;
 use piramid_model::inference::batching::FinishReason;
 use piramid_model::inference::tokenizer::ChatMessage;
@@ -37,9 +38,22 @@ fn config(device: &str) -> InferenceConfig {
 }
 
 async fn check_reference(device: &str) {
+    let gpu = device.strip_prefix("cuda:").map(|ordinal| {
+        GpuManager::open(
+            ordinal.parse().unwrap(),
+            BudgetSettings {
+                limit_bytes: None,
+                reserve_bytes: 0,
+                shares: None,
+            },
+            1,
+        )
+        .unwrap()
+    });
     let manager = InferenceManager::load(
         &config(device),
         &HardwareConfig::default(),
+        gpu.as_ref(),
         Arc::new(NoopRetrievalHook),
     )
     .unwrap();

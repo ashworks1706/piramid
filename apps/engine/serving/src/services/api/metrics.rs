@@ -23,10 +23,35 @@ pub struct MetricsResponse {
     /// measured none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub gpus: Vec<GpuMetricsResponse>,
+    /// How the device memory budget is divided and used. Left out when no GPU is open.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_budget: Option<GpuBudgetResponse>,
     /// Generation counters and the state of the scheduler and key/value cache. Left out when no
     /// model is loaded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference: Option<InferenceMetricsResponse>,
+}
+
+/// The device memory budget.
+#[derive(Debug, Default, Serialize)]
+pub struct GpuBudgetResponse {
+    /// Bytes the budget covers after the reserve.
+    pub usable_bytes: u64,
+    /// Whether every pool draws from one shared budget.
+    pub shared: bool,
+    /// Capacity and use of each pool: weights, kv_cache and index.
+    pub pools: Vec<GpuPoolResponse>,
+}
+
+/// One pool of the device memory budget.
+#[derive(Debug, Default, Serialize)]
+pub struct GpuPoolResponse {
+    /// weights, kv_cache or index.
+    pub pool: &'static str,
+    /// Bytes the pool may hold; under a shared budget, the whole budget.
+    pub capacity_bytes: u64,
+    /// Bytes reserved in the pool.
+    pub used_bytes: u64,
 }
 
 /// Generation counters of the loaded model. An average not yet measured is left out.
@@ -245,6 +270,7 @@ mod tests {
             },
             host: HostMetricsResponse::default(),
             gpus,
+            gpu_budget: None,
             inference: None,
         };
         let json = serde_json::to_value(metrics(Vec::new())).unwrap();

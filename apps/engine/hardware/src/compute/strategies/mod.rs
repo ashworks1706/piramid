@@ -7,7 +7,7 @@ mod scalar;
 mod simd;
 
 #[cfg(feature = "gpu-cuda")]
-pub use cuda::CudaStrategy;
+pub use cuda::{install_gpu, CudaStrategy};
 pub use parallel::ParallelStrategy;
 pub use scalar::ScalarStrategy;
 pub use simd::SimdStrategy;
@@ -31,6 +31,25 @@ pub fn all() -> Vec<&'static dyn DistanceKernels> {
         #[cfg(feature = "gpu-cuda")]
         &CUDA,
     ]
+}
+
+/// Whether this build can serve a mode at all: a CPU mode on its target, or the gpu mode with a
+/// GPU backend compiled in. A gpu mode still needs a device installed before [for_mode] serves it.
+pub fn compiled(mode: ExecutionMode) -> ComputeResult<()> {
+    match mode.resolve() {
+        ExecutionMode::Gpu => {
+            if cfg!(feature = "gpu-cuda") {
+                Ok(())
+            } else {
+                Err(crate::compute::error::ComputeError::StrategyUnavailable {
+                    strategy: "gpu",
+                    reason: "no GPU backend compiled in; rebuild with the gpu-cuda feature"
+                        .to_string(),
+                })
+            }
+        }
+        _ => for_mode(mode).map(|_| ()),
+    }
 }
 
 /// The strategy serving a mode, resolving Auto first; an unavailable strategy is an error.

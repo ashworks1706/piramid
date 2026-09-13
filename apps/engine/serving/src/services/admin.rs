@@ -139,6 +139,22 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             .into_iter()
             .map(crate::services::convert::gpu_to_response)
             .collect(),
+        gpu_budget: state.gpu.as_ref().map(|gpu| {
+            let budget = gpu.budget();
+            GpuBudgetResponse {
+                usable_bytes: budget.usable_bytes(),
+                shared: budget.is_shared(),
+                pools: budget
+                    .usage()
+                    .into_iter()
+                    .map(|usage| GpuPoolResponse {
+                        pool: usage.pool.as_str(),
+                        capacity_bytes: usage.capacity_bytes,
+                        used_bytes: usage.used_bytes,
+                    })
+                    .collect(),
+            }
+        }),
         inference: state.inference.as_ref().map(|manager| {
             let info = manager.info();
             let m = manager.metrics().snapshot();

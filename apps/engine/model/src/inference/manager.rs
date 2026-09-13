@@ -15,6 +15,7 @@ use crate::inference::architecture::{Architecture, ModelSpec};
 use crate::inference::batching::request::{FinishReason, GenerationEvent, Usage};
 use crate::inference::batching::worker::Command;
 use crate::inference::tokenizer::{ChatMessage, ChatTemplate, Tokenizer};
+use piramid_hardware::gpu::{GpuManager, Reservation};
 
 /// A loaded model, its tokenizer and the thread that runs it.
 pub struct InferenceManager {
@@ -29,6 +30,7 @@ pub struct InferenceManager {
     metrics: Arc<InferenceMetrics>,
     commands: mpsc::UnboundedSender<Command>,
     thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+    reservations: Vec<Reservation>,
 }
 
 impl std::fmt::Debug for InferenceManager {
@@ -114,13 +116,15 @@ pub struct ModelInfo {
 }
 
 impl InferenceManager {
-    /// Load the model configuration names and start its engine thread.
+    /// Load the model configuration names and start its engine thread. On a GPU, gpu is the
+    /// process's device manager, and the weights and key/value cache are reserved from its budget.
     ///
-    /// Errors when the build has no model runtime, the checkpoint cannot be read, or the device is
-    /// unavailable.
+    /// Errors when the build has no model runtime, the checkpoint cannot be read, or the device or
+    /// its budget cannot hold the model.
     pub fn load(
         config: &InferenceConfig,
         hardware: &HardwareConfig,
+        gpu: Option<&GpuManager>,
         hook: Arc<dyn RetrievalHook>,
     ) -> Result<Self, InferenceError> {
         let dir = checkpoint_dir(config)?;
@@ -152,6 +156,7 @@ impl InferenceManager {
             &dir,
             spec,
             &device,
+            gpu,
             template.eos_text(),
             hook.clone(),
         )?;
@@ -174,6 +179,7 @@ impl InferenceManager {
             metrics: loaded.metrics,
             commands: loaded.commands,
             thread: Mutex::new(Some(loaded.thread)),
+            reservations: loaded.reservations,
         })
     }
 
@@ -230,6 +236,11 @@ impl InferenceManager {
         })
     }
 
+    /// Device memory bytes held for the weights and the key/value cache.
+    pub fn reserved_device_bytes(&self) -> u64 {
+        self.reservations.iter().map(Reservation::bytes).sum()
+    }
+
     /// Counters and gauges of the engine.
     pub fn metrics(&self) -> &InferenceMetrics {
         &self.metrics
@@ -272,6 +283,7 @@ struct Started {
     commands: mpsc::UnboundedSender<Command>,
     thread: std::thread::JoinHandle<()>,
     kv_blocks: usize,
+    reservations: Vec<Reservation>,
 }
 
 #[cfg(not(feature = "inference-candle"))]
@@ -280,6 +292,7 @@ fn start(
     _dir: &Path,
     _spec: ModelSpec,
     _device: &str,
+    _gpu: Option<&GpuManager>,
     _eos_text: Option<&str>,
     _hook: Arc<dyn RetrievalHook>,
 ) -> Result<Started, InferenceError> {
@@ -294,10 +307,13 @@ fn start(
     dir: &Path,
     spec: ModelSpec,
     device: &str,
+    gpu: Option<&GpuManager>,
     eos_text: Option<&str>,
     hook: Arc<dyn RetrievalHook>,
 ) -> Result<Started, InferenceError> {
     use std::collections::HashSet;
+
+    use piramid_hardware::gpu::MemoryPool;
 
     use piramid_core::config::Preemption;
 
@@ -326,12 +342,36 @@ fn start(
     }
     let architecture = spec.architecture;
 
+    let on_gpu = device.starts_with("cuda:");
+    let gpu = match (on_gpu, gpu) {
+        (true, Some(gpu)) => Some(gpu),
+        (true, None) => {
+            return Err(InferenceError::Unavailable(format!(
+                "{device} needs the GPU the gpu profile opens at startup"
+            )))
+        }
+        (false, _) => None,
+    };
+    let mut reservations = Vec::new();
+    if let Some(gpu) = gpu {
+        let precision = crate::inference::backends::candle::loader::weight_precision(
+            config.dtype,
+            spec.stored_precision,
+            true,
+        );
+        let bytes = spec.parameter_count() * precision.bytes() as u64;
+        reservations.push(
+            gpu.budget()
+                .reserve(MemoryPool::Weights, bytes)
+                .map_err(|e| InferenceError::Load(format!("model weights: {e}")))?,
+        );
+    }
     let loaded = load_decoder(dir, spec, device, config.dtype, config.kv_cache.dtype)?;
     let mut model = loaded.model;
     let runtime = loaded.runtime;
 
     let layout = model.kv_layout();
-    let budget = kv_budget(config, runtime.ordinal())?;
+    let budget = kv_budget(config, runtime.ordinal(), gpu)?;
     let page_size = config.kv_cache.page_size;
     let blocks = layout.blocks_within(budget, page_size);
     if blocks == 0 {
@@ -339,6 +379,14 @@ fn start(
             "a {budget} byte key/value budget holds no page of {page_size} tokens at {} bytes per token",
             layout.bytes_per_token()
         )));
+    }
+    if let Some(gpu) = gpu {
+        let bytes = (blocks * page_size * layout.bytes_per_token()) as u64;
+        reservations.push(
+            gpu.budget()
+                .reserve(MemoryPool::KvCache, bytes)
+                .map_err(|e| InferenceError::Load(format!("key/value cache: {e}")))?,
+        );
     }
     model.allocate_cache(blocks * page_size)?;
 
@@ -398,28 +446,37 @@ fn start(
         commands,
         thread,
         kv_blocks: blocks,
+        reservations,
     })
 }
 
-/// Bytes the key/value cache may take: device_fraction of free device memory, capped by
-/// max_bytes. On the host, max_bytes is required.
+/// Bytes the key/value cache may take. On a GPU: device_fraction of free device memory, capped
+/// by what the budget's key/value pool has left and by max_bytes. On the host, max_bytes is
+/// required.
 #[cfg(feature = "inference-candle")]
-fn kv_budget(config: &InferenceConfig, ordinal: Option<usize>) -> Result<u64, InferenceError> {
+fn kv_budget(
+    config: &InferenceConfig,
+    ordinal: Option<usize>,
+    gpu: Option<&GpuManager>,
+) -> Result<u64, InferenceError> {
     let cache = &config.kv_cache;
-    match ordinal {
-        #[cfg(feature = "gpu-cuda")]
-        Some(ordinal) => {
-            let free = piramid_hardware::gpu::Device::open(ordinal)
-                .and_then(|device| device.available_memory_bytes())
+    match (ordinal, gpu) {
+        (Some(_), Some(gpu)) => {
+            let free = gpu
+                .device()
+                .available_memory_bytes()
                 .map_err(|e| InferenceError::Load(format!("free device memory: {e}")))?;
             let share = (free as f64 * f64::from(cache.device_fraction)) as u64;
-            Ok(cache.max_bytes.map_or(share, |max| max.min(share)))
+            let pool = gpu
+                .budget()
+                .available(piramid_hardware::gpu::MemoryPool::KvCache);
+            let bound = share.min(pool);
+            Ok(cache.max_bytes.map_or(bound, |max| max.min(bound)))
         }
-        #[cfg(not(feature = "gpu-cuda"))]
-        Some(ordinal) => Err(InferenceError::Unavailable(format!(
-            "cuda:{ordinal} needs a build with the gpu-cuda feature"
+        (Some(ordinal), None) => Err(InferenceError::Unavailable(format!(
+            "cuda:{ordinal} needs the GPU the gpu profile opens at startup"
         ))),
-        None => cache.max_bytes.ok_or_else(|| {
+        (None, _) => cache.max_bytes.ok_or_else(|| {
             InferenceError::Load(
                 "runtime.inference.kv_cache.max_bytes is required when the model runs on the cpu"
                     .to_string(),

@@ -150,8 +150,8 @@ fn every_unimplemented_subsystem_refuses_to_start() {
             Box::new(|c: &mut Config| c.runtime.inference.document_kv.enabled = true),
         ),
         (
-            "vram split",
-            Box::new(|c: &mut Config| c.startup.hardware.vram.enabled = true),
+            "retrieval bandwidth share",
+            Box::new(|c: &mut Config| c.startup.hardware.vram.retrieval_bandwidth_share = 0.5),
         ),
         (
             "vector cache bounds",
@@ -289,5 +289,17 @@ fn enabling_inference_needs_a_model_path_and_a_known_device() {
             .contains("runtime.inference.device"));
     }
     cfg.runtime.inference.device = Some("cuda:0".to_string());
+    assert!(cfg.validate().unwrap_err().contains("profile: gpu"));
+    cfg.startup.hardware.profile = piramid_core::config::HardwareProfile::Gpu;
+    cfg.runtime.inference.device = Some("cuda:1".to_string());
+    assert!(cfg.validate().unwrap_err().contains("device_ordinal"));
+}
+
+#[test]
+fn a_vram_split_must_fit_the_budget() {
+    let mut cfg = Config::default();
+    cfg.startup.hardware.vram.enabled = true;
     cfg.validate().unwrap();
+    cfg.startup.hardware.vram.kv_ratio = 0.5;
+    assert!(cfg.validate().unwrap_err().contains("sum"));
 }

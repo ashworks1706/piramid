@@ -2,6 +2,7 @@
 //! inference over one [Device].
 
 pub mod backends;
+pub mod budget;
 pub mod buffer;
 pub mod device;
 pub mod error;
@@ -10,6 +11,7 @@ pub mod manager;
 pub mod module;
 pub mod stream;
 
+pub use budget::{BudgetSettings, DeviceBudget, MemoryPool, PoolShares, PoolUsage, Reservation};
 pub use buffer::{DeviceAllocation, DeviceBuffer};
 pub use device::{Device, DeviceCapabilities, DeviceRuntime};
 pub use error::{GpuError, GpuResult};

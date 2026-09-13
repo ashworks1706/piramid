@@ -7,9 +7,6 @@ use crate::gpu::error::{GpuError, GpuResult};
 use crate::gpu::module::{KernelArg, KernelModule, LaunchConfig};
 use crate::gpu::stream::Stream;
 
-/// Threads per block for the distance kernels.
-pub const BLOCK_SIZE: u32 = 256;
-
 /// Largest k the device selection serves.
 pub const MAX_TOP_K: usize = 1024;
 
@@ -36,11 +33,6 @@ pub struct DistanceLaunch<'a> {
 }
 
 impl DistanceLaunch<'_> {
-    /// Launch geometry for this batch: one thread per candidate row.
-    pub fn launch_config(&self) -> LaunchConfig {
-        LaunchConfig::for_elements(self.rows, BLOCK_SIZE)
-    }
-
     fn check(&self) -> GpuResult<(u32, u32)> {
         let mismatch = |what: &str, expected: usize, got: usize| {
             Err(GpuError::Launch(format!(
@@ -79,13 +71,18 @@ pub struct DeviceTopK {
 #[derive(Debug)]
 pub struct DistanceModule {
     module: KernelModule,
+    block_size: u32,
 }
 
 impl DistanceModule {
-    /// Compile the distance kernels for a device.
-    pub fn compile(device: &Device) -> GpuResult<Self> {
+    /// Compile the distance kernels for a device, launching block_size threads per block.
+    pub fn compile(device: &Device, block_size: u32) -> GpuResult<Self> {
+        if block_size == 0 {
+            return Err(GpuError::Launch("block size is zero".to_string()));
+        }
         Ok(Self {
             module: KernelModule::compile(device, "distance", SOURCE, &FUNCTIONS)?,
+            block_size,
         })
     }
 
@@ -105,7 +102,7 @@ impl DistanceModule {
         let (dim, rows) = launch.check()?;
         self.module.launch(
             "cosine_rows",
-            launch.launch_config(),
+            LaunchConfig::for_elements(launch.rows, self.block_size),
             stream,
             &[
                 KernelArg::buffer(launch.query),
@@ -137,7 +134,7 @@ impl DistanceModule {
         let (dim, rows) = launch.check()?;
         self.module.launch(
             function,
-            launch.launch_config(),
+            LaunchConfig::for_elements(launch.rows, self.block_size),
             stream,
             &[
                 KernelArg::buffer(launch.query),
@@ -198,7 +195,7 @@ impl DistanceModule {
             |value: usize| u32::try_from(value).map_err(|e| GpuError::Launch(e.to_string()));
         self.module.launch(
             "select_top_k",
-            LaunchConfig::for_elements(chunks, BLOCK_SIZE),
+            LaunchConfig::for_elements(chunks, self.block_size),
             stream,
             &[
                 KernelArg::buffer(scores),

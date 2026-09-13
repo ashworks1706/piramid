@@ -182,13 +182,20 @@ fn start_server_inline(
             }
             None => embeddings::EmbeddingsManager::disabled(),
         };
+        let gpu = if config.startup.hardware.gpu_enabled() {
+            Some(std::sync::Arc::new(open_gpu(&config.startup.hardware)?))
+        } else {
+            None
+        };
         let inference = if config.runtime.inference.enabled {
             let inference_config = config.runtime.inference.clone();
             let hardware = config.startup.hardware;
+            let device = gpu.clone();
             let manager = tokio::task::spawn_blocking(move || {
                 piramid::InferenceManager::load(
                     &inference_config,
                     &hardware,
+                    device.as_deref(),
                     std::sync::Arc::new(piramid::fusion::NoopRetrievalHook),
                 )
             })
@@ -204,6 +211,9 @@ fn start_server_inline(
         let mut state = AppState::new(config, embeddings)
             .map_err(std::io::Error::other)?
             .with_config_source(source);
+        if let Some(manager) = gpu {
+            state = state.with_gpu(manager);
+        }
         if let Some(manager) = inference {
             state = state.with_inference(manager);
         }
@@ -223,6 +233,38 @@ fn start_server_inline(
             .await
             .map_err(std::io::Error::other)
     })
+}
+
+/// Open the configured device with its memory budget and serve the gpu execution mode from it.
+fn open_gpu(hardware: &piramid::config::HardwareConfig) -> std::io::Result<piramid::GpuManager> {
+    let vram = hardware.vram;
+    let settings = piramid::gpu::BudgetSettings {
+        limit_bytes: hardware.gpu_memory_budget_bytes,
+        reserve_bytes: hardware.gpu.reserve_bytes,
+        shares: vram.enabled.then_some(piramid::gpu::PoolShares {
+            weights: vram.weights_ratio,
+            kv_cache: vram.kv_ratio,
+            index: vram.index_ratio,
+        }),
+    };
+    let manager =
+        piramid::GpuManager::open(hardware.gpu.device_ordinal, settings, hardware.gpu.streams)
+            .map_err(|e| std::io::Error::other(format!("startup.hardware: {e}")))?;
+    install_gpu(&manager, hardware.gpu.distance_block_size)?;
+    Ok(manager)
+}
+
+#[cfg(feature = "gpu-cuda")]
+fn install_gpu(manager: &piramid::GpuManager, block_size: u32) -> std::io::Result<()> {
+    piramid::compute::strategies::install_gpu(manager, block_size)
+        .map_err(|e| std::io::Error::other(format!("startup.hardware.gpu: {e}")))
+}
+
+#[cfg(not(feature = "gpu-cuda"))]
+fn install_gpu(_manager: &piramid::GpuManager, _block_size: u32) -> std::io::Result<()> {
+    Err(std::io::Error::other(
+        "startup.hardware.profile: gpu needs a build with the gpu-cuda feature",
+    ))
 }
 
 /// A future that completes on the first SIGINT or SIGTERM.

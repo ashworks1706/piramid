@@ -252,6 +252,29 @@ impl ModelSpec {
         })
     }
 
+    /// Weight elements the checkpoint holds for this architecture, counting a tied output
+    /// projection once.
+    pub fn parameter_count(&self) -> u64 {
+        let h = self.hidden_size as u64;
+        let q = (self.attention_heads * self.head_dim) as u64;
+        let kv = (self.kv_heads * self.head_dim) as u64;
+        let inner = self.intermediate_size as u64;
+        let vocab = self.vocab_size as u64;
+        let bias = if self.qkv_bias { q + 2 * kv } else { 0 };
+        let qk_norm = if self.qk_norm {
+            2 * self.head_dim as u64
+        } else {
+            0
+        };
+        let layer = h * q + 2 * h * kv + q * h + bias + 3 * h * inner + 2 * h + qk_norm;
+        let head = if self.tie_word_embeddings {
+            0
+        } else {
+            vocab * h
+        };
+        vocab * h + self.layers as u64 * layer + h + head
+    }
+
     /// Cache shape for this model at a given element precision.
     pub fn kv_layout(&self, precision: Precision) -> KvLayout {
         KvLayout {
@@ -363,6 +386,7 @@ mod tests {
         assert_eq!(spec.stored_precision, Precision::Bf16);
         assert_eq!(spec.eos_token_ids, vec![151643, 151645]);
         assert_eq!(spec.kv_layout(Precision::Bf16).bytes_per_token(), 12_288);
+        assert_eq!(spec.parameter_count(), 494_032_768);
     }
 
     #[test]

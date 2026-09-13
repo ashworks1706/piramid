@@ -161,6 +161,7 @@ mod with_model {
         let manager = InferenceManager::load(
             inference,
             &HardwareConfig::default(),
+            None,
             Arc::new(NoopRetrievalHook),
         )
         .unwrap();

@@ -62,7 +62,7 @@ startup:
     # host memory the process will use; null is unbounded. Not enforced yet, so setting it is an
     # error.
     memory_budget_bytes: null
-    # device memory to claim; null is unbounded
+    # device memory to claim before gpu.reserve_bytes is held back; null is the whole device
     gpu_memory_budget_bytes: null
 
     gpu:
@@ -70,19 +70,20 @@ startup:
       device_ordinal: 0
       # Threads per block for distance kernels. Must be a multiple of 32.
       distance_block_size: 256
-      # Retrieval and the forward pass each want one, so they overlap rather than serialise.
+      # Independent streams opened with the device. Retrieval kernels queue on the first; the model
+      # queues on the per-thread stream.
       streams: 2
       # Held back for fragmentation and library workspaces.
       reserve_bytes: 1073741824
     vram:
-      # Divide device memory between weights, KV and the index instead of first-come-first-served.
-      # Not implemented (roadmap v0.6.0).
+      # Divide the device budget between weights, KV and the index. Off, all three draw from one
+      # budget, first come first served. Each pool refuses an allocation past its share.
       enabled: false
       weights_ratio: 0.6
       kv_ratio: 0.15
       index_ratio: 0.25
-      # Bandwidth retrieval may take while a pass is decoding. Decode reads every weight per
-      # token, so a search kernel streaming the slab contends with it.
+      # Bandwidth retrieval may take while a pass is decoding. Not implemented (roadmap v0.6.0);
+      # any other value is refused.
       retrieval_bandwidth_share: 0.25
 
   disk:
@@ -249,7 +250,8 @@ runtime:
     tokenizer_path: null
     # qwen2 | qwen3, checked against the checkpoint. null reads it from the checkpoint.
     architecture: null
-    # cpu | cuda:N. null is cuda at hardware.gpu.device_ordinal under the gpu profile, else cpu.
+    # cpu | cuda:N. cuda needs the gpu profile and must name hardware.gpu.device_ordinal. null is
+    # that device under the gpu profile, else cpu.
     device: null
     # auto | fp32 | fp16 | bf16. auto is the checkpoint precision on a GPU and fp32 on the cpu.
     dtype: auto

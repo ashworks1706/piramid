@@ -17,6 +17,7 @@ use piramid_core::config::InferenceConfig;
 use piramid_core::config::{Config, HttpConfig, StartupConfig};
 use piramid_core::error::{PiramidError, Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
+use piramid_hardware::gpu::GpuManager;
 use piramid_model::embeddings::EmbeddingsManager;
 use piramid_model::inference::InferenceManager;
 
@@ -56,6 +57,8 @@ pub struct AppState {
     pub cluster_router: Arc<dyn ClusterRouter>,
     /// The embedding provider, if configured, and its usage metrics.
     pub embeddings: EmbeddingsManager,
+    /// The opened device and its memory budget, under the gpu profile.
+    pub gpu: Option<Arc<GpuManager>>,
     /// The loaded model, when runtime.inference.enabled is set.
     pub inference: Option<Arc<InferenceManager>>,
     /// When the model was loaded, in seconds since the Unix epoch.
@@ -113,6 +116,7 @@ impl AppState {
             data_dir,
             cluster_router,
             embeddings,
+            gpu: None,
             inference: None,
             inference_loaded_at: 0,
             machine: MachineReadings::start(SAMPLE_INTERVAL)?,
@@ -125,6 +129,12 @@ impl AppState {
             rebuild_jobs: Arc::new(DashMap::new()),
             config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs())),
         })
+    }
+
+    /// Account device memory against an opened GPU.
+    pub fn with_gpu(mut self, manager: Arc<GpuManager>) -> Self {
+        self.gpu = Some(manager);
+        self
     }
 
     /// Serve generations from a loaded model.

@@ -3,7 +3,8 @@
 use piramid_core::observability::prometheus::{MetricType, Registry};
 
 use crate::services::api::{
-    GpuMetricsResponse, HostMetricsResponse, InferenceMetricsResponse, MetricsResponse,
+    GpuBudgetResponse, GpuMetricsResponse, HostMetricsResponse, InferenceMetricsResponse,
+    MetricsResponse,
 };
 
 /// Render a metrics snapshot in the Prometheus text format.
@@ -142,6 +143,9 @@ pub fn render(metrics: &MetricsResponse) -> String {
 
     render_host(&mut registry, &metrics.host);
     render_gpus(&mut registry, &metrics.gpus);
+    if let Some(budget) = &metrics.gpu_budget {
+        render_gpu_budget(&mut registry, budget);
+    }
     if let Some(inference) = &metrics.inference {
         render_inference(&mut registry, inference);
     }
@@ -185,6 +189,34 @@ fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
 
 /// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
 /// server could not measure.
+fn render_gpu_budget(registry: &mut Registry, budget: &GpuBudgetResponse) {
+    registry.metric(
+        "piramid_gpu_budget_usable_bytes",
+        "Device memory the budget covers after the reserve.",
+        MetricType::Gauge,
+        budget.usable_bytes as f64,
+    );
+    let by_pool = |extract: fn(&crate::services::api::GpuPoolResponse) -> u64| {
+        budget
+            .pools
+            .iter()
+            .map(|pool| (vec![("pool", pool.pool.to_string())], extract(pool) as f64))
+            .collect::<Vec<_>>()
+    };
+    registry.metric_family(
+        "piramid_gpu_pool_capacity_bytes",
+        "Device memory a pool may hold.",
+        MetricType::Gauge,
+        by_pool(|pool| pool.capacity_bytes),
+    );
+    registry.metric_family(
+        "piramid_gpu_pool_used_bytes",
+        "Device memory reserved in a pool.",
+        MetricType::Gauge,
+        by_pool(|pool| pool.used_bytes),
+    );
+}
+
 fn render_inference(registry: &mut Registry, inference: &InferenceMetricsResponse) {
     let counters: [(&str, &str, u64); 8] = [
         (

@@ -39,8 +39,29 @@ fn vectors(count: usize, dim: usize) -> Vec<f32> {
         .collect()
 }
 
+/// Install device 0 for the gpu mode when this build has a GPU backend and a device is present.
+#[cfg(feature = "gpu-cuda")]
+fn install_device() {
+    use piramid_hardware::gpu::{BudgetSettings, GpuManager};
+    static MANAGER: std::sync::OnceLock<Option<GpuManager>> = std::sync::OnceLock::new();
+    MANAGER.get_or_init(|| {
+        let settings = BudgetSettings {
+            limit_bytes: None,
+            reserve_bytes: 0,
+            shares: None,
+        };
+        let manager = GpuManager::open(0, settings, 1).ok()?;
+        strategies::install_gpu(&manager, 256).ok()?;
+        Some(manager)
+    });
+}
+
+#[cfg(not(feature = "gpu-cuda"))]
+fn install_device() {}
+
 /// Available strategies, resolved once. Auto resolves to one of these and is not listed twice.
 fn available() -> Vec<(&'static str, &'static dyn DistanceKernels)> {
+    install_device();
     COMPARED
         .iter()
         .filter_map(|mode| strategies::for_mode(*mode).ok())
@@ -101,7 +122,7 @@ fn batch_resident(c: &mut Criterion) {
         return;
     };
     let stream = Stream::new(&device).unwrap();
-    let module = DistanceModule::compile(&device).unwrap();
+    let module = DistanceModule::compile(&device, 256).unwrap();
     let mut group = c.benchmark_group("batch_resident/cosine");
     let dim = 768;
     let query = vectors(1, dim);

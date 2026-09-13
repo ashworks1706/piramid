@@ -7,10 +7,10 @@
     reason = "assertions in tests"
 )]
 
-use piramid_hardware::compute::strategies::for_mode;
+use piramid_hardware::compute::strategies::{for_mode, install_gpu};
 use piramid_hardware::compute::ExecutionMode;
 use piramid_hardware::gpu::kernels::distance::{DistanceLaunch, DistanceModule};
-use piramid_hardware::gpu::{Device, DeviceBuffer, Stream};
+use piramid_hardware::gpu::{BudgetSettings, Device, DeviceBuffer, GpuManager, Stream};
 
 fn device() -> Device {
     Device::open(0).expect("CUDA device 0")
@@ -53,7 +53,7 @@ fn a_mismatched_host_slice_is_refused() {
 fn device_scores_match_scalar() {
     let device = device();
     let stream = Stream::new(&device).unwrap();
-    let module = DistanceModule::compile(&device).unwrap();
+    let module = DistanceModule::compile(&device, 256).unwrap();
     let scalar = for_mode(ExecutionMode::Scalar).unwrap();
 
     for (dim, rows) in [(3, 1), (384, 1000), (768, 4099)] {
@@ -107,7 +107,7 @@ fn device_scores_match_scalar() {
 fn device_top_k_matches_a_host_sort() {
     let device = device();
     let stream = Stream::new(&device).unwrap();
-    let module = DistanceModule::compile(&device).unwrap();
+    let module = DistanceModule::compile(&device, 256).unwrap();
 
     for (rows, k) in [(5, 10), (1000, 10), (100_000, 64), (300_000, 1024)] {
         let scores = filler(rows, rows as u64);
@@ -133,6 +133,21 @@ fn device_top_k_matches_a_host_sort() {
 #[test]
 #[ignore = "needs a CUDA device"]
 fn the_gpu_mode_resolves_to_the_cuda_strategy_and_matches_scalar() {
+    assert!(
+        for_mode(ExecutionMode::Gpu).is_err(),
+        "no GPU is installed yet"
+    );
+    let manager = GpuManager::open(
+        0,
+        BudgetSettings {
+            limit_bytes: None,
+            reserve_bytes: 0,
+            shares: None,
+        },
+        1,
+    )
+    .unwrap();
+    install_gpu(&manager, 256).unwrap();
     let gpu = for_mode(ExecutionMode::Gpu).unwrap();
     let scalar = for_mode(ExecutionMode::Scalar).unwrap();
     assert_eq!(gpu.name(), "cuda");
