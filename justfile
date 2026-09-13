@@ -107,6 +107,17 @@ doc-open: doc
 bench *ARGS:
     cargo bench --workspace {{ARGS}}
 
+# Required: PIRAMID_BENCH_MODEL (checkpoint dir), PIRAMID_BENCH_DATASET (JSONL, see
+# scripts/fetch-bench-dataset.sh), PIRAMID_BENCH_EMBEDDING (JSON: provider, model, base_url).
+# Optional: PIRAMID_BENCH_DEVICE (cpu|cuda:N), PIRAMID_BENCH_QUESTIONS, PIRAMID_BENCH_K,
+# PIRAMID_BENCH_ARMS (closed-book, before-prefill-http, before-prefill-host,
+# before-prefill-device), PIRAMID_BENCH_SEARCH_URL (for the http arm), PIRAMID_BENCH_OUT
+# (default target/rag_e2e.json), PIRAMID_BENCH_MAX_NEW_TOKENS, PIRAMID_BENCH_KV_CACHE_BYTES,
+# PIRAMID_BENCH_WARMUP. The device arm needs ARGS="--features gpu-cuda".
+# End-to-end RAG benchmark: embed, search, fetch, prefill, decode per arm, results as JSON.
+bench-rag *ARGS:
+    cargo bench -p piramid-serving --features inference-candle --bench rag_e2e {{ARGS}}
+
 # Advisories, licences, bans, sources
 audit:
     cargo deny check advisories bans licenses sources

@@ -259,7 +259,7 @@ pub fn passages_block(passages: &[PassageDto]) -> String {
 }
 
 /// Put passages in the system message, creating one at the front when there is none.
-fn insert_passages(messages: &mut Vec<ChatMessage>, passages: &[PassageDto]) {
+pub fn insert_passages(messages: &mut Vec<ChatMessage>, passages: &[PassageDto]) {
     let block = format!(
         "Answer using these passages where they are relevant.\n\n{}",
         passages_block(passages)
