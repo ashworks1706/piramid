@@ -72,8 +72,9 @@ as `just audit`. Dependabot proposes updates weekly.
 
 ## Unsafe code
 
-`unsafe_code` is denied workspace-wide, and permitted at four audited sites: `as_bytes` and
+`unsafe_code` is denied workspace-wide, and permitted at five audited sites: `as_bytes` and
 `as_bytes_mut` in `apps/engine/hardware/src/gpu/buffer.rs`, which reinterpret a typed slice as
-bytes for device transfer; `database::storage::sidecars::mmap::create_mmap`; and
-`serving::disk`. Each carries a `// SAFETY:` comment stating its precondition. A PR introducing
+bytes for device transfer; the CUDA backend in `apps/engine/hardware/src/gpu/backends/cudarc.rs`,
+which allocates, frees and copies raw device memory and launches kernels;
+`database::storage::sidecars::mmap::create_mmap`; and `serving::disk`. Each carries a `// SAFETY:` comment stating its precondition. A PR introducing
 `unsafe` anywhere else fails CI.

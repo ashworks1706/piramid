@@ -39,8 +39,10 @@ Each cut is a real one:
 
 - **`hardware`** is the code that changes when the machine changes. `compute` owns what cosine means
   and which strategy runs it, `gpu` owns the device, `quantization` owns the encodings both score
-  over, `host` reads the processor, memory and GPU use of the machine itself. It is a leaf, so kernels can be benchmarked on their own and `model` can get a device
-  without reaching through retrieval math.
+  over, `host` reads the processor, memory and GPU use of the machine itself. It is a leaf, so
+  kernels can be benchmarked on their own and `model` can get a device without reaching through
+  retrieval math. `gpu::budget` is the one account of device memory: weights, key/value cache and
+  index each reserve from it, split by configured shares or first come first served.
 - **`database`** is where vectors live and how they are found: records, WAL, mmap and sidecars; the
   ANN indexes; query planning and scoring; and `collection`, the object composing a store, a cache,
   a checkpoint policy and an index. Inside it, `state.rs` holds what a collection owns and every
@@ -49,7 +51,14 @@ Each cut is a real one:
   below collection lifecycle instead of circular with it.
 - **`model`** is the forward pass, the `fusion` seam retrieval enters it through, and the
   `embeddings` providers that turn text into a vector. It depends on nothing in the retrieval
-  stack, which is what keeps a collection queryable with no model loaded.
+  stack, which is what keeps a collection queryable with no model loaded. Inside `inference`,
+  `architecture` holds what a checkpoint declares and the `DecoderModel` contract a backend runs
+  one layer at a time; `forward` is the driver that runs those layers and calls the hook at every
+  point it asks for; `kv_cache` decides which page slot each token's keys and values go to, and
+  shares full prefix pages, with no tensors in it; `batching` is the scheduler that packs decode
+  tokens and prefill chunks into steps and the engine thread that runs them; `sampling` and
+  `tokenizer` are plain Rust over logits and token ids. Only `backends` names `candle` or
+  `tokenizers`.
 - **`core`** is the vocabulary everything shares: errors, the whole configuration surface, the
   document and hit shapes, metadata and its filters, validation, and the counters the engine keeps
   about itself.
@@ -101,7 +110,8 @@ sidecars, `thiserror` enums per layer (no `anyhow` in libraries — a caller has
 benches. The website is separate and ships nothing: Next.js, TypeScript, Tailwind, MDX.
 
 Two features are reserved for vendor runtimes — `gpu-cuda` for `cudarc` in `gpu/backends/` and
-`nvml-wrapper` in `host/nvml.rs`, and `inference-candle` for `candle` in `inference/backends/`. Both are additive and off by default, so
+`nvml-wrapper` in `host/nvml.rs`, and `inference-candle` for `candle` and `tokenizers` in
+`inference/backends/`. Both are additive and off by default, so
 `cargo build` needs no CUDA toolkit and no model runtime, and an unavailable strategy reports
 `false` rather than pretending. Vendor types never escape those backend modules, which is what
 allows a second backend later without touching the layers between.
@@ -163,6 +173,12 @@ a device-to-host-to-device copy per invocation — exactly the data movement co-
 inference exists to remove. And the `launch`/`join` split is what lets search overlap model compute
 on its own stream; a single fused call serializes them however it is implemented.
 
+The driver in `inference::forward` calls it at `SequenceStart`, at every `ChunkBoundary` and before
+every decoder layer, whenever `wants` says so; `NoopRetrievalHook` is the only implementation today.
+On a CUDA model the `HiddenState` is a `DeviceBuffer` borrowed over the candle tensor's own memory,
+and the context carries the per-thread stream candle queues on, so a kernel in `hardware::gpu` runs
+on the hidden state in place and in order with the model's work.
+
 It exists before anything calls it because a driver written without the seam is hard to retrofit
 with one, and a driver written with it costs nothing extra. A strategy that actually queries an
 index depends on `search`, so it belongs in its own crate depending on both — that's what keeps
@@ -197,6 +213,22 @@ sequenceDiagram
 
 Conversion boundaries are explicit: HTTP shapes in `serving::http`, operational decisions in
 `serving::services`, domain mutation on the `Collection`, bytes and files in `storage`.
+
+A generation takes a second path. `serving::services::generation` renders the prompt through the
+checkpoint's chat template, and when the request asks for retrieval it embeds the query, searches
+the collection and places the passages before the prompt. It tokenizes on the request task and
+hands the tokens to `InferenceManager::generate`. The engine thread admits the sequence, packs it
+into steps, runs each step through the driver, samples, and streams text back over a channel that
+the handler turns into JSON, server-sent events or OpenAI chunks. A dropped stream cancels the
+sequence at the next step.
+
+## One device, two runtimes on it
+
+Candle builds the model graph: weights, projections, norms, attention. Anything custom in the
+forward pass is a cudarc kernel in `hardware::gpu`, launched on candle's memory. It works because
+both open the device through cudarc's primary context, so an address from one is valid in the
+other, and because candle queues on the per-thread stream, which `gpu::Stream::per_thread` names
+too. The two backend modules exchange a device pointer and a stream identifier, never a vendor type.
 
 ## Durability
 
@@ -255,7 +287,8 @@ newtype in the transport layer that maps a kind onto an HTTP status and renders 
 1. `hardware` depends on nothing in the workspace.
 2. No library crate calls `std::process::exit`. Configuration loading returns a `Result`.
 3. `core` never names an HTTP type.
-4. Vendor SDK types, `cudarc`, `nvml-wrapper` and `candle`, never escape their backend module.
+4. Vendor SDK types, `cudarc`, `nvml-wrapper`, `candle` and `tokenizers`, never escape their backend
+   module.
 5. `unsafe` appears only at the audited sites, each with a `// SAFETY:` comment.
 6. Cache and index are rebuildable from the record store.
 7. Retrieval works with no model loaded, and `model` depends on nothing in the retrieval stack.
@@ -272,7 +305,8 @@ newtype in the transport layer that maps a kind onto an HTTP status and renders 
 | Coordinating a user-facing operation | `serving/src/services` |
 | Collection state, records, WAL, sidecars, ANN internals | `database` |
 | Distance math, backend dispatch, device memory, kernels, host readings | `hardware` |
-| Model execution, and retrieval inside the forward pass | `model` |
+| Model execution, scheduling, sampling, tokenization, and retrieval inside the forward pass | `model` |
+| A kernel the forward pass launches on model memory | `hardware/src/gpu/kernels`, called from `model/src/inference/backends` |
 | Shared vocabulary — error, config, metadata | `core` |
 | A deployable, a site, or a client library | `apps/` |
 

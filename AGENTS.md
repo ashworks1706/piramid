@@ -28,6 +28,9 @@ just cli                the console: units, collections, config in one terminal 
 just piramid support-bundle     diagnostics to attach to a bug report
 just doc                rustdoc, warnings are errors
 just bench              criterion
+just bench-rag          end-to-end RAG benchmark (env vars in the recipe)
+just test-gpu           device tests on the local CUDA device
+just test-model         generation on a real checkpoint (PIRAMID_TEST_MODEL)
 just audit              cargo-deny: advisories, bans, licences, sources
 just web                dev server for the site on :3000
 just web-preview        build and serve what actually deploys
@@ -53,15 +56,19 @@ apps/engine/core            errors (every one the app wraps), config (the whole 
                             document and hit shapes, metadata and its filters, validation, stats,
                             observability (subscriber, OTLP, Prometheus)
 apps/engine/hardware        compute (distance kernels, strategy registry, quantization),
-                            gpu (device, buffer, stream, module, kernels) and host (CPU, memory)
+                            gpu (device, buffer, stream, module, budget, kernels) and host (CPU,
+                            memory, GPU readings)
 apps/engine/database        storage (records, WAL, sidecars, mmap), index (flat, hnsw, ivf),
                             search (planning, filtering, ranking, near-duplicates), cache,
                             document (what is done to one), and collection (the object composing
                             them: state, open, checkpoint, compact, limits, manager)
-apps/engine/model           inference (forward pass, kv_cache, batching, sampling), fusion (the
-                            RetrievalHook seam), embeddings (openai wire format; ollama)
-apps/engine/serving         http (axum only, handlers and routes), services (operations, wire
-                            shapes, conversion), state, machine, disk, cluster
+apps/engine/model           inference (architecture, forward driver, kv_cache pages, batching
+                            scheduler and engine thread, sampling, tokenizer, candle backend),
+                            fusion (the RetrievalHook seam), embeddings (openai wire format;
+                            ollama; piramid, in-process)
+apps/engine/serving         http (axum only, handlers and routes, /api and OpenAI-compatible /v1),
+                            services (operations, wire shapes, conversion, generation), state,
+                            machine, disk, cluster
 apps/cli                    the piramid binary and the umbrella piramid facade crate
 apps/website                piramiddb.com, blog content and images included
 apps/sdk                    npm and python clients
@@ -114,16 +121,17 @@ retrieval stack.
   `todo!`, `unimplemented!`, `dbg!`, `println!`, or `eprintln!` outside `apps/cli`. Fix at the
   source rather than adding an `#[allow]`. A real exception gets the narrowest possible scope and
   a one-line reason.
-- `unsafe_code` is denied workspace-wide. It's allowed at four audited sites: `as_bytes` and
-  `as_bytes_mut` in `hardware/src/gpu/buffer.rs`, `database::storage::sidecars::mmap::create_mmap`,
-  and `serving::disk`. Every block carries a `// SAFETY:` comment stating its precondition, and the
-  security workflow fails if a fifth appears.
+- `unsafe_code` is denied workspace-wide. It's allowed at five audited sites: `as_bytes` and
+  `as_bytes_mut` in `hardware/src/gpu/buffer.rs`, the CUDA backend in
+  `hardware/src/gpu/backends/cudarc.rs`, `database::storage::sidecars::mmap::create_mmap`, and
+  `serving::disk`. Every block carries a `// SAFETY:` comment stating its precondition, and the
+  security workflow fails if a sixth appears.
 - A library never ends the process. No `std::process::exit` outside `apps/cli`. Loading
   configuration returns a `Result` and the binary decides what to do with it.
 - `core` is transport-agnostic. `PiramidError` exposes an `ErrorKind`, never a `StatusCode`. HTTP
   mapping lives in `server::http::ApiError`.
-- Vendor SDK types stay inside their backend module, `gpu/backends/` and `inference/backends/`.
-  Nothing above imports `cudarc` or `candle`.
+- Vendor SDK types stay inside their backend module: `gpu/backends/`, `host/nvml.rs` and
+  `inference/backends/`. Nothing above imports `cudarc`, `nvml-wrapper`, `candle` or `tokenizers`.
 - Telemetry speaks open standards only. Prometheus and OTLP are protocols; a vendor's product is
   not. See `docs/decisions`.
 - Dependencies go in `[workspace.dependencies]` and are referenced with `.workspace = true`.
