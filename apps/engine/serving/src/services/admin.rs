@@ -139,6 +139,33 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             .into_iter()
             .map(crate::services::convert::gpu_to_response)
             .collect(),
+        inference: state.inference.as_ref().map(|manager| {
+            let info = manager.info();
+            let m = manager.metrics().snapshot();
+            InferenceMetricsResponse {
+                model: info.name,
+                device: info.device,
+                requests_admitted: m.requests_admitted,
+                requests_finished: m.requests_finished,
+                requests_failed: m.requests_failed,
+                prompt_tokens: m.prompt_tokens,
+                cached_prompt_tokens: m.cached_prompt_tokens,
+                generated_tokens: m.generated_tokens,
+                avg_time_to_first_token_ms: m.avg_time_to_first_token_ms,
+                decode_tokens_per_second: m.decode_tokens_per_second,
+                avg_decode_step_ms: m.avg_decode_step_ms,
+                prefill_tokens_per_second: m.prefill_tokens_per_second,
+                preemptions: m.preemptions,
+                queue_depth: m.queue_depth,
+                running: m.running,
+                last_batch_size: m.last_batch_size,
+                kv_blocks_total: m.kv_blocks_total,
+                kv_blocks_used: m.kv_blocks_used,
+                kv_blocks_cached: m.kv_blocks_cached,
+                kv_evictions: m.kv_evictions,
+                prefix_hit_rate: m.prefix_hit_rate,
+            }
+        }),
     })
 }
 

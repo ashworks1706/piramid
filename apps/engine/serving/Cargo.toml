@@ -29,11 +29,18 @@ tower_governor.workspace = true
 governor.workspace = true
 thiserror.workspace = true
 subtle.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 axum.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
+
+[features]
+default = []
+inference-candle = ["piramid-model/inference-candle"]
+gpu-cuda = ["piramid-model/gpu-cuda"]
 
 [lints]
 workspace = true

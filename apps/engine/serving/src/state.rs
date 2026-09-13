@@ -13,10 +13,12 @@ use crate::cluster::{
 };
 use crate::machine::{MachineReadings, SAMPLE_INTERVAL};
 use piramid_core::config::loader::ConfigSource;
+use piramid_core::config::InferenceConfig;
 use piramid_core::config::{Config, HttpConfig, StartupConfig};
 use piramid_core::error::{PiramidError, Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
 use piramid_model::embeddings::EmbeddingsManager;
+use piramid_model::inference::InferenceManager;
 
 /// Phase of an index rebuild job.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -54,6 +56,10 @@ pub struct AppState {
     pub cluster_router: Arc<dyn ClusterRouter>,
     /// The embedding provider, if configured, and its usage metrics.
     pub embeddings: EmbeddingsManager,
+    /// The loaded model, when runtime.inference.enabled is set.
+    pub inference: Option<Arc<InferenceManager>>,
+    /// When the model was loaded, in seconds since the Unix epoch.
+    pub inference_loaded_at: u64,
     /// Readings of the machine the server runs on.
     pub machine: MachineReadings,
     /// Set once shutdown begins; requests are refused with 503 afterwards.
@@ -64,6 +70,8 @@ pub struct AppState {
     pub app_config: Arc<RwLock<Config>>,
     /// The startup block the process booted with. A reload that changes it is refused.
     booted_with: StartupConfig,
+    /// The inference settings the model was loaded with. A reload that changes them is refused.
+    booted_inference: InferenceConfig,
     /// Where a reload reads configuration from.
     config_source: ConfigSource,
     /// Most recent index rebuild of each collection, keyed by collection name.
@@ -87,6 +95,7 @@ impl AppState {
             .into());
         }
         let booted_with = config.startup.clone();
+        let booted_inference = config.runtime.inference.clone();
         let cluster_router: Arc<dyn ClusterRouter> =
             Arc::new(LocalClusterRouter::new(NodeRuntimeState {
                 id: NodeId::default(),
@@ -104,15 +113,25 @@ impl AppState {
             data_dir,
             cluster_router,
             embeddings,
+            inference: None,
+            inference_loaded_at: 0,
             machine: MachineReadings::start(SAMPLE_INTERVAL)?,
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
             app_config,
             booted_with,
+            booted_inference,
             config_source: ConfigSource::default(),
             rebuild_jobs: Arc::new(DashMap::new()),
             config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs())),
         })
+    }
+
+    /// Serve generations from a loaded model.
+    pub fn with_inference(mut self, manager: Arc<InferenceManager>) -> Self {
+        self.inference = Some(manager);
+        self.inference_loaded_at = piramid_core::clock::unix_secs();
+        self
     }
 
     /// Read reloads from source, the one the process booted from.
@@ -199,6 +218,13 @@ impl AppState {
         if new_cfg.startup != self.booted_with {
             return Err(ServerError::InvalidRequest(
                 "the startup block changed; those settings are applied at boot, so this needs a restart"
+                    .to_string(),
+            )
+            .into());
+        }
+        if new_cfg.runtime.inference != self.booted_inference {
+            return Err(ServerError::InvalidRequest(
+                "runtime.inference changed; the model is loaded with it at boot, so this needs a restart"
                     .to_string(),
             )
             .into());

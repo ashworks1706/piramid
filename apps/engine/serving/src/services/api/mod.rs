@@ -3,6 +3,7 @@
 mod collections;
 mod config;
 mod embeddings;
+mod generation;
 mod health;
 mod metrics;
 mod search;
@@ -12,6 +13,7 @@ mod version;
 pub use collections::*;
 pub use config::*;
 pub use embeddings::*;
+pub use generation::*;
 pub use health::*;
 pub use metrics::*;
 pub use search::*;

@@ -23,6 +23,62 @@ pub struct MetricsResponse {
     /// measured none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub gpus: Vec<GpuMetricsResponse>,
+    /// Generation counters and the state of the scheduler and key/value cache. Left out when no
+    /// model is loaded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inference: Option<InferenceMetricsResponse>,
+}
+
+/// Generation counters of the loaded model. An average not yet measured is left out.
+#[derive(Debug, Default, Serialize)]
+pub struct InferenceMetricsResponse {
+    /// Checkpoint name of the loaded model.
+    pub model: String,
+    /// Device the model runs on.
+    pub device: String,
+    /// Requests accepted into the queue.
+    pub requests_admitted: u64,
+    /// Requests that ended with a finish reason.
+    pub requests_finished: u64,
+    /// Requests that ended with an error.
+    pub requests_failed: u64,
+    /// Prompt tokens across admitted requests.
+    pub prompt_tokens: u64,
+    /// Prompt tokens served from shared cache pages.
+    pub cached_prompt_tokens: u64,
+    /// Tokens generated.
+    pub generated_tokens: u64,
+    /// Mean time from admission to the first token, in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_time_to_first_token_ms: Option<f32>,
+    /// Decode tokens per second.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decode_tokens_per_second: Option<f32>,
+    /// Mean decode step duration, in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_decode_step_ms: Option<f32>,
+    /// Prefill tokens per second.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefill_tokens_per_second: Option<f32>,
+    /// Sequences preempted for recompute.
+    pub preemptions: u64,
+    /// Requests waiting for admission.
+    pub queue_depth: u64,
+    /// Sequences being generated.
+    pub running: u64,
+    /// Sequences in the most recent step.
+    pub last_batch_size: u64,
+    /// Pages in the key/value pool.
+    pub kv_blocks_total: u64,
+    /// Pages held by a sequence.
+    pub kv_blocks_used: u64,
+    /// Free pages still carrying a reusable prefix.
+    pub kv_blocks_cached: u64,
+    /// Prefix pages evicted to make room.
+    pub kv_evictions: u64,
+    /// Share of looked-up prompt tokens served from shared pages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix_hit_rate: Option<f32>,
 }
 
 /// Metrics of one loaded collection.
@@ -189,6 +245,7 @@ mod tests {
             },
             host: HostMetricsResponse::default(),
             gpus,
+            inference: None,
         };
         let json = serde_json::to_value(metrics(Vec::new())).unwrap();
         assert!(json.get("gpus").is_none(), "{json}");

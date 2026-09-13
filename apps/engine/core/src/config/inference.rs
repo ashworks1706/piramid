@@ -15,6 +15,10 @@ pub struct InferenceConfig {
     /// Directory or file holding the weights.
     pub model_path: Option<String>,
 
+    /// Name clients address the model by, the OpenAI model id. None is the model_path directory
+    /// name.
+    pub model_name: Option<String>,
+
     /// Tokenizer location, when it does not sit beside the weights.
     pub tokenizer_path: Option<String>,
 
@@ -52,6 +56,7 @@ impl Default for InferenceConfig {
         InferenceConfig {
             enabled: false,
             model_path: None,
+            model_name: None,
             tokenizer_path: None,
             architecture: None,
             device: None,
@@ -372,6 +377,9 @@ impl InferenceConfig {
     pub fn validate(&self) -> Result<(), String> {
         if self.enabled && self.model_path.is_none() {
             return Err("runtime.inference.model_path: required when inference is enabled".into());
+        }
+        if self.model_name.as_deref().is_some_and(str::is_empty) {
+            return Err("runtime.inference.model_name: must not be empty".into());
         }
         if let Some(device) = &self.device {
             let cuda = device

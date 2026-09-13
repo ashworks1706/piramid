@@ -22,8 +22,8 @@ path = "src/main.rs"
 
 [features]
 default = []
-gpu-cuda = ["piramid-hardware/gpu-cuda"]
-inference-candle = ["piramid-model/inference-candle"]
+gpu-cuda = ["piramid-hardware/gpu-cuda", "piramid-model/gpu-cuda", "piramid-serving/gpu-cuda"]
+inference-candle = ["piramid-model/inference-candle", "piramid-serving/inference-candle"]
 # Export traces over OTLP to any collector (Axiom, Tempo, Honeycomb, Jaeger).
 otel = ["piramid-core/otel"]
 

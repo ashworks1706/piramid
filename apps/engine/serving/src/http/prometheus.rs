@@ -2,7 +2,9 @@
 
 use piramid_core::observability::prometheus::{MetricType, Registry};
 
-use crate::services::api::{GpuMetricsResponse, HostMetricsResponse, MetricsResponse};
+use crate::services::api::{
+    GpuMetricsResponse, HostMetricsResponse, InferenceMetricsResponse, MetricsResponse,
+};
 
 /// Render a metrics snapshot in the Prometheus text format.
 pub fn render(metrics: &MetricsResponse) -> String {
@@ -140,6 +142,9 @@ pub fn render(metrics: &MetricsResponse) -> String {
 
     render_host(&mut registry, &metrics.host);
     render_gpus(&mut registry, &metrics.gpus);
+    if let Some(inference) = &metrics.inference {
+        render_inference(&mut registry, inference);
+    }
 
     registry.render()
 }
@@ -180,6 +185,119 @@ fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
 
 /// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
 /// server could not measure.
+fn render_inference(registry: &mut Registry, inference: &InferenceMetricsResponse) {
+    let counters: [(&str, &str, u64); 8] = [
+        (
+            "piramid_inference_requests_admitted_total",
+            "Generation requests accepted into the queue.",
+            inference.requests_admitted,
+        ),
+        (
+            "piramid_inference_requests_finished_total",
+            "Generation requests that ended with a finish reason.",
+            inference.requests_finished,
+        ),
+        (
+            "piramid_inference_requests_failed_total",
+            "Generation requests that ended with an error.",
+            inference.requests_failed,
+        ),
+        (
+            "piramid_inference_prompt_tokens_total",
+            "Prompt tokens across admitted requests.",
+            inference.prompt_tokens,
+        ),
+        (
+            "piramid_inference_cached_prompt_tokens_total",
+            "Prompt tokens served from shared key/value pages.",
+            inference.cached_prompt_tokens,
+        ),
+        (
+            "piramid_inference_generated_tokens_total",
+            "Tokens generated.",
+            inference.generated_tokens,
+        ),
+        (
+            "piramid_inference_preemptions_total",
+            "Sequences preempted for recompute.",
+            inference.preemptions,
+        ),
+        (
+            "piramid_kv_evictions_total",
+            "Prefix pages evicted to make room.",
+            inference.kv_evictions,
+        ),
+    ];
+    for (name, help, value) in counters {
+        registry.metric(name, help, MetricType::Counter, value as f64);
+    }
+    let gauges: [(&str, &str, u64); 6] = [
+        (
+            "piramid_inference_queue_depth",
+            "Generation requests waiting for admission.",
+            inference.queue_depth,
+        ),
+        (
+            "piramid_inference_running",
+            "Sequences being generated.",
+            inference.running,
+        ),
+        (
+            "piramid_inference_batch_size",
+            "Sequences in the most recent forward step.",
+            inference.last_batch_size,
+        ),
+        (
+            "piramid_kv_blocks",
+            "Pages in the key/value pool.",
+            inference.kv_blocks_total,
+        ),
+        (
+            "piramid_kv_blocks_used",
+            "Key/value pages held by a sequence.",
+            inference.kv_blocks_used,
+        ),
+        (
+            "piramid_kv_blocks_cached",
+            "Free key/value pages still carrying a reusable prefix.",
+            inference.kv_blocks_cached,
+        ),
+    ];
+    for (name, help, value) in gauges {
+        registry.metric(name, help, MetricType::Gauge, value as f64);
+    }
+    let averages: [(&str, &str, Option<f32>); 5] = [
+        (
+            "piramid_inference_time_to_first_token_ms",
+            "Mean time from admission to the first token, in milliseconds.",
+            inference.avg_time_to_first_token_ms,
+        ),
+        (
+            "piramid_inference_decode_tokens_per_second",
+            "Decode tokens per second.",
+            inference.decode_tokens_per_second,
+        ),
+        (
+            "piramid_inference_decode_step_ms",
+            "Mean decode step duration, in milliseconds.",
+            inference.avg_decode_step_ms,
+        ),
+        (
+            "piramid_inference_prefill_tokens_per_second",
+            "Prefill tokens per second.",
+            inference.prefill_tokens_per_second,
+        ),
+        (
+            "piramid_kv_prefix_hit_ratio",
+            "Share of looked-up prompt tokens served from shared pages.",
+            inference.prefix_hit_rate,
+        ),
+    ];
+    for (name, help, value) in averages {
+        registry.optional_metric(name, help, MetricType::Gauge, value.map(f64::from));
+    }
+}
+
 fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
     let by_device = |extract: fn(&GpuMetricsResponse) -> Option<f64>| {
         gpus.iter()

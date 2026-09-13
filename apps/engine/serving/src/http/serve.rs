@@ -133,6 +133,14 @@ where
         sweeper.abort();
     }
     state.initiate_shutdown();
+    if let Some(manager) = state.inference.clone() {
+        if tokio::task::spawn_blocking(move || manager.shutdown())
+            .await
+            .is_err()
+        {
+            tracing::error!(target: "piramid::shutdown", "inference_shutdown_task_failed");
+        }
+    }
     let checkpointed = checkpoint(state).await;
     served?;
     checkpointed

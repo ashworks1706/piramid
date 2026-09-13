@@ -182,13 +182,32 @@ fn start_server_inline(
             }
             None => embeddings::EmbeddingsManager::disabled(),
         };
+        let inference = if config.runtime.inference.enabled {
+            let inference_config = config.runtime.inference.clone();
+            let hardware = config.startup.hardware;
+            let manager = tokio::task::spawn_blocking(move || {
+                piramid::InferenceManager::load(
+                    &inference_config,
+                    &hardware,
+                    std::sync::Arc::new(piramid::fusion::NoopRetrievalHook),
+                )
+            })
+            .await
+            .map_err(std::io::Error::other)?
+            .map_err(|e| std::io::Error::other(format!("model failed to load: {e}")))?;
+            Some(std::sync::Arc::new(manager))
+        } else {
+            None
+        };
         let addr = config.startup.bind.clone();
         let data_dir = config.startup.data_dir.clone();
-        let state = std::sync::Arc::new(
-            AppState::new(config, embeddings)
-                .map_err(std::io::Error::other)?
-                .with_config_source(source),
-        );
+        let mut state = AppState::new(config, embeddings)
+            .map_err(std::io::Error::other)?
+            .with_config_source(source);
+        if let Some(manager) = inference {
+            state = state.with_inference(manager);
+        }
+        let state = std::sync::Arc::new(state);
 
         tracing::info!(
             target: "piramid::config",

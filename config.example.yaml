@@ -241,6 +241,9 @@ runtime:
     enabled: false
     # Directory holding config.json, tokenizer.json, tokenizer_config.json and the safetensors.
     model_path: null
+    # The name clients address the model by, including the OpenAI model id. null is the model_path
+    # directory name.
+    model_name: null
     # Only needed when the tokenizer does not sit beside the weights.
     tokenizer_path: null
     # qwen2 | qwen3, checked against the checkpoint. null reads it from the checkpoint.

@@ -2856,8 +2856,10 @@ dependencies = [
 name = "piramid-serving"
 version = "0.2.0"
 dependencies = [
+ "async-trait",
  "axum",
  "dashmap",
+ "futures",
  "governor",
  "libc",
  "num_cpus",

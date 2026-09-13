@@ -101,7 +101,7 @@ impl Generation {
 /// What a caller needs to know about the loaded model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelInfo {
-    /// Name of the checkpoint directory.
+    /// Name clients address the model by.
     pub name: String,
     /// Decoder family.
     pub architecture: &'static str,
@@ -141,10 +141,12 @@ impl InferenceManager {
             None if hardware.gpu_enabled() => format!("cuda:{}", hardware.gpu.device_ordinal),
             None => "cpu".to_string(),
         };
-        let model_name = dir.file_name().map_or_else(
-            || dir.display().to_string(),
-            |name| name.to_string_lossy().into_owned(),
-        );
+        let model_name = config.model_name.clone().unwrap_or_else(|| {
+            dir.file_name().map_or_else(
+                || dir.display().to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            )
+        });
         let loaded = start(
             config,
             &dir,

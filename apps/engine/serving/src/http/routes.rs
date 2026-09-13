@@ -98,10 +98,13 @@ fn api_router(state: SharedState) -> Router<SharedState> {
             "/collections/{collection}/search/text",
             post(handlers::search_by_text),
         )
+        .route("/model", get(handlers::model))
+        .route("/generate", post(handlers::generate))
         .with_state(state)
 }
 
-/// Build the router: API routes under /api, the Prometheus endpoint, and middleware.
+/// Build the router: API routes under /api, the Prometheus endpoint, the OpenAI-compatible routes
+/// under /v1, and middleware.
 ///
 /// When the process booted with an API key, every route except /api/health and /api/readyz
 /// requires it. A rate limit keys on peer addresses, so the router is served with connect info.
@@ -115,7 +118,13 @@ pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Rout
     let mut router = Router::<SharedState>::new()
         .nest("/api", api_router(state.clone()))
         // The Prometheus endpoint sits outside the API prefix.
-        .route("/metrics", get(handlers::prometheus_metrics));
+        .route("/metrics", get(handlers::prometheus_metrics))
+        // OpenAI-compatible clients take a base URL ending in /v1.
+        .route("/v1/models", get(handlers::openai_models))
+        .route(
+            "/v1/chat/completions",
+            post(handlers::openai_chat_completions),
+        );
     if let Some(key) = state.http_config().auth.api_key.clone() {
         router = router.route_layer(middleware::from_fn_with_state(
             Arc::new(key),
