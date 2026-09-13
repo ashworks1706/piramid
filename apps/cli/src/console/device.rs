@@ -1,5 +1,5 @@
-//! Device view state: host, GPU and generation readings over time, and handing the terminal to a process
-//! monitor.
+//! Device view state: host, GPU, device memory budget and generation readings over time, and
+//! handing the terminal to a process monitor.
 //! Drawing is in ui, HTTP is in client.
 
 use std::collections::VecDeque;
@@ -8,7 +8,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::client::{GpuMetrics, HostMetrics, InferenceMetrics};
+use super::client::{GpuBudget, GpuMetrics, HostMetrics, InferenceMetrics};
 
 /// How many refreshes the graphs keep.
 const HISTORY: usize = 240;
@@ -25,6 +25,8 @@ pub struct Sample {
     pub host: Option<HostMetrics>,
     /// One entry per GPU the server measured. Empty for a refresh that failed or measured none.
     pub gpus: Vec<GpuMetrics>,
+    /// The device memory budget. None for a refresh that failed or a server with no GPU open.
+    pub budget: Option<GpuBudget>,
     /// Generation readings. None for a refresh that failed or a server with no model loaded.
     pub inference: Option<InferenceMetrics>,
 }
@@ -78,6 +80,7 @@ impl DeviceView {
         at: Instant,
         host: Option<HostMetrics>,
         gpus: Vec<GpuMetrics>,
+        budget: Option<GpuBudget>,
         inference: Option<InferenceMetrics>,
     ) {
         if self.samples.len() == HISTORY {
@@ -87,6 +90,7 @@ impl DeviceView {
             at,
             host,
             gpus,
+            budget,
             inference,
         });
     }
@@ -101,6 +105,13 @@ impl DeviceView {
         self.samples
             .back()
             .and_then(|sample| sample.gpus.iter().find(|gpu| gpu.index == index))
+    }
+
+    /// The device memory budget of the newest refresh, if it has one.
+    pub fn latest_budget(&self) -> Option<&GpuBudget> {
+        self.samples
+            .back()
+            .and_then(|sample| sample.budget.as_ref())
     }
 
     /// The generation readings of the newest refresh, if it has any.

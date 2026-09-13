@@ -37,6 +37,8 @@ pub struct Metrics {
     /// One entry per GPU the server measured. Empty when the server left the list out.
     #[serde(default)]
     pub gpus: Vec<GpuMetrics>,
+    /// How the device memory budget is divided and used. None when the server has no GPU open.
+    pub gpu_budget: Option<GpuBudget>,
     /// Generation counters and scheduler state. None when the server has no model loaded.
     pub inference: Option<InferenceMetrics>,
 }
@@ -58,6 +60,26 @@ pub struct InferenceMetrics {
     pub kv_blocks_cached: u64,
     pub kv_evictions: u64,
     pub prefix_hit_rate: Option<f32>,
+}
+
+/// The device memory budget: the bytes it covers and the use of each pool drawing from it.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct GpuBudget {
+    /// Bytes the budget covers after the reserve.
+    pub usable_bytes: u64,
+    /// Whether every pool draws from one shared budget.
+    pub shared: bool,
+    /// Capacity and use of each pool, in the order the server sends them.
+    pub pools: Vec<GpuPool>,
+}
+
+/// One pool of the device memory budget. Under a shared budget the capacity is the whole budget.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct GpuPool {
+    /// The pool name: weights, kv_cache or index.
+    pub pool: String,
+    pub capacity_bytes: u64,
+    pub used_bytes: u64,
 }
 
 /// Processor and memory use of the host and of the server process. An absent field is one the
