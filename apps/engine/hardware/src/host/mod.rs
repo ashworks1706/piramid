@@ -1,7 +1,10 @@
-//! The host: processor and memory readings for the machine and for this process.
+//! The host: processor and memory readings for the machine and for this process, and readings of
+//! its GPUs.
 
+#[cfg(feature = "gpu-cuda")]
+mod nvml;
 pub mod reading;
 pub mod sampler;
 
-pub use reading::HostReading;
-pub use sampler::HostSampler;
+pub use reading::{GpuReading, HostReading};
+pub use sampler::{GpuSampler, HostSampler};

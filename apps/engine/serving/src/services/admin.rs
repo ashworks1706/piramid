@@ -133,6 +133,12 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             avg_latency_ms: embed_metrics.avg_latency_ms,
         },
         host: crate::services::convert::host_to_response(state.machine.host()),
+        gpus: state
+            .machine
+            .gpus()
+            .into_iter()
+            .map(crate::services::convert::gpu_to_response)
+            .collect(),
     })
 }
 

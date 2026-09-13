@@ -2,7 +2,7 @@
 
 use piramid_core::observability::prometheus::{MetricType, Registry};
 
-use crate::services::api::{HostMetricsResponse, MetricsResponse};
+use crate::services::api::{GpuMetricsResponse, HostMetricsResponse, MetricsResponse};
 
 /// Render a metrics snapshot in the Prometheus text format.
 pub fn render(metrics: &MetricsResponse) -> String {
@@ -139,6 +139,7 @@ pub fn render(metrics: &MetricsResponse) -> String {
     );
 
     render_host(&mut registry, &metrics.host);
+    render_gpus(&mut registry, &metrics.gpus);
 
     registry.render()
 }
@@ -174,6 +175,42 @@ fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
         "Resident memory of the server process.",
         MetricType::Gauge,
         host.process_resident_bytes.map(|bytes| bytes as f64),
+    );
+}
+
+/// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
+/// server could not measure.
+fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
+    let by_device = |extract: fn(&GpuMetricsResponse) -> Option<f64>| {
+        gpus.iter()
+            .filter_map(|gpu| {
+                extract(gpu).map(|value| (vec![("gpu", gpu.index.to_string())], value))
+            })
+            .collect::<Vec<_>>()
+    };
+    registry.metric_family(
+        "piramid_gpu_memory_used_bytes",
+        "Device memory in use on a GPU.",
+        MetricType::Gauge,
+        by_device(|gpu| gpu.memory_used_bytes.map(|bytes| bytes as f64)),
+    );
+    registry.metric_family(
+        "piramid_gpu_memory_total_bytes",
+        "Device memory installed on a GPU.",
+        MetricType::Gauge,
+        by_device(|gpu| gpu.memory_total_bytes.map(|bytes| bytes as f64)),
+    );
+    registry.metric_family(
+        "piramid_gpu_utilization_percent",
+        "Share of the last sample period during which a kernel ran on a GPU, from 0 to 100.",
+        MetricType::Gauge,
+        by_device(|gpu| gpu.utilization_percent.map(f64::from)),
+    );
+    registry.metric_family(
+        "piramid_gpu_temperature_celsius",
+        "Temperature of a GPU die in degrees Celsius.",
+        MetricType::Gauge,
+        by_device(|gpu| gpu.temperature_celsius.map(f64::from)),
     );
 }
 
@@ -230,5 +267,62 @@ mod tests {
         assert!(!out.contains("piramid_host_cpu_percent"));
         assert!(!out.contains("piramid_host_memory_used_bytes"));
         assert!(!out.contains("piramid_process_"));
+    }
+
+    fn rendered_gpus(gpus: &[GpuMetricsResponse]) -> String {
+        let mut registry = Registry::new();
+        render_gpus(&mut registry, gpus);
+        registry.render()
+    }
+
+    #[test]
+    fn no_measured_gpu_writes_no_family() {
+        assert_eq!(rendered_gpus(&[]), "");
+        assert_eq!(rendered_gpus(&[GpuMetricsResponse::default()]), "");
+    }
+
+    #[test]
+    fn a_measured_gpu_writes_every_family_labelled_by_index() {
+        let out = rendered_gpus(&[GpuMetricsResponse {
+            index: 1,
+            name: Some("device".to_owned()),
+            memory_used_bytes: Some(1024),
+            memory_total_bytes: Some(4096),
+            utilization_percent: Some(0.0),
+            temperature_celsius: Some(54.0),
+        }]);
+        for family in [
+            "piramid_gpu_memory_used_bytes",
+            "piramid_gpu_memory_total_bytes",
+            "piramid_gpu_utilization_percent",
+            "piramid_gpu_temperature_celsius",
+        ] {
+            assert!(
+                out.contains(&format!("# TYPE {family} gauge\n")),
+                "{family} in {out}"
+            );
+        }
+        assert!(out.contains("piramid_gpu_memory_total_bytes{gpu=\"1\"} 4096\n"));
+        assert!(out.contains("piramid_gpu_utilization_percent{gpu=\"1\"} 0\n"));
+        assert!(out.contains("piramid_gpu_temperature_celsius{gpu=\"1\"} 54\n"));
+    }
+
+    #[test]
+    fn only_the_measured_gpu_fields_are_written() {
+        let out = rendered_gpus(&[
+            GpuMetricsResponse {
+                index: 0,
+                temperature_celsius: Some(40.0),
+                ..GpuMetricsResponse::default()
+            },
+            GpuMetricsResponse {
+                index: 1,
+                ..GpuMetricsResponse::default()
+            },
+        ]);
+        assert!(out.contains("piramid_gpu_temperature_celsius{gpu=\"0\"} 40\n"));
+        assert!(!out.contains("gpu=\"1\""));
+        assert!(!out.contains("piramid_gpu_memory"));
+        assert!(!out.contains("piramid_gpu_utilization_percent"));
     }
 }

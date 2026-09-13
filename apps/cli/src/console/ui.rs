@@ -13,7 +13,7 @@ use ratatui::Frame;
 use crate::console::app::{App, UnitState};
 use crate::console::client::HostMetrics;
 use crate::console::collections::Row;
-use crate::console::device::Run;
+use crate::console::device::{DeviceView, Run};
 use crate::console::types::{
     ConfigState, Focus, Group, Mode, Probe, Profile, Status, Stream, View,
 };
@@ -236,9 +236,10 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
     lines
 }
 
-/// Host processor and memory of the watched server, graphed over the refresh history.
+/// Host processor and memory of the watched server, and each of its GPUs, graphed over the
+/// refresh history.
 fn device(frame: &mut Frame, app: &App, area: Rect) {
-    let [about, cpu_area, memory_area] = Layout::vertical([
+    let [about, cpu_row, memory_row] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(6),
         Constraint::Min(6),
@@ -246,6 +247,15 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
     .areas(area);
     let view = &app.device;
     let latest = view.latest();
+    let gpu_indices = view.gpu_indices();
+    let columns = vec![Constraint::Fill(1); gpu_indices.len() + 1];
+    let cpu_cells = Layout::horizontal(columns.clone()).split(cpu_row);
+    let memory_cells = Layout::horizontal(columns).split(memory_row);
+    let ([cpu_area, gpu_compute_cells @ ..], [memory_area, gpu_memory_cells @ ..]) =
+        (&cpu_cells[..], &memory_cells[..])
+    else {
+        return;
+    };
 
     let where_line = if view.local() {
         Line::from(vec![
@@ -304,7 +314,7 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
             100.0,
             ["0%".to_owned(), "50%".to_owned(), "100%".to_owned()],
         ),
-        cpu_area,
+        *cpu_area,
     );
 
     let used = view.series(now, |h| h.memory_used_bytes.map(|b| b as f64));
@@ -345,6 +355,115 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
                 bytes(ceiling as u64),
             ],
         ),
+        *memory_area,
+    );
+
+    for ((index, compute_area), memory_area) in gpu_indices
+        .iter()
+        .zip(gpu_compute_cells)
+        .zip(gpu_memory_cells)
+    {
+        gpu(
+            frame,
+            view,
+            *index,
+            now,
+            window,
+            *compute_area,
+            *memory_area,
+        );
+    }
+}
+
+/// Utilisation, temperature and memory of the GPU at index, graphed over the refresh history.
+/// Utilisation and temperature are drawn in compute_area and device memory in memory_area.
+fn gpu(
+    frame: &mut Frame,
+    view: &DeviceView,
+    index: u32,
+    now: std::time::Instant,
+    window: f64,
+    compute_area: Rect,
+    memory_area: Rect,
+) {
+    let latest = view.latest_gpu(index);
+    let label = latest.and_then(|g| g.name.as_deref()).map_or_else(
+        || format!("gpu {index}"),
+        |name| format!("gpu {index} {name}"),
+    );
+
+    let busy = view.gpu_series(now, index, |g| g.utilization_percent.map(f64::from));
+    let temperature = view.gpu_series(now, index, |g| g.temperature_celsius.map(f64::from));
+    let top = temperature
+        .iter()
+        .flatten()
+        .map(|(_, celsius)| *celsius)
+        .fold(100.0, f64::max);
+    let compute_title = format!(
+        " {label}  busy {}  temperature {} ",
+        percent(latest.and_then(|g| g.utilization_percent)),
+        celsius(latest.and_then(|g| g.temperature_celsius))
+    );
+    frame.render_widget(
+        chart(
+            &compute_title,
+            [
+                Series {
+                    runs: &busy,
+                    color: ACCENT,
+                    name: "busy %",
+                },
+                Series {
+                    runs: &temperature,
+                    color: Color::Red,
+                    name: "temperature C",
+                },
+            ],
+            window,
+            top,
+            [
+                "0".to_owned(),
+                format!("{:.0}", top / 2.0),
+                format!("{top:.0}"),
+            ],
+        ),
+        compute_area,
+    );
+
+    let used = view.gpu_series(now, index, |g| g.memory_used_bytes.map(|b| b as f64));
+    let ceiling = view
+        .samples
+        .iter()
+        .flat_map(|sample| sample.gpus.iter())
+        .filter(|g| g.index == index)
+        .filter_map(|g| g.memory_total_bytes.or(g.memory_used_bytes))
+        .max()
+        .map_or(1.0, |top| (top as f64).max(1.0));
+    let memory_title = format!(
+        " {label} memory {} of {} ",
+        latest
+            .and_then(|g| g.memory_used_bytes)
+            .map_or_else(unmeasured, bytes),
+        latest
+            .and_then(|g| g.memory_total_bytes)
+            .map_or_else(unmeasured, bytes)
+    );
+    frame.render_widget(
+        chart(
+            &memory_title,
+            [Series {
+                runs: &used,
+                color: ACCENT,
+                name: "used",
+            }],
+            window,
+            ceiling,
+            [
+                "0".to_owned(),
+                bytes((ceiling / 2.0) as u64),
+                bytes(ceiling as u64),
+            ],
+        ),
         memory_area,
     );
 }
@@ -356,10 +475,10 @@ struct Series<'a> {
     name: &'static str,
 }
 
-/// A line chart of two series over the last window seconds, from zero to ceiling.
-fn chart<'a>(
+/// A line chart of the series over the last window seconds, from zero to ceiling.
+fn chart<'a, const N: usize>(
     title: &str,
-    series: [Series<'a>; 2],
+    series: [Series<'a>; N],
     window: f64,
     ceiling: f64,
     y_labels: [String; 3],
@@ -413,6 +532,11 @@ fn memory_ceiling<'a>(readings: impl Iterator<Item = &'a HostMetrics>) -> f64 {
 /// A percentage reading, or a phrase saying it was not measured.
 fn percent(value: Option<f32>) -> String {
     value.map_or_else(unmeasured, |v| format!("{v:.1}%"))
+}
+
+/// A temperature reading in degrees Celsius, or a phrase saying it was not measured.
+fn celsius(value: Option<f32>) -> String {
+    value.map_or_else(unmeasured, |v| format!("{v:.0} C"))
 }
 
 /// The phrase shown in place of a reading the server did not report.

@@ -1,4 +1,5 @@
-//! Device view state: host readings over time, and handing the terminal to a process monitor.
+//! Device view state: host and GPU readings over time, and handing the terminal to a process
+//! monitor.
 //! Drawing is in ui, HTTP is in client.
 
 use std::collections::VecDeque;
@@ -7,7 +8,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use super::client::HostMetrics;
+use super::client::{GpuMetrics, HostMetrics};
 
 /// How many refreshes the graphs keep.
 const HISTORY: usize = 240;
@@ -15,13 +16,15 @@ const HISTORY: usize = 240;
 /// Consecutive points of one reading, as seconds before now against value.
 pub type Run = Vec<(f64, f64)>;
 
-/// One refresh of the host readings.
-#[derive(Debug, Clone, Copy)]
+/// One refresh of the machine readings.
+#[derive(Debug, Clone)]
 pub struct Sample {
     /// When the refresh landed.
     pub at: Instant,
     /// What the server reported. None for a refresh that failed or a server without host readings.
     pub host: Option<HostMetrics>,
+    /// One entry per GPU the server measured. Empty for a refresh that failed or measured none.
+    pub gpus: Vec<GpuMetrics>,
 }
 
 /// A process monitor the terminal can be handed to.
@@ -68,11 +71,11 @@ impl DeviceView {
     }
 
     /// Appends one refresh, dropping the oldest once the history is full.
-    pub fn record(&mut self, at: Instant, host: Option<HostMetrics>) {
+    pub fn record(&mut self, at: Instant, host: Option<HostMetrics>, gpus: Vec<GpuMetrics>) {
         if self.samples.len() == HISTORY {
             self.samples.pop_front();
         }
-        self.samples.push_back(Sample { at, host });
+        self.samples.push_back(Sample { at, host, gpus });
     }
 
     /// The readings of the newest refresh, if it has any.
@@ -80,14 +83,58 @@ impl DeviceView {
         self.samples.back().and_then(|sample| sample.host.as_ref())
     }
 
-    /// Runs of consecutive readings as points of seconds before now against value.
+    /// The readings of the GPU at index in the newest refresh, if it has any.
+    pub fn latest_gpu(&self, index: u32) -> Option<&GpuMetrics> {
+        self.samples
+            .back()
+            .and_then(|sample| sample.gpus.iter().find(|gpu| gpu.index == index))
+    }
+
+    /// The index of every GPU any refresh in the history reported, in ascending order.
+    pub fn gpu_indices(&self) -> Vec<u32> {
+        let mut indices: Vec<u32> = self
+            .samples
+            .iter()
+            .flat_map(|sample| sample.gpus.iter().map(|gpu| gpu.index))
+            .collect();
+        indices.sort_unstable();
+        indices.dedup();
+        indices
+    }
+
+    /// Runs of consecutive host readings as points of seconds before now against value.
     ///
     /// A refresh without the reading ends a run, so an absent reading is a gap in the graph.
     pub fn series(&self, now: Instant, read: impl Fn(&HostMetrics) -> Option<f64>) -> Vec<Run> {
+        self.runs(now, |sample| sample.host.as_ref().and_then(&read))
+    }
+
+    /// Runs of consecutive readings of the GPU at index, as points of seconds before now against
+    /// value.
+    ///
+    /// A refresh without that GPU or without the reading ends a run, so an absent reading is a gap
+    /// in the graph.
+    pub fn gpu_series(
+        &self,
+        now: Instant,
+        index: u32,
+        read: impl Fn(&GpuMetrics) -> Option<f64>,
+    ) -> Vec<Run> {
+        self.runs(now, |sample| {
+            sample
+                .gpus
+                .iter()
+                .find(|gpu| gpu.index == index)
+                .and_then(&read)
+        })
+    }
+
+    /// Runs of consecutive values read from each refresh, split wherever read gives None.
+    fn runs(&self, now: Instant, read: impl Fn(&Sample) -> Option<f64>) -> Vec<Run> {
         let mut runs: Vec<Run> = Vec::new();
         let mut open = false;
         for sample in &self.samples {
-            match sample.host.as_ref().and_then(&read) {
+            match read(sample) {
                 Some(value) => {
                     let x = -now.saturating_duration_since(sample.at).as_secs_f64();
                     match runs.last_mut().filter(|_| open) {

@@ -2,7 +2,7 @@
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
-use crate::host::reading::HostReading;
+use crate::host::reading::{GpuReading, HostReading};
 
 /// Reads host processor and memory use.
 ///
@@ -87,6 +87,81 @@ fn share_of_host(percent_of_one_cpu: f32, cpus: usize) -> f32 {
     percent_of_one_cpu / f32::from(cpus)
 }
 
+/// Reads memory, utilisation and temperature of every GPU the driver reports.
+///
+/// A build without the gpu-cuda feature, a machine without the NVIDIA Management Library, and a
+/// driver that reports no device all give no readings. The reason is logged once.
+#[derive(Debug)]
+pub struct GpuSampler {
+    #[cfg(feature = "gpu-cuda")]
+    library: Option<crate::host::nvml::Library>,
+    #[cfg(feature = "gpu-cuda")]
+    reported: bool,
+}
+
+impl GpuSampler {
+    /// A sampler bound to the driver library, when this build and this machine have one.
+    #[cfg(feature = "gpu-cuda")]
+    pub fn new() -> Self {
+        let library = match crate::host::nvml::Library::load() {
+            Ok(library) => Some(library),
+            Err(reason) => {
+                tracing::warn!(
+                    target: "piramid::host",
+                    %reason,
+                    "GPU readings are absent: the NVIDIA Management Library did not load"
+                );
+                None
+            }
+        };
+        Self {
+            library,
+            reported: false,
+        }
+    }
+
+    /// A sampler that reads no GPU, as this build has no driver library.
+    #[cfg(not(feature = "gpu-cuda"))]
+    pub fn new() -> Self {
+        tracing::debug!(
+            target: "piramid::host",
+            "GPU readings are absent: built without the gpu-cuda feature"
+        );
+        Self {}
+    }
+
+    /// Take one reading per device. Empty when no device is measured.
+    #[cfg(feature = "gpu-cuda")]
+    pub fn sample(&mut self) -> Vec<GpuReading> {
+        let Some(library) = &self.library else {
+            return Vec::new();
+        };
+        let (readings, reason) = match library.sample() {
+            Ok(readings) if readings.is_empty() => {
+                (readings, "the driver reports no device".into())
+            }
+            Ok(readings) => return readings,
+            Err(reason) => (Vec::new(), reason),
+        };
+        if !std::mem::replace(&mut self.reported, true) {
+            tracing::warn!(target: "piramid::host", %reason, "GPU readings are absent");
+        }
+        readings
+    }
+
+    /// Take one reading per device. Always empty, as this build has no driver library.
+    #[cfg(not(feature = "gpu-cuda"))]
+    pub fn sample(&mut self) -> Vec<GpuReading> {
+        Vec::new()
+    }
+}
+
+impl Default for GpuSampler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -130,6 +205,30 @@ mod tests {
         assert!(total > 0);
         assert!(used <= total);
         assert!(reading.process_resident_bytes.is_some_and(|rss| rss > 0));
+    }
+
+    #[cfg(not(feature = "gpu-cuda"))]
+    #[test]
+    fn a_build_without_the_gpu_feature_reads_no_gpu() {
+        assert!(GpuSampler::new().sample().is_empty());
+    }
+
+    #[cfg(feature = "gpu-cuda")]
+    #[test]
+    #[ignore = "needs an NVIDIA driver and device"]
+    fn a_real_device_reports_memory_utilization_and_temperature() {
+        let readings = GpuSampler::new().sample();
+        assert!(!readings.is_empty(), "no device was read");
+        for reading in &readings {
+            let total = reading.memory_total_bytes.unwrap_or(0);
+            let used = reading.memory_used_bytes.unwrap_or(u64::MAX);
+            assert!(total > 0, "{reading:?}");
+            assert!(used <= total, "{reading:?}");
+            let busy = reading.utilization_percent.unwrap_or(-1.0);
+            assert!((0.0..=100.0).contains(&busy), "{reading:?}");
+            let celsius = reading.temperature_celsius.unwrap_or(-1.0);
+            assert!((1.0..=150.0).contains(&celsius), "{reading:?}");
+        }
     }
 
     #[test]

@@ -79,6 +79,7 @@ minijinja = { version = "2", features = ["json", "loop_controls"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
 cudarc = { version = "0.19.8", default-features = false, features = ["std", "driver", "nvrtc", "cuda-version-from-build-system", "dynamic-linking"] }
+nvml-wrapper = "0.13"
 
 # storage + concurrency
 memmap2 = "0.9.11"
