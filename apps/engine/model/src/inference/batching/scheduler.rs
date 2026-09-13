@@ -338,6 +338,11 @@ impl<P> Scheduler<P> {
     }
 
     /// The running sequence with an id.
+    pub fn running(&self, id: u64) -> Option<&Sequence<P>> {
+        self.running.iter().find(|sequence| sequence.id == id)
+    }
+
+    /// The running sequence with an id, mutably.
     pub fn running_mut(&mut self, id: u64) -> Option<&mut Sequence<P>> {
         self.running.iter_mut().find(|sequence| sequence.id == id)
     }
@@ -392,7 +397,7 @@ impl<P> Scheduler<P> {
     }
 
     /// Sequences running.
-    pub fn running(&self) -> usize {
+    pub fn running_count(&self) -> usize {
         self.running.len()
     }
 
@@ -540,7 +545,7 @@ mod tests {
             .submit(Sequence::new(2, prompt(8), 8, ()))
             .unwrap();
         run(&mut scheduler);
-        assert_eq!(scheduler.running(), 2);
+        assert_eq!(scheduler.running_count(), 2);
         let step = run(&mut scheduler);
         assert_eq!(step.preempted, vec![2]);
         assert_eq!(

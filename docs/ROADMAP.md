@@ -84,7 +84,7 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
       there is no paged-attention kernel
 - [ ] the device hidden state handed to a hook is a converted f32 copy when the weights are not f32,
       written back after the hook returns
-- [ ] every forward step copies each scheduled sequence's tokens for the hook, even when no hook
+- [x] every forward step copies each scheduled sequence's tokens for the hook, even when no hook
       point is wanted
 - [ ] a CUDA pairwise score that fails returns NaN, because `DistanceKernels` pairwise methods are
       infallible

@@ -132,7 +132,7 @@ pub fn run<M: DecoderModel>(
         }
         if step.is_empty() {
             publish_gauges(&scheduler, &context);
-            if scheduler.running() == 0 {
+            if scheduler.running_count() == 0 {
                 if let Some(sequence) = scheduler.ids().first().and_then(|&id| scheduler.remove(id))
                 {
                     fail(
@@ -147,32 +147,30 @@ pub fn run<M: DecoderModel>(
             continue;
         }
 
-        let progress_tokens: Vec<(Vec<u32>, usize)> = step
-            .entries
-            .iter()
-            .map(|entry| {
-                scheduler
-                    .running_mut(entry.id)
-                    .map(|sequence| (sequence.tokens.clone(), sequence.generated()))
-                    .unwrap_or_default()
-            })
-            .collect();
-        let progress: Vec<SequenceProgress<'_>> = step
-            .entries
-            .iter()
-            .zip(&progress_tokens)
-            .map(|(entry, (tokens, generated))| SequenceProgress {
-                tokens,
-                first_step: entry.first_step,
-                finished_chunk: (entry.samples
-                    && *generated > 0
-                    && generated.is_multiple_of(context.chunk_tokens.max(1)))
-                .then(|| generated / context.chunk_tokens.max(1) - 1),
-            })
-            .collect();
-
         let started = Instant::now();
-        let outcome = driver.step(&step.batch, &progress);
+        let outcome = {
+            let chunk = context.chunk_tokens.max(1);
+            let progress: Vec<SequenceProgress<'_>> = step
+                .entries
+                .iter()
+                .map(|entry| {
+                    let (tokens, generated) = scheduler
+                        .running(entry.id)
+                        .map_or((&[][..], 0), |sequence| {
+                            (sequence.tokens.as_slice(), sequence.generated())
+                        });
+                    SequenceProgress {
+                        tokens,
+                        first_step: entry.first_step,
+                        finished_chunk: (entry.samples
+                            && generated > 0
+                            && generated.is_multiple_of(chunk))
+                        .then(|| generated / chunk - 1),
+                    }
+                })
+                .collect();
+            driver.step(&step.batch, &progress)
+        };
         let elapsed = started.elapsed();
         let logits = match outcome {
             Ok(logits) => logits,
@@ -381,7 +379,7 @@ fn publish_gauges(scheduler: &Scheduler<Caller>, context: &WorkerContext) {
     let pool = scheduler.pool();
     context.metrics.set_gauges(EngineGauges {
         queue_depth: scheduler.waiting() as u64,
-        running: scheduler.running() as u64,
+        running: scheduler.running_count() as u64,
         kv_blocks_total: pool.total_blocks as u64,
         kv_blocks_used: pool.used_blocks as u64,
         kv_blocks_cached: pool.cached_blocks as u64,
