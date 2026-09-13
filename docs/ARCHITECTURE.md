@@ -1,18 +1,29 @@
 # Architecture
 
-How the workspace is cut, why each boundary sits where it does, and what has to stay true.
+How the workspace is divided, why each boundary sits where it does, how a request moves through it,
+and what has to stay true.
 
-## The problem this shape solves
+## What the shape is for
 
-Piramid runs retrieval and, eventually, transformer inference in one process, on one device, so that
-retrieval can happen during generation rather than once before it. Retrieval inside a generation —
-repeated, overlapped with compute, against device-resident state — cannot afford a service boundary;
-retrieval before prefill costs one hop and does not need one.
+Piramid is an inference engine for retrieval-augmented generation. One process holds the documents,
+the model weights and the KV cache on one device. The KV cache is the per-token attention keys and
+values a model keeps so it does not recompute earlier tokens. Keeping all three together is meant to
+let retrieval run during generation, not only once before it.
 
-That single-process goal is why internal boundaries matter: with no network between the layers,
-nothing keeps them from growing into each other except discipline, and discipline that nothing
-checks tends not to survive. So the layering is physical. Each layer is a crate, and
-`scripts/check-deps.sh` fails CI on an edge that isn't in the rule below.
+Generation has two phases. Prefill runs the prompt through the model and fills the KV cache for
+every prompt token. Decode then produces one new token per step, reading the cache. Retrieval before
+prefill needs no special structure: search, put the passages in the prompt, generate. Retrieval
+during decode runs many times per sequence, is meant to overlap model compute, and reads and writes
+state that lives on the device. A network hop and a host copy on every one of those calls would cost
+more than the retrieval itself, which is why everything runs in one process.
+
+Today the engine retrieves before prefill. The seam for retrieval inside the forward pass is wired
+into the driver and called at every point it defines, but the only hook is one that does nothing.
+Fusing retrieved data into the pass is not built yet; `docs/ROADMAP.md` schedules it.
+
+With no network between the layers, the compiler does not stop one layer from reaching into another.
+The layering is enforced instead: each layer is a crate, and `scripts/check-deps.sh` fails CI on any
+dependency edge the rule below does not allow.
 
 ## The tree
 
@@ -20,110 +31,141 @@ checks tends not to survive. So the layering is physical. Each layer is a crate,
 apps/                     everything we author
   engine/                 the library crates, one folder each
     core/                 errors, config, document, metadata, validation, stats, observability
-    hardware/             compute, gpu, quantization, host
+    hardware/             compute (with quantization), gpu, host
     database/             storage, index, search, cache, document, collection
     model/                inference, fusion, embeddings
-    serving/              how the outside world reaches it
-  cli/                    the piramid binary, which links the engine into one artifact
+    serving/              http, services, state, machine, disk, cluster
+  cli/                    the piramid binary and the piramid umbrella crate
   website/                piramiddb.com, with blog content and images inside it
   sdk/                    npm and python clients
 
-deploy/  docs/  scripts/  .claude/  .github/     how it's built, shipped, and explained
+deploy/  docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
 ```
 
-`engine/` says what the thing is; "crates" describes Rust's compilation model, not the product. One
-binary doesn't mean one folder — the engine is five crates and `apps/cli` links them into an
-artifact.
+There is one binary, but the engine is five crates and `apps/cli` links them into one executable.
+There are no grouping folders, and folder order is not dependency order.
 
-Each cut is a real one:
+## The crates
 
-- **`hardware`** is the code that changes when the machine changes. `compute` owns what cosine means
-  and which strategy runs it, `gpu` owns the device, `quantization` owns the encodings both score
-  over, `host` reads the processor, memory and GPU use of the machine itself. It is a leaf, so
-  kernels can be benchmarked on their own and `model` can get a device without reaching through
-  retrieval math. `gpu::budget` is the one account of device memory: weights, key/value cache and
-  index each reserve from it, split by configured shares or first come first served.
-- **`database`** is where vectors live and how they are found: records, WAL, mmap and sidecars; the
-  ANN indexes; query planning and scoring; and `collection`, the object composing a store, a cache,
-  a checkpoint policy and an index. Inside it, `state.rs` holds what a collection owns and every
-  file beside it is one thing done to that state — opening, checkpointing, compaction, write
-  limits. `search` takes a `SearchTarget` rather than a `Collection`, which is what keeps scoring
-  below collection lifecycle instead of circular with it.
-- **`model`** is the forward pass, the `fusion` seam retrieval enters it through, and the
-  `embeddings` providers that turn text into a vector. It depends on nothing in the retrieval
-  stack, which is what keeps a collection queryable with no model loaded. Inside `inference`,
-  `architecture` holds what a checkpoint declares and the `DecoderModel` contract a backend runs
-  one layer at a time; `forward` is the driver that runs those layers and calls the hook at every
-  point it asks for; `kv_cache` decides which page slot each token's keys and values go to, and
-  shares full prefix pages, with no tensors in it; `batching` is the scheduler that packs decode
-  tokens and prefill chunks into steps and the engine thread that runs them; `sampling` and
-  `tokenizer` are plain Rust over logits and token ids. Only `backends` names `candle` or
-  `tokenizers`.
-- **`core`** is the vocabulary everything shares: errors, the whole configuration surface, the
-  document and hit shapes, metadata and its filters, validation, and the counters the engine keeps
-  about itself.
-- **`serving`** is how the outside world reaches it, and nothing else.
+`hardware` is the code that changes when the machine changes. `compute` defines the distance metrics
+and the strategies that run them, and holds the quantization encodings. `gpu` owns the device
+runtime: opening a device, memory, streams, compiled kernels, and the device memory budget. `host`
+reads processor, memory and GPU use for the console and metrics. It depends on nothing else in the
+workspace, so kernels can be benchmarked on their own and both retrieval and the model can use a
+device without going through each other.
 
-`core::stats` and `core::observability` split a concern that reads as two names for one thing.
-`stats` is what the engine measures, held as plain atomics with no dependency on an exporter, so any
-crate can record into it freely. `observability` is where those numbers go, and it carries
-`tracing-subscriber` and OpenTelemetry.
+`core` is the vocabulary everything shares: every error the app wraps, the whole configuration
+surface, the document and hit shapes, metadata and its filters, validation, and the counters the
+engine keeps about itself. It depends on `hardware` only for types that configuration and errors
+carry, such as `ExecutionMode`, `Metric` and the compute and GPU error types. `core::stats` is what
+the engine measures, held as plain atomics so any crate can record into it. `core::observability` is
+where those numbers go: the tracing subscriber, OTLP export and the Prometheus text format.
 
-One folder per crate, no grouping folders. Folder order is not dependency order — `core` depends on
-`hardware` for the `ExecutionMode` and `Metric` types that configuration carries.
+`database` is where vectors live and how they are found. `storage` holds records, the write-ahead
+log (WAL), mmap and sidecars. `index` holds the flat, HNSW and IVF families. `search` plans a query,
+asks an index for candidates, scores, filters and ranks them. `collection` composes a record store,
+its caches, a checkpoint policy and an index into one queryable object. Its `state.rs` holds what a
+collection owns, the files beside it are operations on that state such as open, checkpoint and
+compact, and `manager.rs` holds the `CollectionManager` that opens and caches collections by name.
+`search` takes a `SearchTarget` of borrowed views rather than a `Collection`, which keeps scoring
+below collection lifecycle instead of circular with it.
+
+`model` runs the model and turns text into vectors. It does not depend on `database`, so a
+collection stays queryable with no model loaded. Inside `inference`:
+
+- `architecture` reads what a checkpoint declares in `config.json` and defines `DecoderModel`, the
+  contract a backend implements so a driver can run it one decoder layer at a time.
+- `forward` is the driver. It runs a model through one step and calls the retrieval hook at every
+  point the hook asks for.
+- `kv_cache` decides which cache slot each token's keys and values are written to and shares full
+  prefix pages between sequences. It holds no tensors.
+- `batching` is the scheduler that packs decode tokens and prefill chunks into steps, and the engine
+  thread that runs those steps and streams results.
+- `sampling` turns logits into a token. `tokenizer` holds the tokenizer contract, the checkpoint's
+  chat template and incremental detokenization.
+- `backends` is the only place `candle` and `tokenizers` appear. It holds the Qwen2 and Qwen3 dense
+  decoders on candle.
+- `manager.rs` holds `InferenceManager`, the entry point the server holds.
+
+`model::fusion` holds the `RetrievalHook` trait and the no-op hook. `model::embeddings` holds the
+embedding providers: an OpenAI-compatible HTTP client, Ollama, and `piramid`, which runs an
+embedding checkpoint in this process.
+
+`serving` is how the outside world reaches the engine. `http` holds axum routes, handlers,
+authentication, rate limiting and request ids. `services` holds the use cases behind the handlers,
+their wire shapes in `services/api`, and conversion. `state` holds `AppState`, which composes the
+collection manager, the embeddings manager, the optional GPU manager and the optional inference
+manager.
+
+`apps/cli` parses arguments, loads configuration, opens the GPU and loads the model at boot, starts
+the server, and runs the terminal console. It is the only crate that may end the process.
 
 ## The dependency rule
 
-A crate may depend on one listed below it. The reverse is a violation.
+An arrow points from a crate to the crates allowed to depend on it. A crate may also depend directly
+on anything upstream of it along the arrows, so `serving` may name `hardware`, but `model` may not
+name `database`. Any other edge is a violation.
 
-```
-hardware ─→ core ─┬─→ database ─→ serving ─→ cli
-                  └─→ model ────┘
+```mermaid
+flowchart LR
+    hardware --> core
+    core --> database
+    core --> model
+    database --> serving
+    model --> serving
+    serving --> cli
 ```
 
-`scripts/check-deps.sh` holds the allow-list. Adding an edge means editing that file and this
-document in the same change.
+`scripts/check-deps.sh` holds the allow-list, checks that `hardware` is a leaf, and checks that
+`model` does not depend on `database`. Adding an edge means editing that script and this document in
+the same change.
 
 | Crate | Owns | Must not |
 |---|---|---|
-| `core` | Every error the app wraps, all configuration, the document and hit shapes, metadata and its filters, validation, `stats`, and the telemetry export those feed | Know about HTTP or end the process |
-| `hardware` | Distance math and strategy dispatch, the device runtime, quantization encodings, host readings | Depend on anything in the workspace, or let vendor types escape `gpu::backends` or `host::nvml` |
-| `database` | Records, WAL, sidecars, mmap; ANN traversal and the sidecar format; planning, filtering, scoring; the `Collection`, its caches, checkpoint and compaction | Serve HTTP |
-| `model` | Model execution, KV cache, batching, sampling; the `RetrievalHook` seam; embedding providers | Depend on `database`, or be required for retrieval to work |
-| `serving` | Routes, handlers, services, wire shapes, `AppState`, routing | Touch file formats or index internals |
-| `apps/cli` | Argument parsing, process lifecycle, terminal output | Contain domain logic |
+| `hardware` | Distance math and strategy dispatch, quantization encodings, the device runtime and memory budget, device kernels, host readings | Depend on anything in the workspace, or let vendor types leave `gpu/backends` or `host/nvml.rs` |
+| `core` | Every error the app wraps, all configuration, document and hit shapes, metadata and filters, validation, stats, telemetry export | Name an HTTP type or end the process |
+| `database` | Records, WAL, sidecars, mmap; index traversal and the index sidecar format; planning, filtering, scoring; the `Collection`, its caches, checkpoint and compaction | Serve HTTP |
+| `model` | Model execution, KV cache bookkeeping, scheduling, sampling, tokenization; the `RetrievalHook` seam; embedding providers | Depend on `database`, or be required for retrieval to work |
+| `serving` | Routes, handlers, services, wire shapes, `AppState` | Touch file formats, index internals or model internals |
+| `apps/cli` | Argument parsing, boot order, process lifecycle, terminal output | Contain domain logic |
 
-`hardware` is a leaf because kernels should be liftable into a standalone benchmark, and because a
-kernel layer that imports application configuration can't be reasoned about on its own. It also
-means `compute` and `inference` share one `Device` — which is what puts vectors and model weights in
-the same address space.
+## What it is built on
 
-## What it's built on
+Rust 1.87, edition 2021. One binary with no services to install beside it: the storage engine, the
+indexes, the model runtime and the HTTP server are all in-process.
 
-Rust 1.87, edition 2021. One binary, no runtime services to install alongside it: the storage
-engine, the indexes and the HTTP server are all in-process.
+`axum` and `tower-http` on `tokio` serve HTTP. `serde` handles JSON on the wire and YAML in the
+configuration file, and `bincode` encodes the sidecars. Errors are `thiserror` enums per layer;
+there is no `anyhow` in the libraries because a caller has to be able to match on an error. `wide`
+gives portable SIMD, `rayon` runs batch work, `memmap2` maps the record file, and `dashmap`,
+`parking_lot` and `lru` hold shared state. `tracing` carries logs and spans, with OTLP export.
+`clap` parses the command line and `ratatui` draws the console. Models run on `candle`, tokenize
+with `tokenizers`, and render chat templates with `minijinja`. The CUDA runtime is `cudarc`, with
+kernels compiled at run time by NVRTC, and GPU readings come from `nvml-wrapper`. The website is
+separate and ships nothing into the binary.
 
-`axum`/`tower-http` on `tokio` for HTTP, `serde` with JSON on the wire and `bincode` in the
-sidecars, `thiserror` enums per layer (no `anyhow` in libraries — a caller has to be able to match),
-`wide` for portable SIMD, `rayon` for batch work, `memmap2` for records, `dashmap`/`parking_lot`/
-`lru` for shared state, `tracing` with OTLP for telemetry, `clap` for the CLI, `criterion` for
-benches. The website is separate and ships nothing: Next.js, TypeScript, Tailwind, MDX.
+Three features exist, all additive and off by default:
 
-Two features are reserved for vendor runtimes — `gpu-cuda` for `cudarc` in `gpu/backends/` and
-`nvml-wrapper` in `host/nvml.rs`, and `inference-candle` for `candle` and `tokenizers` in
-`inference/backends/`. Both are additive and off by default, so
-`cargo build` needs no CUDA toolkit and no model runtime, and an unavailable strategy reports
-`false` rather than pretending. Vendor types never escape those backend modules, which is what
-allows a second backend later without touching the layers between.
+- `gpu-cuda` enables `cudarc` in `hardware::gpu::backends`, `nvml-wrapper` in `hardware::host`, and
+  candle's CUDA support.
+- `inference-candle` enables `candle` and `tokenizers` in `model::inference::backends`, and with it
+  model loading and the `piramid` embedding provider.
+- `otel` enables OTLP trace export.
+
+So `cargo build` needs no CUDA toolkit and no model runtime. A build without a feature refuses the
+settings that need it: enabling inference or the `piramid` embedding provider without
+`inference-candle`, or the GPU profile without `gpu-cuda`, is an error at startup that names the
+feature.
 
 ## The three seams
 
-Everything else exists to make these cheap to implement and swap.
+Everything else is infrastructure for these. Change them deliberately.
 
 ### `compute::DistanceKernels`
 
-One strategy per file in `compute/strategies/`, one arm in the registry. Nothing else changes.
-"Backends" means the vendor layer and nothing else.
+One strategy per file in `compute/strategies/` and one arm in the registry. The strategies are
+scalar, SIMD, parallel and, under `gpu-cuda`, CUDA. Every strategy implements the whole trait: the
+pairwise methods and the batch methods. There are no default methods to fall back on.
 
 ```rust
 fn cosine_batch(&self, query: &[f32], candidates: &[f32], dim: usize, out: &mut [f32])
@@ -131,60 +173,86 @@ fn cosine_batch(&self, query: &[f32], candidates: &[f32], dim: usize, out: &mut 
 ```
 
 `candidates` is a contiguous row-major slab, not `&[Vec<f32>]`. A slab uploads to a device in one
-memcpy; a slice of `Vec`s is scattered allocations a device backend would have to gather on every
-call, and that gather costs more than the kernel saves. `out` is caller-owned so the buffer can be
-reused and pinned later. CPU backends get correct batch behaviour from defaults that loop over the
-pairwise methods; a device backend overrides them with a real launch.
+copy. A slice of `Vec`s is scattered allocations that a device strategy would have to gather on
+every call, and that gather costs more than the kernel saves. `out` is caller-owned so the buffer
+can be reused.
 
-`backends::for_mode` is the only lookup and it checks availability itself. A mode this build or this
-machine cannot run is an error, not a fallback — a caller that asked for one backend and silently
-got another has no way to know its numbers came from somewhere else.
+`compute::strategies::for_mode` is how a caller gets a strategy to run, and it checks availability
+itself. A mode this build or this machine cannot run is an error, not a fallback: a caller that
+asked for one strategy and silently got another has no way to know where its numbers came from.
+
+The CUDA strategy runs on the device the GPU manager opened at boot, on the first of its streams. It
+uploads the query and candidates, runs the distance kernels, and downloads the scores on every call,
+reserving those bytes from the index pool of the device budget while it runs. Keeping candidates on
+the device across queries is a roadmap item.
 
 ### `storage::vectors::VectorReader`
 
-How an index reads vectors it doesn't own, so the backing store can change without touching any
-index. `as_slab()` is the fast path; a reader over scattered allocations returns `None` rather than
-silently copying, because hiding that cost would make the CPU/device choice unmeasurable.
-`gather_into()` is the portable fallback. Both have defaults, so a new reader costs nothing — but a
-wrapper that forwards the trait must forward every method, or it withdraws a capability the reader
-underneath still has.
+How an index reads vectors it does not own, so the backing store can change without touching any
+index. `as_slab()` is the fast path: the whole set as one contiguous buffer. A reader over scattered
+allocations returns `None` rather than silently copying, so the cost stays visible. `gather_into()`
+copies chosen rows into a caller buffer and works for any reader. Both have default implementations,
+so a new reader costs nothing, but a wrapper that forwards the trait must forward every method or it
+hides a capability the reader underneath has.
 
-`VectorStore` is the contiguous one: one `Vec<f32>` at a fixed stride with a `Uuid → u32` ordinal
-map, so hot structures can hold a 4-byte handle instead of a 16-byte key. Ordinals are stable — a
-removed row becomes a hole rather than being filled by moving the last row into it, because a moved
-row invalidates every adjacency list referencing it. A hole holds stale floats a batch kernel cannot
-skip, so `as_slab` reports `None` until an insert reuses it or compaction rebuilds the store.
+`cache::VectorStore` is the contiguous reader behind a collection's vector cache, which is the
+reader the collection hands its index: one `Vec<f32>` at a fixed stride, with a map from `Uuid` to a
+`u32` row ordinal. Ordinals are stable: a removed row becomes a hole instead of being filled by
+moving the last row, and the next insert reuses it. A hole holds stale floats that a batch kernel
+cannot skip, so `as_slab` returns `None` while any hole exists, until an insert fills it or
+compaction rebuilds the store. The indexes themselves refer to vectors by `Uuid`, not by ordinal.
 
 ### `model::fusion::RetrievalHook`
 
 Where retrieval enters the forward pass.
 
 ```rust
-fn wants(&self, point: RetrievalPoint) -> bool;
-fn launch(&self, request: &RetrievalRequest<'_>) -> Result<Box<dyn PendingRetrieval>>;
-// ... the driver does model work here ...
-fn join(self: Box<Self>, ctx: &mut ForwardContext<'_>) -> Result<()>;
+trait RetrievalHook: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn wants(&self, point: RetrievalPoint) -> bool;
+    fn launch(&self, request: &RetrievalRequest<'_>) -> Result<Box<dyn PendingRetrieval>>;
+}
+trait PendingRetrieval: Send {
+    fn join(self: Box<Self>, ctx: &mut ForwardContext<'_>) -> Result<()>;
+}
 ```
 
-Mechanism-agnostic on purpose: it says when retrieval may occur and what it may touch, not how
-retrieved data gets combined. Two things in that signature are load-bearing. `ForwardContext` carries
-a `HiddenState` that is either a host slice or a `DeviceBuffer`, because a host-only seam would force
-a device-to-host-to-device copy per invocation — exactly the data movement co-locating retrieval and
-inference exists to remove. And the `launch`/`join` split is what lets search overlap model compute
-on its own stream; a single fused call serializes them however it is implemented.
+The seam says when retrieval may run and what it may touch. It does not say how retrieved data is
+combined with the model. There are three points: `SequenceStart`, on the step that computes a
+sequence's first tokens; `ChunkBoundary`, on the step after a sequence has generated another
+`runtime.inference.fusion.chunk_tokens` tokens; and `LayerEntry`, before every decoder layer.
+`launch` gets a read-only request carrying the point, the sequence's tokens so far and the hidden
+width. `join` gets a `ForwardContext` whose `HiddenState` is either a host slice or a
+`DeviceBuffer`, and on a device the stream model work is queued on.
 
-The driver in `inference::forward` calls it at `SequenceStart`, at every `ChunkBoundary` and before
-every decoder layer, whenever `wants` says so; `NoopRetrievalHook` is the only implementation today.
-On a CUDA model the `HiddenState` is a `DeviceBuffer` borrowed over the candle tensor's own memory,
-and the context carries the per-thread stream candle queues on, so a kernel in `hardware::gpu` runs
-on the hidden state in place and in order with the model's work.
+Two properties of this shape matter. A device hidden state means a hook can change the pass without
+a device-to-host-to-device copy on every call, which is the data movement co-location exists to
+remove. And splitting `launch` from `join` means a search can run on its own stream while the model
+keeps computing; a single call would serialize the two however it was implemented. Today the driver
+joins immediately after launching, so nothing overlaps yet.
 
-It exists before anything calls it because a driver written without the seam is hard to retrofit
-with one, and a driver written with it costs nothing extra. A strategy that actually queries an
-index depends on `search`, so it belongs in its own crate depending on both — that's what keeps
+```mermaid
+sequenceDiagram
+    participant D as Driver
+    participant K as RetrievalHook
+    participant P as PendingRetrieval
+    participant M as DecoderModel
+    D->>K: wants(point)
+    K-->>D: true
+    D->>K: launch(request)
+    K-->>D: pending
+    D->>M: with_hidden(pass, sequence, visitor)
+    M->>P: visitor calls join(ctx) with host rows, or a DeviceBuffer and the model stream
+    P-->>M: rows changed in place
+    M->>M: splice the rows back into the pass
+```
+
+When `wants` returns false, as it always does for `NoopRetrievalHook`, the driver does nothing at
+that point. The binary always passes the no-op hook. A hook that actually queries an index depends
+on `search`, so it belongs in its own crate depending on both `model` and `database`. That keeps
 `inference` free of the retrieval stack.
 
-## Request flow
+## Retrieval request flow
 
 ```mermaid
 sequenceDiagram
@@ -195,120 +263,386 @@ sequenceDiagram
     participant Col as Collection
     participant Se as search
     participant Idx as index
+    participant Ca as cache
     participant St as storage
 
     C->>H: HTTP request
-    H->>S: typed DTO
-    S->>M: get_existing / get_or_create
-    M->>Col: open or return loaded
-    S->>Col: domain operation
-    Col->>Se: SearchTarget + params
+    H->>S: request shape
+    S->>M: get_existing or get_or_create
+    M-->>S: handle, opening the collection if it is not loaded
+    S->>Col: search under the collection read lock
+    Col->>Se: SearchTarget, SearchParams and a document resolver
     Se->>Idx: IndexSearchRequest
-    Idx->>St: read vectors via VectorReader
+    Idx->>Ca: read vectors through VectorReader
+    Idx-->>Se: candidate ids
+    Se->>St: resolve each candidate to its stored document
+    Se->>Se: rescore in one batch kernel call, filter, rank
     Se-->>Col: ranked hits
-    Col-->>S: domain result
-    S-->>H: response DTO
+    Col-->>S: hits
+    S-->>H: response shape
     H-->>C: JSON
 ```
 
-Conversion boundaries are explicit: HTTP shapes in `serving::http`, operational decisions in
-`serving::services`, domain mutation on the `Collection`, bytes and files in `storage`.
+Each conversion has one place: HTTP in `serving::http`, operational decisions and wire shapes in
+`serving::services`, domain mutation on the `Collection`, bytes and files in `storage`. The index
+reads vectors from the in-memory cache; the scores returned to the caller are recomputed from the
+documents read back from the record store.
 
-A generation takes a second path. `serving::services::generation` renders the prompt through the
-checkpoint's chat template, and when the request asks for retrieval it embeds the query, searches
-the collection and places the passages before the prompt. It tokenizes on the request task and
-hands the tokens to `InferenceManager::generate`. The engine thread admits the sequence, packs it
-into steps, runs each step through the driver, samples, and streams text back over a channel that
-the handler turns into JSON, server-sent events or OpenAI chunks. A dropped stream cancels the
-sequence at the next step.
+## Generation request flow
+
+Settings named in this section and in the KV cache section are under `runtime.inference`.
+
+`InferenceManager::load` runs at boot when `runtime.inference.enabled` is set. It reads the
+checkpoint spec and chat template, checks the sampling defaults, loads the tokenizer, reserves
+device memory for the weights when the model runs on a GPU, loads them, sizes and reserves the KV
+page pool, optionally runs one warm-up step, and starts the engine thread. After that the manager
+holds the tokenizer, the chat template and a channel to the thread. The model, the scheduler and the
+page pool belong to the thread.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant H as http handler
+    participant S as services::generation
+    participant Col as Embedder and Collection
+    participant M as InferenceManager
+    participant T as engine thread
+
+    C->>H: POST /api/generate or /v1/chat/completions
+    H->>S: request shape
+    opt retrieval requested
+        S->>Col: embed the query, then search k passages
+        S->>S: place passages in the prompt
+    end
+    S->>M: render the template for messages, tokenize, generate
+    M->>T: Submit command over a channel
+    T-->>M: admitted id, or a refusal
+    M-->>S: Generation holding the event receiver
+    S-->>H: Generation
+    loop each forward step
+        T->>T: plan, run the driver, sample
+        T-->>H: Token event with released text
+        H-->>C: server-sent event, or buffered
+    end
+    T-->>H: Finished or Failed
+    H-->>C: final event, or the whole JSON body
+```
+
+`/api/generate` takes either a raw `prompt` or chat `messages`, and optionally a `retrieval` block
+naming a collection, `k` and an optional query. Retrieval embeds the query, or the prompt or last
+user message when none is given, with the configured provider and searches the collection. With a
+raw prompt the passages are prepended as a numbered block and the prompt is not templated. With
+messages the passages go into the system message and the conversation is rendered through the
+checkpoint's chat template. `/v1/chat/completions` is the OpenAI-compatible route: it always renders
+the template and has no retrieval. Tokenization happens on the request task, before the engine sees
+the request.
+
+Every generation is a stream of `GenerationEvent`s: `Token` events carrying the text the token
+releases, then exactly one `Finished` or `Failed`. The handler turns that stream into a JSON body,
+native server-sent events (`retrieval`, `token`, `done`, `error`), or OpenAI chunks ending in
+`[DONE]`.
+
+### The engine thread
+
+One OS thread runs the loop in `batching::worker`. When nothing is queued or running it blocks on
+the command channel. Otherwise it first handles every command already waiting, then fails queued
+sequences that have not started and have waited longer than `batching.queue_timeout_ms`, removes
+queued and running sequences whose caller has dropped the event receiver, plans a step, runs it
+through the driver, samples a token for each sequence whose step ended at its last token, and sends
+events. If no step can be planned, the first sequence fails because the cache cannot hold it. If a
+forward step fails, every sequence in that step fails with the error. On shutdown every queued and
+running sequence gets `Failed`.
+
+A sequence finishes with `Stop` on an end-of-sequence token or a completed stop string, and with
+`Length` at `max_new_tokens` or `max_sequence_length`. Text that could be the start of a stop string
+is held back until it either completes one or cannot. Detokenization is incremental: text is
+released only once the tokens behind it decode to complete characters. Sampling applies a repetition
+penalty over a window of recent tokens, then takes the argmax at temperature zero, or draws with
+temperature, top-k and top-p from a per-sequence generator that a seed makes reproducible.
+
+### The scheduler
+
+Continuous batching means admitting new sequences into a running batch between steps rather than
+waiting for the batch to drain. Chunked prefill means splitting a long prompt across several steps
+so it does not stall decoding for everyone else. They are `batching.continuous` and
+`batching.chunked_prefill`.
+
+`Scheduler::plan` fills a step within `batching.max_batched_tokens` in a fixed order:
+
+1. One decode token for each running sequence that has only one token left to compute.
+2. A chunk for each running sequence with more than one token left to compute.
+3. New sequences from the front of the queue, while fewer than `batching.max_batch_size` sequences
+   are running, and only if continuous batching is on or nothing is running.
+
+Admission refuses at submit, before anything is queued, a request that can never run: an empty
+prompt, a prompt plus `max_new_tokens` over `max_sequence_length` or over the whole cache, a prompt
+over `max_batched_tokens` without chunked prefill, or a full queue, counted as queued plus running
+against `batching.max_queue_depth`.
+
+When a running sequence needs a page for its next tokens and none is free, the scheduler preempts
+running sequences, most recently admitted first and skipping any already placed in this step, until
+the pages fit. Preemption is by recompute: the victim's pages are released, its progress resets to
+zero, and it returns to the front of the queue with its prompt and generated tokens. When it is
+admitted again those tokens are prefilled again, reusing any shared prefix pages still cached. The
+other policy, swapping pages to host memory, is not implemented and configuration refuses it.
+
+### One forward step
+
+```mermaid
+flowchart TD
+    batch["StepBatch: tokens, positions and slots per sequence"] --> begin["begin: embed every token of the step"]
+    begin --> starts["SequenceStart and ChunkBoundary points, for sequences that reach them"]
+    starts --> entry["LayerEntry point, once per sequence"]
+    entry --> layer["decoder layer: write keys and values to slots, attend over context slots, MLP"]
+    layer --> more{"more layers?"}
+    more -->|yes| entry
+    more -->|no| finish["finish: final norm and output projection"]
+    finish --> logits["last-token logits for each sequence that samples"]
+```
+
+All sequences in a step share one hidden-state tensor. Attention runs per sequence: it writes the
+new keys and values into the slots the scheduler assigned, gathers the sequence's context slots from
+the cache, and attends over them. There is no paged-attention kernel yet, so that gather is a copy
+on every layer of every step.
+
+## The KV cache
+
+The cache is a pool of fixed-size pages of `kv_cache.page_size` tokens. A slot is one token's place
+in the pool, numbered `page * page_size + offset`. Each sequence holds a block table: the list of
+its pages in token order. The backend keeps one key tensor and one value tensor per layer, each with
+one row per slot, and writes and reads them by slot number. `kv_cache` never touches those tensors;
+it only hands out slot numbers.
+
+Prefix sharing, on with `kv_cache.prefix_sharing`, reuses the pages of an earlier sequence with the
+same leading tokens. A full page is identified by a hash of its tokens chained with the hash of the
+page before it, so a match means the whole prefix matches, and the tokens are compared as well. When
+a sequence is removed, its full computed pages are published. A later prompt starts by taking every
+published page that matches its prefix, except that the last prompt token is never shared, so at
+least one token is always computed. A published page that no sequence holds stays cached until an
+allocation finds no free page, and then it is evicted, the page released longest ago first.
+
+```mermaid
+flowchart LR
+    subgraph SB["sequence B, 36 tokens"]
+        b0["tokens 0 to 15"]
+        b1["tokens 16 to 31"]
+        b2["tokens 32 to 35"]
+    end
+    subgraph SC["sequence C, 40 tokens, same first 32"]
+        c0["tokens 0 to 15"]
+        c1["tokens 16 to 31"]
+        c2["tokens 32 to 39"]
+    end
+    subgraph POOL["page pool, page_size 16"]
+        p3["page 3, slots 48 to 63"]
+        p8["page 8, slots 128 to 143"]
+        p1["page 1, slots 16 to 31"]
+        p6["page 6, slots 96 to 111"]
+    end
+    b0 --> p3
+    c0 --> p3
+    b1 --> p8
+    c1 --> p8
+    b2 --> p1
+    c2 --> p6
+```
+
+Here pages 3 and 8 were published by an earlier sequence with the same first 32 tokens, and both B
+and C took them at admission. Each then got a private page for the rest.
+
+The pool is sized once, at load. One token takes `2 * layers * kv_heads * head_dim` elements at the
+cache precision, `kv_cache.dtype`. On a GPU the byte budget is the smallest of
+`kv_cache.device_fraction` of free device memory, what the budget's KV pool has left, and
+`kv_cache.max_bytes` when set. On the CPU `kv_cache.max_bytes` is required. The page count is that
+budget divided by the bytes in one page. The cache lives in memory only; a restart loses every
+in-flight generation.
 
 ## One device, two runtimes on it
 
-Candle builds the model graph: weights, projections, norms, attention. Anything custom in the
-forward pass is a cudarc kernel in `hardware::gpu`, launched on candle's memory. It works because
-both open the device through cudarc's primary context, so an address from one is valid in the
-other, and because candle queues on the per-thread stream, which `gpu::Stream::per_thread` names
-too. The two backend modules exchange a device pointer and a stream identifier, never a vendor type.
+Candle builds and runs the model: weights, projections, norms, attention. `hardware::gpu` is
+Piramid's own device runtime, used for distance kernels and for handing hidden states to a hook.
+Both run on the same device in the same process.
+
+They can share memory because both open the device through its CUDA primary context, the one context
+per device that every library in a process can retain. A device address allocated by one is valid in
+the other. They can share ordering because candle queues model work on cudarc's per-thread stream,
+and `gpu::Stream::per_thread` names that same stream. A stream is an ordered queue of device work;
+work on different streams may overlap. Kernels are compiled from source at run time with NVRTC and
+launched through `gpu::KernelModule`.
+
+```mermaid
+flowchart TD
+    ctx["CUDA primary context of the device"]
+    subgraph CANDLE["model::inference::backends::candle"]
+        cdev["candle CUDA device"]
+        tensors["weights, KV tensors, hidden states"]
+    end
+    subgraph GPU["hardware::gpu"]
+        mgr["GpuManager: Device, DeviceBudget, streams"]
+        handle["Device handle held by the model"]
+        buf["DeviceBuffer borrowed over hidden-state rows"]
+        dist["distance kernels"]
+    end
+    pts["per-thread stream"]
+    ms["manager streams"]
+    cdev --> ctx
+    mgr --> ctx
+    handle --> ctx
+    cdev --> tensors
+    tensors -.->|"device pointer"| buf
+    cdev -->|"queues model work"| pts
+    handle -->|"Stream::per_thread"| pts
+    mgr --> ms
+    dist -->|"launch"| ms
+```
+
+The two backend modules exchange a device pointer and a stream identifier, never a vendor type. On a
+CUDA model, `with_hidden` wraps the step's hidden-state rows in a borrowed `DeviceBuffer`, which
+never frees the memory, and passes the per-thread stream beside it. Hook kernels launched on that
+stream run in order with the model. The rows are narrowed out of the step's hidden-state tensor,
+converted to f32 when the model runs at another precision, and spliced back into the pass after the
+hook returns. On the CPU the same rows are copied into a host vector instead and copied back the
+same way.
+
+The GPU manager is opened at boot under `startup.hardware.profile: gpu`, before the model loads, and
+the CUDA distance strategy is installed from it. The model runs on `cuda:N` only when that profile
+opened device N: configuration validation refuses a `runtime.inference.device` naming any other
+device, and with no device set the model goes to the opened GPU, or to the CPU without the profile.
+The only device kernels today are the distance kernels; the attention and quantization kernel files
+are placeholders.
+
+## Device memory budget
+
+`gpu::DeviceBudget` is the one account of device memory. It does not allocate anything. Code that is
+about to use device memory reserves the bytes first and holds a `Reservation` that returns them when
+dropped.
+
+```mermaid
+flowchart TD
+    total["device total memory"] --> cap["capped at startup.hardware.gpu_memory_budget_bytes when set"]
+    cap --> usable["usable: cap minus startup.hardware.gpu.reserve_bytes"]
+    usable --> weights["weights pool: reserved once at model load"]
+    usable --> kv["kv_cache pool: reserved once when the page pool is sized"]
+    usable --> index["index pool: reserved per call by the CUDA distance strategy"]
+```
+
+With `startup.hardware.vram.enabled`, each pool's capacity is its share of the usable bytes, set by
+`vram.weights_ratio`, `vram.kv_ratio` and `vram.index_ratio`, and one pool cannot take another's
+space. With it off, all three draw from one shared total, first come first served.
+`gpu.reserve_bytes` covers what the budget does not see, such as library workspaces and
+fragmentation. The `piramid` embedding provider loads its own model and does not reserve from the
+budget.
+
+## Embeddings
+
+`startup.embedding` configures one provider, built at boot and held by `EmbeddingsManager`,
+optionally behind a cache keyed by input text. `openai` speaks the OpenAI embeddings wire format to
+any server that implements it, and `ollama` speaks Ollama's. `piramid` loads a Qwen embedding
+checkpoint into this process with the same candle backend as generation, on the device its options
+name, `cpu` by default. It runs one sequence at a time behind a lock and returns the last token's
+hidden state, L2-normalized. It needs the `inference-candle` feature. Retrieval for generation and
+the text search routes both use this provider.
 
 ## Durability
 
-The record store plus sidecars are the source of truth; cache and index are acceleration structures
-that have to stay rebuildable from stored records. A write logs a WAL entry, appends the record,
-updates the offset index, then the caches and the ANN structure — and a checkpoint condition may
-flush sidecars. `CheckpointManager` owns collection-level bookkeeping and WAL rotation; byte-level
-serialization stays in `storage`, except that an index owns its own sidecar format. On open, the
-builder loads sidecars, opens the record store, initializes the WAL, and replays if needed.
+The record store and sidecars are the source of truth. Caches and indexes are acceleration
+structures and must stay rebuildable from stored records.
+
+A write checks the vector width, encodes the document and checks collection limits, logs a WAL
+entry, appends the record, updates the offset index, then the vector cache, the index and the
+metadata cache. After the write, a checkpoint condition on operation count, elapsed time or log size
+may trigger a checkpoint. A checkpoint saves the offset, index and manifest sidecars, and only then
+writes a checkpoint entry to the WAL, records the last sequence number and rotates the log.
+Byte-level serialization stays in `storage`, except that an index owns its own sidecar format.
+
+Opening a collection loads the offset sidecar, opens the record store, loads the manifest and the
+index sidecar, refuses an index whose metric differs from the configured one, opens the WAL and
+reads entries past the last checkpoint. A missing index sidecar is rebuilt from the record store
+when there are no entries to replay; replayed entries are inserted into the index as they apply.
+When entries were replayed, the collection checkpoints before it is returned.
 
 ## Configuration
 
-One file, blocks split by *when a setting takes effect* rather than by which subsystem owns it:
+One file, split into blocks by when a setting takes effect rather than by which subsystem reads it:
 
 ```yaml
 startup:   # applied once at boot; changing one needs a restart
-runtime:   # re-read on POST /config/reload
+runtime:   # re-read on POST /api/config/reload
 console:   # read when the terminal UI starts
 ```
 
 `console` is in the same file because the terminal UI is part of Piramid, not a second product with
-a configuration system of its own. Its `base_url` defaults to the address `startup.bind` names, so
-moving the port is said once.
+its own configuration. Its `base_url` defaults to the address `startup.bind` names, so the port is
+set in one place.
 
-The split is by lifecycle because grouping by subsystem had already produced a bug: a reload
-returned 200 and silently changed nothing. Which block a key is in is now the answer to "do I need
-to restart?", and `reload_config` compares the incoming startup block against the booted one and
-errors if it differs. A reload applies the runtime settings an open collection reads as it runs,
-and refuses a change to one a collection reads only when it opens, naming the key.
+The split exists because grouping by subsystem once produced a reload that returned 200 and changed
+nothing. A reload now compares the incoming startup block with the one the process booted with and
+refuses if it differs. It applies the runtime settings an open collection reads as it runs, and
+refuses a change to one a collection reads only when it opens, naming the key. `runtime.inference`
+is the exception inside the runtime block: the model is loaded with it at boot, so a reload that
+changes it is refused with a message saying a restart is needed.
 
 Three rules keep the surface legible:
 
-- **One place per setting.** A knob that can be spelled two ways is a bug.
-- **Nothing is silently ignored.** `deny_unknown_fields` throughout. Settings whose code isn't
-  written yet exist so the shape is fixed before the work lands, and `validate` refuses them rather
-  than accepting a value nothing reads.
-- **The example is tested.** `config.example.yaml` is the whole surface at its defaults, with tests
-  asserting it deserializes to exactly `Config::default()` and that every key appears in it.
+- One place per setting. A setting that can be spelled two ways is a bug.
+- Nothing is silently ignored. Every block uses `deny_unknown_fields`. Settings whose code is not
+  written yet exist so the shape is fixed before the work lands, and validation refuses any value
+  other than the default, naming the key. Today that includes `runtime.inference.fusion.enabled`,
+  `runtime.inference.document_kv.enabled`, `runtime.inference.kv_cache.preemption: swap` and every
+  key under `runtime.quantization`.
+- The example is tested. `config.example.yaml` is the whole surface at its defaults, and tests assert
+  it deserializes to exactly `Config::default()` and that every key appears in it.
 
 Environment variables are overrides only, spelled mechanically from the path:
-`runtime.cache.max_bytes` is `PIRAMID__RUNTIME__CACHE__MAX_BYTES`, parsed as YAML so `8`, `true` and
-`null` mean what they do in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are the
-environment-only settings, so a key never lands in a file that gets shared, and the support bundle
+`runtime.wal.max_log_size` is `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`, parsed as YAML so `8`, `true`
+and `null` mean what they mean in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are read from the
+environment, so a key never has to be written into a file that gets shared, and the support bundle
 redacts them.
 
 ## Errors
 
-`core` is transport-agnostic. `PiramidError::kind()` returns an `ErrorKind` — `NotFound`,
-`Conflict`, `Upstream`, `Internal` — with no notion of a status code. `serving::http::ApiError` is a
-newtype in the transport layer that maps a kind onto an HTTP status and renders JSON. Handlers keep
-`?` because `ApiError` converts from anything that converts into `PiramidError`, and because the
-`IntoResponse` impl is on a local newtype the orphan rule isn't a problem.
+`core` is transport-agnostic. `PiramidError::kind()` returns an `ErrorKind`, such as `BadRequest`,
+`NotFound`, `Unavailable` or `Internal`, with no notion of a status code. `serving::http::ApiError`
+is a newtype in the transport layer that maps a kind to an HTTP status and renders JSON. Handlers
+use `?` because `ApiError` converts from anything that converts into `PiramidError`, and because the
+`IntoResponse` impl is on a local newtype, the orphan rule is not a problem. Errors from a streamed
+generation arrive as a `Failed` event and are rendered inside the stream.
 
 ## Invariants
 
 1. `hardware` depends on nothing in the workspace.
 2. No library crate calls `std::process::exit`. Configuration loading returns a `Result`.
 3. `core` never names an HTTP type.
-4. Vendor SDK types, `cudarc`, `nvml-wrapper`, `candle` and `tokenizers`, never escape their backend
-   module.
+4. Vendor SDK types, `cudarc`, `nvml-wrapper`, `candle` and `tokenizers`, never leave their backend
+   modules: `hardware::gpu::backends`, `hardware::host::nvml` and `model::inference::backends`.
 5. `unsafe` appears only at the audited sites, each with a `// SAFETY:` comment.
-6. Cache and index are rebuildable from the record store.
+6. Caches and indexes are rebuildable from the record store.
 7. Retrieval works with no model loaded, and `model` depends on nothing in the retrieval stack.
-   `model::fusion` holds only the trait; a strategy that queries an index is a separate crate.
-8. Default builds are CPU-only and need no vendor toolchain.
+   `model::fusion` holds the trait and the no-op hook; a hook that queries an index is a separate
+   crate.
+8. Default builds are CPU-only and need no vendor toolchain and no model runtime.
 9. Telemetry speaks protocols, not products. Nothing is sent to this project under any
    configuration.
+10. The engine thread alone owns the loaded model, the scheduler and the KV page pool. Everything
+    else reaches them through the command channel and receives results as events.
 
 ## Where new code goes
 
 | What | Where |
 |---|---|
-| Routes, handlers, wire shapes | `serving/src/http` |
-| Coordinating a user-facing operation | `serving/src/services` |
-| Collection state, records, WAL, sidecars, ANN internals | `database` |
-| Distance math, backend dispatch, device memory, kernels, host readings | `hardware` |
-| Model execution, scheduling, sampling, tokenization, and retrieval inside the forward pass | `model` |
+| Routes and handlers | `serving/src/http` |
+| Wire shapes, and coordinating a user-facing operation | `serving/src/services` |
+| Collection state, records, WAL, sidecars, index internals | `database` |
+| Distance math, strategy dispatch, device memory, device kernels, host readings | `hardware` |
+| A distance strategy | one file in `hardware/src/compute/strategies` and one arm in its registry |
 | A kernel the forward pass launches on model memory | `hardware/src/gpu/kernels`, called from `model/src/inference/backends` |
-| Shared vocabulary — error, config, metadata | `core` |
-| A deployable, a site, or a client library | `apps/` |
+| A model architecture | `model/src/inference/architecture` for the spec, `model/src/inference/backends` for the implementation |
+| Scheduling, KV cache policy, sampling, tokenization | `model/src/inference` |
+| An embedding provider | `model/src/embeddings/providers` |
+| A retrieval hook that queries an index | a new crate depending on `model` and `database`, added to `scripts/check-deps.sh` and this document |
+| Shared vocabulary: errors, config, metadata | `core` |
+| A site or a client library | `apps/` |
+| A container image or compose file | `deploy/` |
 
 If a change touches three or more crates, start at the service boundary and make the data flow
 explicit before writing anything.
