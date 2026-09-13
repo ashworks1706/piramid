@@ -109,19 +109,20 @@ startup:
   # embedding provider, built once at boot; null disables server-side embedding.
   # Set the key with OPENAI_API_KEY rather than writing it here.
   embedding: null
-  #   provider: openai        # openai (or any server speaking that format) | ollama
+  #   provider: openai        # openai (or any server speaking that format) | ollama | piramid
   #   model: text-embedding-3-small
   #   base_url: null          # for self-hosted or proxied endpoints
   #   timeout: null           # request timeout in seconds
-  #   options: {}             # openai: merged into the request body; ollama: sent as options
+  #   options: {}             # openai: merged into the request body; ollama: sent as options;
+  #                           # piramid: device (cpu | cuda:N), dtype, max_tokens
   #   cache:
   #     # Identical text is not sent to the provider twice. Size this above your corpus, or the
   #     # tail is re-embedded on every pass.
   #     enabled: true
   #     entries: 10000
   #
-  # provider: piramid — an in-process encoder reusing the device retrieval holds.
-  # Not implemented (roadmap v0.4.0).
+  # provider: piramid runs a Qwen3 embedding checkpoint in this process: model is the checkpoint
+  # directory, and the build needs the `inference-candle` feature (`gpu-cuda` for a GPU device).
 
 runtime:
   index:

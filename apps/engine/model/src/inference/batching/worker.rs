@@ -411,6 +411,10 @@ mod tests {
             Ok(text.bytes().map(|b| u32::from(b) % 90).collect())
         }
 
+        fn encode_with_template(&self, text: &str) -> Result<Vec<u32>, InferenceError> {
+            self.encode(text)
+        }
+
         fn decode(&self, tokens: &[u32], _skip_special: bool) -> Result<String, InferenceError> {
             Ok(tokens
                 .iter()

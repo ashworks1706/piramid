@@ -61,6 +61,10 @@ mod tests {
             Ok(text.bytes().map(u32::from).collect())
         }
 
+        fn encode_with_template(&self, text: &str) -> Result<Vec<u32>, InferenceError> {
+            self.encode(text)
+        }
+
         fn decode(&self, tokens: &[u32], _skip_special: bool) -> Result<String, InferenceError> {
             let bytes: Vec<u8> = tokens.iter().map(|&t| t as u8).collect();
             Ok(String::from_utf8_lossy(&bytes).into_owned())

@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::fusion::HiddenState;
 use crate::inference::kv_cache::KvLayout;
+use piramid_hardware::gpu::Stream;
 
 /// The decoder families this build can run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -296,6 +297,10 @@ impl StepBatch {
     }
 }
 
+/// Receives the hidden states of one sequence, and the device stream when they live on a device.
+pub type HiddenVisitor<'v> =
+    dyn FnMut(HiddenState<'_>, Option<&Stream>) -> Result<(), InferenceError> + 'v;
+
 /// A loaded model that a driver runs one decoder layer at a time.
 pub trait DecoderModel: Send {
     /// State carried through one forward step: hidden states and per-step bookkeeping.
@@ -316,16 +321,21 @@ pub trait DecoderModel: Send {
     /// Run one decoder layer over the pass, writing its keys and values to the cache.
     fn layer(&mut self, pass: &mut Self::Pass, layer: usize) -> Result<(), InferenceError>;
 
-    /// Hand the hidden states of one sequence of the pass to visit, which may change them.
+    /// Hand the hidden states of one sequence of the pass to visit, which may change them. On a
+    /// device, visit also receives the stream the model's work is queued on.
     fn with_hidden(
         &mut self,
         pass: &mut Self::Pass,
         sequence: usize,
-        visit: &mut dyn FnMut(HiddenState<'_>) -> Result<(), InferenceError>,
+        visit: &mut HiddenVisitor<'_>,
     ) -> Result<(), InferenceError>;
 
     /// Normalise and project, returning the last-token logits of every sequence that asked.
     fn finish(&mut self, pass: Self::Pass) -> Result<Vec<Vec<f32>>, InferenceError>;
+
+    /// Normalise, returning the last-token hidden state of every sequence that asked, without the
+    /// output projection.
+    fn pool(&mut self, pass: Self::Pass) -> Result<Vec<Vec<f32>>, InferenceError>;
 }
 
 #[cfg(test)]

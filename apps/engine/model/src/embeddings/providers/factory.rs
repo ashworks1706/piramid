@@ -18,6 +18,8 @@ pub enum EmbeddingProvider {
     OpenAI,
     /// An Ollama server.
     Ollama,
+    /// A checkpoint run by this process; needs the inference-candle feature.
+    Piramid,
 }
 
 impl FromStr for EmbeddingProvider {
@@ -27,6 +29,7 @@ impl FromStr for EmbeddingProvider {
         match s {
             "openai" => Ok(Self::OpenAI),
             "ollama" => Ok(Self::Ollama),
+            "piramid" => Ok(Self::Piramid),
             _ => Err(()),
         }
     }
@@ -36,7 +39,7 @@ impl FromStr for EmbeddingProvider {
 pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embedder>> {
     let provider = config.provider.parse::<EmbeddingProvider>().map_err(|_| {
         EmbeddingError::ConfigError(format!(
-            "Unknown provider '{}'. Expected openai or ollama",
+            "Unknown provider '{}'. Expected openai, ollama or piramid",
             config.provider
         ))
     })?;
@@ -59,5 +62,29 @@ pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embe
             Arc::new(CachedEmbedder::new(OllamaEmbedder::new(config)?, capacity))
         }
         (EmbeddingProvider::Ollama, None) => Arc::new(OllamaEmbedder::new(config)?),
+        (EmbeddingProvider::Piramid, capacity) => piramid_embedder(config, capacity)?,
     })
+}
+
+#[cfg(feature = "inference-candle")]
+fn piramid_embedder(
+    config: &EmbeddingConfig,
+    capacity: Option<NonZeroUsize>,
+) -> EmbeddingResult<Arc<dyn Embedder>> {
+    let embedder = super::piramid::PiramidEmbedder::new(config)?;
+    Ok(match capacity {
+        Some(capacity) => Arc::new(CachedEmbedder::new(embedder, capacity)),
+        None => Arc::new(embedder),
+    })
+}
+
+#[cfg(not(feature = "inference-candle"))]
+fn piramid_embedder(
+    _config: &EmbeddingConfig,
+    _capacity: Option<NonZeroUsize>,
+) -> EmbeddingResult<Arc<dyn Embedder>> {
+    Err(EmbeddingError::ConfigError(
+        "startup.embedding.provider: piramid needs a build with the inference-candle feature"
+            .to_string(),
+    ))
 }

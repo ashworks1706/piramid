@@ -113,20 +113,21 @@ impl<M: DecoderModel> Driver<M> {
             .map_err(|e| InferenceError::Runtime(format!("{} launch: {e}", self.hook.name())))?;
         let name = self.hook.name();
         let mut pending = Some(pending);
-        self.model.with_hidden(pass, sequence, &mut |hidden| {
-            let Some(pending) = pending.take() else {
-                return Err(InferenceError::Runtime(format!("{name} joined twice")));
-            };
-            let mut context = ForwardContext {
-                point,
-                hidden,
-                hidden_dim,
-                stream: None,
-            };
-            pending
-                .join(&mut context)
-                .map_err(|e| InferenceError::Runtime(format!("{name} join: {e}")))
-        })
+        self.model
+            .with_hidden(pass, sequence, &mut |hidden, stream| {
+                let Some(pending) = pending.take() else {
+                    return Err(InferenceError::Runtime(format!("{name} joined twice")));
+                };
+                let mut context = ForwardContext {
+                    point,
+                    hidden,
+                    hidden_dim,
+                    stream,
+                };
+                pending
+                    .join(&mut context)
+                    .map_err(|e| InferenceError::Runtime(format!("{name} join: {e}")))
+            })
     }
 }
 

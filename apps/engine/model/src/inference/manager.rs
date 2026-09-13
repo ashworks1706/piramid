@@ -299,12 +299,10 @@ fn start(
 ) -> Result<Started, InferenceError> {
     use std::collections::HashSet;
 
-    use piramid_core::config::{Dtype, Preemption};
+    use piramid_core::config::Preemption;
 
-    use crate::inference::architecture::{DecoderModel, Precision, StepBatch, StepSequence};
-    use crate::inference::backends::candle::runtime::{dtype, DeviceSelection};
-    use crate::inference::backends::candle::weights::Weights;
-    use crate::inference::backends::candle::{CandleRuntime, QwenModel};
+    use crate::inference::architecture::{DecoderModel, StepBatch, StepSequence};
+    use crate::inference::backends::candle::loader::load_decoder;
     use crate::inference::backends::tokenizers::JsonTokenizer;
     use crate::inference::batching::scheduler::{Scheduler, SchedulerLimits};
     use crate::inference::batching::worker::{self, WorkerContext};
@@ -317,22 +315,6 @@ fn start(
                 .to_string(),
         ));
     }
-    let selection = DeviceSelection::parse(device)?;
-    let runtime = CandleRuntime::open(selection)?;
-    let on_device = runtime.ordinal().is_some();
-    let precision = match config.dtype {
-        Dtype::Auto if on_device => spec.stored_precision,
-        Dtype::Auto | Dtype::Fp32 => Precision::F32,
-        Dtype::Fp16 => Precision::F16,
-        Dtype::Bf16 => Precision::Bf16,
-    };
-    let kv_precision = match config.kv_cache.dtype {
-        Dtype::Auto => precision,
-        Dtype::Fp32 => Precision::F32,
-        Dtype::Fp16 => Precision::F16,
-        Dtype::Bf16 => Precision::Bf16,
-    };
-
     let tokenizer_path = config
         .tokenizer_path
         .as_deref()
@@ -344,9 +326,9 @@ fn start(
     }
     let architecture = spec.architecture;
 
-    let weights = Weights::load(dir, runtime.device(), dtype(precision))?;
-    let mut model = QwenModel::load(spec, weights, runtime.device(), precision, kv_precision)?;
-    runtime.synchronize()?;
+    let loaded = load_decoder(dir, spec, device, config.dtype, config.kv_cache.dtype)?;
+    let mut model = loaded.model;
+    let runtime = loaded.runtime;
 
     let layout = model.kv_layout();
     let budget = kv_budget(config, runtime.ordinal())?;

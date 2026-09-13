@@ -6,7 +6,9 @@ use candle_nn::{Embedding, Linear, RmsNorm};
 use piramid_core::error::InferenceError;
 
 use crate::fusion::HiddenState;
-use crate::inference::architecture::{DecoderModel, ModelSpec, Precision, StepBatch};
+use crate::inference::architecture::{
+    DecoderModel, HiddenVisitor, ModelSpec, Precision, StepBatch,
+};
 use crate::inference::backends::candle::runtime::{dtype, runtime};
 use crate::inference::backends::candle::weights::Weights;
 use crate::inference::kv_cache::KvLayout;
@@ -40,6 +42,8 @@ pub struct QwenModel {
     sin: Tensor,
     keys: Vec<Tensor>,
     values: Vec<Tensor>,
+    #[cfg(feature = "gpu-cuda")]
+    gpu: Option<piramid_hardware::gpu::Device>,
 }
 
 impl std::fmt::Debug for QwenModel {
@@ -93,10 +97,18 @@ impl QwenModel {
         let kv_width = spec.kv_heads * head_dim;
         let eps = spec.rms_norm_eps;
 
-        let embed_weight = weights.take("model.embed_tokens.weight", &[spec.vocab_size, hidden])?;
+        let root = if weights.contains("model.embed_tokens.weight") {
+            "model."
+        } else {
+            ""
+        };
+        let embed_weight = weights.take(
+            &format!("{root}embed_tokens.weight"),
+            &[spec.vocab_size, hidden],
+        )?;
         let mut layers = Vec::with_capacity(spec.layers);
         for index in 0..spec.layers {
-            let prefix = format!("model.layers.{index}");
+            let prefix = format!("{root}layers.{index}");
             let mut linear = |name: &str, out: usize, inp: usize, bias: bool| {
                 let weight = weights.take(&format!("{prefix}.{name}.weight"), &[out, inp])?;
                 let bias = if bias {
@@ -141,7 +153,7 @@ impl QwenModel {
                 down_proj,
             });
         }
-        let norm = RmsNorm::new(weights.take("model.norm.weight", &[hidden])?, eps);
+        let norm = RmsNorm::new(weights.take(&format!("{root}norm.weight"), &[hidden])?, eps);
         let lm_head = if spec.tie_word_embeddings && !weights.contains("lm_head.weight") {
             Linear::new(embed_weight.clone(), None)
         } else {
@@ -160,6 +172,14 @@ impl QwenModel {
 
         let model_dtype = dtype(precision);
         let (cos, sin) = rotary_tables(&spec, model_dtype, device)?;
+        #[cfg(feature = "gpu-cuda")]
+        let gpu = match device.location() {
+            candle_core::DeviceLocation::Cuda { gpu_id } => Some(
+                piramid_hardware::gpu::Device::open(gpu_id)
+                    .map_err(|e| InferenceError::Unavailable(e.to_string()))?,
+            ),
+            _ => None,
+        };
         Ok(Self {
             embed: Embedding::new(embed_weight, hidden),
             spec,
@@ -174,6 +194,8 @@ impl QwenModel {
             sin,
             keys: Vec::new(),
             values: Vec::new(),
+            #[cfg(feature = "gpu-cuda")]
+            gpu,
         })
     }
 
@@ -281,6 +303,49 @@ impl QwenModel {
         let mlp = weights.down_proj.forward(&(gate * up)?)?;
         pass.hidden = (hidden + mlp)?;
         Ok(())
+    }
+
+    /// Hand f32 rows held on a CUDA device to visit in place, as a borrowed device buffer queued on
+    /// the per-thread stream candle uses. Returns None on the CPU, where rows are visited on the
+    /// host.
+    #[cfg(feature = "gpu-cuda")]
+    fn device_rows(
+        &self,
+        rows: &Tensor,
+        elements: usize,
+        visit: &mut HiddenVisitor<'_>,
+    ) -> Result<Option<()>, InferenceError> {
+        use candle_core::cuda_backend::cudarc::driver::DevicePtr;
+
+        let Some(gpu) = &self.gpu else {
+            return Ok(None);
+        };
+        let ptr = {
+            let (storage, layout) = rows.storage_and_layout();
+            let candle_core::Storage::Cuda(storage) = &*storage else {
+                return Err(InferenceError::Runtime(
+                    "a CUDA model holds hidden states off the device".to_string(),
+                ));
+            };
+            let slice = storage.as_cuda_slice::<f32>().map_err(runtime)?;
+            let (base, _guard) = slice.device_ptr(slice.stream());
+            base + (layout.start_offset() * std::mem::size_of::<f32>()) as u64
+        };
+        let mut buffer = piramid_hardware::gpu::DeviceBuffer::<f32>::borrowed(gpu, ptr, elements)
+            .map_err(|e| InferenceError::Runtime(e.to_string()))?;
+        let stream = piramid_hardware::gpu::Stream::per_thread(gpu);
+        visit(HiddenState::Device(&mut buffer), Some(&stream))?;
+        Ok(Some(()))
+    }
+
+    #[cfg(not(feature = "gpu-cuda"))]
+    fn device_rows(
+        &self,
+        _rows: &Tensor,
+        _elements: usize,
+        _visit: &mut HiddenVisitor<'_>,
+    ) -> Result<Option<()>, InferenceError> {
+        Ok(None)
     }
 
     fn prepare(&self, batch: &StepBatch) -> Result<QwenPass, InferenceError> {
@@ -394,7 +459,7 @@ impl DecoderModel for QwenModel {
         &mut self,
         pass: &mut QwenPass,
         sequence: usize,
-        visit: &mut dyn FnMut(HiddenState<'_>) -> Result<(), InferenceError>,
+        visit: &mut HiddenVisitor<'_>,
     ) -> Result<(), InferenceError> {
         let step = pass.sequences.get(sequence).ok_or_else(|| {
             InferenceError::Runtime(format!("the pass has no sequence {sequence}"))
@@ -405,14 +470,21 @@ impl DecoderModel for QwenModel {
             .hidden
             .narrow(1, offset, len)
             .and_then(|rows| rows.to_dtype(DType::F32))
-            .and_then(|rows| rows.flatten_all())
-            .and_then(|rows| rows.to_vec1::<f32>())
+            .and_then(|rows| rows.contiguous())
             .map_err(runtime)?;
-        let mut rows = rows;
-        visit(HiddenState::Host(&mut rows))?;
-        let replacement = Tensor::from_vec(rows, (1, len, hidden_size), &self.device)
-            .and_then(|rows| rows.to_dtype(self.dtype))
-            .map_err(runtime)?;
+        let replacement = match self.device_rows(&rows, len * hidden_size, visit)? {
+            Some(()) => rows.to_dtype(self.dtype).map_err(runtime)?,
+            None => {
+                let mut host = rows
+                    .flatten_all()
+                    .and_then(|rows| rows.to_vec1::<f32>())
+                    .map_err(runtime)?;
+                visit(HiddenState::Host(&mut host), None)?;
+                Tensor::from_vec(host, (1, len, hidden_size), &self.device)
+                    .and_then(|rows| rows.to_dtype(self.dtype))
+                    .map_err(runtime)?
+            }
+        };
         let before = pass.hidden.narrow(1, 0, offset).map_err(runtime)?;
         let total = pass.hidden.dim(1).map_err(runtime)?;
         let after = pass
@@ -439,6 +511,27 @@ impl DecoderModel for QwenModel {
             let normed = self.norm.forward(&rows)?;
             self.lm_head
                 .forward(&normed)?
+                .to_dtype(DType::F32)?
+                .to_vec2::<f32>()
+        };
+        compute().map_err(runtime)
+    }
+
+    fn pool(&mut self, pass: QwenPass) -> Result<Vec<Vec<f32>>, InferenceError> {
+        let last: Vec<u32> = pass
+            .sequences
+            .iter()
+            .filter(|sequence| sequence.logits)
+            .map(|sequence| (sequence.offset + sequence.len - 1) as u32)
+            .collect();
+        if last.is_empty() {
+            return Ok(Vec::new());
+        }
+        let compute = || -> candle_core::Result<Vec<Vec<f32>>> {
+            let index = Tensor::from_slice(&last, last.len(), &self.device)?;
+            let rows = pass.hidden.squeeze(0)?.index_select(&index, 0)?;
+            self.norm
+                .forward(&rows)?
                 .to_dtype(DType::F32)?
                 .to_vec2::<f32>()
         };
@@ -607,11 +700,25 @@ pub(crate) mod testing {
 
     /// A loaded tiny model on the CPU with a cache of slots tokens.
     pub(crate) fn tiny_model(architecture: Architecture, seed: u64, slots: usize) -> QwenModel {
+        tiny_model_on(architecture, seed, slots, &Device::Cpu)
+    }
+
+    /// A loaded tiny model on a device with a cache of slots tokens.
+    pub(crate) fn tiny_model_on(
+        architecture: Architecture,
+        seed: u64,
+        slots: usize,
+        device: &Device,
+    ) -> QwenModel {
         use crate::inference::architecture::DecoderModel;
         let spec = tiny_spec(architecture);
-        let weights = Weights::from_tensors(tiny_weights(&spec, seed), DType::F32);
+        let tensors = tiny_weights(&spec, seed)
+            .into_iter()
+            .map(|(name, tensor)| (name, tensor.to_device(device).unwrap()))
+            .collect();
+        let weights = Weights::from_tensors(tensors, DType::F32);
         let mut model =
-            QwenModel::load(spec, weights, &Device::Cpu, Precision::F32, Precision::F32).unwrap();
+            QwenModel::load(spec, weights, device, Precision::F32, Precision::F32).unwrap();
         model.allocate_cache(slots).unwrap();
         model
     }
@@ -703,5 +810,86 @@ mod tests {
             tokens.push(next);
         }
         assert_eq!(generated, ids("greedy"));
+    }
+
+    #[cfg(feature = "gpu-cuda")]
+    #[test]
+    #[ignore = "needs a CUDA device"]
+    #[allow(clippy::unwrap_used, reason = "assertions in tests")]
+    fn a_device_kernel_changes_hidden_state_in_place_on_the_model_stream() {
+        use crate::fusion::HiddenState;
+        use crate::inference::architecture::{Architecture, DecoderModel, StepBatch, StepSequence};
+        use piramid_hardware::gpu::{KernelArg, KernelModule, LaunchConfig};
+
+        const SOURCE: &str = r#"
+extern "C" __global__ void add_constant(float* rows, unsigned int n, float value) {
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        rows[i] += value;
+    }
+}
+"#;
+        let tokens = [3u32, 1, 4, 1, 5];
+        let batch = StepBatch {
+            sequences: vec![StepSequence {
+                tokens: tokens.to_vec(),
+                start: 0,
+                write_slots: (0..5).collect(),
+                context_slots: (0..5).collect(),
+                logits: true,
+            }],
+        };
+        let run = |device: &Device| -> (Vec<f32>, &'static str) {
+            let mut model = testing::tiny_model_on(Architecture::Qwen3, 5, 16, device);
+            let mut pass = model.begin(&batch).unwrap();
+            let mut path = "none";
+            model
+                .with_hidden(&mut pass, 0, &mut |hidden, stream| {
+                    match hidden {
+                        HiddenState::Host(rows) => {
+                            path = "host";
+                            for value in rows.iter_mut() {
+                                *value += 0.5;
+                            }
+                        }
+                        HiddenState::Device(buffer) => {
+                            path = "device";
+                            let stream = stream.unwrap();
+                            let module = KernelModule::compile(
+                                buffer.device(),
+                                "add_constant",
+                                SOURCE,
+                                &["add_constant"],
+                            )
+                            .unwrap();
+                            let n = buffer.len();
+                            module
+                                .launch(
+                                    "add_constant",
+                                    LaunchConfig::for_elements(n, 256),
+                                    stream,
+                                    &[
+                                        KernelArg::buffer(buffer),
+                                        KernelArg::U32(n as u32),
+                                        KernelArg::F32(0.5),
+                                    ],
+                                )
+                                .unwrap();
+                        }
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            for layer in 0..model.spec().layers {
+                model.layer(&mut pass, layer).unwrap();
+            }
+            (model.finish(pass).unwrap().remove(0), path)
+        };
+        let (host, host_path) = run(&Device::Cpu);
+        let (device, device_path) = run(&Device::new_cuda(0).unwrap());
+        assert_eq!((host_path, device_path), ("host", "device"));
+        for (a, b) in host.iter().zip(&device) {
+            assert!((a - b).abs() < 1e-3, "{a} {b}");
+        }
     }
 }

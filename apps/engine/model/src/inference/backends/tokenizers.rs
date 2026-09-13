@@ -34,6 +34,13 @@ impl Tokenizer for JsonTokenizer {
             .map_err(|e| InferenceError::Runtime(format!("tokenize: {e}")))
     }
 
+    fn encode_with_template(&self, text: &str) -> Result<Vec<u32>, InferenceError> {
+        self.inner
+            .encode(text, true)
+            .map(|encoding| encoding.get_ids().to_vec())
+            .map_err(|e| InferenceError::Runtime(format!("tokenize: {e}")))
+    }
+
     fn decode(&self, tokens: &[u32], skip_special: bool) -> Result<String, InferenceError> {
         self.inner
             .decode(tokens, skip_special)
