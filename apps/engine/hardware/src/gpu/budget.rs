@@ -79,6 +79,7 @@ struct Accounts {
     shared: bool,
     capacity: [u64; 3],
     used: [AtomicU64; 3],
+    total_used: AtomicU64,
 }
 
 /// The device memory budget of one device, shared by everything that allocates on it.
@@ -89,6 +90,7 @@ pub struct DeviceBudget {
 
 /// Bytes held in a pool, returned when dropped.
 #[derive(Debug)]
+#[must_use = "the bytes are returned as soon as the reservation is dropped"]
 pub struct Reservation {
     accounts: Arc<Accounts>,
     pool: MemoryPool,
@@ -110,6 +112,9 @@ impl Reservation {
 impl Drop for Reservation {
     fn drop(&mut self) {
         self.accounts.used[self.pool.index()].fetch_sub(self.bytes, Ordering::Relaxed);
+        self.accounts
+            .total_used
+            .fetch_sub(self.bytes, Ordering::Relaxed);
     }
 }
 
@@ -148,6 +153,7 @@ impl DeviceBudget {
                 shared,
                 capacity,
                 used: [AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)],
+                total_used: AtomicU64::new(0),
             }),
         })
     }
@@ -166,7 +172,9 @@ impl DeviceBudget {
     pub fn available(&self, pool: MemoryPool) -> u64 {
         let accounts = &self.accounts;
         if accounts.shared {
-            accounts.usable.saturating_sub(self.total_used())
+            accounts
+                .usable
+                .saturating_sub(accounts.total_used.load(Ordering::Relaxed))
         } else {
             accounts.capacity[pool.index()]
                 .saturating_sub(accounts.used[pool.index()].load(Ordering::Relaxed))
@@ -176,36 +184,35 @@ impl DeviceBudget {
     /// Hold bytes in a pool, or refuse when the pool cannot take them.
     pub fn reserve(&self, pool: MemoryPool, bytes: u64) -> GpuResult<Reservation> {
         let accounts = &self.accounts;
-        let counter = &accounts.used[pool.index()];
-        loop {
-            let available = self.available(pool);
-            if bytes > available {
-                return Err(GpuError::Allocation(format!(
-                    "{bytes} bytes requested from the {} pool with {available} available",
-                    pool.as_str()
-                )));
-            }
-            let current = counter.load(Ordering::Relaxed);
-            if counter
-                .compare_exchange(
-                    current,
-                    current + bytes,
-                    Ordering::SeqCst,
-                    Ordering::Relaxed,
-                )
-                .is_ok()
-            {
-                if accounts.shared && self.total_used() > accounts.usable {
-                    counter.fetch_sub(bytes, Ordering::SeqCst);
-                    continue;
-                }
-                return Ok(Reservation {
-                    accounts: accounts.clone(),
-                    pool,
-                    bytes,
-                });
-            }
+        let (counter, limit) = if accounts.shared {
+            (&accounts.total_used, accounts.usable)
+        } else {
+            (
+                &accounts.used[pool.index()],
+                accounts.capacity[pool.index()],
+            )
+        };
+        counter
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(bytes).filter(|next| *next <= limit)
+            })
+            .map_err(|current| {
+                GpuError::Allocation(format!(
+                    "{bytes} bytes requested from the {} pool with {} available",
+                    pool.as_str(),
+                    limit.saturating_sub(current)
+                ))
+            })?;
+        if accounts.shared {
+            accounts.used[pool.index()].fetch_add(bytes, Ordering::Relaxed);
+        } else {
+            accounts.total_used.fetch_add(bytes, Ordering::Relaxed);
         }
+        Ok(Reservation {
+            accounts: Arc::clone(accounts),
+            pool,
+            bytes,
+        })
     }
 
     /// Capacity and use of every pool.
@@ -218,14 +225,6 @@ impl DeviceBudget {
                 used_bytes: self.accounts.used[pool.index()].load(Ordering::Relaxed),
             })
             .collect()
-    }
-
-    fn total_used(&self) -> u64 {
-        self.accounts
-            .used
-            .iter()
-            .map(|used| used.load(Ordering::Relaxed))
-            .sum()
     }
 }
 
@@ -301,5 +300,47 @@ mod tests {
             }),
         };
         assert!(DeviceBudget::new(8 * GB, shares).is_err());
+    }
+
+    #[test]
+    fn concurrent_reservations_never_exceed_a_pool() {
+        const CAPACITY: u64 = 1000;
+        for shares in [
+            None,
+            Some(PoolShares {
+                weights: 1.0,
+                kv_cache: 0.0,
+                index: 0.0,
+            }),
+        ] {
+            let budget = DeviceBudget::new(
+                CAPACITY,
+                BudgetSettings {
+                    limit_bytes: None,
+                    reserve_bytes: 0,
+                    shares,
+                },
+            )
+            .unwrap();
+            let held = std::sync::Mutex::new(Vec::new());
+            std::thread::scope(|scope| {
+                for _ in 0..8 {
+                    scope.spawn(|| {
+                        for _ in 0..CAPACITY {
+                            if let Ok(reservation) = budget.reserve(MemoryPool::Weights, 1) {
+                                held.lock().unwrap().push(reservation);
+                            }
+                        }
+                    });
+                }
+            });
+            let held = held.into_inner().unwrap();
+            assert_eq!(held.len() as u64, CAPACITY);
+            assert_eq!(budget.available(MemoryPool::Weights), 0);
+            assert!(budget.reserve(MemoryPool::Weights, u64::MAX).is_err());
+            drop(held);
+            assert_eq!(budget.available(MemoryPool::Weights), CAPACITY);
+            assert_eq!(budget.usage()[0].used_bytes, 0);
+        }
     }
 }

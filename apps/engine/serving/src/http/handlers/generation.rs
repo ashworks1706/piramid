@@ -1,8 +1,6 @@
 //! Generation endpoints: /api/generate, /api/model, and the OpenAI-compatible
 //! /v1/chat/completions and /v1/models.
 
-use std::convert::Infallible;
-
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -15,7 +13,7 @@ use crate::http::ApiResult as Result;
 use crate::services::api::{
     ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, DoneEventDto,
     GenerateRequest, GenerateResponse, ModelResponse, OpenAiChoice, OpenAiChunkChoice, OpenAiDelta,
-    OpenAiModel, OpenAiModelList, OpenAiResponseMessage, TokenEventDto,
+    OpenAiModel, OpenAiModelList, OpenAiResponseMessage, OpenAiUsage, TokenEventDto,
 };
 use crate::services::generation;
 use crate::state::SharedState;
@@ -52,9 +50,10 @@ pub async fn generate(
     .into_response())
 }
 
-fn native_events(
-    generation: Generation,
-) -> impl Stream<Item = std::result::Result<Event, Infallible>> {
+/// One server-sent event, or the serialization error that ends the stream.
+type SseItem = std::result::Result<Event, axum::Error>;
+
+fn native_events(generation: Generation) -> impl Stream<Item = SseItem> {
     stream::unfold(Some(generation), |state| async move {
         let mut generation = state?;
         let event = generation.next().await?;
@@ -81,10 +80,8 @@ fn native_events(
     })
 }
 
-fn json_event<T: serde::Serialize>(name: &str, body: &T) -> std::result::Result<Event, Infallible> {
-    Ok(Event::default()
-        .event(name)
-        .data(serde_json::to_string(body).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))))
+fn json_event<T: serde::Serialize>(name: &str, body: &T) -> SseItem {
+    Event::default().event(name).json_data(body)
 }
 
 /// GET /v1/models: the loaded model in OpenAI form.
@@ -115,7 +112,8 @@ pub async fn openai_chat_completions(
     let id = format!("chatcmpl-{}", generation.id);
     let created = piramid_core::clock::unix_secs();
     if stream_chunks {
-        let chunks = openai_chunks(generation, id, model, created, include_usage);
+        let header = ChunkHeader { id, model, created };
+        let chunks = openai_chunks(generation, header, include_usage);
         return Ok(Sse::new(chunks)
             .keep_alive(KeepAlive::default())
             .into_response());
@@ -139,108 +137,94 @@ pub async fn openai_chat_completions(
     .into_response())
 }
 
+/// Fields shared by every chunk of one streamed completion.
+struct ChunkHeader {
+    id: String,
+    model: String,
+    created: u64,
+}
+
+impl ChunkHeader {
+    fn event(&self, choices: Vec<OpenAiChunkChoice>, usage: Option<OpenAiUsage>) -> SseItem {
+        Event::default().json_data(ChatCompletionChunk {
+            id: &self.id,
+            object: "chat.completion.chunk",
+            created: self.created,
+            model: &self.model,
+            choices,
+            usage,
+        })
+    }
+}
+
 enum ChunkState {
     Streaming { generation: Generation, first: bool },
-    Usage(ChatCompletionChunk),
+    Usage(OpenAiUsage),
     Done,
     Ended,
 }
 
 fn openai_chunks(
     generation: Generation,
-    id: String,
-    model: String,
-    created: u64,
+    header: ChunkHeader,
     include_usage: bool,
-) -> impl Stream<Item = std::result::Result<Event, Infallible>> {
-    let chunk = move |choices: Vec<OpenAiChunkChoice>, usage| ChatCompletionChunk {
-        id: id.clone(),
-        object: "chat.completion.chunk",
-        created,
-        model: model.clone(),
-        choices,
-        usage,
+) -> impl Stream<Item = SseItem> {
+    let start = ChunkState::Streaming {
+        generation,
+        first: true,
     };
-    stream::unfold(
-        ChunkState::Streaming {
-            generation,
-            first: true,
-        },
-        move |state| {
-            let chunk = chunk.clone();
-            async move {
-                match state {
+    stream::unfold((header, start), move |(header, state)| async move {
+        let (event, next) = match state {
+            ChunkState::Streaming {
+                mut generation,
+                first,
+            } => match generation.next().await? {
+                GenerationEvent::Token { text, .. } => (
+                    header.event(
+                        vec![OpenAiChunkChoice {
+                            index: 0,
+                            delta: OpenAiDelta {
+                                role: first.then_some("assistant"),
+                                content: Some(text),
+                            },
+                            finish_reason: None,
+                        }],
+                        None,
+                    ),
                     ChunkState::Streaming {
-                        mut generation,
-                        first,
-                    } => {
-                        let event = generation.next().await?;
-                        match event {
-                            GenerationEvent::Token { text, .. } => {
-                                let body = chunk(
-                                    vec![OpenAiChunkChoice {
-                                        index: 0,
-                                        delta: OpenAiDelta {
-                                            role: first.then_some("assistant"),
-                                            content: Some(text),
-                                        },
-                                        finish_reason: None,
-                                    }],
-                                    None,
-                                );
-                                Some((
-                                    data_event(&body),
-                                    ChunkState::Streaming {
-                                        generation,
-                                        first: false,
-                                    },
-                                ))
-                            }
-                            GenerationEvent::Finished { reason, usage } => {
-                                let body = chunk(
-                                    vec![OpenAiChunkChoice {
-                                        index: 0,
-                                        delta: OpenAiDelta {
-                                            role: first.then_some("assistant"),
-                                            content: None,
-                                        },
-                                        finish_reason: Some(reason.as_str()),
-                                    }],
-                                    None,
-                                );
-                                let next = if include_usage {
-                                    ChunkState::Usage(chunk(
-                                        Vec::new(),
-                                        Some(generation::openai_usage(&usage)),
-                                    ))
-                                } else {
-                                    ChunkState::Done
-                                };
-                                Some((data_event(&body), next))
-                            }
-                            GenerationEvent::Failed(error) => Some((
-                                Ok(Event::default().data(
-                                    serde_json::json!({
-                                        "error": { "message": error.to_string(), "type": "server_error" }
-                                    })
-                                    .to_string(),
-                                )),
-                                ChunkState::Done,
-                            )),
-                        }
-                    }
-                    ChunkState::Usage(body) => Some((data_event(&body), ChunkState::Done)),
-                    ChunkState::Done => {
-                        Some((Ok(Event::default().data("[DONE]")), ChunkState::Ended))
-                    }
-                    ChunkState::Ended => None,
-                }
-            }
-        },
-    )
-}
-
-fn data_event<T: serde::Serialize>(body: &T) -> std::result::Result<Event, Infallible> {
-    Ok(Event::default()
-        .data(serde_json::to_string(body).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))))
+                        generation,
+                        first: false,
+                    },
+                ),
+                GenerationEvent::Finished { reason, usage } => (
+                    header.event(
+                        vec![OpenAiChunkChoice {
+                            index: 0,
+                            delta: OpenAiDelta {
+                                role: first.then_some("assistant"),
+                                content: None,
+                            },
+                            finish_reason: Some(reason.as_str()),
+                        }],
+                        None,
+                    ),
+                    if include_usage {
+                        ChunkState::Usage(generation::openai_usage(&usage))
+                    } else {
+                        ChunkState::Done
+                    },
+                ),
+                GenerationEvent::Failed(error) => (
+                    Event::default().json_data(serde_json::json!({
+                        "error": { "message": error.to_string(), "type": "server_error" }
+                    })),
+                    ChunkState::Done,
+                ),
+            },
+            ChunkState::Usage(usage) => (header.event(Vec::new(), Some(usage)), ChunkState::Done),
+            ChunkState::Done => (Ok(Event::default().data("[DONE]")), ChunkState::Ended),
+            ChunkState::Ended => return None,
+        };
+        Some((event, (header, next)))
+    })
 }

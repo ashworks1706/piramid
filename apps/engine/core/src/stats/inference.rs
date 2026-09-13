@@ -97,7 +97,7 @@ pub struct EngineGauges {
 }
 
 impl InferenceMetrics {
-    /// Count an admitted request, its prompt tokens and the prompt tokens found in the cache.
+    /// Count an admitted request and its prompt tokens.
     pub fn record_admitted(&self, prompt_tokens: u64) {
         self.requests_admitted.fetch_add(1, Ordering::Relaxed);
         self.prompt_tokens
@@ -119,7 +119,7 @@ impl InferenceMetrics {
     pub fn record_first_token(&self, elapsed: Duration) {
         self.first_token_count.fetch_add(1, Ordering::Relaxed);
         self.first_token_ns
-            .fetch_add(elapsed.as_nanos() as u64, Ordering::Relaxed);
+            .fetch_add(saturating_nanos(elapsed), Ordering::Relaxed);
     }
 
     /// Record one forward step: how many tokens were prefill and decode, and how long it took.
@@ -131,12 +131,13 @@ impl InferenceMetrics {
         decode_tokens: u64,
         elapsed: Duration,
     ) {
-        let total = prefill_tokens + decode_tokens;
+        let total = u128::from(prefill_tokens) + u128::from(decode_tokens);
         if total == 0 {
             return;
         }
-        let ns = elapsed.as_nanos() as u64;
-        let prefill_ns = ns * prefill_tokens / total;
+        let ns = saturating_nanos(elapsed);
+        let prefill_ns =
+            u64::try_from(u128::from(ns) * u128::from(prefill_tokens) / total).unwrap_or(ns);
         self.last_batch_size.store(batch_size, Ordering::Relaxed);
         self.prefill_tokens
             .fetch_add(prefill_tokens, Ordering::Relaxed);
@@ -222,6 +223,11 @@ impl InferenceMetrics {
     }
 }
 
+/// Nanoseconds in a duration, clamped to u64::MAX.
+fn saturating_nanos(elapsed: Duration) -> u64 {
+    u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,5 +255,14 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.prefill_tokens_per_second, Some(100.0));
         assert_eq!(snapshot.decode_tokens_per_second, Some(100.0));
+    }
+
+    #[test]
+    fn a_step_too_large_for_u64_products_splits_without_overflow() {
+        let metrics = InferenceMetrics::default();
+        metrics.record_step(1, u64::MAX / 2, u64::MAX / 2, Duration::from_secs(1_000));
+        let snapshot = metrics.snapshot();
+        assert!(snapshot.prefill_tokens_per_second.is_some());
+        assert!(snapshot.decode_tokens_per_second.is_some());
     }
 }

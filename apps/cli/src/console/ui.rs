@@ -248,11 +248,11 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
         Constraint::Min(6),
         Constraint::Min(6),
         Constraint::Length(budget.map_or(0, |_| BUDGET_HEIGHT)),
-        Constraint::Min(match inference {
-            None => 0,
-            Some(_) if area.width >= KV_BESIDE => KV_HEIGHT.max(GENERATION_HEIGHT),
-            Some(_) => KV_HEIGHT + GENERATION_HEIGHT,
-        }),
+        match inference {
+            None => Constraint::Length(0),
+            Some(_) if area.width >= KV_BESIDE => Constraint::Min(KV_HEIGHT.max(GENERATION_HEIGHT)),
+            Some(_) => Constraint::Min(KV_HEIGHT + GENERATION_HEIGHT),
+        },
     ])
     .areas(area);
     let latest = view.latest();

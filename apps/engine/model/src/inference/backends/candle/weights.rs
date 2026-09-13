@@ -80,11 +80,8 @@ fn shards(dir: &Path) -> Result<Vec<PathBuf>, InferenceError> {
         .get("weight_map")
         .and_then(serde_json::Value::as_object)
         .ok_or_else(|| InferenceError::Load(format!("{} has no weight_map", index.display())))?;
-    let mut files: Vec<String> = map
-        .values()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect();
-    files.sort();
+    let mut files: Vec<&str> = map.values().filter_map(serde_json::Value::as_str).collect();
+    files.sort_unstable();
     files.dedup();
     Ok(files.into_iter().map(|file| dir.join(file)).collect())
 }

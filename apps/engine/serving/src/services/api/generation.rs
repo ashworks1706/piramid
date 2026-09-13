@@ -305,15 +305,15 @@ pub struct OpenAiChunkChoice {
 
 /// A streamed chat completion chunk.
 #[derive(Debug, Clone, Serialize)]
-pub struct ChatCompletionChunk {
+pub struct ChatCompletionChunk<'a> {
     /// Completion id, the same on every chunk.
-    pub id: String,
+    pub id: &'a str,
     /// Always chat.completion.chunk.
     pub object: &'static str,
     /// Creation time, in seconds since the Unix epoch.
     pub created: u64,
     /// Model id.
-    pub model: String,
+    pub model: &'a str,
     /// Empty on a usage chunk.
     pub choices: Vec<OpenAiChunkChoice>,
     /// Token counts, only on the usage chunk.

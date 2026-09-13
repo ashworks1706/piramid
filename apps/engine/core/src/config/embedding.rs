@@ -40,6 +40,9 @@ impl EmbeddingConfig {
     /// Reject a provider this build cannot construct.
     pub fn validate(&self) -> Result<(), String> {
         self.cache.validate()?;
+        if self.timeout == Some(0) {
+            return Err("startup.embedding.timeout: must be >= 1".into());
+        }
         match &self.options {
             serde_json::Value::Null => {}
             serde_json::Value::Object(fields) => {

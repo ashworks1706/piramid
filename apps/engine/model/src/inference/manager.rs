@@ -151,15 +151,8 @@ impl InferenceManager {
                 |name| name.to_string_lossy().into_owned(),
             )
         });
-        let loaded = start(
-            config,
-            &dir,
-            spec,
-            &device,
-            gpu,
-            template.eos_text(),
-            hook.clone(),
-        )?;
+        let hook_name = hook.name();
+        let loaded = start(config, &dir, spec, &device, gpu, template.eos_text(), hook)?;
         tracing::info!(
             target: "piramid::inference",
             model = %model_name,
@@ -175,7 +168,7 @@ impl InferenceManager {
             template,
             defaults: config.sampling.clone(),
             max_sequence_length: config.max_sequence_length,
-            hook_name: hook.name(),
+            hook_name,
             metrics: loaded.metrics,
             commands: loaded.commands,
             thread: Mutex::new(Some(loaded.thread)),

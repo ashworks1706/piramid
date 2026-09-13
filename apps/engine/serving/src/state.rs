@@ -3,8 +3,7 @@
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    atomic::{AtomicU64, Ordering as AtomicOrdering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
 
@@ -22,7 +21,7 @@ use piramid_model::embeddings::EmbeddingsManager;
 use piramid_model::inference::InferenceManager;
 
 /// Phase of an index rebuild job.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RebuildState {
     /// The rebuild has started and not yet finished.
     Running,
@@ -33,7 +32,7 @@ pub enum RebuildState {
 }
 
 /// Record of the most recent index rebuild of one collection.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RebuildJobStatus {
     /// Current phase of the job.
     pub status: RebuildState,
@@ -132,12 +131,14 @@ impl AppState {
     }
 
     /// Account device memory against an opened GPU.
+    #[must_use]
     pub fn with_gpu(mut self, manager: Arc<GpuManager>) -> Self {
         self.gpu = Some(manager);
         self
     }
 
     /// Serve generations from a loaded model.
+    #[must_use]
     pub fn with_inference(mut self, manager: Arc<InferenceManager>) -> Self {
         self.inference = Some(manager);
         self.inference_loaded_at = piramid_core::clock::unix_secs();
@@ -145,6 +146,7 @@ impl AppState {
     }
 
     /// Read reloads from source, the one the process booted from.
+    #[must_use]
     pub fn with_config_source(mut self, source: ConfigSource) -> Self {
         self.config_source = source;
         self
@@ -262,7 +264,7 @@ impl AppState {
             })?;
         }
         let now = piramid_core::clock::unix_secs();
-        self.config_last_reload.store(now, AtomicOrdering::Relaxed);
+        self.config_last_reload.store(now, Ordering::Relaxed);
         Ok(new_cfg)
     }
 
@@ -323,8 +325,7 @@ impl AppState {
 
     /// Clear the largest metadata caches until cached metadata fits runtime.cache.metadata.max_bytes.
     pub fn enforce_cache_budget(&self) {
-        let metadata_config = self.current_config().runtime.cache.metadata;
-        let Some(max_bytes) = metadata_config.max_bytes else {
+        let Some(max_bytes) = self.app_config.read().runtime.cache.metadata.max_bytes else {
             return;
         };
         let mut total: u64 = 0;

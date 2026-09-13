@@ -12,7 +12,7 @@ pub use parallel::ParallelStrategy;
 pub use scalar::ScalarStrategy;
 pub use simd::SimdStrategy;
 
-use crate::compute::error::ComputeResult;
+use crate::compute::error::{ComputeError, ComputeResult};
 use crate::compute::kernels::DistanceKernels;
 use crate::compute::mode::ExecutionMode;
 
@@ -41,11 +41,7 @@ pub fn compiled(mode: ExecutionMode) -> ComputeResult<()> {
             if cfg!(feature = "gpu-cuda") {
                 Ok(())
             } else {
-                Err(crate::compute::error::ComputeError::StrategyUnavailable {
-                    strategy: "gpu",
-                    reason: "no GPU backend compiled in; rebuild with the gpu-cuda feature"
-                        .to_string(),
-                })
+                Err(no_gpu_backend())
             }
         }
         _ => for_mode(mode).map(|_| ()),
@@ -61,20 +57,23 @@ pub fn for_mode(mode: ExecutionMode) -> ComputeResult<&'static dyn DistanceKerne
         #[cfg(feature = "gpu-cuda")]
         ExecutionMode::Gpu => &CUDA,
         #[cfg(not(feature = "gpu-cuda"))]
-        ExecutionMode::Gpu => {
-            return Err(crate::compute::error::ComputeError::StrategyUnavailable {
-                strategy: "gpu",
-                reason: "no GPU backend compiled in; rebuild with the gpu-cuda feature".to_string(),
-            });
-        }
+        ExecutionMode::Gpu => return Err(no_gpu_backend()),
     };
 
     if strategy.is_available() {
         Ok(strategy)
     } else {
-        Err(crate::compute::error::ComputeError::StrategyUnavailable {
+        Err(ComputeError::StrategyUnavailable {
             strategy: strategy.name(),
             reason: "not available on this machine".to_string(),
         })
+    }
+}
+
+/// The error for the gpu mode in a build with no GPU backend.
+fn no_gpu_backend() -> ComputeError {
+    ComputeError::StrategyUnavailable {
+        strategy: "gpu",
+        reason: "no GPU backend compiled in; rebuild with the gpu-cuda feature".to_string(),
     }
 }

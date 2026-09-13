@@ -44,13 +44,12 @@ fn default_max_tokens() -> usize {
 impl PiramidOptions {
     /// Parse the options object of an embedding configuration.
     pub fn from_config(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
-        let options = if config.options.is_null() {
-            serde_json::json!({})
+        let parsed = if config.options.is_null() {
+            Self::deserialize(&serde_json::json!({}))
         } else {
-            config.options.clone()
-        };
-        let parsed: Self = serde_json::from_value(options)
-            .map_err(|e| EmbeddingError::ConfigError(format!("startup.embedding.options: {e}")))?;
+            Self::deserialize(&config.options)
+        }
+        .map_err(|e| EmbeddingError::ConfigError(format!("startup.embedding.options: {e}")))?;
         if parsed.max_tokens == 0 {
             return Err(EmbeddingError::ConfigError(
                 "startup.embedding.options.max_tokens: must be >= 1".to_string(),
@@ -107,14 +106,16 @@ impl PiramidEmbedder {
 }
 
 /// Run one text through the model and return its pooled, normalised embedding.
-fn embed_tokens(model: &mut QwenModel, tokens: &[u32]) -> Result<Vec<f32>, InferenceError> {
-    let count = tokens.len();
+fn embed_tokens(model: &mut QwenModel, tokens: Vec<u32>) -> Result<Vec<f32>, InferenceError> {
+    let count = u32::try_from(tokens.len()).map_err(|_| {
+        InferenceError::InvalidRequest(format!("{} tokens exceed u32::MAX", tokens.len()))
+    })?;
     let batch = StepBatch {
         sequences: vec![StepSequence {
-            tokens: tokens.to_vec(),
+            tokens,
             start: 0,
-            write_slots: (0..count as u32).collect(),
-            context_slots: (0..count as u32).collect(),
+            write_slots: (0..count).collect(),
+            context_slots: (0..count).collect(),
             logits: true,
         }],
     };
@@ -159,10 +160,12 @@ impl Embedder for PiramidEmbedder {
                 self.max_tokens
             )));
         }
-        let model = self.model.clone();
-        let count = tokens.len() as u32;
+        let count = u32::try_from(tokens.len()).map_err(|_| {
+            EmbeddingError::RequestFailed(format!("{} tokens exceed u32::MAX", tokens.len()))
+        })?;
+        let model = Arc::clone(&self.model);
         let embedding =
-            tokio::task::spawn_blocking(move || embed_tokens(&mut model.lock(), &tokens))
+            tokio::task::spawn_blocking(move || embed_tokens(&mut model.lock(), tokens))
                 .await
                 .map_err(|e| EmbeddingError::RequestFailed(e.to_string()))?
                 .map_err(|e| EmbeddingError::RequestFailed(e.to_string()))?;
@@ -222,9 +225,9 @@ mod tests {
     #[test]
     fn an_embedding_is_unit_length_and_depends_on_the_text() {
         let mut model = tiny_model(Architecture::Qwen3, 9, 32);
-        let a = embed_tokens(&mut model, &[1, 2, 3]).unwrap();
-        let b = embed_tokens(&mut model, &[1, 2, 4]).unwrap();
-        let again = embed_tokens(&mut model, &[1, 2, 3]).unwrap();
+        let a = embed_tokens(&mut model, vec![1, 2, 3]).unwrap();
+        let b = embed_tokens(&mut model, vec![1, 2, 4]).unwrap();
+        let again = embed_tokens(&mut model, vec![1, 2, 3]).unwrap();
         let norm: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!((norm - 1.0).abs() < 1e-4);
         assert_eq!(a.len(), 64);

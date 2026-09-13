@@ -39,7 +39,7 @@ pub enum ServeError {
     Io(#[from] std::io::Error),
     /// The checkpoint task did not run to completion.
     #[error("checkpoint at shutdown did not complete: {0}")]
-    CheckpointTask(String),
+    CheckpointTask(#[source] tokio::task::JoinError),
     /// One or more collections failed to checkpoint at shutdown.
     #[error("checkpoint at shutdown failed for collections: {}", .0.join(", "))]
     Checkpoint(Vec<String>),
@@ -150,7 +150,7 @@ where
 async fn checkpoint(state: SharedState) -> Result<(), ServeError> {
     let failures = tokio::task::spawn_blocking(move || state.checkpoint_all())
         .await
-        .map_err(|error| ServeError::CheckpointTask(error.to_string()))?;
+        .map_err(ServeError::CheckpointTask)?;
     if failures.is_empty() {
         tracing::info!(target: "piramid::shutdown", "shutdown_checkpointed");
         return Ok(());

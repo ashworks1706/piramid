@@ -183,7 +183,11 @@ fn start_server_inline(
             None => embeddings::EmbeddingsManager::disabled(),
         };
         let gpu = if config.startup.hardware.gpu_enabled() {
-            Some(std::sync::Arc::new(open_gpu(&config.startup.hardware)?))
+            let hardware = config.startup.hardware;
+            let manager = tokio::task::spawn_blocking(move || open_gpu(&hardware))
+                .await
+                .map_err(std::io::Error::other)??;
+            Some(std::sync::Arc::new(manager))
         } else {
             None
         };

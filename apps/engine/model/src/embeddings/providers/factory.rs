@@ -39,7 +39,7 @@ impl FromStr for EmbeddingProvider {
 pub fn create_embedder(config: &EmbeddingConfig) -> EmbeddingResult<Arc<dyn Embedder>> {
     let provider = config.provider.parse::<EmbeddingProvider>().map_err(|_| {
         EmbeddingError::ConfigError(format!(
-            "Unknown provider '{}'. Expected openai, ollama or piramid",
+            "startup.embedding.provider: unknown provider {}, expected openai, ollama or piramid",
             config.provider
         ))
     })?;

@@ -131,19 +131,16 @@ pub fn run<M: DecoderModel>(
             context.metrics.record_preemption();
         }
         if step.is_empty() {
-            publish_gauges(&scheduler, &context);
-            if scheduler.running_count() == 0 {
-                if let Some(sequence) = scheduler.ids().first().and_then(|&id| scheduler.remove(id))
-                {
-                    fail(
-                        &context,
-                        sequence,
-                        InferenceError::Runtime(
-                            "the key/value cache cannot hold this sequence".to_string(),
-                        ),
-                    );
-                }
+            if let Some(sequence) = scheduler.ids().first().and_then(|&id| scheduler.remove(id)) {
+                fail(
+                    &context,
+                    sequence,
+                    InferenceError::Runtime(
+                        "the key/value cache cannot hold this sequence".to_string(),
+                    ),
+                );
             }
+            publish_gauges(&scheduler, &context);
             continue;
         }
 
@@ -201,7 +198,16 @@ pub fn run<M: DecoderModel>(
         let mut rows = logits.into_iter();
         for entry in step.entries.iter().filter(|entry| entry.samples) {
             let Some(mut row) = rows.next() else {
-                break;
+                if let Some(sequence) = scheduler.remove(entry.id) {
+                    fail(
+                        &context,
+                        sequence,
+                        InferenceError::Runtime(
+                            "the forward step returned no logits for this sequence".to_string(),
+                        ),
+                    );
+                }
+                continue;
             };
             if let Some(reason) = sample_one(&mut scheduler, &context, entry.id, &mut row) {
                 finish(&mut scheduler, &context, entry.id, reason);
@@ -361,18 +367,7 @@ fn usage(sequence: &Sequence<Caller>) -> Usage {
 }
 
 fn cancel_abandoned(scheduler: &mut Scheduler<Caller>) {
-    let abandoned: Vec<u64> = scheduler
-        .ids()
-        .into_iter()
-        .filter(|&id| {
-            scheduler
-                .running_mut(id)
-                .is_some_and(|sequence| sequence.payload.events.is_closed())
-        })
-        .collect();
-    for id in abandoned {
-        scheduler.remove(id);
-    }
+    scheduler.remove_where(|sequence| sequence.payload.events.is_closed());
 }
 
 fn publish_gauges(scheduler: &Scheduler<Caller>, context: &WorkerContext) {

@@ -24,13 +24,32 @@ pub struct KvLayout {
 
 impl KvLayout {
     /// Bytes one token occupies across every layer's keys and values.
+    ///
+    /// Saturates at usize::MAX.
     pub fn bytes_per_token(&self) -> usize {
-        2 * self.layers * self.kv_heads * self.head_dim * self.bytes_per_element
+        self.checked_bytes_per_token().unwrap_or(usize::MAX)
+    }
+
+    fn checked_bytes_per_token(&self) -> Option<usize> {
+        [
+            self.layers,
+            self.kv_heads,
+            self.head_dim,
+            self.bytes_per_element,
+        ]
+        .into_iter()
+        .try_fold(2usize, usize::checked_mul)
     }
 
     /// Whole pages of block_size tokens that fit in budget_bytes.
     pub fn blocks_within(&self, budget_bytes: u64, block_size: usize) -> usize {
-        let per_block = (self.bytes_per_token() * block_size) as u64;
+        let Some(per_block) = self
+            .checked_bytes_per_token()
+            .and_then(|bytes| bytes.checked_mul(block_size))
+            .and_then(|bytes| u64::try_from(bytes).ok())
+        else {
+            return 0;
+        };
         if per_block == 0 {
             return 0;
         }
@@ -79,10 +98,17 @@ pub struct PoolStats {
     pub prefix_lookup_tokens: u64,
 }
 
+/// The content of one published prefix page: the hash of the page before it and its tokens.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PrefixKey {
     parent: u64,
-    tokens: Vec<u32>,
+    tokens: Box<[u32]>,
+}
+
+impl PrefixKey {
+    fn matches(&self, parent: u64, tokens: &[u32]) -> bool {
+        self.parent == parent && *self.tokens == *tokens
+    }
 }
 
 /// Allocates pages to sequences and shares full prefix pages between them.
@@ -100,18 +126,23 @@ pub struct BlockAllocator {
 
 impl BlockAllocator {
     /// A pool of num_blocks pages of block_size tokens each.
+    ///
+    /// The pool holds at most as many pages as keep every slot addressable by a u32.
     pub fn new(num_blocks: usize, block_size: usize, prefix_sharing: bool) -> Self {
-        let total = u32::try_from(num_blocks).unwrap_or(u32::MAX);
+        let block_size = block_size.max(1);
+        let slot_limit = u64::from(u32::MAX) + 1;
+        let max_blocks = usize::try_from(slot_limit / block_size as u64).unwrap_or(usize::MAX);
+        let total = num_blocks.min(max_blocks);
         Self {
-            block_size: block_size.max(1),
+            block_size,
             prefix_sharing,
-            refcounts: vec![0; total as usize],
-            free: (0..total).rev().collect(),
+            refcounts: vec![0; total],
+            free: (0..total).rev().map(block_id).collect(),
             evictable: VecDeque::new(),
             by_hash: HashMap::new(),
-            keys: vec![None; total as usize],
+            keys: vec![None; total],
             stats: PoolStats {
-                total_blocks: total as usize,
+                total_blocks: total,
                 ..PoolStats::default()
             },
         }
@@ -159,15 +190,14 @@ impl BlockAllocator {
         self.stats.prefix_lookup_tokens += (shareable * self.block_size) as u64;
         let mut parent = 0u64;
         for chunk in prompt.chunks_exact(self.block_size).take(shareable) {
-            let key = PrefixKey {
-                parent,
-                tokens: chunk.to_vec(),
-            };
-            let hash = hash_key(&key);
+            let hash = hash_prefix(parent, chunk);
             let Some(&block) = self.by_hash.get(&hash) else {
                 break;
             };
-            if self.keys[block as usize].as_ref().map(|(_, k)| k) != Some(&key) {
+            let published = self.keys[block as usize]
+                .as_ref()
+                .is_some_and(|(_, key)| key.matches(parent, chunk));
+            if !published {
                 break;
             }
             self.retain(block);
@@ -226,7 +256,7 @@ impl BlockAllocator {
         (start..start + count)
             .map(|position| {
                 let block = table.blocks[position / self.block_size] as usize;
-                (block * self.block_size + position % self.block_size) as u32
+                block_id(block * self.block_size + position % self.block_size)
             })
             .collect()
     }
@@ -242,11 +272,7 @@ impl BlockAllocator {
         let mut parent = 0u64;
         for (index, chunk) in tokens.chunks_exact(self.block_size).take(full).enumerate() {
             let block = table.blocks[index];
-            let key = PrefixKey {
-                parent,
-                tokens: chunk.to_vec(),
-            };
-            let hash = hash_key(&key);
+            let hash = hash_prefix(parent, chunk);
             match &self.keys[block as usize] {
                 Some((existing, _)) if *existing == hash => {}
                 Some(_) => return,
@@ -255,6 +281,10 @@ impl BlockAllocator {
                         return;
                     }
                     self.by_hash.insert(hash, block);
+                    let key = PrefixKey {
+                        parent,
+                        tokens: chunk.into(),
+                    };
                     self.keys[block as usize] = Some((hash, key));
                 }
             }
@@ -304,17 +334,17 @@ impl BlockAllocator {
     }
 }
 
-fn hash_key(key: &PrefixKey) -> u64 {
+/// Hash of a prefix page from the hash of the page before it and its tokens.
+fn hash_prefix(parent: u64, tokens: &[u32]) -> u64 {
     let mut hasher = DefaultHasher::new();
-    key.hash(&mut hasher);
+    parent.hash(&mut hasher);
+    tokens.hash(&mut hasher);
     hasher.finish()
 }
 
-impl Hash for PrefixKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.parent.hash(state);
-        self.tokens.hash(state);
-    }
+/// A block or slot index as a u32. The pool size keeps every index in range.
+fn block_id(index: usize) -> u32 {
+    u32::try_from(index).unwrap_or(u32::MAX)
 }
 
 #[cfg(test)]
@@ -407,5 +437,31 @@ mod tests {
         };
         assert_eq!(layout.bytes_per_token(), 12_288);
         assert_eq!(layout.blocks_within(12_288 * 16 * 10, 16), 10);
+    }
+
+    #[test]
+    fn every_slot_of_a_large_pool_is_a_distinct_u32() {
+        let block_size = 1 << 20;
+        let pool = BlockAllocator::new(1 << 16, block_size, false);
+        assert_eq!(pool.stats().total_blocks, 1 << 12);
+        assert_eq!(pool.total_slots() as u64, u64::from(u32::MAX) + 1);
+
+        let mut pool = pool;
+        let (mut table, _) = pool.start_sequence(&[1]);
+        pool.reserve(&mut table, pool.total_slots()).unwrap();
+        let last = pool.slots(&table, pool.total_slots() - 1, 1);
+        assert_eq!(table.blocks().last(), Some(&((1 << 12) - 1)));
+        assert_eq!(last, vec![u32::MAX]);
+    }
+
+    #[test]
+    fn an_oversized_layout_fits_no_blocks() {
+        let layout = KvLayout {
+            layers: usize::MAX,
+            kv_heads: 2,
+            head_dim: 64,
+            bytes_per_element: 2,
+        };
+        assert_eq!(layout.blocks_within(u64::MAX, 16), 0);
     }
 }

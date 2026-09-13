@@ -72,7 +72,10 @@ pub async fn start(state: &SharedState, request: GenerateRequest) -> Result<Star
     let (prompt, retrieval) = match (request.prompt, request.messages) {
         (Some(prompt), None) => {
             let retrieval = match &request.retrieval {
-                Some(retrieval) => Some(retrieve(state, retrieval, &prompt).await?),
+                Some(retrieval) => {
+                    let query = retrieval.query.as_deref().unwrap_or(&prompt);
+                    Some(retrieve(state, retrieval, query).await?)
+                }
                 None => None,
             };
             let text = match &retrieval {
@@ -85,8 +88,8 @@ pub async fn start(state: &SharedState, request: GenerateRequest) -> Result<Star
             let mut messages: Vec<ChatMessage> = messages.into_iter().map(to_chat).collect();
             let retrieval = match &request.retrieval {
                 Some(retrieval) => {
-                    let query = last_user_message(&messages)?;
-                    Some(retrieve(state, retrieval, &query).await?)
+                    let query = chat_retrieval_query(retrieval, &messages)?;
+                    Some(retrieve(state, retrieval, query).await?)
                 }
                 None => None,
             };
@@ -235,12 +238,19 @@ fn to_chat(message: MessageDto) -> ChatMessage {
     }
 }
 
-fn last_user_message(messages: &[ChatMessage]) -> Result<String> {
+/// The query retrieval embeds for a conversation: the given query, or the last user message.
+fn chat_retrieval_query<'a>(
+    retrieval: &'a RetrievalDto,
+    messages: &'a [ChatMessage],
+) -> Result<&'a str> {
+    if let Some(query) = retrieval.query.as_deref() {
+        return Ok(query);
+    }
     messages
         .iter()
         .rev()
         .find(|message| message.role == "user")
-        .map(|message| message.content.clone())
+        .map(|message| message.content.as_str())
         .ok_or_else(|| {
             ServerError::InvalidRequest(
                 "retrieval needs a query or a user message to search with".to_string(),
@@ -260,19 +270,21 @@ pub fn passages_block(passages: &[PassageDto]) -> String {
 
 /// Put passages in the system message, creating one at the front when there is none.
 pub fn insert_passages(messages: &mut Vec<ChatMessage>, passages: &[PassageDto]) {
-    let block = format!(
+    let mut block = format!(
         "Answer using these passages where they are relevant.\n\n{}",
         passages_block(passages)
     );
+    block.truncate(block.trim_end().len());
     match messages.first_mut() {
         Some(first) if first.role == "system" => {
-            first.content = format!("{}\n\n{}", first.content, block.trim_end());
+            first.content.push_str("\n\n");
+            first.content.push_str(&block);
         }
         _ => messages.insert(
             0,
             ChatMessage {
                 role: "system".to_string(),
-                content: block.trim_end().to_string(),
+                content: block,
             },
         ),
     }
@@ -281,7 +293,7 @@ pub fn insert_passages(messages: &mut Vec<ChatMessage>, passages: &[PassageDto])
 async fn retrieve(
     state: &SharedState,
     retrieval: &RetrievalDto,
-    fallback_query: &str,
+    query: &str,
 ) -> Result<RetrievedDto> {
     if retrieval.k == 0 {
         return Err(ServerError::InvalidRequest("retrieval.k must be >= 1".to_string()).into());
@@ -290,7 +302,6 @@ async fn retrieve(
     let embedder = state.embeddings.embedder().ok_or_else(|| {
         ServerError::ServiceUnavailable(crate::services::EMBEDDING_NOT_CONFIGURED.to_string())
     })?;
-    let query = retrieval.query.as_deref().unwrap_or(fallback_query);
 
     let started = Instant::now();
     let embedded = embedder.embed(query).await?;
@@ -346,7 +357,7 @@ pub fn openai_usage(usage: &Usage) -> OpenAiUsage {
     OpenAiUsage {
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
-        total_tokens: usage.prompt_tokens + usage.completion_tokens,
+        total_tokens: usage.prompt_tokens.saturating_add(usage.completion_tokens),
     }
 }
 
@@ -384,6 +395,37 @@ mod tests {
         insert_passages(&mut messages, &passages[..1]);
         assert_eq!(messages.len(), 2);
         assert!(messages[0].content.starts_with("Be brief.\n\nAnswer using"));
+    }
+
+    fn retrieval(query: Option<&str>) -> RetrievalDto {
+        RetrievalDto {
+            collection: "facts".to_string(),
+            k: 1,
+            query: query.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_given_retrieval_query_needs_no_user_message() {
+        let messages = [message("system", "Be brief.")];
+        assert_eq!(
+            chat_retrieval_query(&retrieval(Some("vault code")), &messages).ok(),
+            Some("vault code")
+        );
+        assert!(chat_retrieval_query(&retrieval(None), &messages).is_err());
+    }
+
+    #[test]
+    fn without_a_query_retrieval_searches_with_the_last_user_message() {
+        let messages = [
+            message("user", "first"),
+            message("assistant", "reply"),
+            message("user", "second"),
+        ];
+        assert_eq!(
+            chat_retrieval_query(&retrieval(None), &messages).ok(),
+            Some("second")
+        );
     }
 
     #[test]

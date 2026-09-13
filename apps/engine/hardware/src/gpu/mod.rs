@@ -12,7 +12,7 @@ pub mod module;
 pub mod stream;
 
 pub use budget::{BudgetSettings, DeviceBudget, MemoryPool, PoolShares, PoolUsage, Reservation};
-pub use buffer::{DeviceAllocation, DeviceBuffer};
+pub use buffer::{DeviceAllocation, DeviceBuffer, DeviceElement};
 pub use device::{Device, DeviceCapabilities, DeviceRuntime};
 pub use error::{GpuError, GpuResult};
 pub use manager::GpuManager;

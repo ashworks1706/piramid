@@ -40,9 +40,8 @@ pub struct RuntimeConfig {
 impl RuntimeConfig {
     /// Reject a setting this build cannot honour or a combination that contradicts itself.
     pub fn validate(&self) -> Result<(), String> {
-        if let Err(error) = piramid_hardware::compute::strategies::compiled(self.execution) {
-            return Err(format!("runtime.execution: {error}"));
-        }
+        piramid_hardware::compute::strategies::compiled(self.execution)
+            .map_err(|error| format!("runtime.execution: {error}"))?;
         if self.quantization != QuantizationConfig::default() {
             return Err(
                 "runtime.quantization: nothing applies quantization yet, so every key must stay \

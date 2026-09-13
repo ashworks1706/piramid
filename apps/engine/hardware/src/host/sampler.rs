@@ -42,7 +42,8 @@ impl HostSampler {
 
         self.system.refresh_cpu_usage();
         let cpus = self.system.cpus().len();
-        let cpu_percent = (primed && cpus > 0).then(|| self.system.global_cpu_usage());
+        let measured = primed && cpus > 0;
+        let cpu_percent = measured.then(|| self.system.global_cpu_usage());
 
         let (process_cpu_percent, process_resident_bytes) = match self.pid {
             Some(pid) => {
@@ -56,7 +57,7 @@ impl HostSampler {
                 );
                 match self.system.process(pid) {
                     Some(process) => (
-                        (primed && cpus > 0).then(|| share_of_host(process.cpu_usage(), cpus)),
+                        measured.then(|| share_of_host(process.cpu_usage(), cpus)),
                         Some(process.memory()),
                     ),
                     None => (None, None),
@@ -136,17 +137,25 @@ impl GpuSampler {
         let Some(library) = &self.library else {
             return Vec::new();
         };
-        let (readings, reason) = match library.sample() {
-            Ok(readings) if readings.is_empty() => {
-                (readings, "the driver reports no device".into())
+        match library.sample() {
+            Ok(readings) if !readings.is_empty() => readings,
+            Ok(_) => {
+                self.report_absent("the driver reports no device");
+                Vec::new()
             }
-            Ok(readings) => return readings,
-            Err(reason) => (Vec::new(), reason),
-        };
+            Err(reason) => {
+                self.report_absent(&reason);
+                Vec::new()
+            }
+        }
+    }
+
+    /// Logs the reason readings are absent the first time it is called.
+    #[cfg(feature = "gpu-cuda")]
+    fn report_absent(&mut self, reason: &str) {
         if !std::mem::replace(&mut self.reported, true) {
             tracing::warn!(target: "piramid::host", %reason, "GPU readings are absent");
         }
-        readings
     }
 
     /// Take one reading per device. Always empty, as this build has no driver library.

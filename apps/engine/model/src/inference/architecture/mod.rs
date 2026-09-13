@@ -256,16 +256,13 @@ impl ModelSpec {
     /// projection once.
     pub fn parameter_count(&self) -> u64 {
         let h = self.hidden_size as u64;
-        let q = (self.attention_heads * self.head_dim) as u64;
-        let kv = (self.kv_heads * self.head_dim) as u64;
+        let head_dim = self.head_dim as u64;
+        let q = self.attention_heads as u64 * head_dim;
+        let kv = self.kv_heads as u64 * head_dim;
         let inner = self.intermediate_size as u64;
         let vocab = self.vocab_size as u64;
         let bias = if self.qkv_bias { q + 2 * kv } else { 0 };
-        let qk_norm = if self.qk_norm {
-            2 * self.head_dim as u64
-        } else {
-            0
-        };
+        let qk_norm = if self.qk_norm { 2 * head_dim } else { 0 };
         let layer = h * q + 2 * h * kv + q * h + bias + 3 * h * inner + 2 * h + qk_norm;
         let head = if self.tie_word_embeddings {
             0

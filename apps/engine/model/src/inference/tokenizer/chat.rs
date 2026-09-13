@@ -20,8 +20,7 @@ pub struct ChatMessage {
 pub struct ChatTemplate {
     environment: Environment<'static>,
     bos_token: String,
-    eos_token: String,
-    eos_text: Option<String>,
+    eos_token: Option<String>,
 }
 
 const TEMPLATE: &str = "chat";
@@ -104,15 +103,13 @@ impl ChatTemplate {
         environment
             .add_template_owned(TEMPLATE, source)
             .map_err(|e| InferenceError::Load(format!("chat template: {e}")))?;
-        let eos_text = config.eos_token.map(TokenField::into_text);
         Ok(Self {
             environment,
             bos_token: config
                 .bos_token
                 .map(TokenField::into_text)
                 .unwrap_or_default(),
-            eos_token: eos_text.clone().unwrap_or_default(),
-            eos_text,
+            eos_token: config.eos_token.map(TokenField::into_text),
         })
     }
 
@@ -132,14 +129,14 @@ impl ChatTemplate {
                 messages => messages,
                 add_generation_prompt => true,
                 bos_token => &self.bos_token,
-                eos_token => &self.eos_token,
+                eos_token => self.eos_token.as_deref().unwrap_or_default(),
             })
             .map_err(|e| InferenceError::InvalidRequest(format!("chat template: {e}")))
     }
 
     /// The end-of-sequence token text the tokenizer config names, if any.
     pub fn eos_text(&self) -> Option<&str> {
-        self.eos_text.as_deref()
+        self.eos_token.as_deref()
     }
 }
 

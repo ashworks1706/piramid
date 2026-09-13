@@ -172,17 +172,23 @@ impl<P> Scheduler<P> {
         let Some(timeout) = self.limits.queue_timeout else {
             return Vec::new();
         };
-        let mut expired = Vec::new();
+        let expired = |sequence: &Sequence<P>| {
+            !sequence.started && now.duration_since(sequence.arrived) > timeout
+        };
+        if !self.waiting.iter().any(expired) {
+            return Vec::new();
+        }
+        let mut gone = Vec::new();
         let mut kept = VecDeque::with_capacity(self.waiting.len());
         for sequence in self.waiting.drain(..) {
-            if !sequence.started && now.duration_since(sequence.arrived) > timeout {
-                expired.push(sequence);
+            if expired(&sequence) {
+                gone.push(sequence);
             } else {
                 kept.push_back(sequence);
             }
         }
         self.waiting = kept;
-        expired
+        gone
     }
 
     /// Plan the next step.
@@ -197,35 +203,34 @@ impl<P> Scheduler<P> {
                 continue;
             }
             let needed = self.running[index].tokens.len();
-            if self.make_room(index, needed, &mut step) {
-                if index < self.running.len() {
-                    self.push_entry(index, 1, &mut step);
-                    budget -= 1;
-                    index += 1;
-                }
-            } else {
+            let Some(at) = self.make_room(index, needed, &mut step) else {
                 break;
-            }
+            };
+            self.push_entry(at, 1, &mut step);
+            budget -= 1;
+            index = at + 1;
         }
 
-        for index in 0..self.running.len() {
-            let pending = self.running[index].pending();
-            if pending <= 1
-                || budget == 0
-                || step.entries.iter().any(|e| e.id == self.running[index].id)
-            {
+        let mut index = 0;
+        while index < self.running.len() {
+            let sequence = &self.running[index];
+            let pending = sequence.pending();
+            if pending <= 1 || budget == 0 || step.entries.iter().any(|e| e.id == sequence.id) {
+                index += 1;
                 continue;
             }
             let Some(count) = self.chunk(pending, budget, step.entries.is_empty()) else {
+                index += 1;
                 continue;
             };
-            let end = self.running[index].computed + count;
-            let table = &mut self.running[index].table;
-            if self.allocator.reserve(table, end).is_err() {
+            let end = sequence.computed + count;
+            let Some(at) = self.make_room(index, end, &mut step) else {
+                index += 1;
                 continue;
-            }
-            self.push_entry(index, count, &mut step);
+            };
+            self.push_entry(at, count, &mut step);
             budget -= count;
+            index = at + 1;
         }
 
         let admit = self.limits.continuous || self.running.is_empty();
@@ -281,15 +286,20 @@ impl<P> Scheduler<P> {
     }
 
     /// Reserve pages for the sequence at index to hold needed tokens, preempting the most recently
-    /// arrived running sequences until it fits. Returns false when even preempting every other
-    /// sequence cannot make room.
-    fn make_room(&mut self, index: usize, needed: usize, step: &mut PlannedStep) -> bool {
+    /// arrived running sequences outside the step until it fits. Returns the sequence's index after
+    /// preemption, or None when preempting every other sequence cannot make room.
+    fn make_room(
+        &mut self,
+        mut index: usize,
+        needed: usize,
+        step: &mut PlannedStep,
+    ) -> Option<usize> {
         loop {
             let mut table = std::mem::take(&mut self.running[index].table);
             let reserved = self.allocator.reserve(&mut table, needed).is_ok();
             self.running[index].table = table;
             if reserved {
-                return true;
+                return Some(index);
             }
             let victim = (0..self.running.len()).rev().find(|&candidate| {
                 candidate != index
@@ -297,16 +307,13 @@ impl<P> Scheduler<P> {
                         .entries
                         .iter()
                         .any(|e| e.id == self.running[candidate].id)
-            });
-            let Some(victim) = victim else {
-                return false;
-            };
+            })?;
             let sequence = self.running.remove(victim);
+            if victim < index {
+                index -= 1;
+            }
             step.preempted.push(sequence.id);
             self.return_to_queue(sequence);
-            if victim < index {
-                return self.make_room(index - 1, needed, step);
-            }
         }
     }
 
@@ -373,10 +380,19 @@ impl<P> Scheduler<P> {
 
     /// Remove every sequence, waiting and running.
     pub fn drain(&mut self) -> Vec<Sequence<P>> {
+        self.remove_where(|_| true)
+    }
+
+    /// Remove every running or waiting sequence the predicate selects, releasing its pages.
+    pub fn remove_where(
+        &mut self,
+        mut predicate: impl FnMut(&Sequence<P>) -> bool,
+    ) -> Vec<Sequence<P>> {
         let ids: Vec<u64> = self
             .running
             .iter()
             .chain(self.waiting.iter())
+            .filter(|sequence| predicate(sequence))
             .map(|sequence| sequence.id)
             .collect();
         ids.into_iter().filter_map(|id| self.remove(id)).collect()
@@ -562,6 +578,92 @@ mod tests {
             "the prompt and its generated token are recomputed"
         );
         assert!(!step.entries[0].first_step);
+    }
+
+    #[test]
+    fn a_decode_that_preempts_an_earlier_sequence_still_runs_in_the_same_step() {
+        let settings = SchedulerLimits {
+            chunked_prefill: true,
+            prefill_chunk_tokens: 4,
+            max_batched_tokens: 8,
+            ..limits()
+        };
+        let mut scheduler = scheduler(settings, 2);
+        scheduler
+            .submit(Sequence::new(1, prompt(6), 1, ()))
+            .unwrap();
+        scheduler
+            .submit(Sequence::new(2, prompt(4), 2, ()))
+            .unwrap();
+        run(&mut scheduler);
+        let step = run(&mut scheduler);
+        assert_eq!(step.preempted, vec![1]);
+        assert_eq!(
+            step.entries
+                .iter()
+                .map(|e| (e.id, e.tokens))
+                .collect::<Vec<_>>(),
+            vec![(2, 1)]
+        );
+    }
+
+    #[test]
+    fn prefills_that_exhaust_the_pool_preempt_instead_of_stalling() {
+        let settings = SchedulerLimits {
+            chunked_prefill: true,
+            prefill_chunk_tokens: 5,
+            ..limits()
+        };
+        let mut scheduler = scheduler(settings, 12);
+        for id in 1..=3 {
+            scheduler
+                .submit(Sequence::new(id, prompt(25), 12, ()))
+                .unwrap();
+        }
+        let mut finished = 0;
+        for _ in 0..500 {
+            if scheduler.is_idle() {
+                break;
+            }
+            let step = run(&mut scheduler);
+            assert!(
+                !step.is_empty(),
+                "a step with sequences queued computes nothing"
+            );
+            for entry in &step.entries {
+                let done = scheduler
+                    .running(entry.id)
+                    .is_some_and(|sequence| sequence.generated() >= sequence.max_new_tokens);
+                if done {
+                    scheduler.remove(entry.id);
+                    finished += 1;
+                }
+            }
+        }
+        assert_eq!(finished, 3);
+    }
+
+    #[test]
+    fn remove_where_takes_matching_sequences_from_both_queues() {
+        let settings = SchedulerLimits {
+            max_batch_size: 1,
+            ..limits()
+        };
+        let mut scheduler = scheduler(settings, 16);
+        for id in 1..=3 {
+            scheduler
+                .submit(Sequence::new(id, prompt(3), 2, ()))
+                .unwrap();
+        }
+        run(&mut scheduler);
+        let removed: Vec<u64> = scheduler
+            .remove_where(|sequence| sequence.id != 2)
+            .iter()
+            .map(|sequence| sequence.id)
+            .collect();
+        assert_eq!(removed, vec![1, 3]);
+        assert_eq!(scheduler.ids(), vec![2]);
+        assert_eq!(scheduler.pool().used_blocks, 0);
     }
 
     #[test]

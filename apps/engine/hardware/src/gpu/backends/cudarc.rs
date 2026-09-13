@@ -32,8 +32,8 @@ pub fn open(ordinal: usize) -> GpuResult<Device> {
         name,
         ordinal,
         compute_capability: (
-            u32::try_from(major).map_err(|e| GpuError::Runtime(e.to_string()))?,
-            u32::try_from(minor).map_err(|e| GpuError::Runtime(e.to_string()))?,
+            u32::try_from(major).map_err(runtime)?,
+            u32::try_from(minor).map_err(runtime)?,
         ),
         total_memory_bytes: total as u64,
     };

@@ -57,10 +57,18 @@ impl std::fmt::Debug for QwenModel {
     }
 }
 
+/// Consecutive tokens of one sequence written to consecutive cache slots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WriteRun {
+    slot: usize,
+    token: usize,
+    len: usize,
+}
+
 struct SequencePass {
     offset: usize,
     len: usize,
-    write_runs: Vec<(usize, usize, usize)>,
+    write_runs: Vec<WriteRun>,
     context: Tensor,
     cos: Tensor,
     sin: Tensor,
@@ -206,6 +214,7 @@ impl QwenModel {
         pass: &QwenPass,
     ) -> candle_core::Result<Tensor> {
         let weights = &self.layers[layer];
+        let (key_store, value_store) = (&self.keys[layer], &self.values[layer]);
         let spec = &self.spec;
         let head_dim = spec.head_dim;
         let groups = spec.attention_heads / spec.kv_heads;
@@ -217,44 +226,30 @@ impl QwenModel {
         let mut outputs = Vec::with_capacity(pass.sequences.len());
         for sequence in &pass.sequences {
             let len = sequence.len;
-            let split = |tensor: &Tensor, heads: usize| {
+            let tokens_first = |tensor: &Tensor, heads: usize| {
                 tensor
                     .narrow(1, sequence.offset, len)?
-                    .reshape((1, len, heads, head_dim))?
-                    .transpose(1, 2)?
-                    .contiguous()
+                    .reshape((1, len, heads, head_dim))
             };
-            let mut q = split(&q_all, spec.attention_heads)?;
-            let mut k = split(&k_all, spec.kv_heads)?;
-            let v = split(&v_all, spec.kv_heads)?;
+            let mut q = tokens_first(&q_all, spec.attention_heads)?
+                .transpose(1, 2)?
+                .contiguous()?;
+            let mut k = tokens_first(&k_all, spec.kv_heads)?;
             if let (Some(q_norm), Some(k_norm)) = (&weights.q_norm, &weights.k_norm) {
                 q = q_norm.forward(&q)?;
                 k = k_norm.forward(&k)?;
             }
             let q = candle_nn::rotary_emb::rope(&q, &sequence.cos, &sequence.sin)?;
-            let k = candle_nn::rotary_emb::rope(&k, &sequence.cos, &sequence.sin)?;
+            let k = candle_nn::rotary_emb::rope_thd(&k, &sequence.cos, &sequence.sin)?;
 
-            let k_rows = k
+            let k_rows = k.squeeze(0)?.to_dtype(self.kv_dtype)?;
+            let v_rows = tokens_first(&v_all, spec.kv_heads)?
                 .squeeze(0)?
-                .transpose(0, 1)?
                 .to_dtype(self.kv_dtype)?
                 .contiguous()?;
-            let v_rows = v
-                .squeeze(0)?
-                .transpose(0, 1)?
-                .to_dtype(self.kv_dtype)?
-                .contiguous()?;
-            for &(slot, token, run) in &sequence.write_runs {
-                self.keys[layer].slice_set(
-                    &k_rows.narrow(0, token, run)?.contiguous()?,
-                    0,
-                    slot,
-                )?;
-                self.values[layer].slice_set(
-                    &v_rows.narrow(0, token, run)?.contiguous()?,
-                    0,
-                    slot,
-                )?;
+            for run in &sequence.write_runs {
+                key_store.slice_set(&k_rows.narrow(0, run.token, run.len)?, 0, run.slot)?;
+                value_store.slice_set(&v_rows.narrow(0, run.token, run.len)?, 0, run.slot)?;
             }
 
             let gather = |store: &Tensor| -> candle_core::Result<Tensor> {
@@ -272,8 +267,8 @@ impl QwenModel {
                         .reshape((1, spec.attention_heads, context, head_dim))
                 }
             };
-            let k_context = gather(&self.keys[layer])?;
-            let v_context = gather(&self.values[layer])?;
+            let k_context = gather(key_store)?;
+            let v_context = gather(value_store)?;
 
             let mut scores = (q.matmul(&k_context.t()?)? * scale)?;
             if let Some(mask) = &sequence.mask {
@@ -305,14 +300,13 @@ impl QwenModel {
         Ok(())
     }
 
-    /// Hand f32 rows held on a CUDA device to visit in place, as a borrowed device buffer queued on
-    /// the per-thread stream candle uses. Returns None on the CPU, where rows are visited on the
-    /// host.
+    /// Hand contiguous f32 rows held on a CUDA device to visit in place, as a borrowed device buffer
+    /// covering every element of rows, queued on the per-thread stream candle uses. Returns None on
+    /// the CPU, where rows are visited on the host.
     #[cfg(feature = "gpu-cuda")]
     fn device_rows(
         &self,
         rows: &Tensor,
-        elements: usize,
         visit: &mut HiddenVisitor<'_>,
     ) -> Result<Option<()>, InferenceError> {
         use candle_core::cuda_backend::cudarc::driver::DevicePtr;
@@ -320,19 +314,33 @@ impl QwenModel {
         let Some(gpu) = &self.gpu else {
             return Ok(None);
         };
-        let ptr = {
-            let (storage, layout) = rows.storage_and_layout();
-            let candle_core::Storage::Cuda(storage) = &*storage else {
-                return Err(InferenceError::Runtime(
-                    "a CUDA model holds hidden states off the device".to_string(),
-                ));
-            };
-            let slice = storage.as_cuda_slice::<f32>().map_err(runtime)?;
-            let (base, _guard) = slice.device_ptr(slice.stream());
-            base + (layout.start_offset() * std::mem::size_of::<f32>()) as u64
+        if !rows.is_contiguous() {
+            return Err(InferenceError::Runtime(
+                "hidden rows handed to a device visitor are not contiguous".to_string(),
+            ));
+        }
+        let (storage, layout) = rows.storage_and_layout();
+        let candle_core::Storage::Cuda(cuda) = &*storage else {
+            return Err(InferenceError::Runtime(
+                "a CUDA model holds hidden states off the device".to_string(),
+            ));
         };
-        let mut buffer = piramid_hardware::gpu::DeviceBuffer::<f32>::borrowed(gpu, ptr, elements)
-            .map_err(|e| InferenceError::Runtime(e.to_string()))?;
+        let slice = cuda.as_cuda_slice::<f32>().map_err(runtime)?;
+        // The storage guard and the stream record are held until visit returns.
+        let (base, _record) = slice.device_ptr(slice.stream());
+        let offset = layout
+            .start_offset()
+            .checked_mul(std::mem::size_of::<f32>())
+            .and_then(|bytes| u64::try_from(bytes).ok())
+            .ok_or_else(|| {
+                InferenceError::Runtime("hidden row offset overflows a device address".to_string())
+            })?;
+        let mut buffer = piramid_hardware::gpu::DeviceBuffer::<f32>::borrowed(
+            gpu,
+            base + offset,
+            layout.shape().elem_count(),
+        )
+        .map_err(|e| InferenceError::Runtime(e.to_string()))?;
         let stream = piramid_hardware::gpu::Stream::per_thread(gpu);
         visit(HiddenState::Device(&mut buffer), Some(&stream))?;
         Ok(Some(()))
@@ -342,10 +350,32 @@ impl QwenModel {
     fn device_rows(
         &self,
         _rows: &Tensor,
-        _elements: usize,
         _visit: &mut HiddenVisitor<'_>,
     ) -> Result<Option<()>, InferenceError> {
         Ok(None)
+    }
+
+    /// The normalised last-token hidden state of every sequence that asked for logits, one row per
+    /// sequence, or None when none asked.
+    fn last_token_states(&self, pass: &QwenPass) -> Result<Option<Tensor>, InferenceError> {
+        let last = pass
+            .sequences
+            .iter()
+            .filter(|sequence| sequence.logits)
+            .map(|sequence| {
+                u32::try_from(sequence.offset + sequence.len - 1).map_err(|_| {
+                    InferenceError::Runtime("a step holds more than u32::MAX tokens".to_string())
+                })
+            })
+            .collect::<Result<Vec<u32>, _>>()?;
+        if last.is_empty() {
+            return Ok(None);
+        }
+        Tensor::from_slice(&last, last.len(), &self.device)
+            .and_then(|index| pass.hidden.squeeze(0)?.index_select(&index, 0))
+            .and_then(|rows| self.norm.forward(&rows))
+            .map(Some)
+            .map_err(runtime)
     }
 
     fn prepare(&self, batch: &StepBatch) -> Result<QwenPass, InferenceError> {
@@ -382,6 +412,7 @@ impl QwenModel {
             if let Some(&slot) = step
                 .context_slots
                 .iter()
+                .chain(&step.write_slots)
                 .find(|&&slot| slot as usize >= slots)
             {
                 return Err(InferenceError::Runtime(format!(
@@ -432,12 +463,14 @@ impl DecoderModel for QwenModel {
         self.keys.clear();
         self.values.clear();
         let shape = (slots, self.spec.kv_heads, self.spec.head_dim);
+        let mut keys = Vec::with_capacity(self.spec.layers);
+        let mut values = Vec::with_capacity(self.spec.layers);
         for _ in 0..self.spec.layers {
-            self.keys
-                .push(Tensor::zeros(shape, self.kv_dtype, &self.device).map_err(runtime)?);
-            self.values
-                .push(Tensor::zeros(shape, self.kv_dtype, &self.device).map_err(runtime)?);
+            keys.push(Tensor::zeros(shape, self.kv_dtype, &self.device).map_err(runtime)?);
+            values.push(Tensor::zeros(shape, self.kv_dtype, &self.device).map_err(runtime)?);
         }
+        self.keys = keys;
+        self.values = values;
         Ok(())
     }
 
@@ -451,6 +484,11 @@ impl DecoderModel for QwenModel {
                 "layer {layer} of a {} layer model",
                 self.layers.len()
             )));
+        }
+        if layer >= self.keys.len() || layer >= self.values.len() {
+            return Err(InferenceError::Runtime(
+                "cache storage is not allocated".to_string(),
+            ));
         }
         self.run_layer(pass, layer).map_err(runtime)
     }
@@ -472,7 +510,7 @@ impl DecoderModel for QwenModel {
             .and_then(|rows| rows.to_dtype(DType::F32))
             .and_then(|rows| rows.contiguous())
             .map_err(runtime)?;
-        let replacement = match self.device_rows(&rows, len * hidden_size, visit)? {
+        let replacement = match self.device_rows(&rows, visit)? {
             Some(()) => rows.to_dtype(self.dtype).map_err(runtime)?,
             None => {
                 let mut host = rows
@@ -485,8 +523,12 @@ impl DecoderModel for QwenModel {
                     .map_err(runtime)?
             }
         };
-        let before = pass.hidden.narrow(1, 0, offset).map_err(runtime)?;
         let total = pass.hidden.dim(1).map_err(runtime)?;
+        if offset == 0 && len == total {
+            pass.hidden = replacement;
+            return Ok(());
+        }
+        let before = pass.hidden.narrow(1, 0, offset).map_err(runtime)?;
         let after = pass
             .hidden
             .narrow(1, offset + len, total - offset - len)
@@ -496,46 +538,24 @@ impl DecoderModel for QwenModel {
     }
 
     fn finish(&mut self, pass: QwenPass) -> Result<Vec<Vec<f32>>, InferenceError> {
-        let last: Vec<u32> = pass
-            .sequences
-            .iter()
-            .filter(|sequence| sequence.logits)
-            .map(|sequence| (sequence.offset + sequence.len - 1) as u32)
-            .collect();
-        if last.is_empty() {
+        let Some(normed) = self.last_token_states(&pass)? else {
             return Ok(Vec::new());
-        }
-        let compute = || -> candle_core::Result<Vec<Vec<f32>>> {
-            let index = Tensor::from_slice(&last, last.len(), &self.device)?;
-            let rows = pass.hidden.squeeze(0)?.index_select(&index, 0)?;
-            let normed = self.norm.forward(&rows)?;
-            self.lm_head
-                .forward(&normed)?
-                .to_dtype(DType::F32)?
-                .to_vec2::<f32>()
         };
-        compute().map_err(runtime)
+        self.lm_head
+            .forward(&normed)
+            .and_then(|logits| logits.to_dtype(DType::F32))
+            .and_then(|logits| logits.to_vec2::<f32>())
+            .map_err(runtime)
     }
 
     fn pool(&mut self, pass: QwenPass) -> Result<Vec<Vec<f32>>, InferenceError> {
-        let last: Vec<u32> = pass
-            .sequences
-            .iter()
-            .filter(|sequence| sequence.logits)
-            .map(|sequence| (sequence.offset + sequence.len - 1) as u32)
-            .collect();
-        if last.is_empty() {
+        let Some(normed) = self.last_token_states(&pass)? else {
             return Ok(Vec::new());
-        }
-        let compute = || -> candle_core::Result<Vec<Vec<f32>>> {
-            let index = Tensor::from_slice(&last, last.len(), &self.device)?;
-            let rows = pass.hidden.squeeze(0)?.index_select(&index, 0)?;
-            self.norm
-                .forward(&rows)?
-                .to_dtype(DType::F32)?
-                .to_vec2::<f32>()
         };
-        compute().map_err(runtime)
+        normed
+            .to_dtype(DType::F32)
+            .and_then(|states| states.to_vec2::<f32>())
+            .map_err(runtime)
     }
 }
 
@@ -549,9 +569,14 @@ fn rotary_tables(
     let inverse: Vec<f32> = (0..half)
         .map(|i| 1.0 / spec.rope_theta.powf((2 * i) as f64 / spec.head_dim as f64) as f32)
         .collect();
+    let end = u32::try_from(positions).map_err(|_| {
+        InferenceError::Load(format!(
+            "max_position_embeddings {positions} does not fit a u32 position"
+        ))
+    })?;
     let build = || -> candle_core::Result<(Tensor, Tensor)> {
         let inverse = Tensor::from_vec(inverse, (1, half), device)?;
-        let steps = Tensor::arange(0u32, positions as u32, device)?
+        let steps = Tensor::arange(0u32, end, device)?
             .to_dtype(DType::F32)?
             .reshape((positions, 1))?;
         let angles = steps.matmul(&inverse)?;
@@ -584,17 +609,20 @@ fn causal_mask(
     Tensor::from_vec(values, (len, context), device)?.to_dtype(dtype)
 }
 
-/// Contiguous runs of slots as (first slot, first token, run length).
-fn runs(slots: &[u32]) -> Vec<(usize, usize, usize)> {
-    let mut runs: Vec<(usize, usize, usize)> = Vec::new();
+/// Contiguous runs of slots, each starting at a slot and a token index.
+fn runs(slots: &[u32]) -> Vec<WriteRun> {
+    let mut runs: Vec<WriteRun> = Vec::new();
     for (token, &slot) in slots.iter().enumerate() {
+        let slot = slot as usize;
         match runs.last_mut() {
-            Some((first, start, length))
-                if *first + *length == slot as usize && *start + *length == token =>
-            {
-                *length += 1;
+            Some(run) if run.slot + run.len == slot && run.token + run.len == token => {
+                run.len += 1;
             }
-            _ => runs.push((slot as usize, token, 1)),
+            _ => runs.push(WriteRun {
+                slot,
+                token,
+                len: 1,
+            }),
         }
     }
     runs
@@ -729,12 +757,79 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::unwrap_used, reason = "assertions in tests")]
+    fn rotating_keys_tokens_first_matches_rotating_them_heads_first() {
+        let (heads, tokens, dim) = (3, 5, 8);
+        let values: Vec<f32> = (0..heads * tokens * dim)
+            .map(|i| (i as f32 * 0.37).sin())
+            .collect();
+        let heads_first = Tensor::from_vec(values, (1, heads, tokens, dim), &Device::Cpu).unwrap();
+        let angles: Vec<f32> = (0..tokens * dim / 2).map(|i| i as f32 * 0.11).collect();
+        let angles = Tensor::from_vec(angles, (tokens, dim / 2), &Device::Cpu).unwrap();
+        let (cos, sin) = (angles.cos().unwrap(), angles.sin().unwrap());
+
+        let expected = candle_nn::rotary_emb::rope(&heads_first, &cos, &sin).unwrap();
+        let tokens_first = heads_first.transpose(1, 2).unwrap().contiguous().unwrap();
+        let got = candle_nn::rotary_emb::rope_thd(&tokens_first, &cos, &sin)
+            .unwrap()
+            .transpose(1, 2)
+            .unwrap();
+        let difference = (expected - got)
+            .unwrap()
+            .abs()
+            .unwrap()
+            .max_all()
+            .unwrap()
+            .to_scalar::<f32>()
+            .unwrap();
+        assert!(difference < 1e-6, "{difference}");
+    }
+
+    #[test]
     fn slots_group_into_contiguous_runs() {
+        let run = |slot, token, len| WriteRun { slot, token, len };
         assert_eq!(
             runs(&[4, 5, 6, 12, 13, 0]),
-            vec![(4, 0, 3), (12, 3, 2), (0, 5, 1)]
+            vec![run(4, 0, 3), run(12, 3, 2), run(0, 5, 1)]
         );
         assert!(runs(&[]).is_empty());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used, reason = "assertions in tests")]
+    fn a_layer_without_cache_storage_is_an_error() {
+        use crate::inference::architecture::{Architecture, StepSequence};
+        let mut model = testing::tiny_model(Architecture::Qwen2, 3, 8);
+        let batch = StepBatch {
+            sequences: vec![StepSequence {
+                tokens: vec![1, 2],
+                start: 0,
+                write_slots: vec![0, 1],
+                context_slots: vec![0, 1],
+                logits: true,
+            }],
+        };
+        let mut pass = model.begin(&batch).unwrap();
+        model.keys.clear();
+        model.values.clear();
+        assert!(model.layer(&mut pass, 0).is_err());
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used, reason = "assertions in tests")]
+    fn a_write_slot_outside_the_cache_is_refused() {
+        use crate::inference::architecture::{Architecture, StepSequence};
+        let mut model = testing::tiny_model(Architecture::Qwen2, 3, 8);
+        let batch = StepBatch {
+            sequences: vec![StepSequence {
+                tokens: vec![1],
+                start: 1,
+                write_slots: vec![8],
+                context_slots: vec![0, 1],
+                logits: true,
+            }],
+        };
+        assert!(model.begin(&batch).is_err());
     }
 
     #[test]

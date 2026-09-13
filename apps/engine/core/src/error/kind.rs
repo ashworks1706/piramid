@@ -3,6 +3,8 @@
 use std::io;
 use thiserror::Error;
 
+use super::inference::InferenceError;
+
 /// Result with [PiramidError] as the error.
 pub type Result<T> = std::result::Result<T, PiramidError>;
 
@@ -52,11 +54,12 @@ pub enum PiramidError {
 
     /// A model load or generation failure.
     #[error("Inference error: {0}")]
-    Inference(#[from] super::inference::InferenceError),
+    Inference(#[from] InferenceError),
 
     /// A distance kernel or strategy failure.
     #[error("Compute error: {0}")]
     Compute(#[from] piramid_hardware::compute::ComputeError),
+
     /// A GPU device failure.
     #[error("Device error: {0}")]
     Gpu(#[from] piramid_hardware::gpu::GpuError),
@@ -94,13 +97,12 @@ impl PiramidError {
             Self::Server(e) => e.kind(),
             Self::Embedding(_) => ErrorKind::Upstream,
             Self::Inference(e) => match e {
-                super::inference::InferenceError::InvalidRequest(_) => ErrorKind::BadRequest,
-                super::inference::InferenceError::Timeout(_) => ErrorKind::Timeout,
-                super::inference::InferenceError::Unavailable(_)
-                | super::inference::InferenceError::QueueFull(_)
-                | super::inference::InferenceError::Stopped(_) => ErrorKind::Unavailable,
-                super::inference::InferenceError::Load(_)
-                | super::inference::InferenceError::Runtime(_) => ErrorKind::Internal,
+                InferenceError::InvalidRequest(_) => ErrorKind::BadRequest,
+                InferenceError::Timeout(_) => ErrorKind::Timeout,
+                InferenceError::Unavailable(_)
+                | InferenceError::QueueFull(_)
+                | InferenceError::Stopped(_) => ErrorKind::Unavailable,
+                InferenceError::Load(_) | InferenceError::Runtime(_) => ErrorKind::Internal,
             },
             Self::Index(super::index::IndexError::MetricMismatch { .. })
             | Self::Storage(

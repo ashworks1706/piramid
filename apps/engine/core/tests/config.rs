@@ -303,3 +303,29 @@ fn a_vram_split_must_fit_the_budget() {
     cfg.startup.hardware.vram.kv_ratio = 0.5;
     assert!(cfg.validate().unwrap_err().contains("sum"));
 }
+
+#[test]
+fn a_sampling_temperature_or_penalty_that_is_not_finite_is_rejected() {
+    for value in [f32::NAN, f32::INFINITY] {
+        let mut cfg = Config::default();
+        cfg.runtime.inference.sampling.temperature = value;
+        assert!(
+            cfg.validate().unwrap_err().contains("temperature"),
+            "{value}"
+        );
+
+        let mut cfg = Config::default();
+        cfg.runtime.inference.sampling.repetition_penalty = value;
+        assert!(
+            cfg.validate().unwrap_err().contains("repetition_penalty"),
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn a_zero_embedding_timeout_is_rejected() {
+    let yaml = "startup:\n  embedding:\n    provider: openai\n    model: m\n    timeout: 0\n";
+    let cfg: Config = yaml_serde::from_str(yaml).unwrap();
+    assert!(cfg.validate().unwrap_err().contains("timeout"));
+}

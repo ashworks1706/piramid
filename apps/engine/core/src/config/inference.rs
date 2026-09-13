@@ -455,11 +455,15 @@ impl InferenceConfig {
         if self.batching.prefill_chunk_tokens == 0 {
             return Err("runtime.inference.batching.prefill_chunk_tokens: must be >= 1".into());
         }
-        if self.sampling.repetition_penalty <= 0.0 {
-            return Err("runtime.inference.sampling.repetition_penalty: must be > 0".into());
+        let penalty = self.sampling.repetition_penalty;
+        if !(penalty > 0.0 && penalty.is_finite()) {
+            return Err(
+                "runtime.inference.sampling.repetition_penalty: must be finite and > 0".into(),
+            );
         }
-        if self.sampling.temperature < 0.0 {
-            return Err("runtime.inference.sampling.temperature: must be >= 0".into());
+        let temperature = self.sampling.temperature;
+        if !(temperature >= 0.0 && temperature.is_finite()) {
+            return Err("runtime.inference.sampling.temperature: must be finite and >= 0".into());
         }
         if self.sampling.top_p.is_some_and(|p| !(p > 0.0 && p <= 1.0)) {
             return Err("runtime.inference.sampling.top_p: must be within (0.0, 1.0]".into());

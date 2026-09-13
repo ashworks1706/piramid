@@ -539,7 +539,9 @@ async fn retrieve(
                 .json()
                 .await
                 .context(&format!("read the search response of {url}"))?;
-            let hits = body.results.into_iter().next().unwrap_or_default();
+            let hits = body.results.into_iter().next().ok_or_else(|| {
+                Failure(format!("the search response of {url} holds no result list"))
+            })?;
             let mut passages = Vec::with_capacity(hits.len());
             let mut passage_ids = Vec::with_capacity(hits.len());
             for hit in hits {

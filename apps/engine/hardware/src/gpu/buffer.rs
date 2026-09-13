@@ -6,7 +6,7 @@ use crate::gpu::device::Device;
 use crate::gpu::error::{GpuError, GpuResult};
 use crate::gpu::stream::Stream;
 
-/// A typed region of device memory, generic over element type (f32, f16, u32 and so on).
+/// A typed region of device memory, generic over a numeric [DeviceElement] type.
 ///
 /// An owned buffer frees its allocation on drop. A borrowed buffer names memory another runtime
 /// on the same device owns, and never frees it.
@@ -28,7 +28,26 @@ pub struct DeviceAllocation {
     pub size_bytes: usize,
 }
 
-impl<T: Copy> DeviceBuffer<T> {
+/// A plain numeric type with no padding for which every byte pattern is a valid value.
+pub trait DeviceElement: Copy + Default + sealed::Sealed {}
+
+mod sealed {
+    /// Restricts [super::DeviceElement] to the primitive numeric types listed in this module.
+    pub trait Sealed {}
+}
+
+macro_rules! device_elements {
+    ($($t:ty),*) => {
+        $(
+            impl sealed::Sealed for $t {}
+            impl DeviceElement for $t {}
+        )*
+    };
+}
+
+device_elements!(u8, i8, u16, i16, u32, i32, u64, i64, f32, f64);
+
+impl<T: DeviceElement> DeviceBuffer<T> {
     /// Allocate the given number of elements on a device. The contents are unspecified.
     pub fn alloc(device: &Device, len: usize) -> GpuResult<Self> {
         let size_bytes = len
@@ -85,10 +104,7 @@ impl<T: Copy> DeviceBuffer<T> {
     }
 
     /// Copy the contents of this buffer into a new host vector.
-    pub fn to_host(&self, stream: &Stream) -> GpuResult<Vec<T>>
-    where
-        T: Default,
-    {
+    pub fn to_host(&self, stream: &Stream) -> GpuResult<Vec<T>> {
         let mut out = vec![T::default(); self.len];
         self.copy_to_host(&mut out, stream)?;
         Ok(out)
@@ -140,17 +156,17 @@ impl<T> Drop for DeviceBuffer<T> {
 
 /// Reinterpret a typed slice as bytes for transfer.
 #[allow(unsafe_code)]
-fn as_bytes<T: Copy>(src: &[T]) -> &[u8] {
-    // SAFETY: T is Copy with no drop glue, and the returned slice borrows src for its lifetime
-    // with a length of size_of_val(src).
+fn as_bytes<T: DeviceElement>(src: &[T]) -> &[u8] {
+    // SAFETY: T is a primitive numeric type with no padding, so every byte of src is initialized,
+    // and the returned slice borrows src for its lifetime with a length of size_of_val(src).
     unsafe { std::slice::from_raw_parts(src.as_ptr().cast::<u8>(), std::mem::size_of_val(src)) }
 }
 
 /// Reinterpret a typed slice as mutable bytes for transfer.
 #[allow(unsafe_code)]
-fn as_bytes_mut<T: Copy>(dst: &mut [T]) -> &mut [u8] {
+fn as_bytes_mut<T: DeviceElement>(dst: &mut [T]) -> &mut [u8] {
     let size = std::mem::size_of_val(dst);
-    // SAFETY: T is Copy plain numeric data for which any byte pattern is valid, and the returned
+    // SAFETY: T is a primitive numeric type for which any byte pattern is valid, and the returned
     // slice holds the exclusive borrow of dst with a length of size_of_val(dst).
     unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), size) }
 }

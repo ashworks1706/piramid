@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use axum::http::header::{HeaderName, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use axum::http::HeaderValue;
 use axum::{
     extract::DefaultBodyLimit,
@@ -140,15 +141,15 @@ pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Rout
     router
         .layer(middleware::from_fn(assign_request_id))
         .layer(SetResponseHeaderLayer::if_not_present(
-            axum::http::header::HeaderName::from_static("x-api-version"),
+            HeaderName::from_static("x-api-version"),
             HeaderValue::from_static("v1"),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
-            axum::http::header::HeaderName::from_static("x-content-type-options"),
+            X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
-            axum::http::header::HeaderName::from_static("x-frame-options"),
+            X_FRAME_OPTIONS,
             HeaderValue::from_static("DENY"),
         ))
         .with_state(state)

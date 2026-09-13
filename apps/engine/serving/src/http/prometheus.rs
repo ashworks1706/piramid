@@ -187,8 +187,7 @@ fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
     );
 }
 
-/// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
-/// server could not measure.
+/// Write the device memory budget and the capacity and use of each pool.
 fn render_gpu_budget(registry: &mut Registry, budget: &GpuBudgetResponse) {
     registry.metric(
         "piramid_gpu_budget_usable_bytes",
@@ -330,6 +329,8 @@ fn render_inference(registry: &mut Registry, inference: &InferenceMetricsRespons
     }
 }
 
+/// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
+/// server could not measure.
 fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
     let by_device = |extract: fn(&GpuMetricsResponse) -> Option<f64>| {
         gpus.iter()

@@ -27,15 +27,15 @@ impl TextStream {
     ) -> Result<String, InferenceError> {
         self.tokens.push(token);
         let prefix = tokenizer.decode(&self.tokens[self.prefix_offset..self.read_offset], true)?;
-        let full = tokenizer.decode(&self.tokens[self.prefix_offset..], true)?;
+        let mut full = tokenizer.decode(&self.tokens[self.prefix_offset..], true)?;
         if full.len() > prefix.len()
             && !full.ends_with('\u{FFFD}')
             && full.is_char_boundary(prefix.len())
         {
-            let delta = full[prefix.len()..].to_string();
+            full.replace_range(..prefix.len(), "");
             self.prefix_offset = self.read_offset;
             self.read_offset = self.tokens.len();
-            Ok(delta)
+            Ok(full)
         } else {
             Ok(String::new())
         }

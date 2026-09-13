@@ -106,13 +106,12 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
         });
 
         let wal_size = optional_file_size(&SidecarManager::at(&collection_guard.path).wal_path())?;
-        let checkpoint_age_secs = collection_guard
-            .checkpoint
-            .last_checkpoint()
+        let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
+        let checkpoint_age_secs = last_checkpoint
             .and_then(|timestamp| piramid_core::clock::unix_secs().checked_sub(timestamp));
         wal_stats.push(WalStats {
             collection: collection_name,
-            last_checkpoint: collection_guard.checkpoint.last_checkpoint(),
+            last_checkpoint,
             checkpoint_age_secs,
             wal_size_bytes: wal_size,
         });

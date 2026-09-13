@@ -1239,3 +1239,24 @@ fn the_console_sends_the_key_the_environment_set() {
     config.startup.http.auth.api_key = Some(key.clone());
     assert_eq!(Settings::from_config(&config).api_key, Some(key));
 }
+
+#[test]
+fn a_server_with_no_model_loaded_gives_the_device_graphs_the_whole_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    let (width, height) = (200, 40);
+    let drawn: Vec<char> = screen_of(&mut app, width, height).chars().collect();
+    let last_body_row: String = drawn
+        .chunks(usize::from(width))
+        .nth(usize::from(height) - 2)
+        .expect("the screen has that row")
+        .iter()
+        .collect();
+    assert!(!last_body_row.trim().is_empty(), "{last_body_row:?}");
+}

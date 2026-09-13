@@ -102,6 +102,7 @@ impl<M: DecoderModel> Driver<M> {
             return Ok(());
         }
         let hidden_dim = self.model.spec().hidden_size;
+        let name = self.hook.name();
         let pending = self
             .hook
             .launch(&RetrievalRequest {
@@ -110,8 +111,7 @@ impl<M: DecoderModel> Driver<M> {
                 hidden_dim,
                 stream: None,
             })
-            .map_err(|e| InferenceError::Runtime(format!("{} launch: {e}", self.hook.name())))?;
-        let name = self.hook.name();
+            .map_err(|e| InferenceError::Runtime(format!("{name} launch: {e}")))?;
         let mut pending = Some(pending);
         self.model
             .with_hidden(pass, sequence, &mut |hidden, stream| {

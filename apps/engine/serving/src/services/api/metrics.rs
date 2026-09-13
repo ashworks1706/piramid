@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 /// Server-wide metrics snapshot.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct MetricsResponse {
     /// Number of collections open in memory.
     pub total_collections: usize,
@@ -107,7 +107,7 @@ pub struct InferenceMetricsResponse {
 }
 
 /// Metrics of one loaded collection.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct CollectionMetrics {
     /// Collection name.
     pub name: String,
@@ -134,7 +134,7 @@ pub struct CollectionMetrics {
 }
 
 /// Write-ahead log state of one loaded collection.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct WalStats {
     /// Collection name.
     pub collection: String,
@@ -148,7 +148,7 @@ pub struct WalStats {
 }
 
 /// Embedding provider usage since startup.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct EmbeddingMetricsResponse {
     /// Number of embed and text-search requests served.
     pub requests: u64,

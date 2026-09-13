@@ -35,10 +35,9 @@ impl StopMatcher {
             .filter_map(|stop| self.held.find(stop.as_str()))
             .min();
         if let Some(position) = first_match {
-            let text = self.held[..position].to_string();
-            self.held.clear();
+            self.held.truncate(position);
             return StopOutcome {
-                text,
+                text: std::mem::take(&mut self.held),
                 stopped: true,
             };
         }
@@ -49,10 +48,8 @@ impl StopMatcher {
             .max()
             .unwrap_or(0);
         let release = self.held.len() - keep;
-        let text = self.held[..release].to_string();
-        self.held.drain(..release);
         StopOutcome {
-            text,
+            text: self.held.drain(..release).collect(),
             stopped: false,
         }
     }
