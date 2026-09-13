@@ -2,7 +2,7 @@
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::symbols::Marker;
+use ratatui::symbols::{self, Marker};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState,
@@ -11,7 +11,7 @@ use ratatui::widgets::{
 use ratatui::Frame;
 
 use crate::console::app::{App, UnitState};
-use crate::console::client::HostMetrics;
+use crate::console::client::{HostMetrics, InferenceMetrics};
 use crate::console::collections::Row;
 use crate::console::device::{DeviceView, Run};
 use crate::console::types::{
@@ -236,16 +236,22 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
     lines
 }
 
-/// Host processor and memory of the watched server, and each of its GPUs, graphed over the
-/// refresh history.
+/// Host processor and memory of the watched server, each of its GPUs, and generation on its
+/// loaded model, graphed over the refresh history.
 fn device(frame: &mut Frame, app: &App, area: Rect) {
-    let [about, cpu_row, memory_row] = Layout::vertical([
+    let view = &app.device;
+    let inference = view.latest_inference();
+    let [about, cpu_row, memory_row, inference_row] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(6),
         Constraint::Min(6),
+        Constraint::Min(match inference {
+            None => 0,
+            Some(_) if area.width >= KV_BESIDE => KV_HEIGHT.max(GENERATION_HEIGHT),
+            Some(_) => KV_HEIGHT + GENERATION_HEIGHT,
+        }),
     ])
     .areas(area);
-    let view = &app.device;
     let latest = view.latest();
     let gpu_indices = view.gpu_indices();
     let columns = vec![Constraint::Fill(1); gpu_indices.len() + 1];
@@ -373,6 +379,158 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
             *memory_area,
         );
     }
+
+    if let Some(latest) = inference {
+        generation(frame, view, latest, now, window, inference_row);
+    }
+}
+
+/// Width of the key/value cache panel beside the generation chart.
+const KV_PANEL: u16 = 52;
+
+/// Rows of the key/value cache panel, borders included.
+const KV_HEIGHT: u16 = 6;
+
+/// Fewest rows of the generation chart, borders included.
+const GENERATION_HEIGHT: u16 = 7;
+
+/// Terminal widths below this stack the generation chart above the key/value cache panel.
+const KV_BESIDE: u16 = 100;
+
+/// Decode rate and time to first token graphed over the refresh history, beside the key/value
+/// cache and scheduler state of the newest refresh.
+fn generation(
+    frame: &mut Frame,
+    view: &DeviceView,
+    latest: &InferenceMetrics,
+    now: std::time::Instant,
+    window: f64,
+    area: Rect,
+) {
+    let [chart_area, kv_area] = if area.width >= KV_BESIDE {
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(KV_PANEL)]).areas(area)
+    } else {
+        Layout::vertical([
+            Constraint::Min(GENERATION_HEIGHT),
+            Constraint::Length(KV_HEIGHT),
+        ])
+        .areas(area)
+    };
+
+    let decode = view.inference_series(now, |i| i.decode_tokens_per_second.map(f64::from));
+    let first_token = view.inference_series(now, |i| i.avg_time_to_first_token_ms.map(f64::from));
+    let top = decode
+        .iter()
+        .chain(first_token.iter())
+        .flatten()
+        .map(|(_, value)| *value)
+        .fold(1.0, f64::max);
+    let title = format!(
+        " generation  decode {}  first token {} ",
+        latest
+            .decode_tokens_per_second
+            .map_or_else(unmeasured, |v| format!("{v:.1} tok/s")),
+        latest
+            .avg_time_to_first_token_ms
+            .map_or_else(unmeasured, |v| format!("{v:.0} ms"))
+    );
+    frame.render_widget(
+        chart(
+            &title,
+            [
+                Series {
+                    runs: &decode,
+                    color: ACCENT,
+                    name: "decode tok/s",
+                },
+                Series {
+                    runs: &first_token,
+                    color: Color::Yellow,
+                    name: "first token ms",
+                },
+            ],
+            window,
+            top,
+            [
+                "0".to_owned(),
+                format!("{:.0}", top / 2.0),
+                format!("{top:.0}"),
+            ],
+        ),
+        chart_area,
+    );
+
+    let block = pane(&format!(" {} on {} ", latest.model, latest.device), false);
+    let width = usize::from(block.inner(kv_area).width.saturating_sub(4));
+    let free = latest
+        .kv_blocks_total
+        .saturating_sub(latest.kv_blocks_used)
+        .saturating_sub(latest.kv_blocks_cached);
+    let [used_cells, cached_cells, free_cells] = kv_cells(
+        latest.kv_blocks_used,
+        latest.kv_blocks_cached,
+        latest.kv_blocks_total,
+        width,
+    );
+    let lines = vec![
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                symbols::block::FULL.repeat(used_cells),
+                Style::default().fg(ACCENT),
+            ),
+            Span::styled(
+                symbols::block::FULL.repeat(cached_cells),
+                Style::default().fg(Color::Magenta),
+            ),
+            Span::styled(
+                symbols::shade::LIGHT.repeat(free_cells),
+                Style::default().fg(DIM),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  used ", Style::default().fg(ACCENT)),
+            Span::raw(thousands_u64(latest.kv_blocks_used)),
+            Span::styled("  cached ", Style::default().fg(Color::Magenta)),
+            Span::raw(thousands_u64(latest.kv_blocks_cached)),
+            Span::styled("  free ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(free)),
+            Span::styled("  of ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.kv_blocks_total)),
+        ]),
+        Line::from(vec![
+            Span::styled("  prefix hits ", Style::default().fg(DIM)),
+            Span::raw(percent(latest.prefix_hit_rate.map(|rate| rate * 100.0))),
+            Span::styled("  evictions ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.kv_evictions)),
+        ]),
+        Line::from(vec![
+            Span::styled("  queue ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.queue_depth)),
+            Span::styled("  running ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.running)),
+            Span::styled("  batch ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.last_batch_size)),
+            Span::styled("  preempted ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.preemptions)),
+        ]),
+    ];
+    frame.render_widget(Paragraph::new(lines).block(block), kv_area);
+}
+
+/// Cells of a bar width wide given to used, cached and free key/value blocks out of total.
+pub fn kv_cells(used: u64, cached: u64, total: u64, width: usize) -> [usize; 3] {
+    if total == 0 {
+        return [0, 0, width];
+    }
+    let cells = |blocks: u64| -> usize {
+        let share = u128::from(blocks.min(total)) * width as u128;
+        let rounded = (share + u128::from(total) / 2) / u128::from(total);
+        usize::try_from(rounded).unwrap_or(width).min(width)
+    };
+    let used_cells = cells(used);
+    let held_cells = cells(used.saturating_add(cached)).max(used_cells);
+    [used_cells, held_cells - used_cells, width - held_cells]
 }
 
 /// Utilisation, temperature and memory of the GPU at index, graphed over the refresh history.

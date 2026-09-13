@@ -494,21 +494,24 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
 
     let start = Instant::now();
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(start, Some(cpu_reading(Some(10.0))), Vec::new());
+    view.record(start, Some(cpu_reading(Some(10.0))), Vec::new(), None);
     view.record(
         start + Duration::from_secs(1),
         Some(cpu_reading(Some(20.0))),
         Vec::new(),
+        None,
     );
     view.record(
         start + Duration::from_secs(2),
         Some(cpu_reading(None)),
         Vec::new(),
+        None,
     );
     view.record(
         start + Duration::from_secs(3),
         Some(cpu_reading(Some(30.0))),
         Vec::new(),
+        None,
     );
 
     let now = start + Duration::from_secs(3);
@@ -542,14 +545,15 @@ fn an_absent_gpu_reading_is_a_gap_in_the_graph_and_never_zero() {
     let start = Instant::now();
     let at = |secs| start + Duration::from_secs(secs);
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(at(0), None, vec![busy_reading(0, Some(10.0))]);
-    view.record(at(1), None, vec![busy_reading(0, None)]);
-    view.record(at(2), None, vec![busy_reading(0, Some(20.0))]);
-    view.record(at(3), None, Vec::new());
+    view.record(at(0), None, vec![busy_reading(0, Some(10.0))], None);
+    view.record(at(1), None, vec![busy_reading(0, None)], None);
+    view.record(at(2), None, vec![busy_reading(0, Some(20.0))], None);
+    view.record(at(3), None, Vec::new(), None);
     view.record(
         at(4),
         None,
         vec![busy_reading(1, Some(90.0)), busy_reading(0, Some(30.0))],
+        None,
     );
 
     let now = at(4);
@@ -615,6 +619,161 @@ fn gpu_readings_are_decoded_and_drawn_in_the_device_view() {
     assert!(drawn.contains("gpu 0 Test GPU"), "{drawn}");
     assert!(drawn.contains("busy not reported"), "{drawn}");
     assert!(drawn.contains("temperature 61 C"), "{drawn}");
+}
+
+/// Generation readings of a model on cuda:0 with only decode rate and time to first token set
+/// among the averages.
+fn generation_reading(
+    decode: Option<f32>,
+    first_token: Option<f32>,
+) -> super::client::InferenceMetrics {
+    super::client::InferenceMetrics {
+        model: "qwen3-0.6b".into(),
+        device: "cuda:0".into(),
+        avg_time_to_first_token_ms: first_token,
+        decode_tokens_per_second: decode,
+        preemptions: 0,
+        queue_depth: 0,
+        running: 0,
+        last_batch_size: 0,
+        kv_blocks_total: 100,
+        kv_blocks_used: 0,
+        kv_blocks_cached: 0,
+        kv_evictions: 0,
+        prefix_hit_rate: None,
+    }
+}
+
+#[test]
+fn an_absent_generation_average_is_a_gap_in_the_graph_and_never_zero() {
+    use super::device::DeviceView;
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let at = |secs| start + Duration::from_secs(secs);
+    let mut view = DeviceView::new("http://localhost:6333");
+    view.record(
+        at(0),
+        None,
+        Vec::new(),
+        Some(generation_reading(None, None)),
+    );
+    view.record(
+        at(1),
+        None,
+        Vec::new(),
+        Some(generation_reading(Some(40.0), Some(120.0))),
+    );
+    view.record(at(2), None, Vec::new(), None);
+    view.record(
+        at(3),
+        None,
+        Vec::new(),
+        Some(generation_reading(Some(50.0), None)),
+    );
+
+    let now = at(3);
+    assert_eq!(
+        view.inference_series(now, |i| i.decode_tokens_per_second.map(f64::from)),
+        vec![vec![(-2.0, 40.0)], vec![(-0.0, 50.0)]]
+    );
+    assert_eq!(
+        view.inference_series(now, |i| i.avg_time_to_first_token_ms.map(f64::from)),
+        vec![vec![(-2.0, 120.0)]]
+    );
+    assert_eq!(
+        view.latest_inference()
+            .and_then(|i| i.avg_time_to_first_token_ms),
+        None
+    );
+}
+
+#[test]
+fn kv_bar_cells_split_the_width_and_always_fill_it() {
+    use super::ui::kv_cells;
+
+    assert_eq!(kv_cells(25, 25, 100, 40), [10, 10, 20]);
+    assert_eq!(kv_cells(0, 0, 0, 40), [0, 0, 40]);
+    assert_eq!(kv_cells(100, 0, 100, 40), [40, 0, 0]);
+    assert_eq!(kv_cells(90, 90, 100, 40), [36, 4, 0]);
+    assert_eq!(kv_cells(1, 1, 3, 0), [0, 0, 0]);
+}
+
+/// The inference block of a metrics body with averages left out as the server leaves them out.
+const INFERENCE_BODY: &str = r#", "host": {"cpu_percent": 42.0},
+    "inference": {
+        "model": "qwen3-0.6b", "device": "cuda:0",
+        "requests_admitted": 9, "requests_finished": 7, "requests_failed": 0,
+        "prompt_tokens": 900, "cached_prompt_tokens": 300, "generated_tokens": 700,
+        "decode_tokens_per_second": 38.5, "avg_decode_step_ms": 26.0,
+        "preemptions": 1, "queue_depth": 2, "running": 4, "last_batch_size": 3,
+        "kv_blocks_total": 1200, "kv_blocks_used": 300, "kv_blocks_cached": 60,
+        "kv_evictions": 5, "prefix_hit_rate": 0.25
+    }"#;
+
+#[test]
+fn inference_readings_decode_with_unmeasured_averages_absent() {
+    use super::client::{parse, Metrics};
+
+    let metrics: Metrics =
+        parse("/api/metrics", &metrics_body(INFERENCE_BODY)).expect("the body decodes");
+    let inference = metrics.inference.expect("the inference block was sent");
+    assert_eq!(inference.model, "qwen3-0.6b");
+    assert_eq!(inference.decode_tokens_per_second, Some(38.5));
+    assert_eq!(inference.avg_time_to_first_token_ms, None);
+    assert_eq!(inference.kv_blocks_cached, 60);
+    assert_eq!(inference.prefix_hit_rate, Some(0.25));
+
+    // A server with no model loaded leaves the block out.
+    let idle: Metrics =
+        parse("/api/metrics", &metrics_body(r#", "host": {}"#)).expect("the body decodes");
+    assert!(idle.inference.is_none());
+
+    // A counter the server always sends is required.
+    let missing = metrics_body(INFERENCE_BODY).replace(r#""queue_depth": 2,"#, "");
+    let error = parse::<Metrics>("/api/metrics", &missing).expect_err("the key is required");
+    assert!(error.to_string().contains("queue_depth"), "{error}");
+}
+
+#[test]
+fn a_server_with_no_model_loaded_draws_no_generation_panels() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert!(app.device.latest_inference().is_none());
+
+    app.handle(press('4'));
+    let drawn = screen_of(&mut app, 200, 40);
+    assert!(drawn.contains("cpu  host 42.0%"), "{drawn}");
+    assert!(!drawn.contains("generation"), "{drawn}");
+    assert!(!drawn.contains("prefix hits"), "{drawn}");
+}
+
+#[test]
+fn inference_readings_are_drawn_in_the_device_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(&metrics_body(INFERENCE_BODY), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 44), (60, 30)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(drawn.contains("decode 38.5 tok/s"), "{drawn}");
+        assert!(drawn.contains("first token not reported"), "{drawn}");
+        assert!(drawn.contains("qwen3-0.6b on cuda:0"), "{drawn}");
+        assert!(
+            drawn.contains("used 300  cached 60  free 840  of 1,200"),
+            "{drawn}"
+        );
+        assert!(drawn.contains("prefix hits 25.0%  evictions 5"), "{drawn}");
+        assert!(
+            drawn.contains("queue 2  running 4  batch 3  preempted 1"),
+            "{drawn}"
+        );
+    }
 }
 
 /// A metrics body with one collection, the host block given, and the rest as the server sends it.
@@ -721,7 +880,12 @@ fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
 
 /// The text of every cell of the console drawn at 200 by 20.
 fn screen(app: &mut super::app::App) -> String {
-    let backend = ratatui::backend::TestBackend::new(200, 20);
+    screen_of(app, 200, 20)
+}
+
+/// The text of every cell of the console drawn at width by height.
+fn screen_of(app: &mut super::app::App, width: u16, height: u16) -> String {
+    let backend = ratatui::backend::TestBackend::new(width, height);
     let mut terminal = ratatui::Terminal::new(backend).expect("a test terminal opens");
     terminal
         .draw(|frame| super::ui::draw(frame, app))
