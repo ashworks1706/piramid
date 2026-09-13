@@ -216,9 +216,11 @@ async fn run(plan: &Plan) -> Result<Results, Failure> {
     let embedder = create_embedder(&plan.embedding).context("build the embedder")?;
     let passages = embed_passages(embedder.as_ref(), &questions).await?;
 
+    let gpu = open_gpu(plan)?;
     let manager = InferenceManager::load(
         &inference_config(plan),
         &HardwareConfig::default(),
+        gpu.as_ref(),
         Arc::new(NoopRetrievalHook),
     )
     .context("load the model")?;
@@ -305,6 +307,37 @@ async fn run(plan: &Plan) -> Result<Results, Failure> {
         arms,
         records,
     })
+}
+
+/// Open the device the model or the device arm runs on, and serve the gpu execution mode from it.
+#[cfg(feature = "gpu-cuda")]
+fn open_gpu(plan: &Plan) -> Result<Option<piramid_hardware::gpu::GpuManager>, Failure> {
+    use piramid_hardware::gpu::{BudgetSettings, GpuManager};
+
+    let model_ordinal = plan.device.strip_prefix("cuda:");
+    if model_ordinal.is_none() && !plan.arms.contains(&Arm::BeforePrefillDevice) {
+        return Ok(None);
+    }
+    let ordinal = model_ordinal
+        .map(str::parse::<usize>)
+        .transpose()
+        .context("parse PIRAMID_BENCH_DEVICE")?
+        .unwrap_or(0);
+    let settings = BudgetSettings {
+        limit_bytes: None,
+        reserve_bytes: 0,
+        shares: None,
+    };
+    let manager = GpuManager::open(ordinal, settings, 1).context("open the GPU")?;
+    piramid_hardware::compute::strategies::install_gpu(&manager, 256)
+        .context("install the GPU for search")?;
+    Ok(Some(manager))
+}
+
+/// Without a GPU backend no device is opened; a cuda model device fails at load.
+#[cfg(not(feature = "gpu-cuda"))]
+fn open_gpu(_plan: &Plan) -> Result<Option<piramid_hardware::gpu::GpuManager>, Failure> {
+    Ok(None)
 }
 
 fn inference_config(plan: &Plan) -> InferenceConfig {
