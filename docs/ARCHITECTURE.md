@@ -49,11 +49,11 @@ There are no grouping folders, and folder order is not dependency order.
 ## The crates
 
 `hardware` is the code that changes when the machine changes. `compute` defines the distance metrics
-and the strategies that run them, and holds the quantization encodings. `hardware` cannot see core's configuration, so its quantization encoders
-and its GPU manager take plain values. `gpu` owns the device
+and the strategies that run them, and holds the quantization encodings. `gpu` owns the device
 runtime: opening a device, memory, streams, compiled kernels, and the device memory budget. `host`
-reads processor, memory and GPU use for the console and metrics. It depends on nothing else in the
-workspace, so kernels can be benchmarked on their own and both retrieval and the model can use a
+reads processor, memory and GPU use for the console and metrics. `hardware` cannot see core's
+configuration, so its quantization encoders and its GPU manager take plain values. It depends on
+nothing else in the workspace, so kernels can be benchmarked on their own and both retrieval and the model can use a
 device without going through each other.
 
 `core` is the vocabulary everything shares: every error the app wraps, the whole configuration
