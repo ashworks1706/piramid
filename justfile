@@ -4,6 +4,9 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# The CUDA toolkit root the cudarc build links against.
+export CUDA_HOME := env_var_or_default("CUDA_HOME", "/usr/local/cuda")
+
 default:
     @just --list --unsorted
 
@@ -58,6 +61,10 @@ fmt:
 # Compile-check the GPU backend without a GPU present
 check-gpu:
     cargo check --workspace --features gpu-cuda --all-targets
+
+# Run the device tests on the local CUDA device
+test-gpu:
+    cargo test -p piramid-hardware --features gpu-cuda --test gpu -- --ignored
 
 # Compile-check the inference backend
 check-inference:

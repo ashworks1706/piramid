@@ -4,26 +4,39 @@
 use crate::gpu::device::Device;
 use crate::gpu::error::GpuResult;
 
+/// Identifier of the device default stream.
+pub const DEFAULT_STREAM: u64 = 0;
+
+/// Identifier of the per-thread stream, the queue a model runtime on the calling thread uses.
+pub const PER_THREAD_STREAM: u64 = 1;
+
 /// An ordered queue of device operations.
 #[derive(Debug, Clone)]
 pub struct Stream {
     device: Device,
-    /// Backend stream identifier; 0 is the default stream.
     id: u64,
 }
 
 impl Stream {
-    /// The default synchronizing stream for the device.
+    /// The default stream for the device.
     pub fn default_for(device: &Device) -> Self {
         Self {
             device: device.clone(),
-            id: 0,
+            id: DEFAULT_STREAM,
+        }
+    }
+
+    /// The per-thread stream for the device, shared with any runtime queueing from the same thread.
+    pub fn per_thread(device: &Device) -> Self {
+        Self {
+            device: device.clone(),
+            id: PER_THREAD_STREAM,
         }
     }
 
     /// Create an independent stream that can overlap with others.
     pub fn new(device: &Device) -> GpuResult<Self> {
-        let id = crate::gpu::backends::create_stream(device)?;
+        let id = device.runtime().create_stream()?;
         Ok(Self {
             device: device.clone(),
             id,
@@ -42,6 +55,6 @@ impl Stream {
 
     /// Block until every operation queued on this stream has completed.
     pub fn synchronize(&self) -> GpuResult<()> {
-        crate::gpu::backends::synchronize_stream(&self.device, self.id)
+        self.device.runtime().synchronize_stream(self.id)
     }
 }

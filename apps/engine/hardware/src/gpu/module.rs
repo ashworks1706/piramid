@@ -1,8 +1,10 @@
 //! Compiled kernel modules: [KernelModule] is a loaded image, [LaunchConfig] the geometry of one
-//! launch.
+//! launch, [KernelArg] one bound argument.
 
+use crate::gpu::buffer::DeviceBuffer;
 use crate::gpu::device::Device;
 use crate::gpu::error::GpuResult;
+use crate::gpu::stream::Stream;
 
 /// Grid and block geometry for a single kernel launch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,7 +21,7 @@ impl LaunchConfig {
     /// One-dimensional geometry covering n elements at the given threads per block.
     pub fn for_elements(n: usize, block_size: u32) -> Self {
         let block_size = block_size.max(1);
-        let blocks = n.div_ceil(block_size as usize).max(1) as u32;
+        let blocks = u32::try_from(n.div_ceil(block_size as usize).max(1)).unwrap_or(u32::MAX);
         Self {
             grid: (blocks, 1, 1),
             block: (block_size, 1, 1),
@@ -28,19 +30,45 @@ impl LaunchConfig {
     }
 }
 
+/// One argument bound to a kernel launch, in declaration order.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum KernelArg {
+    /// A device pointer.
+    Pointer(u64),
+    /// A 32-bit unsigned integer.
+    U32(u32),
+    /// A 32-bit signed integer.
+    I32(i32),
+    /// A 64-bit unsigned integer.
+    U64(u64),
+    /// A 32-bit float.
+    F32(f32),
+}
+
+impl KernelArg {
+    /// The device pointer of a buffer.
+    pub fn buffer<T>(buffer: &DeviceBuffer<T>) -> Self {
+        Self::Pointer(buffer.handle().ptr)
+    }
+}
+
 /// A compiled device module, loaded once and reused across launches.
 #[derive(Debug)]
 pub struct KernelModule {
     device: Device,
     name: &'static str,
-    /// Backend module identifier.
     id: u64,
 }
 
 impl KernelModule {
-    /// Load a module from a compiled PTX image.
-    pub fn load_ptx(device: &Device, name: &'static str, ptx: &str) -> GpuResult<Self> {
-        let id = crate::gpu::backends::load_ptx(device, name, ptx)?;
+    /// Compile kernel source and load the named functions from it.
+    pub fn compile(
+        device: &Device,
+        name: &'static str,
+        source: &str,
+        functions: &[&'static str],
+    ) -> GpuResult<Self> {
+        let id = device.runtime().compile_module(source, functions)?;
         Ok(Self {
             device: device.clone(),
             name,
@@ -48,14 +76,22 @@ impl KernelModule {
         })
     }
 
+    /// Queue one launch of a function from this module on a stream.
+    pub fn launch(
+        &self,
+        function: &'static str,
+        config: LaunchConfig,
+        stream: &Stream,
+        args: &[KernelArg],
+    ) -> GpuResult<()> {
+        self.device
+            .runtime()
+            .launch(self.id, function, config, stream.id(), args)
+    }
+
     /// Module name, as used in logs and error messages.
     pub fn name(&self) -> &'static str {
         self.name
-    }
-
-    /// Backend module identifier.
-    pub fn id(&self) -> u64 {
-        self.id
     }
 
     /// Device this module is loaded on.

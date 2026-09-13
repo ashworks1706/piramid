@@ -72,6 +72,9 @@ num_cpus = "1.16"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 rand = "0.8.6"
 
+# device and model runtimes, each confined to its backend module
+cudarc = { version = "0.19.8", default-features = false, features = ["std", "driver", "nvrtc", "cuda-version-from-build-system", "dynamic-linking"] }
+
 # storage + concurrency
 memmap2 = "0.9.11"
 lru = "0.18.2"

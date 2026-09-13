@@ -14,5 +14,5 @@ pub use buffer::{DeviceAllocation, DeviceBuffer};
 pub use device::{Device, DeviceCapabilities, DeviceRuntime};
 pub use error::{GpuError, GpuResult};
 pub use manager::GpuManager;
-pub use module::{KernelModule, LaunchConfig};
-pub use stream::Stream;
+pub use module::{KernelArg, KernelModule, LaunchConfig};
+pub use stream::{Stream, DEFAULT_STREAM, PER_THREAD_STREAM};

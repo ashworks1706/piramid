@@ -16,6 +16,8 @@ wide.workspace = true
 rayon.workspace = true
 sysinfo.workspace = true
 tracing.workspace = true
+parking_lot = { workspace = true, optional = true }
+cudarc = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -23,7 +25,7 @@ serde_json.workspace = true
 
 [features]
 default = []
-gpu-cuda = []
+gpu-cuda = ["dep:cudarc", "dep:parking_lot"]
 
 [[bench]]
 name = "strategies_performance"

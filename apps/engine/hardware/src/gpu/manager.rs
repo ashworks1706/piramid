@@ -14,10 +14,10 @@ pub struct GpuManager {
 }
 
 impl GpuManager {
-    /// Open the default device; errors when no GPU backend is compiled in or none is present.
-    pub fn open() -> GpuResult<Self> {
+    /// Open the device at an ordinal; errors when no GPU backend is compiled in or none is present.
+    pub fn open(ordinal: usize) -> GpuResult<Self> {
         Ok(Self {
-            device: Device::open_default()?,
+            device: Device::open(ordinal)?,
         })
     }
 

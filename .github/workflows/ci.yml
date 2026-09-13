@@ -66,7 +66,8 @@ jobs:
       - run: just check-rust
 
   # Additive default-off features only break in combinations nobody builds locally.
-  # cargo check, so no GPU runner is needed.
+  # cargo check, so no GPU runner is needed. The CUDA features need nvcc present at build time to
+  # pick the toolkit version, so those rows install it.
   features:
     name: Features (${{ matrix.name }})
     needs: changes
@@ -78,12 +79,14 @@ jobs:
         include:
           - name: gpu-cuda
             flags: --features gpu-cuda
+            cuda: true
           - name: inference-candle
             flags: --features inference-candle
           - name: otel
             flags: --features otel
           - name: all
             flags: --all-features
+            cuda: true
           - name: no-default
             flags: --no-default-features
     steps:
@@ -92,6 +95,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.name }}
+      - if: matrix.cuda
+        uses: Jimver/cuda-toolkit@v0.2.24
+        with:
+          cuda: "12.9.1"
+          method: network
+          sub-packages: '["nvcc", "nvrtc-dev", "cudart-dev"]'
+          non-cuda-sub-packages: '["libcublas-dev", "libcurand-dev"]'
       - run: cargo check --workspace --all-targets ${{ matrix.flags }}
 
   # The declared MSRV has to actually build.
@@ -120,6 +130,12 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: Jimver/cuda-toolkit@v0.2.24
+        with:
+          cuda: "12.9.1"
+          method: network
+          sub-packages: '["nvcc", "nvrtc-dev", "cudart-dev"]'
+          non-cuda-sub-packages: '["libcublas-dev", "libcurand-dev"]'
       - run: cargo doc --workspace --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings

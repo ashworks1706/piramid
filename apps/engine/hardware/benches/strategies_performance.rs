@@ -4,16 +4,19 @@
     reason = "criterion_group generates the undocumented harness functions"
 )]
 
-//! Scalar vs SIMD vs parallel, at the dimensions embeddings actually come in.
+//! Scalar vs SIMD vs parallel vs CUDA, at the dimensions embeddings actually come in. The CUDA
+//! strategy rows include the upload of query and candidates and the download of scores; the
+//! batch_resident group scores a slab already on the device.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
 
 use piramid_hardware::compute::{strategies, DistanceKernels, ExecutionMode};
 
-const COMPARED: [ExecutionMode; 3] = [
+const COMPARED: [ExecutionMode; 4] = [
     ExecutionMode::Scalar,
     ExecutionMode::Simd,
     ExecutionMode::Parallel,
+    ExecutionMode::Gpu,
 ];
 
 /// Dimensions real embedding models emit: MiniLM, OpenAI small/ada, OpenAI large.
@@ -88,5 +91,46 @@ fn batch(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, pairwise, batch);
+/// One query against a candidate slab uploaded once, scores left on the device.
+#[cfg(feature = "gpu-cuda")]
+fn batch_resident(c: &mut Criterion) {
+    use piramid_hardware::gpu::kernels::distance::{DistanceLaunch, DistanceModule};
+    use piramid_hardware::gpu::{Device, DeviceBuffer, Stream};
+
+    let Ok(device) = Device::open(0) else {
+        return;
+    };
+    let stream = Stream::new(&device).unwrap();
+    let module = DistanceModule::compile(&device).unwrap();
+    let mut group = c.benchmark_group("batch_resident/cosine");
+    let dim = 768;
+    let query = vectors(1, dim);
+    let norm: f32 = query.iter().map(|x| x * x).sum();
+    let query_gpu = DeviceBuffer::from_host(&device, &query, &stream).unwrap();
+
+    for rows in ROWS {
+        let slab_gpu = DeviceBuffer::from_host(&device, &vectors(rows, dim), &stream).unwrap();
+        let mut out_gpu = DeviceBuffer::<f32>::alloc(&device, rows).unwrap();
+        group.throughput(Throughput::Elements((rows * dim) as u64));
+        group.bench_with_input(BenchmarkId::new("cuda", rows), &rows, |bencher, _| {
+            bencher.iter(|| {
+                let launch = DistanceLaunch {
+                    query: &query_gpu,
+                    candidates: &slab_gpu,
+                    out: &mut out_gpu,
+                    dim,
+                    rows,
+                };
+                module.cosine_batch(launch, norm, &stream).unwrap();
+                stream.synchronize().unwrap();
+            });
+        });
+    }
+    group.finish();
+}
+
+#[cfg(not(feature = "gpu-cuda"))]
+fn batch_resident(_c: &mut Criterion) {}
+
+criterion_group!(benches, pairwise, batch, batch_resident);
 criterion_main!(benches);
