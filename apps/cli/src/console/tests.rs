@@ -494,11 +494,12 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
 
     let start = Instant::now();
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(start, Some(cpu_reading(Some(10.0))), Vec::new(), None);
+    view.record(start, Some(cpu_reading(Some(10.0))), Vec::new(), None, None);
     view.record(
         start + Duration::from_secs(1),
         Some(cpu_reading(Some(20.0))),
         Vec::new(),
+        None,
         None,
     );
     view.record(
@@ -506,11 +507,13 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
         Some(cpu_reading(None)),
         Vec::new(),
         None,
+        None,
     );
     view.record(
         start + Duration::from_secs(3),
         Some(cpu_reading(Some(30.0))),
         Vec::new(),
+        None,
         None,
     );
 
@@ -545,14 +548,15 @@ fn an_absent_gpu_reading_is_a_gap_in_the_graph_and_never_zero() {
     let start = Instant::now();
     let at = |secs| start + Duration::from_secs(secs);
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(at(0), None, vec![busy_reading(0, Some(10.0))], None);
-    view.record(at(1), None, vec![busy_reading(0, None)], None);
-    view.record(at(2), None, vec![busy_reading(0, Some(20.0))], None);
-    view.record(at(3), None, Vec::new(), None);
+    view.record(at(0), None, vec![busy_reading(0, Some(10.0))], None, None);
+    view.record(at(1), None, vec![busy_reading(0, None)], None, None);
+    view.record(at(2), None, vec![busy_reading(0, Some(20.0))], None, None);
+    view.record(at(3), None, Vec::new(), None, None);
     view.record(
         at(4),
         None,
         vec![busy_reading(1, Some(90.0)), busy_reading(0, Some(30.0))],
+        None,
         None,
     );
 
@@ -656,19 +660,22 @@ fn an_absent_generation_average_is_a_gap_in_the_graph_and_never_zero() {
         at(0),
         None,
         Vec::new(),
+        None,
         Some(generation_reading(None, None)),
     );
     view.record(
         at(1),
         None,
         Vec::new(),
+        None,
         Some(generation_reading(Some(40.0), Some(120.0))),
     );
-    view.record(at(2), None, Vec::new(), None);
+    view.record(at(2), None, Vec::new(), None, None);
     view.record(
         at(3),
         None,
         Vec::new(),
+        None,
         Some(generation_reading(Some(50.0), None)),
     );
 
@@ -773,6 +780,151 @@ fn inference_readings_are_drawn_in_the_device_view() {
             drawn.contains("queue 2  running 4  batch 3  preempted 1"),
             "{drawn}"
         );
+    }
+}
+
+#[test]
+fn stacked_bar_cells_split_the_width_and_always_fill_it() {
+    use super::ui::stacked_cells;
+
+    assert_eq!(stacked_cells(&[25, 25, 10], 100, 40), vec![10, 10, 4, 16]);
+    assert_eq!(stacked_cells(&[5, 5, 5], 0, 40), vec![0, 0, 0, 40]);
+    assert_eq!(stacked_cells(&[80, 80, 80], 100, 40), vec![32, 8, 0, 0]);
+    assert_eq!(stacked_cells(&[50], 100, 0), vec![0, 0]);
+    assert_eq!(stacked_cells(&[], 100, 10), vec![10]);
+}
+
+/// The device memory budget of a metrics body, shared or split.
+fn budget_body(shared: bool) -> String {
+    let (weights, kv, index) = if shared {
+        (8_u64 << 30, 8_u64 << 30, 8_u64 << 30)
+    } else {
+        (4_u64 << 30, 3_u64 << 30, 1_u64 << 30)
+    };
+    format!(
+        r#", "host": {{"cpu_percent": 42.0}},
+        "gpu_budget": {{
+            "usable_bytes": {usable}, "shared": {shared},
+            "pools": [
+                {{"pool": "weights", "capacity_bytes": {weights}, "used_bytes": {w_used}}},
+                {{"pool": "kv_cache", "capacity_bytes": {kv}, "used_bytes": {k_used}}},
+                {{"pool": "index", "capacity_bytes": {index}, "used_bytes": {i_used}}}
+            ]
+        }}"#,
+        usable = 8_u64 << 30,
+        w_used = 2_u64 << 30,
+        k_used = 1_u64 << 30,
+        i_used = 512_u64 << 20,
+    )
+}
+
+#[test]
+fn a_device_memory_budget_decodes_and_is_absent_without_a_gpu() {
+    use super::client::{parse, Metrics};
+
+    let metrics: Metrics =
+        parse("/api/metrics", &metrics_body(&budget_body(false))).expect("the body decodes");
+    let budget = metrics.gpu_budget.expect("the budget was sent");
+    assert_eq!(budget.usable_bytes, 8 << 30);
+    assert!(!budget.shared);
+    let pools: Vec<(&str, u64, u64)> = budget
+        .pools
+        .iter()
+        .map(|p| (p.pool.as_str(), p.capacity_bytes, p.used_bytes))
+        .collect();
+    assert_eq!(
+        pools,
+        vec![
+            ("weights", 4 << 30, 2 << 30),
+            ("kv_cache", 3 << 30, 1 << 30),
+            ("index", 1 << 30, 512 << 20),
+        ]
+    );
+
+    // A server with no GPU open leaves the block out.
+    let idle: Metrics =
+        parse("/api/metrics", &metrics_body(r#", "host": {}"#)).expect("the body decodes");
+    assert!(idle.gpu_budget.is_none());
+}
+
+#[test]
+fn a_server_without_a_budget_draws_no_device_memory_panel() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert!(app.device.latest_budget().is_none());
+
+    app.handle(press('4'));
+    let drawn = screen_of(&mut app, 200, 40);
+    assert!(drawn.contains("cpu  host 42.0%"), "{drawn}");
+    assert!(!drawn.contains("device memory"), "{drawn}");
+}
+
+#[test]
+fn a_shared_budget_draws_total_use_and_each_pool() {
+    let mut app = console();
+    let snapshot = snapshot_from(&metrics_body(&budget_body(true)), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 44), (60, 30)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(
+            drawn.contains("device memory  shared  3.5 GB of 8.0 GB"),
+            "{drawn}"
+        );
+        assert!(
+            drawn.contains("weights 2.0 GB  kv cache 1.0 GB  index 512.0 MB"),
+            "{drawn}"
+        );
+        assert!(drawn.contains("free 4.5 GB"), "{drawn}");
+        assert!(
+            drawn.contains("every pool draws from one budget"),
+            "{drawn}"
+        );
+    }
+}
+
+#[test]
+fn a_split_budget_draws_each_pool_against_its_capacity() {
+    let mut app = console();
+    let snapshot = snapshot_from(&metrics_body(&budget_body(false)), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 44), (60, 30)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(
+            drawn.contains("device memory  split  3.5 GB of 8.0 GB"),
+            "{drawn}"
+        );
+        assert!(drawn.contains("2.0 GB of 4.0 GB"), "{drawn}");
+        assert!(drawn.contains("1.0 GB of 3.0 GB"), "{drawn}");
+        assert!(drawn.contains("512.0 MB of 1.0 GB"), "{drawn}");
+        assert!(!drawn.contains("every pool draws"), "{drawn}");
+    }
+}
+
+#[test]
+fn a_budget_and_generation_panels_share_the_device_view() {
+    let mut app = console();
+    let body = format!(
+        "{}{}",
+        budget_body(true),
+        INFERENCE_BODY.replacen(r#", "host": {"cpu_percent": 42.0},"#, ",", 1)
+    );
+    let snapshot = snapshot_from(&metrics_body(&body), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 50)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(drawn.contains("device memory  shared"), "{drawn}");
+        assert!(drawn.contains("qwen3-0.6b on cuda:0"), "{drawn}");
+        assert!(drawn.contains("queue 2  running 4"), "{drawn}");
     }
 }
 

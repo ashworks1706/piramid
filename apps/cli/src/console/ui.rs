@@ -11,7 +11,7 @@ use ratatui::widgets::{
 use ratatui::Frame;
 
 use crate::console::app::{App, UnitState};
-use crate::console::client::{HostMetrics, InferenceMetrics};
+use crate::console::client::{GpuBudget, HostMetrics, InferenceMetrics};
 use crate::console::collections::Row;
 use crate::console::device::{DeviceView, Run};
 use crate::console::types::{
@@ -237,14 +237,17 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
 }
 
 /// Host processor and memory of the watched server, each of its GPUs, and generation on its
-/// loaded model, graphed over the refresh history.
+/// loaded model, graphed over the refresh history, with the device memory budget of the newest
+/// refresh.
 fn device(frame: &mut Frame, app: &App, area: Rect) {
     let view = &app.device;
     let inference = view.latest_inference();
-    let [about, cpu_row, memory_row, inference_row] = Layout::vertical([
+    let budget = view.latest_budget();
+    let [about, cpu_row, memory_row, budget_row, inference_row] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(6),
         Constraint::Min(6),
+        Constraint::Length(budget.map_or(0, |_| BUDGET_HEIGHT)),
         Constraint::Min(match inference {
             None => 0,
             Some(_) if area.width >= KV_BESIDE => KV_HEIGHT.max(GENERATION_HEIGHT),
@@ -380,9 +383,120 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
         );
     }
 
+    if let Some(budget) = budget {
+        device_memory(frame, budget, budget_row);
+    }
+
     if let Some(latest) = inference {
         generation(frame, view, latest, now, window, inference_row);
     }
+}
+
+/// Rows of the device memory panel, borders included.
+const BUDGET_HEIGHT: u16 = 5;
+
+/// Width the pool names of the device memory panel are padded to.
+const POOL_LABEL: usize = 8;
+
+/// Colours of the pools of the device memory budget, in the order the server sends them.
+const POOL_COLORS: [Color; 3] = [ACCENT, Color::Magenta, Color::Yellow];
+
+/// The device memory budget of the newest refresh: under a shared budget one bar of every pool
+/// against the usable bytes, and under a split budget one bar per pool against its capacity.
+fn device_memory(frame: &mut Frame, budget: &GpuBudget, area: Rect) {
+    let used: Vec<u64> = budget.pools.iter().map(|pool| pool.used_bytes).collect();
+    let total_used = used
+        .iter()
+        .fold(0u64, |sum, bytes| sum.saturating_add(*bytes));
+    let mode = if budget.shared { "shared" } else { "split" };
+    let block = pane(
+        &format!(
+            " device memory  {mode}  {} of {} ",
+            bytes(total_used),
+            bytes(budget.usable_bytes)
+        ),
+        false,
+    );
+    let inner = usize::from(block.inner(area).width);
+    let color = |index: usize| POOL_COLORS.get(index).copied().unwrap_or(DIM);
+
+    let lines: Vec<Line<'static>> = if budget.shared {
+        let cells = stacked_cells(&used, budget.usable_bytes, inner.saturating_sub(4));
+        let mut bar = vec![Span::raw("  ")];
+        for (index, count) in cells.iter().enumerate() {
+            bar.push(if index < used.len() {
+                Span::styled(
+                    symbols::block::FULL.repeat(*count),
+                    Style::default().fg(color(index)),
+                )
+            } else {
+                Span::styled(
+                    symbols::shade::LIGHT.repeat(*count),
+                    Style::default().fg(DIM),
+                )
+            });
+        }
+        let mut legend = Vec::new();
+        for (index, pool) in budget.pools.iter().enumerate() {
+            legend.push(Span::styled(
+                format!("  {} ", pool_label(&pool.pool)),
+                Style::default().fg(color(index)),
+            ));
+            legend.push(Span::raw(bytes(pool.used_bytes)));
+        }
+        vec![
+            Line::from(bar),
+            Line::from(legend),
+            Line::from(vec![
+                Span::styled("  free ", Style::default().fg(DIM)),
+                Span::raw(bytes(budget.usable_bytes.saturating_sub(total_used))),
+                Span::styled(
+                    "  every pool draws from one budget",
+                    Style::default().fg(DIM),
+                ),
+            ]),
+        ]
+    } else {
+        budget
+            .pools
+            .iter()
+            .enumerate()
+            .map(|(index, pool)| {
+                let figures = format!(
+                    "  {} of {}",
+                    bytes(pool.used_bytes),
+                    bytes(pool.capacity_bytes)
+                );
+                let width = inner.saturating_sub(2 + POOL_LABEL + 1 + figures.len() + 2);
+                let cells = stacked_cells(&[pool.used_bytes], pool.capacity_bytes, width);
+                let (used_cells, free_cells) = match cells[..] {
+                    [used_cells, free_cells] => (used_cells, free_cells),
+                    _ => (0, width),
+                };
+                Line::from(vec![
+                    Span::styled(
+                        format!("  {:<POOL_LABEL$} ", pool_label(&pool.pool)),
+                        Style::default().fg(color(index)),
+                    ),
+                    Span::styled(
+                        symbols::block::FULL.repeat(used_cells),
+                        Style::default().fg(color(index)),
+                    ),
+                    Span::styled(
+                        symbols::shade::LIGHT.repeat(free_cells),
+                        Style::default().fg(DIM),
+                    ),
+                    Span::raw(figures),
+                ])
+            })
+            .collect()
+    };
+    frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+/// The name of a device memory pool as the console shows it.
+fn pool_label(pool: &str) -> String {
+    pool.replace('_', " ")
 }
 
 /// Width of the key/value cache panel beside the generation chart.
@@ -520,17 +634,36 @@ fn generation(
 
 /// Cells of a bar width wide given to used, cached and free key/value blocks out of total.
 pub fn kv_cells(used: u64, cached: u64, total: u64, width: usize) -> [usize; 3] {
-    if total == 0 {
-        return [0, 0, width];
+    match stacked_cells(&[used, cached], total, width)[..] {
+        [used_cells, cached_cells, free_cells] => [used_cells, cached_cells, free_cells],
+        _ => [0, 0, width],
     }
-    let cells = |blocks: u64| -> usize {
-        let share = u128::from(blocks.min(total)) * width as u128;
+}
+
+/// Cells of a bar width wide given to each of parts out of total, followed by the cells left
+/// free. Parts are stacked in order and clipped at total, and the cells sum to width.
+pub fn stacked_cells(parts: &[u64], total: u64, width: usize) -> Vec<usize> {
+    let mut cells = Vec::with_capacity(parts.len() + 1);
+    if total == 0 {
+        cells.resize(parts.len(), 0);
+        cells.push(width);
+        return cells;
+    }
+    let edge = |amount: u64| -> usize {
+        let share = u128::from(amount.min(total)) * width as u128;
         let rounded = (share + u128::from(total) / 2) / u128::from(total);
         usize::try_from(rounded).unwrap_or(width).min(width)
     };
-    let used_cells = cells(used);
-    let held_cells = cells(used.saturating_add(cached)).max(used_cells);
-    [used_cells, held_cells - used_cells, width - held_cells]
+    let mut held = 0u64;
+    let mut filled = 0usize;
+    for part in parts {
+        held = held.saturating_add(*part);
+        let reached = edge(held).max(filled);
+        cells.push(reached - filled);
+        filled = reached;
+    }
+    cells.push(width - filled);
+    cells
 }
 
 /// Utilisation, temperature and memory of the GPU at index, graphed over the refresh history.
