@@ -4,21 +4,12 @@
 
 - [ ] route the IVF posting-list scan through the batch kernels without a gather copy: either a
       batch over the store slab by row index, or posting lists that own their rows
-- [x] settle the execution modes against the bench: keep what wins, drop what doesn't
 - [ ] a real CUDA device — allocate, upload, run a batch kernel, take the top-k on the device
 - [ ] keep the candidate set device-resident across queries, and measure it against per-call upload
 - [ ] quantize on the device, with recall reported alongside the speedup
 - [ ] choose the index family per device: IVF where a device runs it, HNSW on the host
-- [x] the server reports host CPU and memory in `/api/metrics` and `/metrics`, absent when the
-      build can't measure them
 - [ ] GPU memory, utilisation and temperature beside the host readings, absent when unmeasured
-- [x] a device view in the console graphing host readings over time, against a local or remote
-      server, with keys that hand the terminal to htop or nvtop for the local machine
 - [ ] GPU readings graphed in the device view
-- [x] make `serve` safe to expose — graceful shutdown, authentication, rate limiting, and a test
-      that actually starts the server
-- [x] clear the dependency debt: bincode 2.x with a read path for existing data, off the archived
-      YAML parser
 - [ ] implement the quantization levels or drop them; until then every quantization key is refused
       at its default
 
@@ -65,20 +56,12 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 - [ ] retrieval over the model's own KV history rather than external documents
 - [ ] block-diffusion decoding, where a block is the retrieval unit
 
-## Housekeeping
-
-- [x] backfill doc comments so `missing_docs` can move from `allow` to `warn`
-- [x] make `runtime:` reload reach a running collection, or document that it doesn't
-- [x] test config reload against a running server, not just the loader
-
 ## Unscheduled
 
 - [ ] GPU settings are accepted and read by nothing: `gpu_memory_budget_bytes`, `gpu.*`, `vram.*`
 - [ ] inference sub-settings (batching, kv_cache, sampling, fusion, document_kv, dtype, model_path)
       are accepted while inference is off and read by nothing
 - [ ] the `auto` hardware profile means the same as `cpu-only` until something detects a GPU
-- [x] an `auto` index picks its family when the collection opens and keeps it as the collection
-      grows past the thresholds
 - [ ] behind a reverse proxy every client shares one rate-limit bucket; forwarded headers are not
       read
 - [ ] `/api/readyz` is unauthenticated and names the data directory and every collection
@@ -95,4 +78,3 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 - [ ] about sixteen error variants are never constructed
 - [ ] `model::embeddings`, `database::index` and `core::observability` re-export other modules'
       items, against the one-canonical-path rule
-
