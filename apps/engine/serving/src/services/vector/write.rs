@@ -105,13 +105,12 @@ pub fn insert_vector(
     if let Some(tracker) = state.collection_manager.tracker(&collection) {
         tracker.record_insert(duration);
     }
-    state.enforce_cache_budget();
     tracing::Span::current().record("inserted", ids.len());
 
     Ok(InsertResponse {
         count: ids.len(),
         ids: ids.into_iter().map(|id| id.to_string()).collect(),
-        latency_ms: duration.as_millis() as f32,
+        latency_ms: duration.as_secs_f32() * 1000.0,
     })
 }
 
@@ -141,7 +140,7 @@ pub fn delete_vector(
 
     Ok(DeleteResponse {
         deleted_count: usize::from(deleted),
-        latency_ms: duration.as_millis() as f32,
+        latency_ms: duration.as_secs_f32() * 1000.0,
     })
 }
 
@@ -183,7 +182,7 @@ pub fn delete_vectors(
 
     Ok(DeleteResponse {
         deleted_count,
-        latency_ms: duration.as_millis() as f32,
+        latency_ms: duration.as_secs_f32() * 1000.0,
     })
 }
 
@@ -233,7 +232,6 @@ pub fn upsert_vector(
     if let (Some(tracker), false) = (state.collection_manager.tracker(&collection), exists) {
         tracker.record_insert(duration);
     }
-    state.enforce_cache_budget();
     tracing::info!(
         target: "piramid::writes",
         collection=%collection,
@@ -245,6 +243,6 @@ pub fn upsert_vector(
     Ok(UpsertResponse {
         id: id.to_string(),
         created: !exists,
-        latency_ms: duration.as_millis() as f32,
+        latency_ms: duration.as_secs_f32() * 1000.0,
     })
 }

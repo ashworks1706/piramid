@@ -14,7 +14,7 @@ pub enum HardwareProfile {
     CpuOnly,
     /// Require a GPU; fail to start without one.
     Gpu,
-    /// A small host: conservative cache budget, aggressive compression.
+    /// A small host with 8 GB of memory.
     #[serde(rename = "8gb")]
     Memory8Gb,
     /// A mid-sized host.
@@ -67,7 +67,7 @@ pub struct HardwareConfig {
     /// Device selection and kernel launch shapes.
     pub gpu: GpuConfig,
 
-    /// Division of device memory between weights, KV cache and index.
+    /// Division of device memory between weights, KV cache and retrieval.
     pub vram: VramSplit,
 }
 
@@ -113,7 +113,7 @@ impl Default for GpuConfig {
     }
 }
 
-/// How device memory is divided between model weights, the KV cache and the index.
+/// How device memory is divided between model weights, the KV cache and retrieval.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct VramSplit {
@@ -126,8 +126,8 @@ pub struct VramSplit {
     /// Share for the KV cache.
     pub kv_ratio: f32,
 
-    /// Share for the index and its candidate slab.
-    pub index_ratio: f32,
+    /// Share for stored vectors and scoring buffers on the device.
+    pub vectors_ratio: f32,
 
     /// Fraction of retrieval-side bandwidth to allow while a forward pass is decoding.
     pub retrieval_bandwidth_share: f32,
@@ -139,7 +139,7 @@ impl Default for VramSplit {
             enabled: false,
             weights_ratio: 0.6,
             kv_ratio: 0.15,
-            index_ratio: 0.25,
+            vectors_ratio: 0.25,
             retrieval_bandwidth_share: 0.25,
         }
     }
@@ -157,7 +157,7 @@ impl VramSplit {
         if !self.enabled {
             return Ok(());
         }
-        let shares = [self.weights_ratio, self.kv_ratio, self.index_ratio];
+        let shares = [self.weights_ratio, self.kv_ratio, self.vectors_ratio];
         if shares.iter().any(|share| !(0.0..=1.0).contains(share)) {
             return Err("startup.hardware.vram: each ratio must be within 0.0..=1.0".into());
         }

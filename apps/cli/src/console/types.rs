@@ -177,7 +177,7 @@ impl Profile {
 pub enum View {
     /// Repo units: the server, the website, containers, recipes.
     Units,
-    /// Collections on a running server, with index state and latency.
+    /// Collections on a running server, with storage and latency.
     Collections,
     /// The configuration as the server resolved it.
     Config,
@@ -318,7 +318,7 @@ pub enum Event {
     ProbesStopped(String),
     /// A collections refresh finished.
     Snapshot(Box<Result<super::client::Snapshot, super::client::ClientError>>),
-    /// A rebuild or compact finished, with the line to show for it.
+    /// A compaction finished, with the line to show for it.
     Acted(Result<String, String>),
     /// The configuration as the server resolved it, or why it could not be read.
     Config(Result<String, String>),

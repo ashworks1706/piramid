@@ -265,7 +265,7 @@ fn open_gpu(
         shares: vram.enabled.then_some(piramid::gpu::PoolShares {
             weights: vram.weights_ratio,
             kv_cache: vram.kv_ratio,
-            index: vram.index_ratio,
+            vectors: vram.vectors_ratio,
         }),
     };
     let manager =

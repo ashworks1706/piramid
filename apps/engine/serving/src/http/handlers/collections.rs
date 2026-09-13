@@ -1,4 +1,4 @@
-//! Collection, index, compaction and duplicate-scan endpoints.
+//! Collection and compaction endpoints.
 
 use axum::{
     extract::{Path, State},
@@ -49,43 +49,10 @@ pub async fn collection_count(
     Ok(Json(collection::collection_count(&state, collection)?))
 }
 
-/// GET /api/collections/{collection}/index/stats: returns statistics of the vector index.
-pub async fn index_stats(
-    State(state): State<SharedState>,
-    Path(collection): Path<String>,
-) -> Result<Json<IndexStatsResponse>> {
-    Ok(Json(collection::index_stats(&state, collection)?))
-}
-
-/// POST /api/collections/{collection}/index/rebuild: starts a background index rebuild.
-pub async fn rebuild_index(
-    State(state): State<SharedState>,
-    Path(collection): Path<String>,
-) -> Result<Json<RebuildIndexResponse>> {
-    Ok(Json(collection::rebuild_index(&state, collection)?))
-}
-
-/// POST /api/collections/{collection}/duplicates: finds near-identical document pairs.
-pub async fn find_duplicates(
-    State(state): State<SharedState>,
-    Path(collection): Path<String>,
-    Json(req): Json<DuplicateRequest>,
-) -> Result<Json<DuplicateResponse>> {
-    Ok(Json(collection::find_duplicates(&state, collection, req)?))
-}
-
 /// POST /api/collections/{collection}/compact: rewrites the record store without dead entries.
 pub async fn compact_collection(
     State(state): State<SharedState>,
     Path(collection): Path<String>,
-) -> Result<Json<RebuildIndexResponse>> {
+) -> Result<Json<CompactResponse>> {
     Ok(Json(collection::compact_collection(&state, collection)?))
-}
-
-/// GET /api/collections/{collection}/index/rebuild/status: reports the most recent index rebuild.
-pub async fn rebuild_index_status(
-    State(state): State<SharedState>,
-    Path(collection): Path<String>,
-) -> Result<Json<RebuildIndexStatusResponse>> {
-    Ok(Json(collection::rebuild_index_status(&state, collection)?))
 }

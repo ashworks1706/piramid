@@ -11,7 +11,8 @@ use std::time::Duration;
 
 #[test]
 fn metadata_new_and_dimensions() {
-    let mut meta = CollectionMetadata::new("test".into()).unwrap();
+    let mut meta =
+        CollectionMetadata::new("test".into(), piramid_hardware::compute::Metric::Cosine).unwrap();
     assert_eq!(meta.name, "test");
     assert_eq!(meta.dimensions, None);
     meta.set_dimensions(512).unwrap();
@@ -27,7 +28,8 @@ fn metadata_new_and_dimensions() {
 
 #[test]
 fn metadata_touch_and_counts() {
-    let mut meta = CollectionMetadata::new("test".into()).unwrap();
+    let mut meta =
+        CollectionMetadata::new("test".into(), piramid_hardware::compute::Metric::Cosine).unwrap();
     let created = meta.created_at;
     let prev_updated = meta.updated_at;
     thread::sleep(Duration::from_millis(2));

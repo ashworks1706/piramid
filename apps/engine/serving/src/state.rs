@@ -1,15 +1,11 @@
-//! Process-wide shared state of the server and the index rebuild job registry.
+//! Process-wide shared state of the server.
 
-use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
 
-use crate::cluster::{
-    ClusterRouter, LocalClusterRouter, NodeCapabilities, NodeId, NodeRuntimeState, RouteDecision,
-};
 use crate::machine::{MachineReadings, SAMPLE_INTERVAL};
 use piramid_core::config::loader::ConfigSource;
 use piramid_core::config::InferenceConfig;
@@ -20,40 +16,12 @@ use piramid_hardware::gpu::GpuManager;
 use piramid_model::embeddings::EmbeddingsManager;
 use piramid_model::inference::InferenceManager;
 
-/// Phase of an index rebuild job.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RebuildState {
-    /// The rebuild has started and not yet finished.
-    Running,
-    /// The rebuild finished without error.
-    Completed,
-    /// The rebuild returned an error or panicked.
-    Failed,
-}
-
-/// Record of the most recent index rebuild of one collection.
-#[derive(Debug, Clone)]
-pub struct RebuildJobStatus {
-    /// Current phase of the job.
-    pub status: RebuildState,
-    /// Start time, in seconds since the Unix epoch.
-    pub started_at: u64,
-    /// End time, in seconds since the Unix epoch. None while running.
-    pub finished_at: Option<u64>,
-    /// Error message of a failed rebuild. None unless failed.
-    pub error: Option<String>,
-    /// Duration of the rebuild, in milliseconds. None while running.
-    pub elapsed_ms: Option<u128>,
-}
-
 /// Process-wide state shared by every request handler.
 pub struct AppState {
     /// Open collections and their latency trackers.
     pub collection_manager: CollectionManager,
     /// Directory holding the collection files.
     pub data_dir: String,
-    /// Decides which node serves each collection.
-    pub cluster_router: Arc<dyn ClusterRouter>,
     /// The embedding provider, if configured, and its usage metrics.
     pub embeddings: EmbeddingsManager,
     /// The opened device and its memory budget, under the gpu profile.
@@ -76,8 +44,6 @@ pub struct AppState {
     booted_inference: InferenceConfig,
     /// Where a reload reads configuration from.
     config_source: ConfigSource,
-    /// Most recent index rebuild of each collection, keyed by collection name.
-    pub rebuild_jobs: Arc<DashMap<String, RebuildJobStatus>>,
     /// Time of startup or of the last successful reload, in seconds since the Unix epoch.
     pub config_last_reload: Arc<AtomicU64>,
 }
@@ -98,22 +64,11 @@ impl AppState {
         }
         let booted_with = config.startup.clone();
         let booted_inference = config.runtime.inference.clone();
-        let cluster_router: Arc<dyn ClusterRouter> =
-            Arc::new(LocalClusterRouter::new(NodeRuntimeState {
-                id: NodeId::default(),
-                capabilities: NodeCapabilities {
-                    cpu_threads: config.startup.threads,
-                    memory_budget_bytes: config.startup.hardware.memory_budget_bytes,
-                    gpu_enabled: config.startup.hardware.gpu_enabled(),
-                },
-                healthy: true,
-            }));
         let app_config = Arc::new(RwLock::new(config));
 
         Ok(Self {
             collection_manager: CollectionManager::new(data_dir.clone(), app_config.clone()),
             data_dir,
-            cluster_router,
             embeddings,
             gpu: None,
             inference: None,
@@ -125,7 +80,6 @@ impl AppState {
             booted_with,
             booted_inference,
             config_source: ConfigSource::default(),
-            rebuild_jobs: Arc::new(DashMap::new()),
             config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs()?)),
         })
     }
@@ -179,26 +133,15 @@ impl AppState {
         Ok(())
     }
 
-    fn check_routable(&self, name: &str) -> Result<()> {
-        self.ensure_available()?;
-        if let RouteDecision::Remote(node_id) = self.cluster_router.route_collection(name) {
-            return Err(ServerError::ServiceUnavailable(format!(
-                "collection '{name}' is assigned to remote node '{node_id}', but remote routing is not implemented"
-            ))
-            .into());
-        }
-        Ok(())
-    }
-
     /// Handle to a collection that is loaded or present on disk, opening it if needed.
     pub fn get_existing_collection(&self, name: &str) -> Result<CollectionHandle> {
-        self.check_routable(name)?;
+        self.ensure_available()?;
         self.collection_manager.get_existing(name)
     }
 
     /// Handle to a collection, opening or creating it if needed.
     pub fn get_or_create_collection(&self, name: &str) -> Result<CollectionHandle> {
-        self.check_routable(name)?;
+        self.ensure_available()?;
         self.collection_manager.get_or_create(name)
     }
 
@@ -323,44 +266,6 @@ impl AppState {
             ServerError::ServiceUnavailable("Low disk space; write operations disabled".into())
                 .into(),
         )
-    }
-
-    /// Clear the largest metadata caches until cached metadata fits runtime.cache.metadata.max_bytes.
-    pub fn enforce_cache_budget(&self) {
-        let Some(max_bytes) = self.app_config.read().runtime.cache.metadata.max_bytes else {
-            return;
-        };
-        let mut total: u64 = 0;
-        let mut collections = Vec::new();
-        for (name, storage) in self.collection_manager.loaded_collections() {
-            let metadata_bytes = storage.read().metadata_cache_usage_bytes() as u64;
-            total = total.saturating_add(metadata_bytes);
-            collections.push((name, storage, metadata_bytes));
-        }
-        if total <= max_bytes {
-            return;
-        }
-        tracing::warn!(
-            target: "piramid::cache",
-            metadata_bytes = total,
-            max_bytes = max_bytes,
-            "metadata_cache_budget_exceeded"
-        );
-        collections.sort_by_key(|collection| std::cmp::Reverse(collection.2));
-        for (name, storage, metadata_bytes) in collections {
-            if total <= max_bytes || metadata_bytes == 0 {
-                break;
-            }
-            let freed = storage.write().clear_metadata_cache() as u64;
-            total = total.saturating_sub(freed);
-            tracing::debug!(
-                target: "piramid::cache",
-                collection = name,
-                freed_bytes = freed,
-                metadata_bytes = total,
-                "metadata_cache_cleared"
-            );
-        }
     }
 }
 

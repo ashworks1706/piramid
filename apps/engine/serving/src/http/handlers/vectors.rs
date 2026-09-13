@@ -79,18 +79,3 @@ pub async fn upsert_vector(
 ) -> Result<Json<UpsertResponse>> {
     Ok(Json(vector::upsert_vector(&state, collection, req)?))
 }
-
-/// POST /api/collections/{collection}/search/range: searches for hits at or above a minimum score.
-pub async fn range_search_vectors(
-    State(state): State<SharedState>,
-    Path(collection): Path<String>,
-    Extension(request_id): Extension<RequestId>,
-    Json(req): Json<RangeSearchRequest>,
-) -> Result<Json<SearchResponse>> {
-    Ok(Json(vector::range_search_vectors(
-        &state,
-        collection,
-        request_id.0.as_str(),
-        req,
-    )?))
-}

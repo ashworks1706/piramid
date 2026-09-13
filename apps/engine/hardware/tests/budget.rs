@@ -19,7 +19,7 @@ fn a_split_budget_caps_each_pool_and_a_dropped_reservation_returns_its_bytes() {
             shares: Some(PoolShares {
                 weights: 0.5,
                 kv_cache: 0.25,
-                index: 0.25,
+                vectors: 0.25,
             }),
         },
     )
@@ -29,7 +29,7 @@ fn a_split_budget_caps_each_pool_and_a_dropped_reservation_returns_its_bytes() {
     let held = budget.reserve(MemoryPool::KvCache, GB / 2).unwrap();
     assert!(budget.reserve(MemoryPool::KvCache, GB).is_err());
     assert_eq!(
-        budget.available(MemoryPool::Index),
+        budget.available(MemoryPool::Vectors),
         GB,
         "pools do not borrow"
     );
@@ -49,7 +49,7 @@ fn a_shared_budget_is_first_come_across_pools() {
     )
     .unwrap();
     let _weights = budget.reserve(MemoryPool::Weights, 3 * GB).unwrap();
-    assert_eq!(budget.available(MemoryPool::Index), GB);
+    assert_eq!(budget.available(MemoryPool::Vectors), GB);
     assert!(budget.reserve(MemoryPool::KvCache, 2 * GB).is_err());
     let usage = budget.usage();
     assert_eq!(usage[0].used_bytes, 3 * GB);
@@ -69,7 +69,7 @@ fn impossible_settings_are_refused() {
         shares: Some(PoolShares {
             weights: 0.7,
             kv_cache: 0.3,
-            index: 0.2,
+            vectors: 0.2,
         }),
     };
     assert!(DeviceBudget::new(8 * GB, shares).is_err());
@@ -83,7 +83,7 @@ fn concurrent_reservations_never_exceed_a_pool() {
         Some(PoolShares {
             weights: 1.0,
             kv_cache: 0.0,
-            index: 0.0,
+            vectors: 0.0,
         }),
     ] {
         let budget = DeviceBudget::new(

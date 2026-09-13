@@ -1,7 +1,8 @@
 //! Settings re-read after POST /config/reload.
 //!
-//! A reload applies search, limits, WAL checkpoint thresholds, the metadata cache budget and the
-//! execution mode to collections already open. A change to a setting read only when a collection
+//! A reload applies batch search parallelism, limits, WAL checkpoint thresholds and the execution
+//! mode to collections already open. A change to runtime.search.metric applies to collections
+//! created afterwards. A change to a setting read only when a collection
 //! opens refuses the reload while any collection is open.
 
 use serde::{Deserialize, Serialize};
@@ -9,17 +10,14 @@ use serde::{Deserialize, Serialize};
 use piramid_hardware::compute::ExecutionMode;
 
 use super::{
-    CacheConfig, IndexConfig, InferenceConfig, LimitsConfig, MemoryConfig, QuantizationConfig,
-    SearchConfig, WalConfig,
+    InferenceConfig, LimitsConfig, MemoryConfig, QuantizationConfig, SearchConfig, WalConfig,
 };
 
 /// Everything that can change without a restart.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct RuntimeConfig {
-    /// Index family, metric and family parameters.
-    pub index: IndexConfig,
-    /// Default search depth and filter overfetch.
+    /// Metric for a new collection, and batch search parallelism.
     pub search: SearchConfig,
     /// How stored vectors are compressed.
     pub quantization: QuantizationConfig,
@@ -29,8 +27,6 @@ pub struct RuntimeConfig {
     pub wal: WalConfig,
     /// Per-collection size ceilings.
     pub limits: LimitsConfig,
-    /// Cache sizes and eviction.
-    pub cache: CacheConfig,
 
     /// Which distance-kernel strategy to run.
     pub execution: ExecutionMode,
@@ -57,14 +53,9 @@ impl RuntimeConfig {
         if self.wal.enabled && self.wal.checkpoint_frequency == 0 {
             return Err("runtime.wal.checkpoint_frequency: must be > 0 when the WAL is on".into());
         }
-        if self.search.filter_overfetch == 0 {
-            return Err("runtime.search.filter_overfetch: must be >= 1".into());
-        }
         if self.memory.use_mmap && self.memory.initial_mmap_size == 0 {
             return Err("runtime.memory.initial_mmap_size: must be > 0 when mmap is on".into());
         }
-        self.cache.validate()?;
-        self.index.validate()?;
         self.inference.validate()
     }
 }

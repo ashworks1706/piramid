@@ -505,7 +505,7 @@ async fn retrieve(
                 .search(
                     &embedded.embedding,
                     k,
-                    collection.vector_index().metric(),
+                    collection.metric(),
                     SearchParams {
                         mode: *mode,
                         ..SearchParams::default()

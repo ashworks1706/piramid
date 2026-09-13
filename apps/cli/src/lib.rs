@@ -7,12 +7,12 @@ pub mod support;
 
 pub use piramid_core::{config, document, error, metadata, observability, stats, validation};
 
-pub use piramid_database::{cache, index, search, storage};
+pub use piramid_database::{resident, search, storage};
 // Items the database crate exposes only at its root.
 pub use piramid_database::{
-    compact, find_duplicates, CheckpointManager, Collection, CollectionHandle, CollectionManager,
+    compact, CheckpointManager, Collection, CollectionHandle, CollectionManager,
     CollectionOpenOptions, CompactStats,
 };
 pub use piramid_hardware::{compute, gpu};
 pub use piramid_model::{embeddings, fusion, inference};
-pub use piramid_serving::{cluster, disk, http, services, state};
+pub use piramid_serving::{disk, http, services, state};

@@ -9,29 +9,31 @@ use piramid_core::{Document, Hit};
 use piramid_hardware::compute::Metric;
 
 use super::checkpoint::CheckpointManager;
-use crate::cache::CacheManager;
-use crate::index::save_vector_index;
-use crate::index::{HashMapVectorReader, VectorIndex, VectorReader};
+use crate::resident::ResidentManager;
 use crate::storage::manifest::CollectionMetadata;
 use crate::storage::record_store::RecordStore;
 use crate::storage::sidecars::{warm_file, EntryPointer};
+use crate::storage::vectors::VectorReader;
 use crate::storage::SidecarManager;
-use piramid_core::error::Result;
+use piramid_core::error::{ConfigError, Result, StorageError};
 
-/// One open collection: its data file, offset index, caches, vector index, manifest and log.
+/// One open collection: its data file, offsets, resident vectors and metadata, manifest and log.
 pub struct Collection {
     pub(crate) record_store: RecordStore,
-    pub(crate) index: HashMap<Uuid, EntryPointer>,
-    pub(crate) vector_index: Box<dyn VectorIndex>,
-    pub(crate) cache: CacheManager,
-    /// Configuration the collection was opened with.
+    pub(crate) offsets: HashMap<Uuid, EntryPointer>,
+    pub(crate) resident: ResidentManager,
+    /// Configuration the collection runs with. search.metric is the metric a new collection is
+    /// created with; [Collection::metric] is the metric this collection scores with.
     pub config: piramid_core::config::CollectionConfig,
-    /// Name, width, counts and timestamps.
+    /// Name, metric, width, counts and timestamps.
     pub manifest: CollectionMetadata,
     /// Path of the data file; sidecar paths derive from it.
     pub path: String,
     /// Write-ahead log and checkpoint counters.
     pub checkpoint: CheckpointManager,
+    /// Why a committed compaction could not be finished in memory. While set, every write and
+    /// checkpoint is refused until the collection is opened again.
+    pub(crate) unfinished_compaction: Option<String>,
 }
 
 impl Collection {
@@ -46,29 +48,20 @@ impl Collection {
 
     /// The first setting in next that differs from this collection and takes effect only when
     /// the collection is opened, named by its config path. None when next can be applied live.
+    ///
+    /// search.metric is not compared: a collection keeps the metric it was created with.
     pub fn setting_needing_reopen(
         &self,
         next: &piramid_core::config::CollectionConfig,
     ) -> Option<&'static str> {
         let current = &self.config;
-        let mut metadata_cache = next.cache.metadata;
-        metadata_cache.max_bytes = current.cache.metadata.max_bytes;
         [
-            (current.index != next.index, "runtime.index"),
             (
                 current.quantization != next.quantization,
                 "runtime.quantization",
             ),
             (current.memory != next.memory, "runtime.memory"),
             (current.hardware != next.hardware, "startup.hardware"),
-            (
-                current.cache.vectors != next.cache.vectors,
-                "runtime.cache.vectors",
-            ),
-            (
-                current.cache.metadata != metadata_cache,
-                "runtime.cache.metadata",
-            ),
             (
                 current.wal.enabled != next.wal.enabled,
                 "runtime.wal.enabled",
@@ -82,8 +75,10 @@ impl Collection {
         .find_map(|(differs, name)| differs.then_some(name))
     }
 
-    /// Apply the settings an open collection reads as it runs: search, limits, WAL checkpoint
-    /// thresholds, the metadata cache budget and the execution mode.
+    /// Apply the settings an open collection reads as it runs: search.parallel, limits, WAL
+    /// checkpoint thresholds and the execution mode. The metric of the collection is unchanged.
+    ///
+    /// # Errors
     ///
     /// Errors, changing nothing, when next differs in a setting that needs a reopen.
     pub fn apply_live_settings(
@@ -91,74 +86,45 @@ impl Collection {
         next: &piramid_core::config::CollectionConfig,
     ) -> Result<()> {
         if let Some(setting) = self.setting_needing_reopen(next) {
-            return Err(piramid_core::error::IndexError::InvalidConfig(format!(
+            return Err(ConfigError::Invalid(format!(
                 "{setting} changed; it applies when the collection is opened"
             ))
             .into());
         }
-        self.config.search = next.search;
+        self.config.search.parallel = next.search.parallel;
         self.config.limits = next.limits;
         self.config.wal = next.wal;
-        self.config.cache.metadata.max_bytes = next.cache.metadata.max_bytes;
         self.config.execution = next.execution;
-        self.vector_index.set_execution(next.execution);
         Ok(())
     }
 
-    /// Name, width, counts and timestamps.
+    /// Name, metric, width, counts and timestamps.
     pub fn manifest(&self) -> &CollectionMetadata {
         &self.manifest
     }
 
+    /// The metric the collection was created with, which every search of it scores with.
+    pub fn metric(&self) -> Metric {
+        self.manifest.metric
+    }
+
     /// Number of live documents.
     pub fn count(&self) -> usize {
-        self.index.len()
+        self.offsets.len()
     }
 
-    /// Approximate resident size: mmap plus offset index plus caches plus ANN structure.
+    /// Approximate resident size: mmap plus offsets plus resident vectors and metadata.
     pub fn memory_usage_bytes(&self) -> Result<usize> {
-        let index_size = self.index.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>();
+        let offsets_size = self.offsets.capacity() * std::mem::size_of::<(Uuid, EntryPointer)>();
 
-        Ok(self.record_store.mapped_len()?
-            + index_size
-            + self.cache.memory_usage_bytes()
-            + self.vector_index.stats().memory_usage_bytes)
+        Ok(self.record_store.mapped_len()? + offsets_size + self.resident.memory_usage_bytes())
     }
 
-    /// The ANN index over the collection's vectors.
-    pub fn vector_index(&self) -> &dyn VectorIndex {
-        self.vector_index.as_ref()
-    }
-
-    /// Approximate bytes held by the vector store and metadata cache.
-    pub fn cache_usage_bytes(&self) -> usize {
-        self.cache.memory_usage_bytes()
-    }
-
-    /// Approximate bytes held by the metadata cache.
-    pub fn metadata_cache_usage_bytes(&self) -> usize {
-        self.cache.metadata_usage_bytes()
-    }
-
-    /// Empty the metadata cache and return the bytes freed.
-    pub fn clear_metadata_cache(&mut self) -> usize {
-        self.cache.clear_metadata()
-    }
-
-    /// Empty the vector store and metadata cache. Search cannot score until they are repopulated.
-    pub fn clear_caches_for_rebuild(&mut self) {
-        self.cache.clear_all();
-    }
-
-    /// Faults the data file, the ANN index, the offset index and the WAL into the page cache.
+    /// Faults the data file, the offsets and the WAL into the page cache.
     pub fn warm_page_cache(&self) {
         self.record_store.warm_page_cache();
         let sidecars = SidecarManager::at(&self.path);
-        for path in [
-            sidecars.vector_index_path(),
-            sidecars.offsets_path(),
-            sidecars.wal_path(),
-        ] {
+        for path in [sidecars.offsets_path(), sidecars.wal_path()] {
             if let Err(error) = warm_file(&path) {
                 tracing::warn!(
                     target: "piramid::collections",
@@ -170,34 +136,36 @@ impl Collection {
         }
     }
 
-    /// The resident vectors, as indexes read them.
+    /// The resident vectors of every live document.
     pub fn vector_reader(&self) -> &dyn VectorReader {
-        &self.cache
+        &self.resident
     }
 
-    /// Metadata currently in the cache, keyed by id. Evicted documents are absent.
-    pub fn metadata_view(&self) -> &HashMap<Uuid, piramid_core::metadata::Metadata> {
-        self.cache.metadata()
+    /// The resident metadata of every live document, keyed by id.
+    pub fn metadata_view(&self) -> &HashMap<Uuid, Metadata> {
+        self.resident.metadata()
     }
 
-    /// Configuration the collection was opened with.
+    /// Configuration the collection runs with.
     pub fn config(&self) -> &piramid_core::config::CollectionConfig {
         &self.config
     }
 
     /// Up to limit documents in id order, skipping the first offset. Only the page is read.
     ///
-    /// Errors when the offset index names a document the record store cannot return.
-    pub fn page(&self, offset: usize, limit: usize) -> Result<Vec<piramid_core::Document>> {
-        let mut ids: Vec<&Uuid> = self.index.keys().collect();
+    /// # Errors
+    ///
+    /// Errors when the offsets name a document the record store cannot return.
+    pub fn page(&self, offset: usize, limit: usize) -> Result<Vec<Document>> {
+        let mut ids: Vec<&Uuid> = self.offsets.keys().collect();
         ids.sort_unstable();
         ids.into_iter()
             .skip(offset)
             .take(limit)
             .map(|id| {
                 crate::document::get(self, id)?.ok_or_else(|| {
-                    piramid_core::error::StorageError::CorruptedIndex(format!(
-                        "the offset index names document {id}, which the record store does not hold"
+                    piramid_core::error::StorageError::CorruptedSidecar(format!(
+                        "the offsets name document {id}, which the record store does not hold"
                     ))
                     .into()
                 })
@@ -206,75 +174,32 @@ impl Collection {
     }
 
     /// Every document in id order. Errors like [Collection::page].
-    pub fn get_all(&self) -> Result<Vec<piramid_core::Document>> {
+    pub fn get_all(&self) -> Result<Vec<Document>> {
         self.page(0, usize::MAX)
     }
 
-    pub(crate) fn rebuild_vector_cache(&mut self) -> Result<()> {
-        let mut cache = CacheManager::new(self.config.cache);
-        for entry in self.get_all()? {
-            cache.put_vector(entry.id, entry.vector())?;
-            cache.put_metadata(entry.id, entry.metadata.clone());
+    /// Replace the resident vectors and metadata with those of every document the offsets name.
+    pub(crate) fn load_resident(&mut self) -> Result<()> {
+        let mut resident = ResidentManager::new();
+        for (id, pointer) in &self.offsets {
+            let document = self.record_store.read_document(pointer)?;
+            resident.put_vector(*id, document.vector())?;
+            resident.put_metadata(*id, document.metadata);
         }
-        self.cache = cache;
+        self.resident = resident;
         Ok(())
     }
 
-    /// Replace the index with the family an auto configuration picks for the current count, when
-    /// the collection has grown past a threshold. A collection that shrinks keeps its family.
-    pub(crate) fn grow_index_family(&mut self) -> Result<()> {
-        use crate::index::{growth_rank, kind_of};
-
-        let count = self.index.len();
-        let wanted = self.config.index.select_type(count);
-        let current = self.vector_index.index_type();
-        if growth_rank(wanted) <= growth_rank(kind_of(current)) {
-            return Ok(());
+    /// Refuse a write while a committed compaction is unfinished in memory.
+    pub(crate) fn ensure_writable(&self) -> Result<()> {
+        match &self.unfinished_compaction {
+            None => Ok(()),
+            Some(reason) => Err(StorageError::CompactionUnfinished {
+                collection: self.manifest.name.clone(),
+                reason: reason.clone(),
+            }
+            .into()),
         }
-
-        tracing::info!(
-            target: "piramid::indexing",
-            collection = self.path.as_str(),
-            vectors = count,
-            from = %current,
-            to = ?wanted,
-            "index_family_grown"
-        );
-        let mut grown =
-            crate::index::create_index(&self.config.index, self.config.execution, count);
-        let ids: Vec<Uuid> = self.index.keys().copied().collect();
-        for id in ids {
-            let vector = VectorReader::get(&self.cache, &id).ok_or_else(|| {
-                piramid_core::error::IndexError::BuildFailed(format!(
-                    "vector {id} is not resident, so the index cannot grow into a new family"
-                ))
-            })?;
-            grown.insert(id, vector, &self.cache)?;
-        }
-        self.vector_index = grown;
-        Ok(())
-    }
-
-    /// Rebuild the vector index from on-disk data and persist it.
-    pub fn rebuild_index(&mut self) -> Result<()> {
-        let mut vectors: HashMap<Uuid, Vec<f32>> = HashMap::new();
-
-        for (id, pointer) in &self.index {
-            let entry = self.record_store.read_document(pointer)?;
-            vectors.insert(*id, entry.vector().to_vec());
-        }
-
-        let mut new_index =
-            crate::index::create_index(&self.config.index, self.config.execution, self.index.len());
-        let reader = HashMapVectorReader::new(&vectors);
-        for (id, vec) in &vectors {
-            new_index.insert(*id, vec, &reader)?;
-        }
-
-        self.vector_index = new_index;
-        self.rebuild_vector_cache()?;
-        save_vector_index(self.path.as_str(), self.vector_index())?;
-        Ok(())
     }
 }
 
@@ -329,7 +254,14 @@ impl Collection {
         crate::document::update_vector(self, id, vector)
     }
 
-    /// The k best hits for query, scored under metric.
+    /// The k best hits for query among the documents matching the filter of params.
+    ///
+    /// An Auto mode in params scores with the configured execution mode of the collection.
+    ///
+    /// # Errors
+    ///
+    /// Errors when metric is not the metric of the collection, when the query cannot be scored
+    /// under it, or as [crate::search::search] does.
     pub fn search(
         &self,
         query: &[f32],
@@ -340,7 +272,7 @@ impl Collection {
         super::search_target::search(self, query, k, metric, params)
     }
 
-    /// The k best hits for each query, scored under metric, one list per query.
+    /// The k best hits for each query, one list per query. Errors like [Collection::search].
     pub fn search_batch_with(
         &self,
         queries: &[Vec<f32>],

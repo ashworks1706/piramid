@@ -244,7 +244,7 @@ pub struct FusionConfig {
     /// Candidates fetched before filtering, as a multiple of top_k.
     pub overfetch: usize,
 
-    /// Drop neighbours scoring below this. None keeps whatever the index returns.
+    /// Drop neighbours scoring below this. None keeps every hit search returns.
     pub score_threshold: Option<f32>,
 
     /// Tokens between calls when point is chunk-boundary.

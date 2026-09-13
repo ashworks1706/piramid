@@ -31,7 +31,7 @@ fn the_filter_comes_from_the_configuration_only() {
     std::env::set_var("RUST_LOG", "trace");
     let logging = LoggingConfig {
         level: LogLevel::Warn,
-        indexing: false,
+        writes: false,
         ..LoggingConfig::default()
     };
     let filter = filter_for(logging);
@@ -39,7 +39,7 @@ fn the_filter_comes_from_the_configuration_only() {
     let filter = filter.unwrap().to_string();
     assert!(filter.contains("warn"), "{filter}");
     assert!(!filter.contains("trace"), "{filter}");
-    assert!(filter.contains("piramid::indexing=off"), "{filter}");
+    assert!(filter.contains("piramid::writes=off"), "{filter}");
 }
 
 #[test]

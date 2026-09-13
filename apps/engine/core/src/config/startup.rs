@@ -19,7 +19,7 @@ pub struct StartupConfig {
     /// Root directory for collection data.
     pub data_dir: String,
 
-    /// Worker threads for parallel search and indexing. None is one per core.
+    /// Worker threads for parallel search. None is one per core.
     pub threads: Option<usize>,
 
     /// Log level, format and per-subsystem switches.

@@ -189,24 +189,14 @@ fn fetch_config(app: &mut App, tx: &UnboundedSender<Event>) {
 }
 
 /// Runs a confirmed action and reports what it did.
-///
-/// The outcome of a rebuild is read from the rebuild status endpoint.
 fn act(client: Client, tx: UnboundedSender<Event>, pending: Pending) {
     let name = crate::console::collections::verb(&pending);
     tokio::spawn(async move {
         let outcome = match &pending {
-            Pending::Rebuild(collection) => match client.rebuild(collection).await {
-                Ok(()) => match client.rebuild_status(collection).await {
-                    Ok(status) => match status.error {
-                        Some(error) => Err(format!("{name} failed: {error}")),
-                        None => Ok(format!("{name} {}", status.status)),
-                    },
-                    Err(e) => Err(format!("{name} started, status unknown: {e}")),
-                },
-                Err(e) => Err(format!("{name} failed: {e}")),
-            },
             Pending::Compact(collection) => match client.compact(collection).await {
-                Ok(()) => Ok(format!("{name} done")),
+                Ok(compacted) => Ok(crate::console::collections::compacted_line(
+                    collection, &compacted,
+                )),
                 Err(e) => Err(format!("{name} failed: {e}")),
             },
         };

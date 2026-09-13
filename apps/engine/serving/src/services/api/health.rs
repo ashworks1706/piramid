@@ -21,9 +21,6 @@ pub struct CollectionHealth {
     /// Number of stored documents. Absent when not loaded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<usize>,
-    /// Index family: Flat, HNSW or IVF. Absent when not loaded.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub index_type: Option<String>,
     /// Time of the last checkpoint since the collection was opened, in seconds since the Unix
     /// epoch. Absent when not loaded or not yet checkpointed.
     #[serde(skip_serializing_if = "Option::is_none")]

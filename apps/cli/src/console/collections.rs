@@ -47,8 +47,6 @@ impl Row {
 /// An action that changes the server, held until it is confirmed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pending {
-    /// Rebuild the index of the collection from its stored records.
-    Rebuild(String),
     /// Compact the collection, reclaiming space held by deleted records.
     Compact(String),
 }
@@ -57,9 +55,6 @@ impl Pending {
     /// The question to put on the confirmation line.
     pub fn question(&self) -> String {
         match self {
-            Self::Rebuild(name) => {
-                format!("rebuild the index for {name}? it re-reads every record  [y/n]")
-            }
             Self::Compact(name) => {
                 format!("compact {name}? it rewrites the record store  [y/n]")
             }
@@ -215,7 +210,6 @@ impl Collections {
             KeyCode::Char('g') => self.pending_key = Some('g'),
             KeyCode::Char('G') => self.selected = self.rows.len().saturating_sub(1),
             KeyCode::Char('R') => self.last_refresh = None,
-            KeyCode::Char('r') => return self.ask(Pending::Rebuild),
             KeyCode::Char('c') => return self.ask(Pending::Compact),
             _ => {}
         }
@@ -241,10 +235,19 @@ impl Collections {
     }
 }
 
+/// The line shown when the compaction of the collection name finished.
+pub fn compacted_line(name: &str, compacted: &super::client::Compacted) -> String {
+    format!(
+        "compaction of {name}: {} documents, {} -> {}",
+        compacted.documents,
+        super::ui::bytes(compacted.bytes_before),
+        super::ui::bytes(compacted.bytes_after),
+    )
+}
+
 /// What to call an action while it runs.
 pub fn verb(pending: &Pending) -> String {
     match pending {
-        Pending::Rebuild(name) => format!("rebuild of {name}"),
         Pending::Compact(name) => format!("compaction of {name}"),
     }
 }

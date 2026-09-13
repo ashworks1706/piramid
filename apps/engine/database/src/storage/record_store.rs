@@ -20,11 +20,11 @@ pub struct RecordStore {
 }
 
 impl RecordStore {
-    /// Open or create the data file at path, appending after the furthest record in index.
+    /// Open or create the data file at path, appending after the furthest record in offsets.
     pub fn open(
         path: &str,
         config: &CollectionConfig,
-        index: &std::collections::HashMap<uuid::Uuid, EntryPointer>,
+        offsets: &std::collections::HashMap<uuid::Uuid, EntryPointer>,
     ) -> Result<Self> {
         let data_file = OpenOptions::new()
             .read(true)
@@ -45,7 +45,7 @@ impl RecordStore {
         Ok(Self {
             data_file,
             mmap,
-            append_cursor: next_append_offset(index),
+            append_cursor: next_append_offset(offsets),
         })
     }
 
@@ -139,7 +139,7 @@ impl RecordStore {
         if let Some(mmap) = self.mmap.as_ref() {
             return match offset.checked_add(length).filter(|&end| end <= mmap.len()) {
                 Some(end) => Ok(mmap[offset..end].to_vec()),
-                None => Err(StorageError::CorruptedIndex(format!(
+                None => Err(StorageError::CorruptedData(format!(
                     "pointer offset {offset} length {length} lies outside the {} byte mapping",
                     mmap.len()
                 ))
@@ -174,8 +174,8 @@ pub fn record_length(len: usize) -> Result<u32> {
     })
 }
 
-fn next_append_offset(index: &std::collections::HashMap<uuid::Uuid, EntryPointer>) -> u64 {
-    index
+fn next_append_offset(offsets: &std::collections::HashMap<uuid::Uuid, EntryPointer>) -> u64 {
+    offsets
         .values()
         .map(|pointer| pointer.offset + u64::from(pointer.length))
         .max()

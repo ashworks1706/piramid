@@ -1,5 +1,5 @@
 //! Device memory accounting: a budget of usable bytes, divided into pools for model weights, the
-//! key/value cache and the index, or shared by all three when no split is set. A [Reservation]
+//! key/value cache and stored vectors, or shared by all three when no split is set. A [Reservation]
 //! holds bytes until it is dropped.
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -14,20 +14,24 @@ pub enum MemoryPool {
     Weights,
     /// The attention key/value cache.
     KvCache,
-    /// Vectors and candidates uploaded for retrieval.
-    Index,
+    /// Stored vectors and scoring buffers uploaded for search.
+    Vectors,
 }
 
 impl MemoryPool {
     /// Every pool, in reporting order.
-    pub const ALL: [MemoryPool; 3] = [MemoryPool::Weights, MemoryPool::KvCache, MemoryPool::Index];
+    pub const ALL: [MemoryPool; 3] = [
+        MemoryPool::Weights,
+        MemoryPool::KvCache,
+        MemoryPool::Vectors,
+    ];
 
     /// Stable lowercase name.
     pub fn as_str(&self) -> &'static str {
         match self {
             MemoryPool::Weights => "weights",
             MemoryPool::KvCache => "kv_cache",
-            MemoryPool::Index => "index",
+            MemoryPool::Vectors => "vectors",
         }
     }
 
@@ -35,20 +39,20 @@ impl MemoryPool {
         match self {
             MemoryPool::Weights => 0,
             MemoryPool::KvCache => 1,
-            MemoryPool::Index => 2,
+            MemoryPool::Vectors => 2,
         }
     }
 }
 
-/// Shares of the usable budget for weights, key/value cache and index.
+/// Shares of the usable budget for weights, key/value cache and stored vectors.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PoolShares {
     /// Share for model weights.
     pub weights: f32,
     /// Share for the key/value cache.
     pub kv_cache: f32,
-    /// Share for the index.
-    pub index: f32,
+    /// Share for stored vectors and scoring buffers.
+    pub vectors: f32,
 }
 
 /// How much device memory the process may use and how it is divided.
@@ -133,7 +137,7 @@ impl DeviceBudget {
         let (shared, capacity) = match settings.shares {
             None => (true, [usable; 3]),
             Some(shares) => {
-                let parts = [shares.weights, shares.kv_cache, shares.index];
+                let parts = [shares.weights, shares.kv_cache, shares.vectors];
                 if parts.iter().any(|share| !(0.0..=1.0).contains(share))
                     || parts.iter().sum::<f32>() > 1.0 + 1e-6
                 {

@@ -4,23 +4,22 @@
     reason = "assertions in tests"
 )]
 
-//! Bytes written by bincode 1.3 decode with the storage codec and re-encode byte for byte.
+//! Offsets and documents written by bincode 1.3 decode with the storage codec and re-encode byte
+//! for byte, and a manifest written by bincode 1.3 is schema 1 and refused.
 //!
 //! The files under tests/fixtures/bincode1 were written by bincode 1.3.3 with bincode::serialize.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use piramid_core::config::{CollectionConfig, SearchConfig};
+use piramid_core::config::CollectionConfig;
 use piramid_core::metadata::{Metadata, MetadataValue};
 use piramid_core::Document;
-use piramid_database::index::{
-    load_vector_index, HashMapVectorReader, IndexSearchRequest, IndexType, SerializableIndex,
-};
 use piramid_database::storage::codec;
 use piramid_database::storage::record_store::RecordStore;
 use piramid_database::storage::sidecars::{EntryPointer, SidecarManager};
 use piramid_database::storage::CollectionMetadata;
+use piramid_hardware::compute::Metric;
 use uuid::Uuid;
 
 const ID: u128 = 0x0123_4567_89ab_cdef_fedc_ba98_7654_3210;
@@ -54,25 +53,57 @@ fn u64_le(out: &mut Vec<u8>, v: u64) {
 #[test]
 fn manifest_layout_is_fixed_width_little_endian() {
     let mut expected = Vec::new();
-    u32_le(&mut expected, 1);
-    u64_le(&mut expected, 6);
-    expected.extend_from_slice(b"legacy");
+    u32_le(&mut expected, 2);
+    u64_le(&mut expected, 7);
+    expected.extend_from_slice(b"current");
     u64_le(&mut expected, 1_700_000_000);
     u64_le(&mut expected, 1_700_000_500);
     expected.push(1);
     u64_le(&mut expected, 3);
     u64_le(&mut expected, 1);
+    u32_le(&mut expected, 2);
 
-    assert_eq!(expected, fixture("manifest.bin"));
-
-    let metadata: CollectionMetadata = codec::decode(&expected).unwrap();
-    assert_eq!(metadata.schema_version, 1);
-    assert_eq!(metadata.name, "legacy");
+    let metadata = CollectionMetadata::decode(&expected).unwrap();
+    assert_eq!(metadata.schema_version, 2);
+    assert_eq!(metadata.name, "current");
     assert_eq!(metadata.created_at, 1_700_000_000);
     assert_eq!(metadata.updated_at, 1_700_000_500);
     assert_eq!(metadata.dimensions, Some(3));
     assert_eq!(metadata.vector_count, 1);
+    assert_eq!(metadata.metric, Metric::DotProduct);
     assert_eq!(codec::encode(&metadata).unwrap(), expected);
+}
+
+#[test]
+fn a_manifest_written_by_bincode1_is_schema_1_and_refused() {
+    let error = CollectionMetadata::decode(&fixture("manifest.bin")).unwrap_err();
+
+    assert!(
+        matches!(
+            &error,
+            piramid_core::error::PiramidError::Storage(
+                piramid_core::error::StorageError::LegacyManifest { collection }
+            ) if collection == "legacy"
+        ),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_manifest_of_an_unknown_schema_version_is_unsupported() {
+    let mut manifest = CollectionMetadata::new("future".to_string(), Metric::Cosine).unwrap();
+    manifest.schema_version = 3;
+    let error = CollectionMetadata::decode(&codec::encode(&manifest).unwrap()).unwrap_err();
+
+    assert!(
+        matches!(
+            &error,
+            piramid_core::error::PiramidError::Storage(
+                piramid_core::error::StorageError::UnsupportedManifest { collection, found: 3 }
+            ) if collection == "future"
+        ),
+        "{error}"
+    );
 }
 
 #[test]
@@ -115,50 +146,17 @@ fn document_round_trips_byte_identical() {
 }
 
 #[test]
-fn every_index_family_round_trips_byte_identical() {
-    for (name, index_type) in [
-        ("flat.bin", IndexType::Flat),
-        ("hnsw.bin", IndexType::Hnsw),
-        ("ivf.bin", IndexType::Ivf),
-    ] {
-        let bytes = fixture(name);
-        let serializable: SerializableIndex = codec::decode(&bytes).unwrap();
-        assert_eq!(codec::encode(&serializable).unwrap(), bytes, "{name}");
-
-        let index = serializable.to_trait_object();
-        assert_eq!(index.index_type(), index_type, "{name}");
-        assert_eq!(index.stats().total_vectors, 1, "{name}");
-    }
-}
-
-#[test]
 fn sidecars_written_by_bincode1_load() {
     let base = scratch_base("legacy_sidecars");
     let sidecars = SidecarManager::at(&base);
     std::fs::write(sidecars.offsets_path(), fixture("offsets.bin")).unwrap();
     std::fs::write(sidecars.manifest_path(), fixture("manifest.bin")).unwrap();
-    std::fs::write(sidecars.vector_index_path(), fixture("hnsw.bin")).unwrap();
 
     let offsets = sidecars.load_offsets().unwrap();
     assert_eq!(offsets[&Uuid::from_u128(ID)].offset, 4096);
 
-    let manifest = sidecars.load_manifest().unwrap().unwrap();
-    assert_eq!(manifest.name, "legacy");
-
-    let index = load_vector_index(&base).unwrap().unwrap();
-    let vectors = HashMap::from([(Uuid::from_u128(ID), vec![1.0f32, 0.0, 0.0])]);
-    let reader = HashMapVectorReader::new(&vectors);
-    let no_metadata: HashMap<Uuid, Metadata> = HashMap::new();
-    let hits = index
-        .search(IndexSearchRequest::new(
-            &[1.0, 0.0, 0.0],
-            1,
-            &reader,
-            SearchConfig::default(),
-            &no_metadata,
-        ))
-        .unwrap();
-    assert_eq!(hits, vec![Uuid::from_u128(ID)]);
+    let error = sidecars.load_manifest().unwrap_err();
+    assert!(error.to_string().contains("'legacy'"), "{error}");
 }
 
 #[test]

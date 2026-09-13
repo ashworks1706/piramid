@@ -1,5 +1,5 @@
 //! CUDA strategy: every call uploads the query and candidates to the installed device, runs the
-//! distance kernels there, and downloads the scores, holding the bytes in the index pool of the
+//! distance kernels there, and downloads the scores, holding the bytes in the vectors pool of the
 //! device budget meanwhile. A single pair is scored as a batch of one row.
 
 use std::sync::OnceLock;
@@ -83,7 +83,7 @@ fn run(
     let bytes = ((query.len() + candidates.len() + rows) * std::mem::size_of::<f32>()) as u64;
     let _held = state
         .budget
-        .reserve(MemoryPool::Index, bytes)
+        .reserve(MemoryPool::Vectors, bytes)
         .map_err(failed)?;
     let device = state.module.device();
     let stream = &state.stream;

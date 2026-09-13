@@ -93,7 +93,7 @@ pub struct GpuBudget {
 /// One pool of the device memory budget. Under a shared budget the capacity is the whole budget.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct GpuPool {
-    /// The pool name: weights, kv_cache or index.
+    /// The pool name: weights, kv_cache or vectors.
     pub pool: String,
     /// Bytes the pool may use.
     pub capacity_bytes: u64,
@@ -135,6 +135,17 @@ pub struct GpuMetrics {
     pub temperature_celsius: Option<f32>,
 }
 
+/// What a compaction kept and reclaimed.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Compacted {
+    /// Number of live documents written to the compacted record store.
+    pub documents: usize,
+    /// Size of the record store before compaction, in bytes.
+    pub bytes_before: u64,
+    /// Size of the record store after compaction, in bytes.
+    pub bytes_after: u64,
+}
+
 /// The counters of one collection.
 ///
 /// The server sends every Option here as null when it has no value, and each key is required.
@@ -144,9 +155,7 @@ pub struct CollectionMetrics {
     pub name: String,
     /// Number of stored documents.
     pub vector_count: usize,
-    /// Index family: Flat, HNSW or IVF.
-    pub index_type: String,
-    /// Approximate resident size of records, offsets, caches and index, in bytes.
+    /// Approximate resident size of records, offsets, vectors and metadata, in bytes.
     pub memory_usage_bytes: usize,
     /// Moving average of insert duration, in milliseconds.
     #[serde(deserialize_with = "Option::deserialize")]
@@ -160,12 +169,6 @@ pub struct CollectionMetrics {
     /// Moving average of write-lock wait, in milliseconds.
     #[serde(deserialize_with = "Option::deserialize")]
     pub lock_write_ms: Option<f32>,
-    /// Configured HNSW candidate-list width.
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub hnsw_ef_search: Option<usize>,
-    /// Configured IVF partitions to scan.
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub ivf_nprobe: Option<usize>,
 }
 
 /// The durability state of one collection.
@@ -200,15 +203,6 @@ pub struct CollectionHealth {
     /// Whether the collection passed its integrity check, when reported.
     pub integrity_ok: Option<bool>,
     /// The error reported for the collection, if any.
-    pub error: Option<String>,
-}
-
-/// Where a rebuild is, from the rebuild status endpoint.
-#[derive(Debug, Clone, Deserialize)]
-pub struct RebuildStatus {
-    /// One of running, completed or failed.
-    pub status: String,
-    /// Why the rebuild failed, if it did.
     pub error: Option<String>,
 }
 
@@ -295,22 +289,8 @@ impl Client {
         render_config(&value)
     }
 
-    /// Asks for an index rebuild and returns once the server accepts it.
-    pub async fn rebuild(&self, collection: &str) -> Result<(), ClientError> {
-        self.post_empty(&format!("/api/collections/{collection}/index/rebuild"))
-            .await
-    }
-
-    /// Where a rebuild started earlier has got to.
-    pub async fn rebuild_status(&self, collection: &str) -> Result<RebuildStatus, ClientError> {
-        self.get(&format!(
-            "/api/collections/{collection}/index/rebuild/status"
-        ))
-        .await
-    }
-
     /// Compacts a collection, reclaiming space held by deleted records.
-    pub async fn compact(&self, collection: &str) -> Result<(), ClientError> {
+    pub async fn compact(&self, collection: &str) -> Result<Compacted, ClientError> {
         self.post_empty(&format!("/api/collections/{collection}/compact"))
             .await
     }
@@ -325,7 +305,10 @@ impl Client {
         self.decode(path, response).await
     }
 
-    async fn post_empty(&self, path: &str) -> Result<(), ClientError> {
+    async fn post_empty<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<T, ClientError> {
         let response = self
             .http
             .post(format!("{}{path}", self.base))
@@ -333,8 +316,7 @@ impl Client {
             .send()
             .await
             .map_err(|e| ClientError::Unreachable(path.to_owned(), root_cause(&e)))?;
-        let _: serde_json::Value = self.decode(path, response).await?;
-        Ok(())
+        self.decode(path, response).await
     }
 
     async fn decode<T: serde::de::DeserializeOwned>(

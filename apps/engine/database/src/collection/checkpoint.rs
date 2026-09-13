@@ -1,7 +1,6 @@
 //! Checkpoint bookkeeping: when to flush sidecars, and clearing the WAL once they are durable.
 
 use super::Collection;
-use crate::index::save_vector_index as save_vec_idx;
 use crate::storage::wal::Wal;
 use crate::storage::SidecarManager;
 use piramid_core::error::Result;
@@ -74,31 +73,21 @@ impl CheckpointManager {
     }
 }
 
-pub fn save_index(collection: &Collection) -> Result<()> {
-    SidecarManager::at(&collection.path).save_offsets(&collection.index)
-}
-
-pub fn save_vector_index(collection: &Collection) -> Result<()> {
-    save_vec_idx(&collection.path, collection.vector_index.as_ref())
-}
-
-pub fn save_manifest(collection: &Collection) -> Result<()> {
-    SidecarManager::at(&collection.path).save_manifest(&collection.manifest)
-}
-
 pub fn checkpoint(collection: &mut Collection) -> Result<()> {
+    collection.ensure_writable()?;
     let timestamp = piramid_core::clock::unix_secs()?;
 
-    // All three sidecars land before the WAL is cleared below, the manifest first.
-    save_manifest(collection)?;
-    save_index(collection)?;
-    save_vector_index(collection)?;
+    // The records, the manifest and the offsets are durable before the WAL is cleared below.
+    collection.record_store.sync()?;
+    let sidecars = SidecarManager::at(&collection.path);
+    sidecars.save_manifest(&collection.manifest)?;
+    sidecars.save_offsets(&collection.offsets)?;
 
     if collection.config.wal.enabled {
         collection.checkpoint.wal.checkpoint(timestamp)?;
         collection.checkpoint.record_checkpoint(timestamp);
         let last_seq = collection.checkpoint.wal.next_seq.saturating_sub(1);
-        SidecarManager::at(&collection.path).save_wal_meta(last_seq)?;
+        sidecars.save_wal_meta(last_seq)?;
         collection.checkpoint.wal.rotate()?;
     }
 

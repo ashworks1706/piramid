@@ -1,4 +1,4 @@
-//! Vector search and range search request and response shapes.
+//! Vector search request and response shapes.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -6,17 +6,6 @@ use std::collections::HashMap;
 /// Number of hits a search returns when the request omits k.
 pub fn default_k() -> usize {
     10
-}
-
-/// Recall/speed knobs a request may override, shared by every search shape.
-#[derive(Clone, Default)]
-pub struct SearchTuning {
-    /// HNSW candidate-list width.
-    pub ef: Option<usize>,
-    /// IVF partitions to scan.
-    pub nprobe: Option<usize>,
-    /// Multiplier applied to k when a filter is present.
-    pub filter_overfetch: Option<usize>,
 }
 
 /// Search a collection with one or more query vectors.
@@ -28,22 +17,12 @@ pub struct SearchRequest {
     /// Maximum number of hits per query. 10 when omitted.
     #[serde(default = "default_k")]
     pub k: usize,
-    /// Similarity metric: cosine, euclidean or dot. The metric the collection is indexed by when
-    /// omitted.
+    /// Similarity metric: cosine, euclidean or dot. The metric of the collection when omitted.
     #[serde(default)]
     pub metric: Option<String>,
     /// Metadata predicate, mapping a field name to an operator and value.
     #[serde(default)]
     pub filter: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
-    /// HNSW candidate-list width. The collection default when omitted.
-    #[serde(default)]
-    pub ef: Option<usize>,
-    /// IVF partitions to scan. The collection default when omitted.
-    #[serde(default)]
-    pub nprobe: Option<usize>,
-    /// Multiplier applied to k when a filter is present. The collection default when omitted.
-    #[serde(default)]
-    pub filter_overfetch: Option<usize>,
 }
 
 /// One search hit.
@@ -66,33 +45,4 @@ pub struct SearchResponse {
     pub results: Vec<Vec<HitResponse>>,
     /// Duration of the search itself, excluding embedding and lock wait, in whole milliseconds.
     pub latency_ms: f32,
-}
-
-/// Search restricted to hits scoring at least the requested minimum.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RangeSearchRequest {
-    /// Query vectors, searched as one batch. Must not be empty.
-    pub vectors: Vec<Vec<f32>>,
-    /// Minimum score a hit must reach to be returned.
-    pub min_score: f32,
-    /// Similarity metric: cosine, euclidean or dot. The metric the collection is indexed by when
-    /// omitted.
-    #[serde(default)]
-    pub metric: Option<String>,
-    /// Maximum number of hits per query. 10 when omitted.
-    #[serde(default = "default_k")]
-    pub k: usize,
-    /// Metadata predicate, mapping a field name to an operator and value.
-    #[serde(default)]
-    pub filter: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
-    /// HNSW candidate-list width. The collection default when omitted.
-    #[serde(default)]
-    pub ef: Option<usize>,
-    /// IVF partitions to scan. The collection default when omitted.
-    #[serde(default)]
-    pub nprobe: Option<usize>,
-    /// Multiplier applied to k when a filter is present. The collection default when omitted.
-    #[serde(default)]
-    pub filter_overfetch: Option<usize>,
 }

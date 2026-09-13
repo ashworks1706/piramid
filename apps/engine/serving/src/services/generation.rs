@@ -335,15 +335,12 @@ async fn retrieve(
     let started = Instant::now();
     let hits = {
         let guard = handle.read();
-        let metric = guard.vector_index().metric();
+        let metric = guard.metric();
         guard.search(
             &embedded.embedding,
             retrieval.k,
             metric,
-            SearchParams {
-                mode: guard.config().execution,
-                ..SearchParams::default()
-            },
+            SearchParams::default(),
         )?
     };
     let search_elapsed = started.elapsed();

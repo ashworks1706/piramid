@@ -1,6 +1,6 @@
 [package]
 name = "piramid-database"
-description = "Where vectors live and how they are found: records, WAL, sidecars, ANN indexes, query planning, and the collection that composes them."
+description = "Where documents live and how they are found: records, WAL, sidecars, exact search, and the collection that composes them."
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -18,7 +18,6 @@ bincode.workspace = true
 memmap2.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-rand.workspace = true
 rayon.workspace = true
 dashmap.workspace = true
 parking_lot.workspace = true
@@ -28,15 +27,7 @@ tokio.workspace = true
 criterion.workspace = true
 
 [[bench]]
-name = "hnsw_performance"
-harness = false
-
-[[bench]]
-name = "flat_scan"
-harness = false
-
-[[bench]]
-name = "ivf_scan"
+name = "exact_scan"
 harness = false
 
 [lints]

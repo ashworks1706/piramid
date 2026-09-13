@@ -11,14 +11,12 @@ use axum::{
 };
 use piramid_core::config::Config;
 use piramid_core::error::{ErrorKind, PiramidError};
-use piramid_core::metadata::metadata;
 use piramid_core::Document;
 use piramid_database::Collection;
 use piramid_serving::http::handlers::{collections, vectors};
 use piramid_serving::http::ApiResult;
 use piramid_serving::services::api::{InsertRequest, ListVectorsQuery, SearchRequest};
-use piramid_serving::services::collection::record_rebuild_panic;
-use piramid_serving::state::{AppState, RebuildJobStatus, RebuildState};
+use piramid_serving::state::AppState;
 use std::{fs, sync::Arc};
 
 fn cleanup_dir(path: &str) {
@@ -82,52 +80,6 @@ async fn read_endpoints_do_not_create_missing_collections() {
 
     assert_eq!(state.collection_manager.len(), 0);
     assert!(!std::path::Path::new(&format!("{data_dir}/missing.db")).exists());
-
-    cleanup_dir(data_dir);
-}
-
-#[tokio::test]
-async fn cache_budget_evicts_metadata_without_dropping_vectors() {
-    let data_dir = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/collection_manager_cache_budget"
-    );
-    let mut app_config = Config::default();
-    app_config.runtime.cache.metadata.max_bytes = Some(1);
-    let state = test_state_with_config(data_dir, app_config);
-    let collection = state
-        .collection_manager
-        .get_or_create("docs")
-        .expect("create collection");
-
-    {
-        let mut collection_guard = collection.write();
-        collection_guard
-            .insert(Document::with_metadata(
-                vec![1.0, 0.0, 0.0],
-                "first".to_string(),
-                metadata([("kind", "a".into())]),
-            ))
-            .unwrap();
-        collection_guard
-            .insert(Document::with_metadata(
-                vec![0.0, 1.0, 0.0],
-                "second".to_string(),
-                metadata([("kind", "b".into())]),
-            ))
-            .unwrap();
-        assert_eq!(collection_guard.vector_reader().len(), 2);
-        assert_eq!(collection_guard.metadata_view().len(), 2);
-    }
-
-    state.enforce_cache_budget();
-
-    {
-        let collection_guard = collection.read();
-        assert_eq!(collection_guard.vector_reader().len(), 2);
-        assert_eq!(collection_guard.metadata_view().len(), 0);
-        assert_eq!(collection_guard.count(), 2);
-    }
 
     cleanup_dir(data_dir);
 }
@@ -227,9 +179,6 @@ async fn search_applies_a_metadata_filter_from_the_request() {
             k: 10,
             metric: None,
             filter: Some(filter),
-            ef: None,
-            nprobe: None,
-            filter_overfetch: None,
         }),
     )
     .await
@@ -347,33 +296,6 @@ fn a_write_below_the_disk_floor_fails_without_read_only() {
     cleanup_dir(data_dir);
 }
 
-#[tokio::test]
-async fn a_rebuild_while_one_is_running_is_a_conflict() {
-    use piramid_serving::state::{RebuildJobStatus, RebuildState};
-
-    let data_dir = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/collection_manager_rebuild_conflict"
-    );
-    let state = test_state(data_dir);
-    state.collection_manager.get_or_create("docs").unwrap();
-    state.rebuild_jobs.insert(
-        "docs".to_string(),
-        RebuildJobStatus {
-            status: RebuildState::Running,
-            started_at: 0,
-            finished_at: None,
-            error: None,
-            elapsed_ms: None,
-        },
-    );
-    let error = piramid_serving::services::collection::rebuild_index(&state, "docs".to_string())
-        .err()
-        .unwrap();
-    assert_eq!(error.kind(), ErrorKind::Conflict);
-    cleanup_dir(data_dir);
-}
-
 /// Reports a token count for texts that start with a digit and none for the rest.
 struct CountsSome;
 
@@ -436,36 +358,103 @@ async fn embed_total_tokens_is_absent_when_any_text_went_uncounted() {
     cleanup_dir(data_dir);
 }
 
-#[tokio::test]
-async fn a_rebuild_that_panics_is_recorded_as_failed() {
-    let jobs = Arc::new(dashmap::DashMap::new());
-    jobs.insert(
-        "docs".to_string(),
-        RebuildJobStatus {
-            status: RebuildState::Running,
-            started_at: 7,
-            finished_at: None,
-            error: None,
-            elapsed_ms: None,
-        },
-    );
-    let rebuild = tokio::task::spawn_blocking(|| panic!("index out of bounds"));
-    record_rebuild_panic(
-        rebuild,
-        jobs.clone(),
-        "docs".to_string(),
-        7,
-        std::time::Instant::now(),
-    )
-    .await;
+/// A filter body matching lang equal to the given value.
+fn lang_filter(
+    lang: &str,
+) -> std::collections::HashMap<String, std::collections::HashMap<String, serde_json::Value>> {
+    [(
+        "lang".to_string(),
+        [("eq".to_string(), serde_json::json!(lang))].into(),
+    )]
+    .into()
+}
 
-    let job = jobs.get("docs").unwrap();
-    assert_eq!(job.status, RebuildState::Failed);
-    assert_eq!(job.started_at, 7);
-    assert!(job.finished_at.is_some());
-    assert!(
-        job.error.as_deref().unwrap().contains("panic"),
-        "{:?}",
-        job.error
+#[tokio::test]
+async fn a_filtered_search_returns_k_matches_when_the_best_documents_do_not_match() {
+    let data_dir = concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/collection_manager_filter_k_matches"
     );
+    let state = test_state(data_dir);
+
+    let mut vectors_in = Vec::new();
+    let mut texts = Vec::new();
+    let mut metadata = Vec::new();
+    for i in 0..40u8 {
+        let offset = f32::from(i) / 100.0;
+        vectors_in.push(vec![1.0 - offset, offset]);
+        texts.push(format!("doc {i}"));
+        let lang = if i < 30 { "go" } else { "rust" };
+        metadata.push([("lang".to_string(), serde_json::json!(lang))].into());
+    }
+    let inserted = vectors::insert_vector(
+        State(state.clone()),
+        Path("docs".to_string()),
+        Json(InsertRequest {
+            vectors: vectors_in,
+            texts,
+            metadata,
+            normalize: false,
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(inserted.0.count, 40);
+
+    let response = vectors::search_vectors(
+        State(state.clone()),
+        Path("docs".to_string()),
+        axum::Extension(piramid_serving::http::request_id::RequestId("test".into())),
+        Json(SearchRequest {
+            vectors: vec![vec![1.0, 0.0]],
+            k: 5,
+            metric: None,
+            filter: Some(lang_filter("rust")),
+        }),
+    )
+    .await
+    .unwrap();
+
+    let hits = &response.0.results[0];
+    let texts: Vec<&str> = hits.iter().map(|hit| hit.text.as_str()).collect();
+    assert_eq!(texts, ["doc 30", "doc 31", "doc 32", "doc 33", "doc 34"]);
+    cleanup_dir(data_dir);
+}
+
+#[tokio::test]
+async fn compaction_reports_documents_and_sizes_and_keeps_every_live_document() {
+    let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_compact");
+    let state = test_state(data_dir);
+
+    let inserted = vectors::insert_vector(
+        State(state.clone()),
+        Path("docs".to_string()),
+        Json(InsertRequest {
+            vectors: vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.7, 0.7]],
+            texts: vec!["a".into(), "b".into(), "c".into()],
+            metadata: Vec::new(),
+            normalize: false,
+        }),
+    )
+    .await
+    .unwrap();
+    let deleted = vectors::delete_vector(
+        State(state.clone()),
+        Path(("docs".to_string(), inserted.0.ids[1].clone())),
+    )
+    .await
+    .unwrap();
+    assert_eq!(deleted.0.deleted_count, 1);
+
+    let response = collections::compact_collection(State(state.clone()), Path("docs".to_string()))
+        .await
+        .unwrap();
+
+    assert_eq!(response.0.documents, 2);
+    assert!(response.0.bytes_after < response.0.bytes_before);
+    let count = collections::collection_count(State(state.clone()), Path("docs".to_string()))
+        .await
+        .unwrap();
+    assert_eq!(count.0.count, 2);
+    cleanup_dir(data_dir);
 }

@@ -67,7 +67,6 @@ pub fn directives(base: &str, logging: LoggingConfig) -> String {
     let mut out = vec![base.to_string()];
     for (enabled, target) in [
         (logging.config, "piramid::config"),
-        (logging.indexing, "piramid::indexing"),
         (logging.search, "piramid::search"),
         (logging.writes, "piramid::writes"),
         (logging.inference, "piramid::inference"),

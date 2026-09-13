@@ -65,7 +65,6 @@ impl Config {
     /// The defaults a newly created collection inherits.
     pub fn to_collection_config(&self) -> CollectionConfig {
         CollectionConfig {
-            index: self.runtime.index.clone(),
             search: self.runtime.search,
             quantization: self.runtime.quantization,
             memory: self.runtime.memory,
@@ -73,7 +72,6 @@ impl Config {
             execution: self.runtime.execution,
             hardware: self.startup.hardware,
             limits: self.runtime.limits,
-            cache: self.runtime.cache,
         }
     }
 }

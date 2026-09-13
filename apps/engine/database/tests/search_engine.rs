@@ -3,25 +3,39 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! Search over a collection: filters, metrics and thresholds.
+//! Search over a collection: exact scoring, filters, metrics and ranking.
 
+use std::collections::HashMap;
 use std::fs;
 use {
-    piramid_core::metadata::metadata, piramid_core::metadata::Filter, piramid_core::Document,
-    piramid_database::search::SearchParams, piramid_database::Collection,
-    piramid_hardware::compute::Metric,
+    piramid_core::config::CollectionConfig,
+    piramid_core::metadata::metadata,
+    piramid_core::metadata::{Filter, Metadata},
+    piramid_core::Document,
+    piramid_database::resident::VectorStore,
+    piramid_database::search::{SearchParams, SearchTarget},
+    piramid_database::storage::{HashMapVectorReader, SidecarManager, VectorReader},
+    piramid_database::{Collection, CollectionOpenOptions, ResidentManager},
+    piramid_hardware::compute::strategies::for_mode,
+    piramid_hardware::compute::{ExecutionMode, Metric},
+    uuid::Uuid,
 };
 
 fn cleanup(path: &str) {
-    let sidecars = [
-        format!("{path}.offsets.db"),
-        format!("{path}.wal.db"),
-        format!("{path}.vecindex.db"),
-        format!("{path}.manifest.db"),
-    ];
-    for p in std::iter::once(path.to_string()).chain(sidecars) {
-        let _ = fs::remove_file(p);
+    let _ = fs::create_dir_all(env!("CARGO_TARGET_TMPDIR"));
+    let _ = fs::remove_file(path);
+    for sidecar in SidecarManager::at(path).all_paths() {
+        let _ = fs::remove_file(&sidecar);
+        let _ = fs::remove_file(format!("{sidecar}.tmp"));
     }
+}
+
+/// A fresh collection at path under metric.
+fn collection_with_metric(path: &str, metric: Metric) -> Collection {
+    cleanup(path);
+    let mut config = CollectionConfig::default();
+    config.search.metric = metric;
+    Collection::open_with_options(path, CollectionOpenOptions { config }).unwrap()
 }
 
 #[test]
@@ -50,8 +64,6 @@ fn search_respects_filter() {
         let params = SearchParams {
             mode: storage.config().execution,
             filter: Some(&filter),
-            search_config_override: None,
-            min_score: None,
         };
 
         let results = storage
@@ -64,25 +76,11 @@ fn search_respects_filter() {
     cleanup(test_db);
 }
 
-// A collection indexed by dot product ranks by dot product.
+// A collection created with dot product ranks by dot product.
 #[test]
 fn a_dot_product_collection_ranks_by_dot_product() {
-    use piramid_core::config::{CollectionConfig, FlatConfig, IndexConfig};
-
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_rank_by_dot.db");
-    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let config = CollectionConfig {
-        index: IndexConfig::Flat {
-            params: FlatConfig {
-                metric: Metric::DotProduct,
-                ..FlatConfig::default()
-            },
-        },
-        ..CollectionConfig::default()
-    };
-    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
+    let mut collection = collection_with_metric(path, Metric::DotProduct);
 
     // Cosine ranks these near-identically; dot product orders them by magnitude.
     for (vector, text) in [
@@ -111,28 +109,25 @@ fn a_dot_product_collection_ranks_by_dot_product() {
     );
 }
 
-// Searching by a metric other than the indexed one is refused.
+// Searching by a metric other than the one the collection was created with is refused.
 #[test]
-fn a_search_by_another_metric_than_the_index_is_refused() {
-    use piramid_core::error::{ErrorKind, IndexError, PiramidError};
+fn a_search_by_another_metric_than_the_collection_is_refused() {
+    use piramid_core::error::{ErrorKind, PiramidError, SearchError};
 
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_metric_mismatch.db");
-    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let mut collection = Collection::open(path).unwrap();
+    let mut collection = collection_with_metric(path, Metric::Cosine);
     collection
         .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
         .unwrap();
-    assert_eq!(collection.vector_index().metric(), Metric::Cosine);
+    assert_eq!(collection.metric(), Metric::Cosine);
 
     let error = collection
         .search(&[1.0, 0.0], 1, Metric::DotProduct, SearchParams::default())
         .unwrap_err();
     assert!(matches!(
         error,
-        PiramidError::Index(IndexError::MetricMismatch {
-            indexed: Metric::Cosine,
+        PiramidError::Search(SearchError::MetricMismatch {
+            collection: Metric::Cosine,
             requested: Metric::DotProduct,
         })
     ));
@@ -149,90 +144,13 @@ fn a_search_by_another_metric_than_the_index_is_refused() {
     assert_eq!(error.kind(), ErrorKind::BadRequest);
 }
 
-// A range query narrows the candidate set by threshold before k truncates it, so it returns every
-// qualifying hit up to k.
-#[test]
-fn a_range_query_fills_k_from_the_whole_qualifying_set() {
-    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_range_threshold.db");
-    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let mut collection = Collection::open(path).unwrap();
-
-    // A shallow ramp: the first five clear 0.99, the rest do not.
-    for i in 0..10 {
-        let angle = i as f32 * 0.03;
-        collection
-            .insert(Document::new(
-                vec![angle.cos(), angle.sin()],
-                format!("doc{i}"),
-            ))
-            .unwrap();
-    }
-
-    let params = SearchParams {
-        min_score: Some(0.99),
-        ..SearchParams::default()
-    };
-    let hits = collection
-        .search(&[1.0, 0.0], 3, Metric::Cosine, params)
-        .unwrap();
-
-    assert_eq!(hits.len(), 3, "k filled from everything that qualifies");
-    for hit in &hits {
-        assert!(
-            hit.score >= 0.99,
-            "{} scored {}",
-            hit.document.text,
-            hit.score
-        );
-    }
-    assert!(hits.windows(2).all(|w| w[0].score >= w[1].score));
-}
-
-// A collection reopened under a configuration naming another metric refuses to open.
-#[test]
-fn reopening_under_another_metric_is_refused() {
-    use piramid_core::config::{CollectionConfig, FlatConfig, IndexConfig};
-
-    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_reopen_other_metric.db");
-    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let flat = |metric| CollectionConfig {
-        index: IndexConfig::Flat {
-            params: FlatConfig {
-                metric,
-                ..FlatConfig::default()
-            },
-        },
-        ..CollectionConfig::default()
-    };
-    {
-        let mut collection =
-            Collection::open_with_options(path, flat(Metric::Cosine).into()).unwrap();
-        collection
-            .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
-            .unwrap();
-        collection.checkpoint().unwrap();
-    }
-    let error = Collection::open_with_options(path, flat(Metric::DotProduct).into())
-        .err()
-        .expect("a metric change must not open silently");
-    assert!(error.to_string().contains("indexed by cosine"), "{error}");
-}
-
 // A zero-magnitude vector is refused on every write and search of a cosine collection.
 #[test]
 fn a_zero_vector_is_refused_by_a_cosine_collection() {
     use piramid_core::error::ErrorKind;
 
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_cosine_zero_vector.db");
-    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let mut collection = Collection::open(path).unwrap();
-    assert_eq!(collection.vector_index().metric(), Metric::Cosine);
+    let mut collection = collection_with_metric(path, Metric::Cosine);
     let one = Document::new(vec![1.0, 0.0], "one".to_string());
     let one_id = one.id;
     collection.insert(one).unwrap();
@@ -279,22 +197,8 @@ fn a_zero_vector_is_refused_by_a_cosine_collection() {
 // A dot product collection scores a zero vector, so it accepts one.
 #[test]
 fn a_zero_vector_is_accepted_by_a_dot_product_collection() {
-    use piramid_core::config::{CollectionConfig, FlatConfig, IndexConfig};
-
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_dot_zero_vector.db");
-    for suffix in ["", ".offsets.db", ".wal.db", ".vecindex.db", ".manifest.db"] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let config = CollectionConfig {
-        index: IndexConfig::Flat {
-            params: FlatConfig {
-                metric: Metric::DotProduct,
-                ..FlatConfig::default()
-            },
-        },
-        ..CollectionConfig::default()
-    };
-    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
+    let mut collection = collection_with_metric(path, Metric::DotProduct);
     collection
         .insert(Document::new(vec![0.0, 0.0], "zero".to_string()))
         .unwrap();
@@ -304,178 +208,249 @@ fn a_zero_vector_is_accepted_by_a_dot_product_collection() {
     assert_eq!(hits.len(), 1);
 }
 
-fn two_language_collection(path: &str) -> Collection {
-    cleanup(path);
-    let mut collection = Collection::open(path).unwrap();
-    collection
-        .insert(Document::with_metadata(
-            vec![1.0, 0.0, 0.0],
-            "python doc".to_string(),
-            metadata([("lang", "python".into())]),
-        ))
-        .unwrap();
-    collection
-        .insert(Document::with_metadata(
-            vec![0.9, 0.1, 0.0],
-            "rust doc".to_string(),
-            metadata([("lang", "rust".into())]),
-        ))
-        .unwrap();
-    collection
+// A collection reopened under a configuration naming another metric keeps its own.
+#[test]
+fn reopening_under_another_metric_keeps_the_stored_metric() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_reopen_other_metric.db");
+    {
+        let mut collection = collection_with_metric(path, Metric::Cosine);
+        collection
+            .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
+            .unwrap();
+        collection.checkpoint().unwrap();
+    }
+    let mut config = CollectionConfig::default();
+    config.search.metric = Metric::DotProduct;
+    let collection = Collection::open_with_options(path, CollectionOpenOptions { config }).unwrap();
+    assert_eq!(collection.metric(), Metric::Cosine);
+    assert!(collection
+        .search(&[1.0, 0.0], 1, Metric::DotProduct, SearchParams::default())
+        .is_err());
+    assert_eq!(
+        collection
+            .search(&[1.0, 0.0], 1, Metric::Cosine, SearchParams::default())
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
-// The filter overfetch of a per-query search config applies to a single query as it does to a batch.
+/// Documents on a half circle, where only every tenth carries lang rust, so the best-scoring
+/// documents for a query along the x axis carry lang python.
+fn ring_documents() -> Vec<Document> {
+    (0..200)
+        .map(|i| {
+            let angle = i as f32 * std::f32::consts::PI / 200.0;
+            let lang = if i % 10 == 9 { "rust" } else { "python" };
+            Document::with_metadata(
+                vec![angle.cos(), angle.sin()],
+                format!("doc{i}"),
+                metadata([("lang", lang.into())]),
+            )
+        })
+        .collect()
+}
+
+// A filtered search returns k matches even when every best-scoring document fails the filter,
+// before and after a delete leaves a hole in the slab.
 #[test]
-fn a_single_query_honours_the_overfetch_of_its_search_config() {
-    let path = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/test_search_overfetch_single.db"
-    );
-    let collection = two_language_collection(path);
+fn a_filtered_search_fills_k_when_the_best_documents_do_not_match() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_filter_fills_k.db");
+    let mut collection = collection_with_metric(path, Metric::Cosine);
+    collection.insert_batch(ring_documents()).unwrap();
     let filter = Filter::new().eq("lang", "rust");
-    let mut search = collection.config().search;
-    search.filter_overfetch = 1;
     let params = SearchParams {
-        mode: collection.config().execution,
         filter: Some(&filter),
-        search_config_override: Some(search),
-        min_score: None,
+        ..SearchParams::default()
     };
+    let k = 7;
 
-    let single = collection
-        .search(&[1.0, 0.0, 0.0], 1, Metric::Cosine, params)
+    let unfiltered = collection
+        .search(&[1.0, 0.0], k, Metric::Cosine, SearchParams::default())
         .unwrap();
-    let batch = collection
-        .search_batch_with(&[vec![1.0, 0.0, 0.0]], 1, Metric::Cosine, params)
-        .unwrap();
+    assert!(unfiltered
+        .iter()
+        .all(|hit| hit.document.metadata["lang"] == "python".into()));
 
-    assert!(single.is_empty(), "one candidate, filtered out");
-    assert_eq!(single.len(), batch[0].len());
-    drop(collection);
-    cleanup(path);
+    assert!(collection.vector_reader().as_slab().is_some());
+    let contiguous = collection
+        .search(&[1.0, 0.0], k, Metric::Cosine, params)
+        .unwrap();
+    let texts: Vec<String> = contiguous
+        .iter()
+        .map(|hit| hit.document.text.clone())
+        .collect();
+    assert_eq!(
+        texts,
+        ["doc9", "doc19", "doc29", "doc39", "doc49", "doc59", "doc69"]
+    );
+
+    collection.delete(&unfiltered[0].document.id).unwrap();
+    assert!(collection
+        .vector_reader()
+        .as_slab()
+        .unwrap()
+        .live
+        .contains(&false));
+    let gathered: Vec<String> = collection
+        .search(&[1.0, 0.0], k, Metric::Cosine, params)
+        .unwrap()
+        .into_iter()
+        .map(|hit| hit.document.text)
+        .collect();
+    assert_eq!(gathered, texts);
 }
 
+// A filter fewer than k documents match returns every match, and k of zero returns nothing.
 #[test]
-fn a_filter_overfetch_of_zero_is_refused() {
-    let path = concat!(
-        env!("CARGO_TARGET_TMPDIR"),
-        "/test_search_overfetch_zero.db"
-    );
-    let collection = two_language_collection(path);
-    let mut search = collection.config().search;
-    search.filter_overfetch = 0;
+fn a_filter_matching_fewer_than_k_returns_every_match() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_filter_fewer_than_k.db");
+    let mut collection = collection_with_metric(path, Metric::Cosine);
+    collection.insert_batch(ring_documents()).unwrap();
+    let filter = Filter::new().eq("lang", "rust");
     let params = SearchParams {
-        search_config_override: Some(search),
+        filter: Some(&filter),
         ..SearchParams::default()
     };
 
-    let error = collection
-        .search(&[1.0, 0.0, 0.0], 1, Metric::Cosine, params)
-        .unwrap_err();
+    let hits = collection
+        .search(&[1.0, 0.0], 50, Metric::Cosine, params)
+        .unwrap();
 
-    assert!(
-        error.to_string().contains("filter_overfetch must be >= 1"),
-        "{error}"
-    );
-    drop(collection);
-    cleanup(path);
+    assert_eq!(hits.len(), 20);
+    assert!(hits.windows(2).all(|w| w[0].score >= w[1].score));
+    assert!(collection
+        .search(&[1.0, 0.0], 0, Metric::Cosine, params)
+        .unwrap()
+        .is_empty());
 }
 
-// A duplicate scan with the default neighbour count finds the only pair of a two-document
-// collection.
+/// The contiguous slab, a scattered map and a store with a hole reach the kernel by different
+/// paths, and every one of them ranks a collection as scoring one pair at a time does.
 #[test]
-fn a_duplicate_scan_of_two_documents_finds_their_pair() {
-    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_duplicates_two.db");
-    let collection = two_language_collection(path);
+fn every_scoring_path_ranks_a_collection_the_same_way() {
+    let dim = 16;
+    let rows: Vec<(Uuid, Vec<f32>)> = (0..2500)
+        .map(|i| {
+            let f = i as f32;
+            (
+                Uuid::new_v4(),
+                (0..dim).map(|d| ((f + d as f32) % 7.0) - 3.0).collect(),
+            )
+        })
+        .collect();
+    let query: Vec<f32> = (0..dim).map(|d| (d as f32 % 5.0) - 2.0).collect();
+    let metadata: HashMap<Uuid, Metadata> = HashMap::new();
+    let map: HashMap<Uuid, Vec<f32>> = rows.iter().cloned().collect();
+    let resolve = |id: &Uuid| Ok(map.get(id).map(|vector| document_with_id(*id, vector)));
 
-    let pairs =
-        piramid_database::find_duplicates(&collection, Metric::Cosine, 0.9, None, None, None, None)
-            .unwrap();
-
-    assert_eq!(pairs.len(), 1);
-    drop(collection);
-    cleanup(path);
-}
-
-#[test]
-fn a_duplicate_scan_refuses_zero_neighbours_ef_or_nprobe() {
-    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_duplicates_zero.db");
-    let collection = two_language_collection(path);
-
-    for (k, ef, nprobe, name) in [
-        (Some(0), None, None, "k"),
-        (None, Some(0), None, "ef"),
-        (None, None, Some(0), "nprobe"),
-    ] {
-        let error = piramid_database::find_duplicates(
-            &collection,
-            Metric::Cosine,
-            0.9,
-            None,
-            k,
-            ef,
-            nprobe,
-        )
-        .unwrap_err();
-        assert!(
-            error.to_string().contains(&format!("{name} must be >= 1")),
-            "{error}"
-        );
+    let mut contiguous = ResidentManager::new();
+    let mut holed = VectorStore::new();
+    for (id, vector) in &rows {
+        contiguous.put_vector(*id, vector).unwrap();
+        holed.put(*id, vector).unwrap();
     }
-    drop(collection);
-    cleanup(path);
-}
+    let evicted = Uuid::new_v4();
+    holed.put(evicted, &vec![1.0; dim]).unwrap();
+    holed.remove(&evicted);
+    let scattered = HashMapVectorReader::new(&map);
+    assert!(contiguous.as_slab().is_some());
+    assert!(holed.as_slab().unwrap().live.contains(&false));
+    assert!(scattered.as_slab().is_none());
 
-// A document deleted from an HNSW collection is not reported as a duplicate.
-#[test]
-fn a_deleted_document_is_not_reported_as_a_duplicate() {
-    use piramid_core::config::{CollectionConfig, HnswConfig, IndexConfig};
-
-    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_duplicates_deleted.db");
-    cleanup(path);
-    let config = CollectionConfig {
-        index: IndexConfig::Hnsw {
-            params: HnswConfig::default(),
-        },
-        ..CollectionConfig::default()
+    let k = 10;
+    let params = SearchParams {
+        mode: ExecutionMode::Scalar,
+        filter: None,
     };
-    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
-    let kept = collection
-        .insert(Document::new(vec![1.0, 0.0, 0.0], "kept".to_string()))
-        .unwrap();
-    let deleted = collection
-        .insert(Document::new(vec![1.0, 0.01, 0.0], "deleted".to_string()))
-        .unwrap();
-    collection
-        .insert(Document::new(vec![0.0, 1.0, 0.0], "other".to_string()))
-        .unwrap();
-    assert!(collection.delete(&deleted).unwrap());
+    for metric in [Metric::Cosine, Metric::Euclidean, Metric::DotProduct] {
+        let ranked = |vectors: &dyn VectorReader| -> Vec<Uuid> {
+            let target = SearchTarget {
+                vectors,
+                metadata: &metadata,
+            };
+            piramid_database::search::search(&target, &query, k, metric, params, &resolve)
+                .unwrap()
+                .into_iter()
+                .map(|hit| hit.document.id)
+                .collect()
+        };
+        let from_slab = ranked(&contiguous);
+        assert_eq!(from_slab.len(), k);
+        assert_eq!(from_slab, ranked(&scattered), "{metric:?}: slab vs gather");
+        assert_eq!(from_slab, ranked(&holed), "{metric:?}: slab vs holed");
 
-    let pairs =
-        piramid_database::find_duplicates(&collection, Metric::Cosine, 0.9, None, None, None, None)
-            .unwrap();
-
-    assert!(
-        pairs
+        let kernels = for_mode(ExecutionMode::Scalar).unwrap();
+        let mut pairwise: Vec<(Uuid, f32)> = rows
             .iter()
-            .all(|pair| pair.id_a != deleted && pair.id_b != deleted),
-        "kept {kept} paired with deleted {deleted}: {pairs:?}"
-    );
-    drop(collection);
-    cleanup(path);
+            .map(|(id, vector)| (*id, metric.calculate(&query, vector, kernels).unwrap()))
+            .collect();
+        pairwise.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let expected: Vec<Uuid> = pairwise.into_iter().take(k).map(|(id, _)| id).collect();
+        assert_eq!(from_slab, expected, "{metric:?}: batch vs pairwise");
+    }
 }
 
+/// A document with the given id and vector and no text.
+fn document_with_id(id: Uuid, vector: &[f32]) -> Document {
+    let mut document = Document::new(vector.to_vec(), String::new());
+    document.id = id;
+    document
+}
+
+// A stored zero vector scores NaN under cosine and is never ranked, on the contiguous path and the
+// gathered one.
 #[test]
 fn a_nan_score_is_not_ranked() {
-    use piramid_core::Hit;
-    use piramid_database::search::engine::rank_top_k;
+    let mut vectors = HashMap::new();
+    let zero_id = Uuid::new_v4();
+    vectors.insert(zero_id, vec![0.0, 0.0, 0.0]);
+    for i in 0..30 {
+        let f = i as f32;
+        vectors.insert(
+            Uuid::new_v4(),
+            vec![1.0 + f, (f % 5.0) - 2.0, (f % 3.0) - 1.0],
+        );
+    }
+    let metadata: HashMap<Uuid, Metadata> = HashMap::new();
+    let resolve = |id: &Uuid| Ok(vectors.get(id).map(|vector| document_with_id(*id, vector)));
+    let mut store = ResidentManager::new();
+    for (id, vector) in &vectors {
+        store.put_vector(*id, vector).unwrap();
+    }
+    let scattered = HashMapVectorReader::new(&vectors);
 
-    let hit = |score: f32, text: &str| Hit {
-        score,
-        document: Document::new(vec![1.0], text.to_string()),
-    };
-    let mut results = vec![hit(0.5, "half"), hit(f32::NAN, "nan"), hit(0.9, "high")];
-    rank_top_k(&mut results, 3);
-    let texts: Vec<&str> = results.iter().map(|h| h.document.text.as_str()).collect();
-    assert_eq!(texts, ["high", "half"]);
+    for reader in [&store as &dyn VectorReader, &scattered] {
+        let target = SearchTarget {
+            vectors: reader,
+            metadata: &metadata,
+        };
+        let hits = piramid_database::search::search(
+            &target,
+            &[1.0, 0.5, 0.25],
+            31,
+            Metric::Cosine,
+            SearchParams::default(),
+            &resolve,
+        )
+        .unwrap();
+        assert_eq!(hits.len(), 30);
+        assert!(hits.iter().all(|hit| hit.document.id != zero_id));
+        assert!(hits.iter().all(|hit| !hit.score.is_nan()));
+    }
+}
+
+#[test]
+fn a_query_of_another_width_is_refused() {
+    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_query_width.db");
+    let mut collection = collection_with_metric(path, Metric::Cosine);
+    collection
+        .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
+        .unwrap();
+
+    let error = collection
+        .search(&[1.0, 0.0, 0.0], 1, Metric::Cosine, SearchParams::default())
+        .unwrap_err();
+
+    assert!(error.to_string().contains("dimension mismatch"), "{error}");
 }

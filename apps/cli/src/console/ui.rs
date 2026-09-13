@@ -133,12 +133,9 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
     match view.current() {
         Some(row) => {
             let title = match &row.metrics {
-                Some(metrics) => format!(
-                    " {} {} {} vectors ",
-                    row.name,
-                    metrics.index_type,
-                    thousands(metrics.vector_count)
-                ),
+                Some(metrics) => {
+                    format!(" {} {} vectors ", row.name, thousands(metrics.vector_count))
+                }
                 None => format!(" {} not open ", row.name),
             };
             frame.render_widget(
@@ -207,14 +204,7 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
         )));
         return lines;
     };
-    lines.push(heading("index"));
-    lines.push(field("type", &metrics.index_type, 18));
-    if let Some(ef) = metrics.hnsw_ef_search {
-        lines.push(field("ef_search", &ef.to_string(), 18));
-    }
-    if let Some(nprobe) = metrics.ivf_nprobe {
-        lines.push(field("nprobe", &nprobe.to_string(), 18));
-    }
+    lines.push(heading("storage"));
     lines.push(field(
         "memory",
         &bytes(metrics.memory_usage_bytes as u64),
@@ -1152,12 +1142,7 @@ fn bottom_line(frame: &mut Frame, app: &App, area: Rect) {
                     (":", "command"),
                     ("o", "open url"),
                 ],
-                View::Collections => &[
-                    ("j/k", "move"),
-                    ("r", "rebuild index"),
-                    ("c", "compact"),
-                    ("R", "refresh"),
-                ],
+                View::Collections => &[("j/k", "move"), ("c", "compact"), ("R", "refresh")],
                 View::Config => &[("j/k", "scroll"), ("g", "top"), ("R", "reload")],
                 View::Device => &[("h", "htop"), ("n", "nvtop"), ("R", "refresh")],
             };
@@ -1206,10 +1191,6 @@ fn help(frame: &mut Frame, app: &App, area: Rect) {
         View::Collections => &[
             ("j / k", "move between collections"),
             ("gg / G", "first, last collection"),
-            (
-                "r",
-                "rebuild the index of the selected collection, after y or n",
-            ),
             ("c", "compact the selected collection, after y or n"),
             ("R", "refresh now instead of waiting for the interval"),
         ],

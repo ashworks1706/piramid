@@ -3,9 +3,7 @@
 use std::time::Instant;
 
 use crate::services::api::*;
-use crate::services::convert::{
-    apply_search_overrides, hit_to_response, json_to_metadata, parse_filter, parse_metric,
-};
+use crate::services::convert::{hit_to_response, json_to_metadata, parse_filter, parse_metric};
 use crate::services::EMBEDDING_NOT_CONFIGURED;
 use crate::state::SharedState;
 use piramid_core::error::{Result, ServerError};
@@ -88,7 +86,6 @@ pub async fn embed_text(
     );
 
     let ids = collection_guard.insert_batch(entries)?;
-    state.enforce_cache_budget();
     state.embeddings.metrics().record(
         1,
         ids.len() as u64,
@@ -135,26 +132,13 @@ pub async fn search_by_text(
         .record(1, 1, response.tokens.map(u64::from), embed_duration);
 
     let filter = parse_filter(req.filter)?;
-    let base_search = {
-        let collection_guard = collection_handle.read();
-        collection_guard.config().search
-    };
-    let effective_search = apply_search_overrides(
-        base_search,
-        &SearchTuning {
-            ef: req.ef,
-            nprobe: req.nprobe,
-            filter_overfetch: req.filter_overfetch,
-        },
-    )?;
-
     let lock_start = Instant::now();
     let collection_guard = collection_handle.read();
     record_lock_read(
         state.collection_manager.tracker(&collection).as_deref(),
         lock_start,
     );
-    let metric = parse_metric(req.metric, collection_guard.vector_index().metric())?;
+    let metric = parse_metric(req.metric, collection_guard.metric())?;
 
     let start = Instant::now();
     let results = collection_guard.search(
@@ -162,10 +146,8 @@ pub async fn search_by_text(
         req.k,
         metric,
         piramid_database::search::SearchParams {
-            mode: collection_guard.config().execution,
             filter: filter.as_ref(),
-            search_config_override: Some(effective_search),
-            min_score: None,
+            ..Default::default()
         },
     )?;
     let duration = start.elapsed();
@@ -184,6 +166,6 @@ pub async fn search_by_text(
 
     Ok(SearchResponse {
         results: vec![results.into_iter().map(hit_to_response).collect()],
-        latency_ms: duration.as_millis() as f32,
+        latency_ms: duration.as_secs_f32() * 1000.0,
     })
 }

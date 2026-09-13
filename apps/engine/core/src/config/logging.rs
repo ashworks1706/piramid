@@ -32,9 +32,6 @@ pub struct LoggingConfig {
     /// Emit events on the piramid::config target.
     #[serde(default = "crate::config::default_true")]
     pub config: bool,
-    /// Emit events on the piramid::indexing target.
-    #[serde(default = "crate::config::default_true")]
-    pub indexing: bool,
     /// Emit events on the piramid::search target.
     #[serde(default = "crate::config::default_true")]
     pub search: bool,
@@ -65,7 +62,6 @@ impl Default for LoggingConfig {
             enabled: true,
             level: LogLevel::Info,
             config: true,
-            indexing: true,
             search: true,
             writes: true,
             inference: true,

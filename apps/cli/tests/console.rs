@@ -834,7 +834,7 @@ fn stacked_bar_cells_split_the_width_and_always_fill_it() {
 
 /// The device memory budget of a metrics body, shared or split.
 fn budget_body(shared: bool) -> String {
-    let (weights, kv, index) = if shared {
+    let (weights, kv, vectors) = if shared {
         (8_u64 << 30, 8_u64 << 30, 8_u64 << 30)
     } else {
         (4_u64 << 30, 3_u64 << 30, 1_u64 << 30)
@@ -846,13 +846,13 @@ fn budget_body(shared: bool) -> String {
             "pools": [
                 {{"pool": "weights", "capacity_bytes": {weights}, "used_bytes": {w_used}}},
                 {{"pool": "kv_cache", "capacity_bytes": {kv}, "used_bytes": {k_used}}},
-                {{"pool": "index", "capacity_bytes": {index}, "used_bytes": {i_used}}}
+                {{"pool": "vectors", "capacity_bytes": {vectors}, "used_bytes": {v_used}}}
             ]
         }}"#,
         usable = 8_u64 << 30,
         w_used = 2_u64 << 30,
         k_used = 1_u64 << 30,
-        i_used = 512_u64 << 20,
+        v_used = 512_u64 << 20,
     )
 }
 
@@ -875,7 +875,7 @@ fn a_device_memory_budget_decodes_and_is_absent_without_a_gpu() {
         vec![
             ("weights", 4 << 30, 2 << 30),
             ("kv_cache", 3 << 30, 1 << 30),
-            ("index", 1 << 30, 512 << 20),
+            ("vectors", 1 << 30, 512 << 20),
         ]
     );
 
@@ -919,7 +919,7 @@ fn a_shared_budget_draws_total_use_and_each_pool() {
             "{drawn}"
         );
         assert!(
-            drawn.contains("weights 2.0 GB  kv cache 1.0 GB  index 512.0 MB"),
+            drawn.contains("weights 2.0 GB  kv cache 1.0 GB  vectors 512.0 MB"),
             "{drawn}"
         );
         assert!(drawn.contains("free 4.5 GB"), "{drawn}");
@@ -981,10 +981,9 @@ fn metrics_body(host: &str) -> String {
             "total_collections": 1,
             "total_vectors": 3,
             "collections": [{{
-                "name": "docs", "vector_count": 3, "index_type": "hnsw",
+                "name": "docs", "vector_count": 3,
                 "memory_usage_bytes": 64, "insert_latency_ms": null, "search_latency_ms": 1.5,
-                "lock_read_ms": null, "lock_write_ms": null, "filter_overfetch": null,
-                "hnsw_ef_search": 64, "ivf_nprobe": null
+                "lock_read_ms": null, "lock_write_ms": null
             }}],
             "wal_stats": [{{
                 "collection": "docs", "last_checkpoint": null,
@@ -1148,7 +1147,7 @@ fn collections_messages_reach_the_status_bar() {
     // With no collection there is nothing to act on, and the console says so.
     let mut app = console();
     app.handle(press('2'));
-    app.handle(press('r'));
+    app.handle(press('c'));
     assert_eq!(app.notice.as_deref(), Some("no collection selected"));
     assert!(screen(&mut app).contains("no collection selected"));
 
@@ -1161,23 +1160,44 @@ fn collections_messages_reach_the_status_bar() {
     assert!(screen(&mut app).contains("cancelled"));
 
     app.handle(press('r'));
+    assert!(
+        app.collections.pending.is_none(),
+        "r starts no action in the collections view"
+    );
+    app.handle(press('c'));
     app.handle(press('y'));
     assert_eq!(
         app.pending_action,
-        Some(piramid::console::collections::Pending::Rebuild(
+        Some(piramid::console::collections::Pending::Compact(
             "docs".into()
         ))
     );
-    assert!(screen(&mut app).contains("rebuild of docs running"));
+    assert!(screen(&mut app).contains("compaction of docs running"));
 
     app.handle(piramid::console::types::Event::Acted(Err(
-        "rebuild of docs failed: /api/collections/docs/index/rebuild returned 500: boom".into(),
+        "compaction of docs failed: /api/collections/docs/compact returned 500: boom".into(),
     )));
-    assert!(screen(&mut app).contains("rebuild of docs failed"));
+    assert!(screen(&mut app).contains("compaction of docs failed"));
     app.handle(piramid::console::types::Event::Acted(Ok(
         "compaction of docs done".into(),
     )));
     assert!(screen(&mut app).contains("compaction of docs done"));
+}
+
+#[test]
+fn a_finished_compaction_reports_documents_and_reclaimed_bytes() {
+    use piramid::console::client::{parse, Compacted};
+
+    let compacted: Compacted = parse(
+        "/api/collections/docs/compact",
+        r#"{"documents": 1200, "bytes_before": 5347737, "bytes_after": 3355443, "latency_ms": 12.0}"#,
+    )
+    .expect("the body decodes");
+
+    assert_eq!(
+        piramid::console::collections::compacted_line("docs", &compacted),
+        "compaction of docs: 1200 documents, 5.1 MB -> 3.2 MB"
+    );
 }
 
 #[test]

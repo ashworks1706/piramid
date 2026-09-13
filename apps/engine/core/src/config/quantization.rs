@@ -31,8 +31,8 @@ pub enum QuantizationStage {
     Disabled,
     /// Quantize what is written to disk.
     Storage,
-    /// Quantize what the index scores against.
-    Index,
+    /// Quantize the resident vectors search scores against.
+    Resident,
     /// Quantize the query before searching.
     QueryPreSearch,
     /// Quantize results after searching.

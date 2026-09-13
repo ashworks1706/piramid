@@ -5,9 +5,7 @@
 //! - [services] holds admission checks, lock acquisition, metrics, and the API shapes.
 //! - [state] holds [AppState], the process-wide shared state, and [disk] the pressure watcher.
 //! - [machine] holds the host readings, sampled on a background thread.
-//! - [cluster] holds node identity and routing. Every collection routes locally.
 
-pub mod cluster;
 pub mod disk;
 pub mod http;
 pub mod machine;

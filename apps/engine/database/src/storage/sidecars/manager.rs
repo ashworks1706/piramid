@@ -6,15 +6,16 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::durable::write_atomic;
 use super::offsets::EntryPointer;
 use crate::storage::codec;
-use crate::storage::manifest::{CollectionMetadata, SCHEMA_VERSION};
+use crate::storage::manifest::CollectionMetadata;
 use piramid_core::error::{Result, StorageError};
 
 /// The sidecar domain entry for one collection.
 ///
 /// Every file beside the base path gets its path and its serialization from here: offsets,
-/// manifest, WAL, WAL meta and vector index.
+/// manifest, WAL, WAL meta and the files of an interrupted compaction.
 #[derive(Clone, Copy)]
 pub struct SidecarManager<'a> {
     base: &'a str,
@@ -32,14 +33,17 @@ impl<'a> SidecarManager<'a> {
         Self { base }
     }
 
-    /// Every suffix this type appends to a base path.
-    pub const SUFFIXES: [&'static str; 6] = [
+    /// Every suffix this type appends to a base path, including the index sidecar Piramid 0.2
+    /// wrote, which this build never reads.
+    pub const SUFFIXES: [&'static str; 8] = [
         ".wal.db",
         ".wal.meta",
         ".offsets.db",
         ".manifest.db",
         ".vecindex.db",
         ".compact",
+        ".compact.offsets",
+        ".compact.commit",
     ];
 
     /// Every sidecar path beside this base, existing or not.
@@ -70,19 +74,30 @@ impl<'a> SidecarManager<'a> {
         format!("{}.manifest.db", self.base)
     }
 
-    /// Path of the ANN index sidecar.
-    pub fn vector_index_path(&self) -> String {
-        format!("{}.vecindex.db", self.base)
-    }
-
-    /// Path of the scratch record file a compaction rewrites into before the rename.
+    /// Path of the record file a compaction rewrites live documents into.
     pub fn compact_path(&self) -> String {
         format!("{}.compact", self.base)
     }
 
+    /// Path of the offsets a compaction writes for the records in [SidecarManager::compact_path].
+    pub fn compact_offsets_path(&self) -> String {
+        format!("{}.compact.offsets", self.base)
+    }
+
+    /// Path of the marker whose presence commits a compaction: open moves the compacted files into
+    /// place when it exists and discards them when it does not.
+    pub fn compact_commit_path(&self) -> String {
+        format!("{}.compact.commit", self.base)
+    }
+
     /// Persist the offset index.
-    pub fn save_offsets(&self, index: &HashMap<Uuid, EntryPointer>) -> Result<()> {
-        Self::write_bincode(&self.offsets_path(), index)
+    pub fn save_offsets(&self, offsets: &HashMap<Uuid, EntryPointer>) -> Result<()> {
+        Self::write_bincode(&self.offsets_path(), offsets)
+    }
+
+    /// Persist the offsets of a compacted record file to [SidecarManager::compact_offsets_path].
+    pub fn save_compact_offsets(&self, offsets: &HashMap<Uuid, EntryPointer>) -> Result<()> {
+        Self::write_bincode(&self.compact_offsets_path(), offsets)
     }
 
     /// Load the offset index. A missing sidecar is an empty collection.
@@ -92,7 +107,7 @@ impl<'a> SidecarManager<'a> {
             return Ok(HashMap::new());
         };
         codec::decode(&data).map_err(|e| {
-            StorageError::CorruptedIndex(format!("failed to decode {path}: {e}")).into()
+            StorageError::CorruptedSidecar(format!("failed to decode {path}: {e}")).into()
         })
     }
 
@@ -101,36 +116,22 @@ impl<'a> SidecarManager<'a> {
         Self::write_bincode(&self.manifest_path(), metadata)
     }
 
-    /// Load the manifest, refusing one written under a different schema version.
+    /// Load the manifest, refusing one written under a different schema version as
+    /// [CollectionMetadata::decode] does.
     pub fn load_manifest(&self) -> Result<Option<CollectionMetadata>> {
         let path = self.manifest_path();
         let Some(bytes) = Self::read_optional(&path)? else {
             return Ok(None);
         };
-        let metadata: CollectionMetadata = codec::decode(&bytes)
-            .map_err(|e| StorageError::CorruptedData(format!("failed to read manifest: {e}")))?;
-        if metadata.schema_version != SCHEMA_VERSION {
-            return Err(StorageError::CorruptedData(format!(
-                "Schema version mismatch: expected {}, found {}",
-                SCHEMA_VERSION, metadata.schema_version
-            ))
-            .into());
-        }
-        Ok(Some(metadata))
+        CollectionMetadata::decode(&bytes).map(Some)
     }
 
     /// Record the last checkpointed WAL sequence, atomically via a temp file.
     pub fn save_wal_meta(&self, last_checkpoint_seq: u64) -> Result<()> {
-        let meta_path = self.wal_meta_path();
-        let tmp_path = format!("{meta_path}.tmp");
         let meta = WalMeta {
             last_checkpoint_seq,
         };
-        fs::write(&tmp_path, serde_json::to_vec(&meta)?)?;
-        fs::rename(&tmp_path, &meta_path)?;
-        let file = fs::File::open(&meta_path)?;
-        file.sync_all()?;
-        Ok(())
+        write_atomic(&self.wal_meta_path(), &serde_json::to_vec(&meta)?)
     }
 
     /// Last checkpointed WAL sequence, 0 when no checkpoint has happened.
@@ -142,10 +143,9 @@ impl<'a> SidecarManager<'a> {
         Ok(meta.last_checkpoint_seq)
     }
 
-    /// Serializes a value with bincode and writes it to a path.
+    /// Serializes a value with bincode and writes it to a path atomically.
     fn write_bincode<T: Serialize>(path: &str, value: &T) -> Result<()> {
-        fs::write(path, codec::encode(value)?)?;
-        Ok(())
+        write_atomic(path, &codec::encode(value)?)
     }
 
     /// Reads a path, returning None when the file is missing.

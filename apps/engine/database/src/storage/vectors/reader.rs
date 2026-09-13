@@ -1,12 +1,13 @@
-//! Vector access abstraction: how indexes read vectors they do not own.
+//! Vector access abstraction: how search reads vectors it does not own.
 
 use std::collections::HashMap;
 
 use uuid::Uuid;
 
-/// Every vector as one contiguous buffer, with the id of each row.
+/// Every vector as one contiguous buffer, with the id and liveness of each row.
 ///
-/// The data is row-major at dim floats per row, and entry i of ids names row i.
+/// The data is row-major at dim floats per row. Entry i of ids names row i, and entry i of live is
+/// false when row i is a hole whose contents and id are stale.
 pub struct VectorSlab<'a> {
     /// Row-major floats, rows() * dim long.
     pub data: &'a [f32],
@@ -14,10 +15,12 @@ pub struct VectorSlab<'a> {
     pub dim: usize,
     /// Id of each row, in row order.
     pub ids: &'a [Uuid],
+    /// Whether each row holds a stored vector, in row order.
+    pub live: &'a [bool],
 }
 
 impl VectorSlab<'_> {
-    /// Number of rows.
+    /// Number of rows, holes included.
     pub fn rows(&self) -> usize {
         self.ids.len()
     }
@@ -46,7 +49,8 @@ pub trait VectorReader: Sync {
 
     /// The whole vector set as one contiguous row-major buffer, if it is stored that way.
     ///
-    /// A reader over scattered allocations returns None.
+    /// A reader over scattered allocations returns None. Rows the slab marks as holes are not part
+    /// of the vector set.
     ///
     /// A wrapper forwarding this trait forwards this method too.
     fn as_slab(&self) -> Option<VectorSlab<'_>> {

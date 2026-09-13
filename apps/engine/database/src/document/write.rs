@@ -19,7 +19,7 @@ fn check_width(collection: &Collection, vector: &[f32]) -> Result<()> {
 
 /// Reject a vector the metric of the collection cannot score, touching nothing.
 fn check_scorable(collection: &Collection, vector: &[f32]) -> Result<()> {
-    match collection.vector_index.metric() {
+    match collection.metric() {
         Metric::Cosine => piramid_core::validation::validate_cosine_magnitude(vector),
         Metric::Euclidean | Metric::DotProduct => Ok(()),
     }
@@ -34,42 +34,33 @@ fn prepare(collection: &Collection, entry: &Document, replacing: bool) -> Result
     Ok(bytes)
 }
 
-/// Store an encoded document that has passed [prepare], and index it.
+/// Store an encoded document that has passed [prepare], and make it resident.
 fn apply_insert(collection: &mut Collection, entry: Document, bytes: &[u8]) -> Result<Uuid> {
     let id = entry.id;
     let pointer = collection.record_store.append(bytes)?;
-    collection.index.insert(id, pointer);
+    collection.offsets.insert(id, pointer);
     collection.manifest.set_dimensions(entry.vector().len())?;
-    collection.cache.put_vector(id, entry.vector())?;
-    collection
-        .vector_index
-        .insert(id, entry.vector(), &collection.cache)?;
-    collection.cache.put_metadata(id, entry.metadata);
+    collection.resident.put_vector(id, entry.vector())?;
+    collection.resident.put_metadata(id, entry.metadata);
     collection
         .manifest
-        .update_vector_count(collection.index.len())?;
-    collection.grow_index_family()?;
+        .update_vector_count(collection.offsets.len())?;
     Ok(id)
 }
 
-/// Validate, store and index one document without logging it. Used by WAL replay.
+/// Validate and store one document without logging it. Used by WAL replay.
 pub fn insert_internal(collection: &mut Collection, entry: Document) -> Result<Uuid> {
-    let replacing = collection.index.contains_key(&entry.id);
+    let replacing = collection.offsets.contains_key(&entry.id);
     let bytes = prepare(collection, &entry, replacing)?;
     apply_insert(collection, entry, &bytes)
 }
 
 pub fn delete_internal(collection: &mut Collection, id: &Uuid) -> Result<()> {
-    collection.index.remove(id);
-    collection.vector_index.remove(id);
-    if collection.vector_index.index_type() != crate::index::IndexType::Hnsw {
-        collection.cache.remove(id, true);
-    } else {
-        collection.cache.remove(id, false);
-    }
+    collection.offsets.remove(id);
+    collection.resident.remove(id);
     collection
         .manifest
-        .update_vector_count(collection.index.len())
+        .update_vector_count(collection.offsets.len())
 }
 
 fn insert_wal_entry(entry: &Document) -> WalEntry {
@@ -84,7 +75,7 @@ fn insert_wal_entry(entry: &Document) -> WalEntry {
 
 /// Refuse an id already stored, touching nothing.
 fn check_new_id(collection: &Collection, id: &Uuid) -> Result<()> {
-    if collection.index.contains_key(id) {
+    if collection.offsets.contains_key(id) {
         return Err(ServerError::InvalidRequest(format!(
             "document {id} already exists; use upsert"
         ))
@@ -94,6 +85,7 @@ fn check_new_id(collection: &Collection, id: &Uuid) -> Result<()> {
 }
 
 pub fn insert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
+    collection.ensure_writable()?;
     check_new_id(collection, &entry.id)?;
     check_scorable(collection, entry.vector())?;
     let bytes = prepare(collection, &entry, false)?;
@@ -106,6 +98,7 @@ pub fn insert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
 }
 
 pub fn insert_batch(collection: &mut Collection, entries: Vec<Document>) -> Result<Vec<Uuid>> {
+    collection.ensure_writable()?;
     let Some(first) = entries.first() else {
         return Ok(Vec::new());
     };
@@ -142,26 +135,23 @@ pub fn insert_batch(collection: &mut Collection, entries: Vec<Document>) -> Resu
     collection.manifest.set_dimensions(width)?;
     for (entry, pointer) in entries.into_iter().zip(pointers) {
         let id = entry.id;
-        collection.index.insert(id, pointer);
-        collection.cache.put_vector(id, entry.vector())?;
-        collection
-            .vector_index
-            .insert(id, entry.vector(), &collection.cache)?;
-        collection.cache.put_metadata(id, entry.metadata);
+        collection.offsets.insert(id, pointer);
+        collection.resident.put_vector(id, entry.vector())?;
+        collection.resident.put_metadata(id, entry.metadata);
         ids.push(id);
     }
     collection
         .manifest
-        .update_vector_count(collection.index.len())?;
-    collection.grow_index_family()?;
+        .update_vector_count(collection.offsets.len())?;
     collection.track_operation()?;
 
     Ok(ids)
 }
 
 pub fn upsert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
+    collection.ensure_writable()?;
     let id = entry.id;
-    if !collection.index.contains_key(&id) {
+    if !collection.offsets.contains_key(&id) {
         return insert(collection, entry);
     }
     check_scorable(collection, entry.vector())?;
@@ -183,7 +173,8 @@ pub fn upsert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
 }
 
 pub fn delete(collection: &mut Collection, id: &Uuid) -> Result<bool> {
-    if collection.index.contains_key(id) {
+    collection.ensure_writable()?;
+    if collection.offsets.contains_key(id) {
         let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
         collection.checkpoint.wal.log(&mut wal_entry)?;
 
@@ -196,17 +187,18 @@ pub fn delete(collection: &mut Collection, id: &Uuid) -> Result<bool> {
 }
 
 pub fn delete_batch(collection: &mut Collection, ids: &[Uuid]) -> Result<usize> {
+    collection.ensure_writable()?;
     let mut deleted_count = 0;
 
     for id in ids {
-        if collection.index.contains_key(id) {
+        if collection.offsets.contains_key(id) {
             let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
             collection.checkpoint.wal.log(&mut wal_entry)?;
         }
     }
 
     for id in ids {
-        if collection.index.contains_key(id) {
+        if collection.offsets.contains_key(id) {
             delete_internal(collection, id)?;
             deleted_count += 1;
         }

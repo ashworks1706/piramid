@@ -46,10 +46,10 @@ fn no_file_and_no_overrides_is_the_defaults() {
 fn an_env_override_reaches_a_nested_key() {
     let cfg = with_env(
         None,
-        &[("PIRAMID__RUNTIME__CACHE__METADATA__MAX_BYTES", "4096")],
+        &[("PIRAMID__RUNTIME__LIMITS__MAX_BYTES", "4096")],
         || loader::load().unwrap(),
     );
-    assert_eq!(cfg.runtime.cache.metadata.max_bytes, Some(4096));
+    assert_eq!(cfg.runtime.limits.max_bytes, Some(4096));
 }
 
 #[test]
@@ -59,14 +59,17 @@ fn env_values_parse_as_yaml_not_as_strings() {
         &[
             ("PIRAMID__RUNTIME__WAL__ENABLED", "false"),
             ("PIRAMID__STARTUP__THREADS", "null"),
-            ("PIRAMID__RUNTIME__SEARCH__FILTER_OVERFETCH", "7"),
+            ("PIRAMID__RUNTIME__SEARCH__METRIC", "dot"),
             ("PIRAMID__STARTUP__LOGGING__LEVEL", "debug"),
         ],
         || loader::load().unwrap(),
     );
     assert!(!cfg.runtime.wal.enabled);
     assert_eq!(cfg.startup.threads, None);
-    assert_eq!(cfg.runtime.search.filter_overfetch, 7);
+    assert_eq!(
+        cfg.runtime.search.metric,
+        piramid_hardware::compute::Metric::DotProduct
+    );
     assert_eq!(
         cfg.startup.logging.level,
         piramid_core::config::LogLevel::Debug
@@ -96,10 +99,13 @@ fn an_unknown_override_is_an_error_naming_the_key() {
 fn an_invalid_value_fails_to_load() {
     let error = with_env(
         None,
-        &[("PIRAMID__RUNTIME__SEARCH__FILTER_OVERFETCH", "0")],
+        &[("PIRAMID__RUNTIME__WAL__CHECKPOINT_FREQUENCY", "0")],
         || loader::load().unwrap_err(),
     );
-    assert!(error.to_string().contains("filter_overfetch"), "{error}");
+    assert!(
+        error.to_string().contains("checkpoint_frequency"),
+        "{error}"
+    );
 }
 
 #[test]

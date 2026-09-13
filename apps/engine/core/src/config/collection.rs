@@ -5,17 +5,14 @@ use serde::{Deserialize, Serialize};
 use piramid_hardware::compute::ExecutionMode;
 
 use super::{
-    CacheConfig, HardwareConfig, IndexConfig, LimitsConfig, MemoryConfig, QuantizationConfig,
-    SearchConfig, WalConfig,
+    HardwareConfig, LimitsConfig, MemoryConfig, QuantizationConfig, SearchConfig, WalConfig,
 };
 
 /// The settings one collection runs with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct CollectionConfig {
-    /// Index family, metric and family parameters.
-    pub index: IndexConfig,
-    /// Default search depth and filter overfetch.
+    /// Metric for a new collection, and batch search parallelism.
     pub search: SearchConfig,
     /// How stored vectors are compressed.
     pub quantization: QuantizationConfig,
@@ -29,6 +26,4 @@ pub struct CollectionConfig {
     pub hardware: HardwareConfig,
     /// Per-collection size ceilings.
     pub limits: LimitsConfig,
-    /// Cache sizes and eviction.
-    pub cache: CacheConfig,
 }

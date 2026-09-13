@@ -40,9 +40,13 @@ pub enum PiramidError {
     #[error("Storage error: {0}")]
     Storage(#[from] super::storage::StorageError),
 
-    /// An index failure.
-    #[error("Index error: {0}")]
-    Index(#[from] super::index::IndexError),
+    /// A search failure.
+    #[error("Search error: {0}")]
+    Search(#[from] super::search::SearchError),
+
+    /// A configuration that cannot be applied.
+    #[error("Configuration error: {0}")]
+    Config(#[from] super::config::ConfigError),
 
     /// A request-level failure with its own classification.
     #[error("Server error: {0}")]
@@ -104,7 +108,8 @@ impl PiramidError {
                 | InferenceError::Stopped(_) => ErrorKind::Unavailable,
                 InferenceError::Load(_) | InferenceError::Runtime(_) => ErrorKind::Internal,
             },
-            Self::Index(super::index::IndexError::MetricMismatch { .. })
+            Self::Search(super::search::SearchError::MetricMismatch { .. })
+            | Self::Config(_)
             | Self::Storage(
                 super::storage::StorageError::InvalidDimension { .. }
                 | super::storage::StorageError::InvalidPath(_),
@@ -118,7 +123,6 @@ impl PiramidError {
             | Self::Gpu(_) => ErrorKind::Unavailable,
             Self::Compute(_)
             | Self::Storage(_)
-            | Self::Index(_)
             | Self::Io(_)
             | Self::Encode(_)
             | Self::Decode(_)

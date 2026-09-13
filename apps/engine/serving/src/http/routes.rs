@@ -37,24 +37,8 @@ fn api_router(state: SharedState) -> Router<SharedState> {
             get(handlers::collection_count),
         )
         .route(
-            "/collections/{collection}/index/stats",
-            get(handlers::index_stats),
-        )
-        .route(
-            "/collections/{collection}/index/rebuild",
-            post(handlers::rebuild_index),
-        )
-        .route(
-            "/collections/{collection}/index/rebuild/status",
-            get(handlers::rebuild_index_status),
-        )
-        .route(
             "/collections/{collection}/compact",
             post(handlers::compact_collection),
-        )
-        .route(
-            "/collections/{collection}/duplicates",
-            post(handlers::find_duplicates),
         )
         .route("/config", get(handlers::config_status))
         .route("/config/reload", post(handlers::reload_config))
@@ -85,10 +69,6 @@ fn api_router(state: SharedState) -> Router<SharedState> {
         .route(
             "/collections/{collection}/search",
             post(handlers::search_vectors),
-        )
-        .route(
-            "/collections/{collection}/search/range",
-            post(handlers::range_search_vectors),
         )
         .route(
             "/collections/{collection}/embed",

@@ -62,34 +62,12 @@ fn invalid_metric_is_rejected() {
 }
 
 #[test]
-fn an_absent_metric_is_the_indexed_metric() {
+fn an_absent_metric_is_the_collection_metric() {
     use piramid_hardware::compute::Metric;
     use piramid_serving::services::convert::parse_metric;
 
-    for indexed in [Metric::Cosine, Metric::Euclidean, Metric::DotProduct] {
-        assert_eq!(parse_metric(None, indexed).unwrap(), indexed);
-    }
-}
-
-#[test]
-fn zero_valued_tuning_knobs_are_rejected() {
-    use piramid_serving::services::api::SearchTuning;
-    let base = piramid_core::config::SearchConfig::default();
-    for tuning in [
-        SearchTuning {
-            ef: Some(0),
-            ..Default::default()
-        },
-        SearchTuning {
-            nprobe: Some(0),
-            ..Default::default()
-        },
-        SearchTuning {
-            filter_overfetch: Some(0),
-            ..Default::default()
-        },
-    ] {
-        assert!(piramid_serving::services::convert::apply_search_overrides(base, &tuning).is_err());
+    for metric in [Metric::Cosine, Metric::Euclidean, Metric::DotProduct] {
+        assert_eq!(parse_metric(None, metric).unwrap(), metric);
     }
 }
 
@@ -124,50 +102,10 @@ fn a_range_filter_with_a_non_numeric_value_is_rejected() {
 }
 
 #[test]
-fn tuning_fields_match_the_config_fields_they_override() {
-    let json = serde_json::json!({
-        "vectors": [[1.0]], "ef": 5, "nprobe": 6, "filter_overfetch": 7
-    });
-    let request: piramid_serving::services::api::SearchRequest =
-        serde_json::from_value(json).unwrap();
-    let tuning = piramid_serving::services::api::SearchTuning {
-        ef: request.ef,
-        nprobe: request.nprobe,
-        filter_overfetch: request.filter_overfetch,
-    };
-
-    let applied = piramid_serving::services::convert::apply_search_overrides(
-        piramid_core::config::SearchConfig::default(),
-        &tuning,
-    )
-    .unwrap();
-
-    assert_eq!(applied.ef, Some(5));
-    assert_eq!(applied.nprobe, Some(6));
-    assert_eq!(applied.filter_overfetch, 7);
-}
-
-#[test]
-fn a_rejected_tuning_value_names_the_field_the_user_wrote() {
-    let tuning = piramid_serving::services::api::SearchTuning {
-        filter_overfetch: Some(0),
-        ..Default::default()
-    };
-    let error = piramid_serving::services::convert::apply_search_overrides(
-        piramid_core::config::SearchConfig::default(),
-        &tuning,
-    )
-    .unwrap_err()
-    .to_string();
-    assert!(error.contains("filter_overfetch"), "{error}");
-}
-
-#[test]
 fn request_shapes_refuse_unknown_fields() {
     use piramid_serving::services::api::{
-        CreateCollectionRequest, DeleteVectorsRequest, DuplicateRequest, EmbedRequest,
-        InsertRequest, ListVectorsQuery, RangeSearchRequest, SearchRequest, TextSearchRequest,
-        UpsertRequest,
+        CreateCollectionRequest, DeleteVectorsRequest, EmbedRequest, InsertRequest,
+        ListVectorsQuery, SearchRequest, TextSearchRequest, UpsertRequest,
     };
     use serde_json::json;
 
@@ -181,19 +119,44 @@ fn request_shapes_refuse_unknown_fields() {
         serde_json::from_value::<T>(value).unwrap();
     }
 
-    accepted::<SearchRequest>(json!({"vectors": [[1.0]], "k": 3, "ef": 8, "filter_overfetch": 2}));
+    accepted::<SearchRequest>(json!({"vectors": [[1.0]], "k": 3, "metric": "dot", "filter": {}}));
     refused::<SearchRequest>(json!({"vectors": [[1.0]], "top_k": 3}));
-    accepted::<RangeSearchRequest>(json!({"vectors": [[1.0]], "min_score": 0.5, "nprobe": 2}));
-    refused::<RangeSearchRequest>(json!({"vectors": [[1.0]], "min_score": 0.5, "efSearch": 2}));
-    accepted::<TextSearchRequest>(json!({"query": "q", "ef": 8}));
+    accepted::<TextSearchRequest>(json!({"query": "q", "k": 3, "metric": "cosine"}));
     refused::<TextSearchRequest>(json!({"query": "q", "limit": 3}));
     refused::<EmbedRequest>(json!({"texts": ["a"], "metadatas": [{}]}));
     refused::<InsertRequest>(json!({"vectors": [[1.0]], "texts": ["a"], "vector": [1.0]}));
     refused::<ListVectorsQuery>(json!({"page": 2}));
     refused::<DeleteVectorsRequest>(json!({"ids": [], "id": "x"}));
     refused::<UpsertRequest>(json!({"vector": [1.0], "text": "a", "normalise": true}));
-    refused::<DuplicateRequest>(json!({"min_score": 0.9}));
     refused::<CreateCollectionRequest>(json!({"name": "docs", "dimensions": 3}));
+}
+
+#[test]
+fn removed_search_fields_are_refused_as_unknown() {
+    use piramid_serving::services::api::{SearchRequest, TextSearchRequest};
+    use serde_json::json;
+
+    for field in ["ef", "nprobe", "filter_overfetch", "min_score"] {
+        let mut search = json!({"vectors": [[1.0]]});
+        search[field] = json!(2);
+        let error = serde_json::from_value::<SearchRequest>(search)
+            .err()
+            .expect("a removed field is refused");
+        assert!(
+            error.to_string().contains("unknown field"),
+            "{field}: {error}"
+        );
+
+        let mut text = json!({"query": "q"});
+        text[field] = json!(2);
+        let error = serde_json::from_value::<TextSearchRequest>(text)
+            .err()
+            .expect("a removed field is refused");
+        assert!(
+            error.to_string().contains("unknown field"),
+            "{field}: {error}"
+        );
+    }
 }
 
 #[test]

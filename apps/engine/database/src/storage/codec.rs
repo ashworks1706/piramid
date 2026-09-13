@@ -15,6 +15,12 @@ pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     Ok(bincode::serde::encode_to_vec(value, CONFIG)?)
 }
 
+/// Decode a value from the start of bytes, ignoring any bytes after it.
+pub fn decode_prefix<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+    let (value, _) = bincode::serde::decode_from_slice(bytes, CONFIG)?;
+    Ok(value)
+}
+
 /// Decode a value from its stored bytes. Bytes left after the value are an error.
 pub fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     let (value, read) = bincode::serde::decode_from_slice(bytes, CONFIG)?;

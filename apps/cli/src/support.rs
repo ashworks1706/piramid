@@ -155,19 +155,12 @@ pub fn render(bundle: &Bundle<'_>) -> String {
             for c in &metrics.collections {
                 let _ = writeln!(out, "### {}", c.name);
                 let _ = writeln!(out, "vectors        {}", c.vector_count);
-                let _ = writeln!(out, "index          {}", c.index_type);
                 let _ = writeln!(out, "memory_bytes   {}", c.memory_usage_bytes);
                 if let Some(v) = c.insert_latency_ms {
                     let _ = writeln!(out, "insert_ms      {v:.3}");
                 }
                 if let Some(v) = c.search_latency_ms {
                     let _ = writeln!(out, "search_ms      {v:.3}");
-                }
-                if let Some(v) = c.hnsw_ef_search {
-                    let _ = writeln!(out, "hnsw_ef_search {v}");
-                }
-                if let Some(v) = c.ivf_nprobe {
-                    let _ = writeln!(out, "ivf_nprobe     {v}");
                 }
                 let _ = writeln!(out);
             }

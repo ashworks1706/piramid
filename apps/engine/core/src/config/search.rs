@@ -1,37 +1,26 @@
-//! Per-query recall and speed knobs.
+//! Search settings.
 
 use serde::{Deserialize, Serialize};
 
-/// HNSW reads ef and IVF reads nprobe. Flat search is exhaustive and ignores both.
+use piramid_hardware::compute::Metric;
+
+/// The metric a new collection is created with, and how a batch of queries runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct SearchConfig {
-    /// HNSW candidate list width. Falls back to the index ef_search.
-    pub ef: Option<usize>,
-
-    /// IVF partitions to scan. Falls back to the index num_probes.
-    pub nprobe: Option<usize>,
-
-    /// Multiplier on k when a filter is present.
-    #[serde(default = "default_filter_overfetch")]
-    pub filter_overfetch: usize,
+    /// Metric a collection takes when it is created. A collection keeps the metric it was
+    /// created with.
+    pub metric: Metric,
 
     /// Fan a batch of queries across the worker threads.
-    #[serde(default = "crate::config::default_true")]
     pub parallel: bool,
 }
 
 impl Default for SearchConfig {
     fn default() -> Self {
         SearchConfig {
-            ef: None,
-            nprobe: None,
-            filter_overfetch: default_filter_overfetch(),
+            metric: Metric::Cosine,
             parallel: true,
         }
     }
-}
-
-fn default_filter_overfetch() -> usize {
-    10
 }

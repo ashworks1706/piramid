@@ -1,4 +1,4 @@
-//! Vector layout and read access for indexes.
+//! Vector layout and read access for search.
 
 pub mod reader;
 

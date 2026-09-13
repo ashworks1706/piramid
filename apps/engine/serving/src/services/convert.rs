@@ -1,7 +1,6 @@
 //! Conversions between the HTTP request/response shapes and domain types.
 
-use crate::services::api::{GpuMetricsResponse, HitResponse, HostMetricsResponse, SearchTuning};
-use piramid_core::config::SearchConfig;
+use crate::services::api::{GpuMetricsResponse, HitResponse, HostMetricsResponse};
 use piramid_core::error::{Result, ServerError};
 use piramid_core::metadata::{Filter, Metadata, MetadataValue};
 use piramid_core::Hit;
@@ -9,38 +8,16 @@ use piramid_hardware::compute::{ComputeError, Metric};
 use piramid_hardware::host::{GpuReading, HostReading};
 use std::collections::HashMap;
 
-/// Resolve a requested metric name against the metric a collection is indexed by.
+/// Resolve a requested metric name against the metric of a collection.
 ///
-/// An absent metric is the indexed one. An unknown name is a bad request, and a known name other
-/// than the indexed metric is refused by the search itself.
-pub fn parse_metric(metric: Option<String>, indexed: Metric) -> Result<Metric> {
+/// An absent metric is the collection's metric. An unknown name is a bad request, and a known name
+/// other than the collection's metric is refused by the search itself.
+pub fn parse_metric(metric: Option<String>, collection: Metric) -> Result<Metric> {
     let Some(name) = metric else {
-        return Ok(indexed);
+        return Ok(collection);
     };
     name.parse()
         .map_err(|error: ComputeError| ServerError::InvalidRequest(error.to_string()).into())
-}
-
-fn require_nonzero(value: usize, name: &str) -> Result<usize> {
-    if value == 0 {
-        return Err(ServerError::InvalidRequest(format!("{name} must be >= 1")).into());
-    }
-    Ok(value)
-}
-
-/// Layer per-request tuning onto the configured defaults of a collection.
-pub fn apply_search_overrides(base: SearchConfig, tuning: &SearchTuning) -> Result<SearchConfig> {
-    let mut cfg = base;
-    if let Some(ef) = tuning.ef {
-        cfg.ef = Some(require_nonzero(ef, "ef")?);
-    }
-    if let Some(nprobe) = tuning.nprobe {
-        cfg.nprobe = Some(require_nonzero(nprobe, "nprobe")?);
-    }
-    if let Some(overfetch) = tuning.filter_overfetch {
-        cfg.filter_overfetch = require_nonzero(overfetch, "filter_overfetch")?;
-    }
-    Ok(cfg)
 }
 
 /// Build a [Filter] from a map of field name to operator and value.

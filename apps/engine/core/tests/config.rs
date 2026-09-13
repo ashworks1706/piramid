@@ -6,8 +6,7 @@
 //! Configuration parsing, defaults and validation.
 
 use piramid_core::config::{
-    AutoIndexConfig, Config, ConsoleConfig, HardwareProfile, IndexConfig, IndexKind, LogLevel,
-    QuantizationLevel, QuantizationStage,
+    Config, ConsoleConfig, HardwareProfile, LogLevel, QuantizationLevel, QuantizationStage,
 };
 use piramid_hardware::compute::Metric;
 
@@ -31,7 +30,7 @@ fn an_empty_file_is_all_defaults() {
     assert_eq!(cfg.startup.hardware.profile, HardwareProfile::CpuOnly);
     assert_eq!(cfg.startup.logging.level, LogLevel::Info);
     assert_eq!(cfg.runtime.quantization.stage, QuantizationStage::Disabled);
-    assert_eq!(cfg.runtime.search.filter_overfetch, 10);
+    assert!(cfg.runtime.search.parallel);
     cfg.validate().unwrap();
 }
 
@@ -42,12 +41,12 @@ startup:
   bind: 127.0.0.1:7000
 runtime:
   search:
-    filter_overfetch: 3
+    metric: euclidean
 ";
     let cfg: Config = yaml_serde::from_str(yaml).unwrap();
 
     assert_eq!(cfg.startup.bind, "127.0.0.1:7000");
-    assert_eq!(cfg.runtime.search.filter_overfetch, 3);
+    assert_eq!(cfg.runtime.search.metric, Metric::Euclidean);
     assert!(cfg.runtime.search.parallel);
     assert_eq!(cfg.startup.logging.level, LogLevel::Info);
     cfg.validate().unwrap();
@@ -58,12 +57,12 @@ fn a_misspelled_key_is_an_error_rather_than_a_silent_default() {
     let yaml = r"
 runtime:
   search:
-    filter_overfech: 3
+    paralel: true
 ";
     let err = yaml_serde::from_str::<Config>(yaml)
         .unwrap_err()
         .to_string();
-    assert!(err.contains("filter_overfech"), "{err}");
+    assert!(err.contains("paralel"), "{err}");
 }
 
 #[test]
@@ -76,113 +75,36 @@ runtime:
 }
 
 #[test]
-fn auto_index_thresholds_are_configurable() {
-    let cfg = IndexConfig::Auto {
-        metric: Metric::Cosine,
-        auto: AutoIndexConfig {
-            flat_max_vectors: 5,
-            ivf_max_vectors: 10,
-            ivf_num_clusters: Some(3),
-            ivf_num_probes: Some(2),
-            ivf_max_iterations: 4,
-            hnsw_m: 8,
-            hnsw_ef_construction: 64,
-            hnsw_ef_search: 32,
-        },
-    };
-
-    assert_eq!(cfg.select_type(4), IndexKind::Flat);
-    assert_eq!(cfg.select_type(7), IndexKind::Ivf);
-    assert_eq!(cfg.select_type(12), IndexKind::Hnsw);
-}
-
-#[test]
-fn a_misspelled_index_key_is_an_error() {
-    let parse = |yaml: &str| yaml_serde::from_str::<Config>(yaml).map_err(|e| e.to_string());
-
-    let hnsw = "runtime:\n  index:\n    type: hnsw\n    m: 16\n    m_max: 32\n    ef_construction: 200\n    ef_search: 200\n    ml: 0.36\n    metric: cosine\n";
-    parse(hnsw).unwrap();
-    let err = parse(&format!("{hnsw}    ef_serch: 100\n")).unwrap_err();
-    assert!(err.contains("ef_serch"), "{err}");
-
-    let auto = "runtime:\n  index:\n    type: auto\n    metric: cosine\n";
-    parse(auto).unwrap();
-    let err = parse(&format!("{auto}    hnsw_m: 8\n")).unwrap_err();
-    assert!(err.contains("hnsw_m"), "{err}");
-
-    let err =
-        parse("runtime:\n  index:\n    type: flat\n    metric: cosine\n    m: 4\n").unwrap_err();
-    assert!(err.contains("unknown field"), "{err}");
-
-    let err = parse("runtime:\n  index:\n    type: annoy\n").unwrap_err();
-    assert!(err.contains("annoy"), "{err}");
-}
-
-#[test]
-fn the_index_config_round_trips_through_yaml() {
-    for index in [
-        IndexConfig::default(),
-        IndexConfig::Hnsw {
-            params: piramid_core::config::HnswConfig::default(),
-        },
-        IndexConfig::Ivf {
-            params: piramid_core::config::IvfConfig::default(),
-        },
-        IndexConfig::Flat {
-            params: piramid_core::config::FlatConfig::default(),
-        },
+fn the_search_metric_defaults_to_cosine_and_parses_every_metric() {
+    assert_eq!(Config::default().runtime.search.metric, Metric::Cosine);
+    for (name, metric) in [
+        ("cosine", Metric::Cosine),
+        ("euclidean", Metric::Euclidean),
+        ("dot", Metric::DotProduct),
     ] {
-        let yaml = yaml_serde::to_string(&index).unwrap();
-        let parsed: IndexConfig = yaml_serde::from_str(&yaml).unwrap();
-        assert_eq!(parsed, index, "{yaml}");
+        let cfg: Config =
+            yaml_serde::from_str(&format!("runtime:\n  search:\n    metric: {name}\n")).unwrap();
+        assert_eq!(cfg.runtime.search.metric, metric);
+        assert_eq!(cfg.to_collection_config().search.metric, metric);
     }
+    assert!(yaml_serde::from_str::<Config>("runtime:\n  search:\n    metric: hamming\n").is_err());
 }
 
 #[test]
-fn hnsw_from_m_derives_the_layer_multiplier_from_m() {
-    let cfg = piramid_core::config::HnswConfig::from_m(4, 64, 32);
-    assert_eq!(cfg.m_max, 8);
-    assert!((cfg.ml - 1.0 / 4.0_f32.ln()).abs() < 1e-6, "{}", cfg.ml);
-}
-
-#[test]
-fn auto_index_parameters_are_validated() {
-    let check = |mutate: fn(&mut AutoIndexConfig)| {
-        let mut auto = AutoIndexConfig::default();
-        mutate(&mut auto);
-        IndexConfig::Auto {
-            metric: Metric::Cosine,
-            auto,
-        }
-        .validate()
-    };
-
-    check(|_| {}).unwrap();
-    check(|a| a.ivf_num_clusters = Some(4)).unwrap();
-    check(|a| {
-        a.ivf_num_clusters = Some(4);
-        a.ivf_num_probes = Some(4);
-    })
-    .unwrap();
-
-    let err = check(|a| a.hnsw_m = 1).unwrap_err();
-    assert!(err.contains("hnsw_m"), "{err}");
-    let err = check(|a| a.ivf_num_clusters = Some(0)).unwrap_err();
-    assert!(err.contains("ivf_num_clusters"), "{err}");
-    let err = check(|a| {
-        a.ivf_num_clusters = Some(4);
-        a.ivf_num_probes = Some(0);
-    })
-    .unwrap_err();
-    assert!(err.contains("ivf_num_probes"), "{err}");
-    let err = check(|a| {
-        a.ivf_num_clusters = Some(4);
-        a.ivf_num_probes = Some(10);
-    })
-    .unwrap_err();
-    assert!(err.contains("ivf_num_probes"), "{err}");
-    let err = check(|a| a.ivf_num_probes = Some(2)).unwrap_err();
-    assert!(err.contains("ivf_num_clusters"), "{err}");
+fn removed_index_and_cache_keys_are_unknown() {
+    for yaml in [
+        "runtime:\n  index:\n    type: flat\n",
+        "runtime:\n  cache:\n    metadata:\n      enabled: true\n",
+        "runtime:\n  search:\n    ef: 64\n",
+        "runtime:\n  search:\n    nprobe: 4\n",
+        "runtime:\n  search:\n    filter_overfetch: 10\n",
+        "startup:\n  logging:\n    indexing: true\n",
+    ] {
+        let err = yaml_serde::from_str::<Config>(yaml)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unknown field"), "{yaml}: {err}");
+    }
 }
 
 #[test]
@@ -201,7 +123,7 @@ fn unimplemented_settings_are_rejected_rather_than_ignored() {
     }
 
     let mut cfg = Config::default();
-    cfg.runtime.quantization.stage = QuantizationStage::Index;
+    cfg.runtime.quantization.stage = QuantizationStage::Resident;
     assert!(cfg.validate().is_err());
 
     let mut cfg = Config::default();
@@ -253,14 +175,6 @@ fn every_unimplemented_subsystem_refuses_to_start() {
         (
             "retrieval bandwidth share",
             Box::new(|c: &mut Config| c.startup.hardware.vram.retrieval_bandwidth_share = 0.5),
-        ),
-        (
-            "vector cache bounds",
-            Box::new(|c: &mut Config| c.runtime.cache.vectors.entries = Some(100)),
-        ),
-        (
-            "metadata ttl",
-            Box::new(|c: &mut Config| c.runtime.cache.metadata.ttl_seconds = Some(60)),
         ),
     ] {
         let mut cfg = Config::default();

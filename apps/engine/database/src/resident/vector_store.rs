@@ -1,4 +1,4 @@
-//! The resident vector slab every index reads through.
+//! The resident vector slab every search reads through.
 
 use std::collections::HashMap;
 
@@ -9,20 +9,20 @@ use crate::storage::vectors::{VectorReader, VectorSlab};
 
 /// Every vector of a collection, resident in memory as one contiguous buffer.
 ///
-/// The ANN indexes resolve ids here, so an evicted entry is a search failure.
-///
 /// Rows are one flat float buffer at a fixed stride, addressed through a Uuid to u32 ordinal map.
 /// Ordinals are stable: a removed row becomes a hole, and the next insert reuses it.
 #[derive(Default)]
 pub struct VectorStore {
     /// Row-major, dim floats per row. Holes are still allocated and their contents are stale.
     slab: Vec<f32>,
-    /// Row width, fixed by the first vector stored and cleared only by [VectorStore::clear].
+    /// Row width, fixed by the first vector stored.
     dim: Option<usize>,
     /// Id to row.
     ordinals: HashMap<Uuid, u32>,
     /// Row to id, in row order. The entry for a hole is stale; ordinals holds what is live.
     ids: Vec<Uuid>,
+    /// Whether each row is live, in row order.
+    live: Vec<bool>,
     /// Holes, reused before the slab grows.
     free: Vec<u32>,
 }
@@ -38,7 +38,7 @@ impl VectorStore {
         self.dim
     }
 
-    /// Rows allocated but not live. Any of them makes [VectorReader::as_slab] return None.
+    /// Rows allocated but not live. [VectorReader::as_slab] marks each of them as a hole.
     pub fn holes(&self) -> usize {
         self.free.len()
     }
@@ -69,23 +69,16 @@ impl VectorStore {
         let Some(ordinal) = self.ordinals.remove(id) else {
             return;
         };
+        self.live[ordinal as usize] = false;
         self.free.push(ordinal);
     }
 
-    /// Drop every vector and the row width. Only correct before a rebuild repopulates the store.
-    pub fn clear(&mut self) {
-        self.slab.clear();
-        self.ids.clear();
-        self.free.clear();
-        self.ordinals.clear();
-        self.dim = None;
-    }
-
-    /// Resident bytes: the slab plus the two id maps.
+    /// Resident bytes: the slab, the two id maps and the liveness of each row.
     pub fn usage_bytes(&self) -> usize {
         self.slab.len() * std::mem::size_of::<f32>()
             + self.ordinals.len() * (std::mem::size_of::<Uuid>() + std::mem::size_of::<u32>())
             + self.ids.len() * std::mem::size_of::<Uuid>()
+            + self.live.len() * std::mem::size_of::<bool>()
     }
 
     /// A hole if there is one, otherwise a new row at the end.
@@ -93,11 +86,13 @@ impl VectorStore {
         let ordinal = match self.free.pop() {
             Some(ordinal) => {
                 self.ids[ordinal as usize] = id;
+                self.live[ordinal as usize] = true;
                 ordinal
             }
             None => {
                 let ordinal = ordinal_for_row(self.ids.len())?;
                 self.ids.push(id);
+                self.live.push(true);
                 self.slab.resize(self.slab.len() + dim, 0.0);
                 ordinal
             }
@@ -143,15 +138,14 @@ impl VectorReader for VectorStore {
         self.dim
     }
 
-    /// The whole slab, when every allocated row is live.
-    ///
-    /// A store with holes returns None.
+    /// The whole slab, holes included and marked, once a vector has been stored.
     fn as_slab(&self) -> Option<VectorSlab<'_>> {
         let dim = self.dim?;
-        self.free.is_empty().then_some(VectorSlab {
+        Some(VectorSlab {
             data: self.slab.as_slice(),
             dim,
             ids: self.ids.as_slice(),
+            live: self.live.as_slice(),
         })
     }
 }

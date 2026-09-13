@@ -3,16 +3,16 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! Collections: storage, persistence, WAL, checkpoints and index growth.
+//! Collections: storage, persistence, WAL, checkpoints, resident state, metric and compaction.
 
 use std::fs;
 use {
-    piramid_core::config::CacheConfig,
     piramid_core::config::CollectionConfig,
     piramid_core::config::MemoryConfig,
     piramid_core::metadata::metadata,
     piramid_core::Document,
     piramid_database::search::SearchParams,
+    piramid_database::storage::SidecarManager,
     piramid_database::Collection,
     piramid_database::{compact, CollectionOpenOptions},
     piramid_hardware::compute::Metric,
@@ -37,7 +37,6 @@ fn basic_store_and_retrieve() {
         test_path,
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_basic.db.offsets.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_basic.db.wal.db"),
-        concat!(env!("CARGO_TARGET_TMPDIR"), "/test_basic.db.vecindex.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_basic.db.manifest.db"),
     ];
     cleanup_test_files(&files);
@@ -62,7 +61,6 @@ fn persistence_roundtrip() {
         test_path,
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_persist.db.offsets.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_persist.db.wal.db"),
-        concat!(env!("CARGO_TARGET_TMPDIR"), "/test_persist.db.vecindex.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_persist.db.manifest.db"),
     ];
     cleanup_test_files(&files);
@@ -97,7 +95,6 @@ fn search_returns_results() {
         test_path,
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_search.db.offsets.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_search.db.wal.db"),
-        concat!(env!("CARGO_TARGET_TMPDIR"), "/test_search.db.vecindex.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_search.db.manifest.db"),
     ];
     cleanup_test_files(&files);
@@ -137,10 +134,6 @@ fn batch_search_multi_queries() {
             "/test_batch_search.db.offsets.db"
         ),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_batch_search.db.wal.db"),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_batch_search.db.vecindex.db"
-        ),
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
             "/test_batch_search.db.manifest.db"
@@ -190,10 +183,6 @@ fn no_mmap_insert_grows_file_without_panicking() {
         ),
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
-            "/test_no_mmap_grow.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
             "/test_no_mmap_grow.db.manifest.db"
         ),
     ];
@@ -233,10 +222,6 @@ fn updates_write_one_wal_entry_each() {
             "/test_update_wal.db.offsets.db"
         ),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_update_wal.db.wal.db"),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_update_wal.db.vecindex.db"
-        ),
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
             "/test_update_wal.db.manifest.db"
@@ -305,10 +290,6 @@ fn update_vector_persists_new_raw_vector_after_reopen() {
         ),
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
-            "/test_update_vector_persist.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
             "/test_update_vector_persist.db.manifest.db"
         ),
         concat!(
@@ -353,10 +334,6 @@ fn sidecar_files_persist_at_checkpoint_only() {
         ),
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
-            "/test_checkpoint_only.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
             "/test_checkpoint_only.db.manifest.db"
         ),
         concat!(
@@ -372,72 +349,11 @@ fn sidecar_files_persist_at_checkpoint_only() {
         .unwrap();
 
     assert!(fs::metadata(format!("{test_path}.offsets.db")).is_err());
-    assert!(fs::metadata(format!("{test_path}.vecindex.db")).is_err());
 
     storage.checkpoint().unwrap();
 
     assert!(fs::metadata(format!("{test_path}.offsets.db")).is_ok());
-    assert!(fs::metadata(format!("{test_path}.vecindex.db")).is_ok());
-
-    drop(storage);
-    cleanup_test_files(&files);
-}
-
-#[test]
-fn metadata_cache_is_bounded_without_evicting_vectors() {
-    ensure_test_dir();
-    let test_path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_cache_manager_bounds.db");
-    let files = vec![
-        test_path,
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_cache_manager_bounds.db.offsets.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_cache_manager_bounds.db.wal.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_cache_manager_bounds.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_cache_manager_bounds.db.manifest.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_cache_manager_bounds.db.wal.meta"
-        ),
-    ];
-    cleanup_test_files(&files);
-
-    let config = CollectionConfig {
-        cache: CacheConfig::with_size(1),
-        ..CollectionConfig::default()
-    };
-    let mut storage =
-        Collection::open_with_options(test_path, CollectionOpenOptions { config }).unwrap();
-
-    let id_a = storage
-        .insert(Document::with_metadata(
-            vec![1.0, 0.0, 0.0],
-            "first".to_string(),
-            metadata([("kind", "a".into())]),
-        ))
-        .unwrap();
-    let id_b = storage
-        .insert(Document::with_metadata(
-            vec![0.0, 1.0, 0.0],
-            "second".to_string(),
-            metadata([("kind", "b".into())]),
-        ))
-        .unwrap();
-
-    assert_eq!(storage.vector_reader().len(), 2);
-    assert_eq!(storage.metadata_view().len(), 1);
-    assert!(storage.vector_reader().get(&id_a).is_some());
-    assert!(storage.vector_reader().get(&id_b).is_some());
+    assert!(fs::metadata(format!("{test_path}.vecindex.db")).is_err());
 
     drop(storage);
     cleanup_test_files(&files);
@@ -456,10 +372,6 @@ fn append_cursor_survives_reopen_and_preserves_existing_records() {
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
             "/test_append_cursor_reopen.db.wal.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_append_cursor_reopen.db.vecindex.db"
         ),
         concat!(
             env!("CARGO_TARGET_TMPDIR"),
@@ -498,39 +410,10 @@ fn append_cursor_survives_reopen_and_preserves_existing_records() {
 }
 
 #[test]
-fn compaction_rewrites_live_records_through_temp_record_store() {
-    ensure_test_dir();
-    let test_path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_record_store_compact.db");
-    let files = vec![
-        test_path,
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_record_store_compact.db.offsets.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_record_store_compact.db.wal.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_record_store_compact.db.vecindex.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_record_store_compact.db.manifest.db"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_record_store_compact.db.wal.meta"
-        ),
-        concat!(
-            env!("CARGO_TARGET_TMPDIR"),
-            "/test_record_store_compact.db.compact"
-        ),
-    ];
-    cleanup_test_files(&files);
+fn compaction_reclaims_deleted_records() {
+    let test_path = fresh_path("test_record_store_compact.db");
 
-    let mut storage = Collection::open(test_path).unwrap();
+    let mut storage = Collection::open(&test_path).unwrap();
     let keep_id = storage
         .insert(Document::new(vec![1.0, 0.0, 0.0], "keep".to_string()))
         .unwrap();
@@ -552,7 +435,7 @@ fn compaction_rewrites_live_records_through_temp_record_store() {
     assert!(fs::metadata(format!("{test_path}.compact")).is_err());
 
     drop(storage);
-    cleanup_test_files(&files);
+    remove_collection_files(&test_path);
 }
 
 // A collection with sync_on_write enabled accepts writes and replays them on reopen.
@@ -561,14 +444,7 @@ fn writes_replay_with_sync_on_write_enabled() {
     use piramid_core::config::CollectionConfig;
 
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_wal_sync.db");
-    for suffix in [
-        "",
-        ".offsets.db",
-        ".wal.db",
-        ".vecindex.db",
-        ".manifest.db",
-        ".wal.meta",
-    ] {
+    for suffix in ["", ".offsets.db", ".wal.db", ".manifest.db", ".wal.meta"] {
         let _ = fs::remove_file(format!("{path}{suffix}"));
     }
 
@@ -598,14 +474,7 @@ fn a_wal_past_max_log_size_triggers_a_checkpoint() {
     use piramid_core::config::CollectionConfig;
 
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_wal_max_size.db");
-    for suffix in [
-        "",
-        ".offsets.db",
-        ".wal.db",
-        ".vecindex.db",
-        ".manifest.db",
-        ".wal.meta",
-    ] {
+    for suffix in ["", ".offsets.db", ".wal.db", ".manifest.db", ".wal.meta"] {
         let _ = fs::remove_file(format!("{path}{suffix}"));
     }
 
@@ -637,7 +506,6 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
         test_path,
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_slab.db.offsets.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_slab.db.wal.db"),
-        concat!(env!("CARGO_TARGET_TMPDIR"), "/test_slab.db.vecindex.db"),
         concat!(env!("CARGO_TARGET_TMPDIR"), "/test_slab.db.manifest.db"),
     ];
     cleanup_test_files(&files);
@@ -661,9 +529,10 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
     assert_eq!(slab.data.len(), 4 * 3);
     assert_eq!(slab.rows(), 4);
 
-    // A delete withdraws the slab fast path until an insert reuses the hole.
+    // A delete marks its row as a hole until an insert reuses it.
     storage.delete(&ids[1]).unwrap();
-    assert!(storage.vector_reader().as_slab().is_none());
+    let slab = storage.vector_reader().as_slab().unwrap();
+    assert_eq!(slab.live.iter().filter(|live| !**live).count(), 1);
 
     storage
         .insert(Document::new(vec![9.0, 9.0, 9.0], "refill".to_string()))
@@ -671,8 +540,9 @@ fn a_collection_hands_its_vectors_over_as_one_slab() {
     let slab = storage
         .vector_reader()
         .as_slab()
-        .expect("the hole was reused, so the slab is whole again");
+        .expect("a collection with vectors hands over a slab");
     assert_eq!(slab.data.len(), 4 * 3);
+    assert!(slab.live.iter().all(|live| *live), "the hole was reused");
 
     drop(storage);
     cleanup_test_files(&files);
@@ -685,14 +555,7 @@ fn the_checkpoint_interval_runs_from_the_open() {
     use piramid_core::config::CollectionConfig;
 
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_wal_interval.db");
-    for suffix in [
-        "",
-        ".offsets.db",
-        ".wal.db",
-        ".vecindex.db",
-        ".manifest.db",
-        ".wal.meta",
-    ] {
+    for suffix in ["", ".offsets.db", ".wal.db", ".manifest.db", ".wal.meta"] {
         let _ = fs::remove_file(format!("{path}{suffix}"));
     }
 
@@ -708,80 +571,11 @@ fn the_checkpoint_interval_runs_from_the_open() {
     assert!(collection.checkpoint.last_checkpoint().is_some());
 }
 
-// An auto index moves to the family its thresholds name as the collection grows, and every
-// vector stays searchable across each move.
-#[test]
-fn an_auto_index_grows_into_the_family_its_size_picks() {
-    use piramid_core::config::{AutoIndexConfig, CollectionConfig, IndexConfig};
-    use piramid_database::index::IndexType;
-    use piramid_database::search::SearchParams;
-    use piramid_hardware::compute::Metric;
-
-    let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_auto_index_growth.db");
-    for suffix in [
-        "",
-        ".offsets.db",
-        ".wal.db",
-        ".vecindex.db",
-        ".manifest.db",
-        ".wal.meta",
-    ] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
-    let config = CollectionConfig {
-        index: IndexConfig::Auto {
-            metric: Metric::Cosine,
-            auto: AutoIndexConfig {
-                flat_max_vectors: 5,
-                ivf_max_vectors: 10,
-                ..AutoIndexConfig::default()
-            },
-        },
-        ..CollectionConfig::default()
-    };
-    let mut collection = Collection::open_with_options(path, config.into()).unwrap();
-    let vector = |i: usize| {
-        let angle = i as f32 * 0.4;
-        vec![angle.cos(), angle.sin(), 0.1 * i as f32]
-    };
-
-    let mut families = Vec::new();
-    for i in 0..12 {
-        collection
-            .insert(Document::new(vector(i), format!("doc{i}")))
-            .unwrap();
-        families.push(collection.vector_index().index_type());
-    }
-    assert_eq!(families[3], IndexType::Flat);
-    assert_eq!(
-        families[4],
-        IndexType::Ivf,
-        "the fifth vector reaches flat_max_vectors"
-    );
-    assert_eq!(
-        families[9],
-        IndexType::Hnsw,
-        "the tenth vector reaches ivf_max_vectors"
-    );
-
-    let hits = collection
-        .search(&vector(7), 1, Metric::Cosine, SearchParams::default())
-        .unwrap();
-    assert_eq!(hits[0].document.text, "doc7");
-}
-
 // Pages come in id order, so walking them visits every document exactly once.
 #[test]
 fn pages_walk_every_document_once_in_id_order() {
     let path = concat!(env!("CARGO_TARGET_TMPDIR"), "/test_pages.db");
-    for suffix in [
-        "",
-        ".offsets.db",
-        ".wal.db",
-        ".vecindex.db",
-        ".manifest.db",
-        ".wal.meta",
-    ] {
+    for suffix in ["", ".offsets.db", ".wal.db", ".manifest.db", ".wal.meta"] {
         let _ = fs::remove_file(format!("{path}{suffix}"));
     }
     let mut collection = Collection::open(path).unwrap();
@@ -808,18 +602,20 @@ fn pages_walk_every_document_once_in_id_order() {
 }
 
 fn fresh_path(name: &str) -> String {
+    ensure_test_dir();
     let path = format!("{}/{name}", env!("CARGO_TARGET_TMPDIR"));
-    for suffix in [
-        "",
-        ".offsets.db",
-        ".wal.db",
-        ".vecindex.db",
-        ".manifest.db",
-        ".wal.meta",
-    ] {
-        let _ = fs::remove_file(format!("{path}{suffix}"));
-    }
+    remove_collection_files(&path);
     path
+}
+
+/// Remove the data file of the collection at path and every sidecar beside it.
+fn remove_collection_files(path: &str) {
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_dir_all(path);
+    for sidecar in SidecarManager::at(path).all_paths() {
+        let _ = fs::remove_file(&sidecar);
+        let _ = fs::remove_file(format!("{sidecar}.tmp"));
+    }
 }
 
 // A write refused for its width or a limit leaves nothing behind: not stored, not counted, and not
@@ -920,86 +716,6 @@ fn offsets_without_a_manifest_are_refused_at_open() {
     assert!(error.to_string().contains("no manifest"), "{error}");
 }
 
-// A missing index sidecar is rebuilt from the stored documents even when the WAL has entries to
-// replay.
-#[test]
-fn a_missing_index_sidecar_is_rebuilt_beside_a_pending_wal() {
-    let path = fresh_path("test_missing_vecindex_with_wal.db");
-    let stored;
-    {
-        let mut collection = Collection::open(&path).unwrap();
-        stored = collection
-            .insert(Document::new(vec![1.0, 0.0], "checkpointed".to_string()))
-            .unwrap();
-        collection.checkpoint().unwrap();
-        collection
-            .insert(Document::new(vec![0.0, 1.0], "logged".to_string()))
-            .unwrap();
-        collection.flush().unwrap();
-    }
-    fs::remove_file(format!("{path}.vecindex.db")).unwrap();
-
-    let collection = Collection::open(&path).unwrap();
-    assert_eq!(collection.count(), 2);
-    assert_eq!(collection.vector_index().stats().total_vectors, 2);
-    let hits = collection
-        .search(&[1.0, 0.0], 2, Metric::Cosine, SearchParams::default())
-        .unwrap();
-    assert!(hits.iter().any(|hit| hit.document.id == stored));
-}
-
-// An index sidecar built with another family or other parameters than the configuration is rebuilt
-// at open.
-#[test]
-fn an_index_built_with_other_settings_is_rebuilt_at_open() {
-    use piramid_core::config::{HnswConfig, IndexConfig};
-
-    let path = fresh_path("test_index_config_changed.db");
-    {
-        let mut collection = Collection::open(&path).unwrap();
-        for i in 0..8 {
-            let angle = i as f32;
-            collection
-                .insert(Document::new(
-                    vec![angle.cos(), angle.sin()],
-                    format!("{i}"),
-                ))
-                .unwrap();
-        }
-        collection.checkpoint().unwrap();
-    }
-
-    let hnsw = |m: usize| CollectionConfig {
-        index: IndexConfig::Hnsw {
-            params: HnswConfig::from_m(m, 100, 100),
-        },
-        ..CollectionConfig::default()
-    };
-
-    let collection = Collection::open_with_options(&path, hnsw(8).into()).unwrap();
-    assert_eq!(
-        collection.vector_index().build_config(),
-        IndexConfig::Hnsw {
-            params: HnswConfig::from_m(8, 100, 100)
-        }
-    );
-    assert_eq!(collection.vector_index().stats().total_vectors, 8);
-    drop(collection);
-
-    let collection = Collection::open_with_options(&path, hnsw(4).into()).unwrap();
-    assert_eq!(
-        collection.vector_index().build_config(),
-        IndexConfig::Hnsw {
-            params: HnswConfig::from_m(4, 100, 100)
-        }
-    );
-    drop(collection);
-
-    // The rebuilt index was saved, so the same configuration opens it unchanged.
-    let collection = Collection::open_with_options(&path, hnsw(4).into()).unwrap();
-    assert_eq!(collection.vector_index().stats().total_vectors, 8);
-}
-
 /// A manager over a fresh directory holding empty files with the given names.
 fn manager_over_files(dir_name: &str, file_names: &[&str]) -> piramid_database::CollectionManager {
     let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(dir_name);
@@ -1025,6 +741,8 @@ fn sidecars_are_not_collections() {
             "docs.db.wal.db",
             "docs.db.offsets.db",
             "docs.db.vecindex.db",
+            "docs.db.compact.offsets",
+            "docs.db.compact.commit",
             "docs.db.manifest.db",
         ],
     );
@@ -1051,4 +769,384 @@ fn an_unreadable_data_directory_is_an_error_not_an_empty_listing() {
         )),
     );
     assert!(manager.discover_on_disk().is_err());
+}
+
+// Every live document has resident metadata after insert, batch insert, upsert, metadata update,
+// delete, reopen and WAL replay.
+#[test]
+fn metadata_is_resident_for_every_live_document() {
+    let path = fresh_path("test_resident_metadata.db");
+    let kind = |value: &str| metadata([("kind", value.into())]);
+    let (first, second, third);
+    {
+        let mut collection = Collection::open(&path).unwrap();
+        first = collection
+            .insert(Document::with_metadata(
+                vec![1.0, 0.0],
+                "first".to_string(),
+                kind("inserted"),
+            ))
+            .unwrap();
+        let batch = collection
+            .insert_batch(vec![
+                Document::with_metadata(vec![0.0, 1.0], "second".to_string(), kind("batched")),
+                Document::with_metadata(vec![1.0, 1.0], "third".to_string(), kind("batched")),
+            ])
+            .unwrap();
+        (second, third) = (batch[0], batch[1]);
+        collection.checkpoint().unwrap();
+
+        let mut replaced = collection.get(&second).unwrap().unwrap();
+        replaced.metadata = kind("upserted");
+        collection.upsert(replaced).unwrap();
+        collection.update_metadata(&first, kind("updated")).unwrap();
+        collection.delete(&third).unwrap();
+
+        let view = collection.metadata_view();
+        assert_eq!(view.len(), 2);
+        assert_eq!(view[&first], kind("updated"));
+        assert_eq!(view[&second], kind("upserted"));
+        assert!(!view.contains_key(&third));
+        collection.flush().unwrap();
+    }
+
+    // The upsert, update and delete after the checkpoint replay from the WAL.
+    let reopened = Collection::open(&path).unwrap();
+    let view = reopened.metadata_view();
+    assert_eq!(view.len(), 2);
+    assert_eq!(view[&first], kind("updated"));
+    assert_eq!(view[&second], kind("upserted"));
+    assert_eq!(reopened.vector_reader().len(), 2);
+}
+
+// A new collection takes the configured metric and stores it; a reopen under another configured
+// metric keeps the stored one.
+#[test]
+fn the_metric_is_stored_in_the_manifest_and_survives_a_config_change() {
+    let path = fresh_path("test_metric_persisted.db");
+    let with_metric = |metric| {
+        let mut config = CollectionConfig::default();
+        config.search.metric = metric;
+        CollectionOpenOptions { config }
+    };
+    {
+        let collection =
+            Collection::open_with_options(&path, with_metric(Metric::DotProduct)).unwrap();
+        assert_eq!(collection.metric(), Metric::DotProduct);
+    }
+    let stored = SidecarManager::at(&path).load_manifest().unwrap().unwrap();
+    assert_eq!(stored.metric, Metric::DotProduct);
+    assert_eq!(stored.schema_version, 2);
+
+    let mut reopened = Collection::open_with_options(&path, with_metric(Metric::Cosine)).unwrap();
+    assert_eq!(reopened.metric(), Metric::DotProduct);
+
+    let mut next = reopened.config().clone();
+    next.search.metric = Metric::Euclidean;
+    next.search.parallel = !next.search.parallel;
+    reopened.apply_live_settings(&next).unwrap();
+    assert_eq!(reopened.metric(), Metric::DotProduct);
+    assert_eq!(reopened.config().search.parallel, next.search.parallel);
+}
+
+#[test]
+fn a_setting_that_needs_a_reopen_is_refused_live() {
+    let path = fresh_path("test_reopen_setting.db");
+    let mut collection = Collection::open(&path).unwrap();
+    let mut next = collection.config().clone();
+    next.wal.enabled = !next.wal.enabled;
+
+    assert_eq!(
+        collection.setting_needing_reopen(&next),
+        Some("runtime.wal.enabled")
+    );
+    let error = collection.apply_live_settings(&next).unwrap_err();
+    assert_eq!(error.kind(), piramid_core::error::ErrorKind::BadRequest);
+    assert!(error.to_string().contains("runtime.wal.enabled"), "{error}");
+}
+
+// A schema 1 manifest is refused with an error naming the collection, and nothing beside it is
+// touched.
+#[test]
+fn a_schema_1_manifest_is_refused() {
+    use piramid_core::error::{PiramidError, StorageError};
+
+    let path = fresh_path("test_legacy_manifest.db");
+    let mut legacy = Vec::new();
+    legacy.extend_from_slice(&1u32.to_le_bytes());
+    legacy.extend_from_slice(&6u64.to_le_bytes());
+    legacy.extend_from_slice(b"legacy");
+    legacy.extend_from_slice(&1_700_000_000u64.to_le_bytes());
+    legacy.extend_from_slice(&1_700_000_500u64.to_le_bytes());
+    legacy.push(1);
+    legacy.extend_from_slice(&3u64.to_le_bytes());
+    legacy.extend_from_slice(&1u64.to_le_bytes());
+    fs::write(format!("{path}.manifest.db"), &legacy).unwrap();
+    fs::write(format!("{path}.vecindex.db"), b"old index").unwrap();
+
+    let error = Collection::open(&path).err().unwrap();
+    assert!(
+        matches!(
+            &error,
+            PiramidError::Storage(StorageError::LegacyManifest { collection }) if collection == "legacy"
+        ),
+        "{error}"
+    );
+    assert!(error.to_string().contains("Piramid 0.2"), "{error}");
+    assert!(error.to_string().contains("re-ingested"), "{error}");
+    assert_eq!(
+        fs::read(format!("{path}.vecindex.db")).unwrap(),
+        b"old index"
+    );
+    assert!(fs::metadata(&path).is_err(), "no data file is created");
+}
+
+/// The files of a collection that compaction reads and replaces, by suffix.
+const COMPACTED_FILES: [&str; 5] = ["", ".offsets.db", ".manifest.db", ".wal.db", ".wal.meta"];
+
+/// Copy every compacted file of the collection at from to the collection at to.
+fn copy_collection(from: &str, to: &str) {
+    for suffix in COMPACTED_FILES {
+        let source = format!("{from}{suffix}");
+        if fs::metadata(&source).is_ok() {
+            fs::copy(&source, format!("{to}{suffix}")).unwrap();
+        }
+    }
+}
+
+/// A checkpointed collection with deleted documents at a path named after name, its live ids,
+/// and a compacted copy of it at a second path.
+fn collection_before_and_after_compaction(name: &str) -> (String, String, Vec<uuid::Uuid>) {
+    let before = fresh_path(&format!("{name}.db"));
+    let after = fresh_path(&format!("{name}_compacted.db"));
+    let mut live = Vec::new();
+    {
+        let mut collection = Collection::open(&before).unwrap();
+        for i in 0..12 {
+            let id = collection
+                .insert(Document::with_metadata(
+                    vec![i as f32 + 1.0, 1.0],
+                    format!("doc{i}"),
+                    metadata([("i", i64::from(i).into())]),
+                ))
+                .unwrap();
+            if i % 3 == 0 {
+                collection.delete(&id).unwrap();
+            } else {
+                live.push(id);
+            }
+        }
+        collection.checkpoint().unwrap();
+    }
+    copy_collection(&before, &after);
+    {
+        let mut collection = Collection::open(&after).unwrap();
+        compact(&mut collection).unwrap();
+    }
+    (before, after, live)
+}
+
+/// Open the collection at path and assert it holds exactly the live documents, searchable, with
+/// no compaction files left.
+fn assert_opens_with(path: &str, live: &[uuid::Uuid]) {
+    let collection = Collection::open(path).unwrap();
+    assert_eq!(collection.count(), live.len());
+    for id in live {
+        let document = collection.get(id).unwrap().unwrap();
+        assert!(collection.metadata_view().contains_key(id));
+        assert!(document.text.starts_with("doc"));
+    }
+    let hits = collection
+        .search(
+            &[4.0, 1.0],
+            live.len(),
+            Metric::Cosine,
+            SearchParams::default(),
+        )
+        .unwrap();
+    assert_eq!(hits.len(), live.len());
+    let sidecars = SidecarManager::at(path);
+    for leftover in [
+        sidecars.compact_path(),
+        sidecars.compact_offsets_path(),
+        sidecars.compact_commit_path(),
+    ] {
+        assert!(fs::metadata(&leftover).is_err(), "{leftover} was left");
+    }
+}
+
+// A crash while the compacted records are being written leaves a partial record file and no
+// commit marker. Open discards it and keeps the original.
+#[test]
+fn a_compaction_interrupted_while_writing_records_is_discarded() {
+    let (before, _, live) = collection_before_and_after_compaction("crash_records");
+    let sidecars = SidecarManager::at(&before);
+    fs::write(sidecars.compact_path(), b"partial records").unwrap();
+
+    assert_opens_with(&before, &live);
+}
+
+// A crash while the compacted offsets are being written leaves a complete record file, a partial
+// offsets file and no commit marker. Open discards both.
+#[test]
+fn a_compaction_interrupted_while_writing_offsets_is_discarded() {
+    let (before, after, live) = collection_before_and_after_compaction("crash_offsets");
+    let sidecars = SidecarManager::at(&before);
+    fs::copy(&after, sidecars.compact_path()).unwrap();
+    fs::write(format!("{}.tmp", sidecars.compact_offsets_path()), b"half").unwrap();
+
+    assert_opens_with(&before, &live);
+}
+
+// A crash after both compacted files are durable and before the commit marker exists discards
+// the compaction.
+#[test]
+fn a_compaction_interrupted_before_its_commit_is_discarded() {
+    let (before, after, live) = collection_before_and_after_compaction("crash_before_commit");
+    let sidecars = SidecarManager::at(&before);
+    fs::copy(&after, sidecars.compact_path()).unwrap();
+    fs::copy(
+        format!("{after}.offsets.db"),
+        sidecars.compact_offsets_path(),
+    )
+    .unwrap();
+    fs::write(format!("{}.tmp", sidecars.compact_commit_path()), b"").unwrap();
+
+    assert_opens_with(&before, &live);
+}
+
+// A crash right after the commit marker is created, before any file moves, finishes the
+// compaction at open.
+#[test]
+fn a_committed_compaction_with_no_file_moved_is_finished() {
+    let (before, after, live) = collection_before_and_after_compaction("crash_after_commit");
+    let sidecars = SidecarManager::at(&before);
+    fs::copy(&after, sidecars.compact_path()).unwrap();
+    fs::copy(
+        format!("{after}.offsets.db"),
+        sidecars.compact_offsets_path(),
+    )
+    .unwrap();
+    fs::write(sidecars.compact_commit_path(), b"").unwrap();
+
+    assert_opens_with(&before, &live);
+    assert_eq!(
+        fs::read(&before).unwrap(),
+        fs::read(&after).unwrap(),
+        "the compacted record file was moved into place"
+    );
+}
+
+// A crash after the record file is moved and before the offsets are finishes the compaction at
+// open.
+#[test]
+fn a_committed_compaction_with_only_the_records_moved_is_finished() {
+    let (before, after, live) = collection_before_and_after_compaction("crash_records_moved");
+    let sidecars = SidecarManager::at(&before);
+    fs::copy(&after, &before).unwrap();
+    fs::copy(
+        format!("{after}.offsets.db"),
+        sidecars.compact_offsets_path(),
+    )
+    .unwrap();
+    fs::write(sidecars.compact_commit_path(), b"").unwrap();
+
+    assert_opens_with(&before, &live);
+}
+
+// A crash after both files are moved and before the commit marker is removed opens the compacted
+// collection and removes the marker.
+#[test]
+fn a_committed_compaction_with_both_files_moved_is_finished() {
+    let (before, after, live) = collection_before_and_after_compaction("crash_both_moved");
+    let sidecars = SidecarManager::at(&before);
+    fs::copy(&after, &before).unwrap();
+    fs::copy(format!("{after}.offsets.db"), sidecars.offsets_path()).unwrap();
+    fs::write(sidecars.compact_commit_path(), b"").unwrap();
+
+    assert_opens_with(&before, &live);
+}
+
+// A compaction that completes leaves the collection usable in memory and on disk, and writes after
+// it replay on the next open.
+#[test]
+fn a_completed_compaction_reopens_and_accepts_writes() {
+    let (_, after, live) = collection_before_and_after_compaction("compaction_complete");
+    assert_opens_with(&after, &live);
+
+    let added = {
+        let mut collection = Collection::open(&after).unwrap();
+        assert!(
+            collection
+                .vector_reader()
+                .as_slab()
+                .unwrap()
+                .live
+                .iter()
+                .all(|live| *live),
+            "compaction leaves no holes"
+        );
+        let added = collection
+            .insert(Document::new(vec![0.5, 2.0], "doc added".to_string()))
+            .unwrap();
+        collection.flush().unwrap();
+        added
+    };
+    let mut expected = live.clone();
+    expected.push(added);
+    assert_opens_with(&after, &expected);
+}
+
+// A compaction whose commit marker exists but whose files cannot be moved into place leaves the
+// open collection refusing writes, checkpoints and further compactions, and the collection opens
+// again with every live document once the obstacle is gone.
+#[test]
+fn a_committed_compaction_that_cannot_finish_refuses_writes_until_reopen() {
+    use piramid_core::error::{PiramidError, StorageError};
+
+    let (before, _, live) = collection_before_and_after_compaction("unfinished_compaction");
+    let mut collection = Collection::open(&before).unwrap();
+    fs::remove_file(&before).unwrap();
+    fs::create_dir(&before).unwrap();
+    fs::write(format!("{before}/occupied"), b"").unwrap();
+
+    let error = compact(&mut collection).unwrap_err();
+    assert!(
+        fs::metadata(SidecarManager::at(&before).compact_commit_path()).is_ok(),
+        "the compaction was committed: {error}"
+    );
+
+    let refused = |error: PiramidError| {
+        assert!(
+            matches!(
+                &error,
+                PiramidError::Storage(StorageError::CompactionUnfinished { .. })
+            ),
+            "{error}"
+        );
+    };
+    refused(
+        collection
+            .insert(Document::new(vec![3.0, 1.0], "doc after".to_string()))
+            .unwrap_err(),
+    );
+    refused(collection.delete(&live[0]).unwrap_err());
+    refused(collection.checkpoint().unwrap_err());
+    refused(compact(&mut collection).unwrap_err());
+    assert_eq!(collection.get(&live[0]).unwrap().unwrap().id, live[0]);
+    drop(collection);
+
+    fs::remove_dir_all(&before).unwrap();
+    assert_opens_with(&before, &live);
+    let added = {
+        let mut collection = Collection::open(&before).unwrap();
+        let added = collection
+            .insert(Document::new(vec![0.5, 2.0], "doc added".to_string()))
+            .unwrap();
+        collection.checkpoint().unwrap();
+        added
+    };
+    let mut expected = live.clone();
+    expected.push(added);
+    assert_opens_with(&before, &expected);
 }

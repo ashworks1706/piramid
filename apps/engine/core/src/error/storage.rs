@@ -43,8 +43,33 @@ pub enum StorageError {
     StorageFull(String),
 
     /// A sidecar file does not decode.
-    #[error("Index file corrupted: {0}")]
-    CorruptedIndex(String),
+    #[error("Sidecar file corrupted: {0}")]
+    CorruptedSidecar(String),
+
+    /// A collection's manifest has schema version 1.
+    #[error("Collection '{collection}' was written by Piramid 0.2 and must be re-ingested")]
+    LegacyManifest {
+        /// Name of the collection.
+        collection: String,
+    },
+
+    /// A collection's manifest has a schema version this build does not read.
+    #[error("Collection '{collection}' has manifest schema version {found}, which this build does not read")]
+    UnsupportedManifest {
+        /// Name of the collection.
+        collection: String,
+        /// Schema version the manifest was written with.
+        found: u32,
+    },
+
+    /// A compaction was committed on disk and the open collection could not adopt its files.
+    #[error("Collection '{collection}' refuses writes until it is opened again: a committed compaction could not be finished: {reason}")]
+    CompactionUnfinished {
+        /// Name of the collection.
+        collection: String,
+        /// The failure that stopped the compaction.
+        reason: String,
+    },
 
     /// Mapping a data file into memory failed.
     #[error("Memory map error: {0}")]

@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use piramid_core::config::{ApiKey, AuthConfig, Config, RateLimitConfig};
+use piramid_hardware::compute::Metric;
 use piramid_model::embeddings::EmbeddingsManager;
 use piramid_serving::http::auth::{bearer_token, key_matches};
 use piramid_serving::http::rate_limit::RateLimit;
@@ -344,7 +345,7 @@ async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
         )
         .unwrap();
     };
-    write_config("  search:\n    filter_overfetch: 10\n");
+    write_config("  search:\n    parallel: false\n");
     let (server, state) = start_from_file(&file).await;
     let http = reqwest::Client::new();
 
@@ -355,7 +356,7 @@ async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
         .await
         .unwrap();
     assert_eq!(inserted.status(), 200);
-    let overfetch = |state: &AppState| {
+    let search = |state: &AppState| {
         state
             .collection_manager
             .get_existing("docs")
@@ -363,23 +364,29 @@ async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
             .read()
             .config()
             .search
-            .filter_overfetch
     };
-    assert_eq!(overfetch(&state), 10);
+    assert!(!search(&state).parallel);
+    assert_eq!(search(&state).metric, Metric::Cosine);
 
-    write_config("  search:\n    filter_overfetch: 3\n");
+    write_config("  search:\n    parallel: true\n    metric: dot\n");
     let reloaded = http
         .post(server.url("/api/config/reload"))
         .send()
         .await
         .unwrap();
     assert_eq!(reloaded.status(), 200, "{}", reloaded.text().await.unwrap());
-    assert_eq!(overfetch(&state), 3, "the open collection took the reload");
-    assert_eq!(state.current_config().runtime.search.filter_overfetch, 3);
-
-    write_config(
-        "  search:\n    filter_overfetch: 5\n  index:\n    type: flat\n    metric: cosine\n",
+    assert!(
+        search(&state).parallel,
+        "the open collection took the reload"
     );
+    assert_eq!(
+        search(&state).metric,
+        Metric::Cosine,
+        "an open collection keeps the metric it was created with"
+    );
+    assert!(state.current_config().runtime.search.parallel);
+
+    write_config("  search:\n    parallel: false\n  wal:\n    enabled: false\n");
     let refused = http
         .post(server.url("/api/config/reload"))
         .send()
@@ -387,9 +394,53 @@ async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
         .unwrap();
     assert_eq!(refused.status(), 400);
     let body = refused.text().await.unwrap();
-    assert!(body.contains("runtime.index"), "{body}");
-    assert_eq!(overfetch(&state), 3, "a refused reload changes nothing");
-    assert_eq!(state.current_config().runtime.search.filter_overfetch, 3);
+    assert!(body.contains("runtime.wal.enabled"), "{body}");
+    assert!(search(&state).parallel, "a refused reload changes nothing");
+    assert!(state.current_config().runtime.search.parallel);
+
+    server.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn removed_index_duplicate_and_range_routes_answer_not_found() {
+    let dir = data_dir("removed_routes");
+    let server = start(config(&dir)).await;
+    let http = reqwest::Client::new();
+
+    let created = http
+        .post(server.url("/api/collections/docs/vectors"))
+        .json(&serde_json::json!({"vectors": [[1.0, 0.0]], "texts": ["first"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), 200);
+
+    let body = serde_json::json!({"vectors": [[1.0, 0.0]], "min_score": 0.5});
+    for (method, path) in [
+        (reqwest::Method::POST, "/api/collections/docs/duplicates"),
+        (reqwest::Method::POST, "/api/collections/docs/search/range"),
+        (reqwest::Method::GET, "/api/collections/docs/index/stats"),
+        (reqwest::Method::POST, "/api/collections/docs/index/rebuild"),
+        (
+            reqwest::Method::GET,
+            "/api/collections/docs/index/rebuild/status",
+        ),
+    ] {
+        let response = http
+            .request(method.clone(), server.url(path))
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 404, "{method} {path}");
+    }
+
+    let compacted = http
+        .post(server.url("/api/collections/docs/compact"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(compacted.status(), 200);
 
     server.stop().await.unwrap();
 }

@@ -69,26 +69,6 @@ pub fn render(metrics: &MetricsResponse) -> String {
         by_collection(|c| c.lock_write_ms.map(f64::from)),
     );
 
-    // The index type is published as a label on a constant-1 gauge.
-    registry.metric_family(
-        "piramid_collection_index_info",
-        "Index family in use for a collection.",
-        MetricType::Gauge,
-        metrics
-            .collections
-            .iter()
-            .map(|c| {
-                (
-                    vec![
-                        ("collection", c.name.clone()),
-                        ("index_type", c.index_type.clone()),
-                    ],
-                    1.0,
-                )
-            })
-            .collect::<Vec<_>>(),
-    );
-
     registry.metric_family(
         "piramid_wal_size_bytes",
         "Write-ahead log size for a collection.",

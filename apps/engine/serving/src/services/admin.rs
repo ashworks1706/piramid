@@ -64,7 +64,6 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             lock_start,
         );
         let count = collection_guard.count();
-        let index_type = collection_guard.vector_index().index_type().to_string();
         let memory_usage_bytes = collection_guard.memory_usage_bytes()?;
         let (insert_latency_ms, search_latency_ms, lock_read_ms, lock_write_ms) = state
             .collection_manager
@@ -80,29 +79,15 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             .unwrap_or_default();
 
         total_vectors += count;
-        let filter_overfetch = Some(collection_guard.config.search.filter_overfetch);
-        let (hnsw_ef_search, ivf_nprobe) = match collection_guard.vector_index().stats().details {
-            piramid_database::index::IndexDetails::Flat => (None, None),
-            piramid_database::index::IndexDetails::Hnsw { ef_search, .. } => {
-                (Some(ef_search), None)
-            }
-            piramid_database::index::IndexDetails::Ivf { num_probes, .. } => {
-                (None, Some(num_probes))
-            }
-        };
 
         collection_metrics.push(CollectionMetrics {
             name: collection_name.clone(),
             vector_count: count,
-            index_type,
             memory_usage_bytes,
             insert_latency_ms,
             search_latency_ms,
             lock_read_ms,
             lock_write_ms,
-            filter_overfetch,
-            hnsw_ef_search,
-            ivf_nprobe,
         });
 
         let wal_size = optional_file_size(&SidecarManager::at(&collection_guard.path).wal_path())?;
@@ -214,7 +199,6 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             name,
             loaded: true,
             count: Some(count),
-            index_type: Some(collection_guard.vector_index().index_type().to_string()),
             last_checkpoint,
             checkpoint_age_secs,
             wal_size_bytes,
@@ -231,7 +215,6 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             name,
             loaded: false,
             count: None,
-            index_type: None,
             last_checkpoint: None,
             checkpoint_age_secs: None,
             wal_size_bytes: None,

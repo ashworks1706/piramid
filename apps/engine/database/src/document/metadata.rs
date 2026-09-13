@@ -9,6 +9,7 @@ use piramid_core::error::Result;
 use piramid_core::metadata::Metadata;
 
 pub fn update_metadata(collection: &mut Collection, id: &Uuid, metadata: Metadata) -> Result<bool> {
+    collection.ensure_writable()?;
     let Some(mut entry) = get(collection, id)? else {
         return Ok(false);
     };
@@ -26,8 +27,8 @@ pub fn update_metadata(collection: &mut Collection, id: &Uuid, metadata: Metadat
     collection.checkpoint.wal.log(&mut wal_entry)?;
 
     let pointer = collection.record_store.append(&bytes)?;
-    collection.index.insert(*id, pointer);
-    collection.cache.put_metadata(*id, entry.metadata);
+    collection.offsets.insert(*id, pointer);
+    collection.resident.put_metadata(*id, entry.metadata);
     collection.track_operation()?;
     Ok(true)
 }

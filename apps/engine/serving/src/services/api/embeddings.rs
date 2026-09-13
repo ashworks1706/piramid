@@ -38,20 +38,10 @@ pub struct TextSearchRequest {
     /// Maximum number of hits returned. 10 when omitted.
     #[serde(default = "default_k")]
     pub k: usize,
-    /// Similarity metric: cosine, euclidean or dot. The metric the collection is indexed by when
-    /// omitted.
+    /// Similarity metric: cosine, euclidean or dot. The metric of the collection when omitted.
     #[serde(default)]
     pub metric: Option<String>,
     /// Metadata predicate, mapping a field name to an operator and value.
     #[serde(default)]
     pub filter: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
-    /// HNSW candidate-list width. The collection default when omitted.
-    #[serde(default)]
-    pub ef: Option<usize>,
-    /// IVF partitions to scan. The collection default when omitted.
-    #[serde(default)]
-    pub nprobe: Option<usize>,
-    /// Multiplier applied to k when a filter is present. The collection default when omitted.
-    #[serde(default)]
-    pub filter_overfetch: Option<usize>,
 }

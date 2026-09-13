@@ -22,7 +22,7 @@ const COMPARED: [ExecutionMode; 4] = [
 /// Embedding dimensions of MiniLM, OpenAI small and ada, and OpenAI large.
 const DIMS: [usize; 4] = [384, 768, 1536, 3072];
 
-/// Candidate counts spanning one HNSW ef list up to a small flat collection.
+/// Candidate counts spanning a small collection up to a mid-sized one.
 const ROWS: [usize; 3] = [128, 1024, 8192];
 
 /// Deterministic filler from a fixed LCG.

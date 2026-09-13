@@ -7,9 +7,10 @@
 #
 #   startup:  applied once at boot. Changing one needs a restart, and POST /api/config/reload
 #             refuses a file whose startup block differs from the running one.
-#   runtime:  re-read on POST /api/config/reload. Search, limits, WAL checkpoint thresholds, the
-#             metadata cache budget and execution reach open collections; a change to anything
-#             read when a collection opens is refused while one is open.
+#   runtime:  re-read on POST /api/config/reload. Batch search parallelism, limits, WAL
+#             checkpoint thresholds and execution reach open collections; a change to anything
+#             read when a collection opens is refused while one is open. search.metric applies
+#             to collections created afterwards.
 #
 # Any key can also be set from the environment, spelled from its path:
 # runtime.wal.max_log_size is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so
@@ -26,7 +27,7 @@ startup:
   # root directory for collection data; each collection gets a subdirectory
   data_dir: ./data
 
-  # worker threads for parallel search and indexing; null is one per core
+  # worker threads for parallel search; null is one per core
   threads: null
 
   logging:
@@ -35,7 +36,6 @@ startup:
     level: info
     # per-subsystem switches, each one a tracing target
     config: true
-    indexing: true
     search: true
     writes: true
     inference: true
@@ -73,12 +73,12 @@ startup:
       # bytes held back for fragmentation and library workspaces
       reserve_bytes: 1073741824
     vram:
-      # divide the device budget between weights, KV and the index; off, all three share one
+      # divide the device budget between weights, KV and retrieval; off, all three share one
       # budget. Each pool refuses an allocation past its share.
       enabled: false
       weights_ratio: 0.6
       kv_ratio: 0.15
-      index_ratio: 0.25
+      vectors_ratio: 0.25
       # bandwidth retrieval may take while a pass is decoding. Not implemented; any other value
       # is refused.
       retrieval_bandwidth_share: 0.25
@@ -122,52 +122,11 @@ startup:
   # directory, and the build needs the inference-candle feature (gpu-cuda for a GPU device).
 
 runtime:
-  index:
-    # auto | flat | hnsw | ivf. auto picks a family from the collection's size and rebuilds into
-    # the next family as an insert crosses a threshold, keeping it if the collection shrinks. The
-    # others take that family's parameters inline, as in the examples below.
-    type: auto
-    # cosine | euclidean | dot
-    metric: cosine
-    auto:
-      # under this many vectors, scan exhaustively
-      flat_max_vectors: 10000
-      # under this many, use IVF; above it, HNSW
-      ivf_max_vectors: 100000
-      # IVF: null sizes clusters from the collection and probes from the cluster count.
-      # ivf_num_probes needs ivf_num_clusters and must not exceed it.
-      ivf_num_clusters: null
-      ivf_num_probes: null
-      ivf_max_iterations: 10
-      # HNSW shape used when auto-selected; m_max is 2 * hnsw_m and ml is 1 / ln(hnsw_m), so
-      # hnsw_m must be >= 2
-      hnsw_m: 16
-      hnsw_ef_construction: 200
-      hnsw_ef_search: 200
-  #
-  # type: hnsw
-  # metric: cosine
-  # m: 16                 # max connections per node above layer 0
-  # m_max: 32             # max connections at layer 0, conventionally 2 * m
-  # ef_construction: 200  # candidate width while linking a new node
-  # ef_search: 200        # candidate width while searching; higher is better recall and slower
-  # ml: 0.36067376        # layer multiplier, conventionally 1 / ln(m)
-  #
-  # type: ivf
-  # metric: cosine
-  # num_clusters: 256     # partitions
-  # num_probes: 8         # partitions scanned per query; higher is better recall and slower
-  # max_iterations: 10    # iteration cap when training centroids
-  #
-  # type: flat
-  # metric: cosine
-
   search:
-    # per-query overrides; null uses the index's own ef_search and num_probes
-    ef: null
-    nprobe: null
-    # multiplier on k when a filter is present
-    filter_overfetch: 10
+    # cosine | euclidean | dot. The metric a collection is created with; the collection stores it
+    # and keeps it. Changing this affects only collections created afterwards, and a search that
+    # names a different metric than its collection's is refused.
+    metric: cosine
     # fan a batch of queries across the worker threads
     parallel: true
 
@@ -177,7 +136,7 @@ runtime:
     level: none
     # keep only the compressed form in memory
     disk_only: false
-    # disabled | storage | index | query_pre_search | result_post_search
+    # disabled | storage | resident | query_pre_search | result_post_search
     stage: disabled
     # keep full-precision vectors alongside the codes, for reranking
     preserve_raw_vectors: true
@@ -206,25 +165,6 @@ runtime:
     max_vectors: null
     max_bytes: null
     max_vector_bytes: null
-
-  cache:
-    vectors:
-      # vectors held resident for search; an evicted vector is missing from results. Bounds are
-      # not implemented; setting one is an error.
-      entries: null
-      max_bytes_per_collection: null
-      # none | oldest | lru. Not implemented for this store.
-      eviction: none
-    metadata:
-      enabled: true
-      entries: 10000
-      # entry lifetime in seconds. Not implemented.
-      ttl_seconds: null
-      # none | oldest | lru. Only oldest is implemented.
-      eviction: oldest
-      # byte budget for cached metadata across every loaded collection; past it the largest
-      # metadata caches are cleared. null is unbounded.
-      max_bytes: null
 
   # auto | scalar | simd | parallel | gpu. The distance strategy for every collection.
   # gpu needs a build with the gpu-cuda feature and startup.hardware.profile: gpu.

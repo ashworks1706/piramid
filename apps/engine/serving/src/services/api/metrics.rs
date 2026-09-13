@@ -39,14 +39,14 @@ pub struct GpuBudgetResponse {
     pub usable_bytes: u64,
     /// Whether every pool draws from one shared budget.
     pub shared: bool,
-    /// Capacity and use of each pool: weights, kv_cache and index.
+    /// Capacity and use of each pool: weights, kv_cache and vectors.
     pub pools: Vec<GpuPoolResponse>,
 }
 
 /// One pool of the device memory budget.
 #[derive(Debug, Default, Serialize)]
 pub struct GpuPoolResponse {
-    /// weights, kv_cache or index.
+    /// weights, kv_cache or vectors.
     pub pool: &'static str,
     /// Bytes the pool may hold; under a shared budget, the whole budget.
     pub capacity_bytes: u64,
@@ -113,9 +113,7 @@ pub struct CollectionMetrics {
     pub name: String,
     /// Number of stored documents.
     pub vector_count: usize,
-    /// Index family: Flat, HNSW or IVF.
-    pub index_type: String,
-    /// Approximate resident size of records, offsets, caches and index, in bytes.
+    /// Approximate resident size of records, offsets, vectors and metadata, in bytes.
     pub memory_usage_bytes: usize,
     /// Moving average of insert duration, in milliseconds. Null before any sample.
     pub insert_latency_ms: Option<f32>,
@@ -125,12 +123,6 @@ pub struct CollectionMetrics {
     pub lock_read_ms: Option<f32>,
     /// Moving average of write-lock wait, in milliseconds. Null before any sample.
     pub lock_write_ms: Option<f32>,
-    /// Multiplier applied to k when a filter is present, from the collection config.
-    pub filter_overfetch: Option<usize>,
-    /// Configured HNSW candidate-list width. Null unless the index is configured as HNSW.
-    pub hnsw_ef_search: Option<usize>,
-    /// Configured IVF partitions to scan. Null unless the index is configured as IVF.
-    pub ivf_nprobe: Option<usize>,
 }
 
 /// Write-ahead log state of one loaded collection.

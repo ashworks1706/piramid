@@ -41,7 +41,7 @@ pub struct EmbeddingConfig {
 
     /// Cache of embeddings keyed by input text.
     #[serde(default)]
-    pub cache: super::EmbeddingCacheConfig,
+    pub cache: EmbeddingCacheConfig,
 
     /// Request timeout in seconds.
     #[serde(default)]
@@ -169,5 +169,37 @@ impl EmbeddingConfig {
                 self.piramid_options().map(|_| ())
             }
         }
+    }
+}
+
+/// Cache of embeddings keyed by input text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct EmbeddingCacheConfig {
+    /// Whether embeddings are cached at all.
+    pub enabled: bool,
+
+    /// Entry ceiling.
+    pub entries: usize,
+}
+
+impl Default for EmbeddingCacheConfig {
+    fn default() -> Self {
+        EmbeddingCacheConfig {
+            enabled: true,
+            entries: 10_000,
+        }
+    }
+}
+
+impl EmbeddingCacheConfig {
+    /// Reject a cache that is on with no room.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.enabled && self.entries == 0 {
+            return Err(
+                "startup.embedding.cache.entries: must be >= 1, or set enabled: false".into(),
+            );
+        }
+        Ok(())
     }
 }
