@@ -36,6 +36,12 @@ async-trait.workspace = true
 axum.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
+sysinfo.workspace = true
+
+[[bench]]
+name = "rag_e2e"
+harness = false
+required-features = ["inference-candle"]
 
 [features]
 default = []
