@@ -1,37 +1,37 @@
-//! Single-pair distance entry points; hot-path wrappers over a caller-resolved strategy. Panics on
-//! mismatched lengths. Untrusted input uses the batch kernels on
-//! [crate::compute::DistanceKernels] instead.
+//! Single-pair distance entry points over a caller-resolved strategy. Each returns an error on
+//! mismatched lengths.
 
+use crate::compute::error::ComputeResult;
 use crate::compute::kernels::DistanceKernels;
 
-/// Assert the shared caller contract for all pairwise kernels.
-#[inline]
-fn assert_same_len(a: &[f32], b: &[f32]) {
-    assert_eq!(a.len(), b.len(), "Vectors must have same length");
-}
-
-/// Cosine similarity in the range -1 to 1; 0.0 if either operand is a zero vector.
-pub fn cosine_similarity(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
-    assert_same_len(a, b);
+/// Cosine similarity in the range -1 to 1; NaN if either operand is a zero vector.
+pub fn cosine_similarity(
+    a: &[f32],
+    b: &[f32],
+    kernels: &dyn DistanceKernels,
+) -> ComputeResult<f32> {
     kernels.cosine(a, b)
 }
 
 /// Inner product of two vectors.
-pub fn dot_product(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
-    assert_same_len(a, b);
+pub fn dot_product(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> ComputeResult<f32> {
     kernels.dot(a, b)
 }
 
 /// L2 distance between two vectors.
-pub fn euclidean_distance(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
-    assert_same_len(a, b);
+pub fn euclidean_distance(
+    a: &[f32],
+    b: &[f32],
+    kernels: &dyn DistanceKernels,
+) -> ComputeResult<f32> {
     kernels.euclidean(a, b)
 }
 
-/// Squared L2 distance, skipping the final sqrt.
-///
-/// Prefer this when only relative ordering matters.
-pub fn euclidean_distance_squared(a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
-    assert_same_len(a, b);
+/// Squared L2 distance, skipping the final sqrt. Orders pairs the same as euclidean_distance.
+pub fn euclidean_distance_squared(
+    a: &[f32],
+    b: &[f32],
+    kernels: &dyn DistanceKernels,
+) -> ComputeResult<f32> {
     kernels.euclidean_squared(a, b)
 }

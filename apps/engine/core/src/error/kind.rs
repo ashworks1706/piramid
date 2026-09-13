@@ -3,6 +3,8 @@
 use std::io;
 use thiserror::Error;
 
+use super::inference::InferenceError;
+
 /// Result with [PiramidError] as the error.
 pub type Result<T> = std::result::Result<T, PiramidError>;
 
@@ -50,9 +52,14 @@ pub enum PiramidError {
     #[error("Embedding error: {0}")]
     Embedding(#[from] super::embedding::EmbeddingError),
 
+    /// A model load or generation failure.
+    #[error("Inference error: {0}")]
+    Inference(#[from] InferenceError),
+
     /// A distance kernel or strategy failure.
     #[error("Compute error: {0}")]
     Compute(#[from] piramid_hardware::compute::ComputeError),
+
     /// A GPU device failure.
     #[error("Device error: {0}")]
     Gpu(#[from] piramid_hardware::gpu::GpuError),
@@ -89,6 +96,14 @@ impl PiramidError {
         match self {
             Self::Server(e) => e.kind(),
             Self::Embedding(_) => ErrorKind::Upstream,
+            Self::Inference(e) => match e {
+                InferenceError::InvalidRequest(_) => ErrorKind::BadRequest,
+                InferenceError::Timeout(_) => ErrorKind::Timeout,
+                InferenceError::Unavailable(_)
+                | InferenceError::QueueFull(_)
+                | InferenceError::Stopped(_) => ErrorKind::Unavailable,
+                InferenceError::Load(_) | InferenceError::Runtime(_) => ErrorKind::Internal,
+            },
             Self::Index(super::index::IndexError::MetricMismatch { .. })
             | Self::Storage(
                 super::storage::StorageError::InvalidDimension { .. }

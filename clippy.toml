@@ -1,7 +1,7 @@
-# Assertions in tests are supposed to panic. These lints stay hard errors in production code.
+# Tests may panic, unwrap and expect.
 allow-panic-in-tests = true
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 
-# Matches `rust-version` in the workspace manifest so clippy flags newer std APIs.
+# Matches rust-version in the workspace manifest.
 msrv = "1.87"

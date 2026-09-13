@@ -1,7 +1,7 @@
 //! Loading: defaults, then the file, then environment overrides, then secrets from the
 //! environment.
 
-use std::env;
+use std::env::{self, VarError};
 use std::fs;
 use std::path::PathBuf;
 
@@ -10,6 +10,9 @@ use yaml_serde::{Mapping, Value};
 use crate::config::{ApiKey, Config, API_KEY_ENV};
 use crate::error::ConfigError;
 
+/// Name of the environment variable holding the key for the openai embedding provider.
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+
 /// Prefix and separator for overrides. PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE=1024 sets
 /// runtime.wal.max_log_size.
 const ENV_PREFIX: &str = "PIRAMID__";
@@ -17,8 +20,7 @@ const ENV_SEPARATOR: &str = "__";
 
 /// Where configuration comes from: a file, and command-line values applied over it.
 ///
-/// A running server keeps the source it booted from, so a reload reads the same file and applies
-/// the same values.
+/// A reload reads the same source the server booted from.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ConfigSource {
     /// The file to read. None reads CONFIG_FILE, or no file when that is unset.
@@ -29,8 +31,8 @@ pub struct ConfigSource {
     pub data_dir: Option<String>,
 }
 
-/// Read CONFIG_FILE, apply PIRAMID__ overrides, read PIRAMID_API_KEY and OPENAI_API_KEY, then
-/// validate.
+/// Read CONFIG_FILE, apply PIRAMID__ overrides, read PIRAMID_API_KEY, and OPENAI_API_KEY for the
+/// openai provider, then validate.
 pub fn load() -> Result<Config, ConfigError> {
     load_from(&ConfigSource::default())
 }
@@ -39,12 +41,11 @@ pub fn load() -> Result<Config, ConfigError> {
 /// secrets from the environment, then validate.
 pub fn load_from(source: &ConfigSource) -> Result<Config, ConfigError> {
     let path = match &source.file {
-        Some(path) => Some(path.to_string_lossy().into_owned()),
-        None => env::var("CONFIG_FILE").ok(),
+        Some(path) => Some(path.clone()),
+        None => env::var_os("CONFIG_FILE").map(PathBuf::from),
     };
     let mut document = load_file(path)?;
     apply_env_overrides(&mut document)?;
-    apply_secret_env(&mut document)?;
 
     let mut config: Config =
         yaml_serde::from_value(document).map_err(|e| ConfigError::Invalid(e.to_string()))?;
@@ -66,32 +67,41 @@ pub fn load_from(source: &ConfigSource) -> Result<Config, ConfigError> {
         config.startup.data_dir = dir.clone();
     }
     config.startup.http.auth.api_key = server_api_key()?;
+    if let Some(embedding) = config
+        .startup
+        .embedding
+        .as_mut()
+        .filter(|embedding| embedding.provider == "openai")
+    {
+        embedding.api_key = read_env(OPENAI_API_KEY_ENV)?;
+    }
 
     config.validate().map_err(ConfigError::Invalid)?;
     Ok(config)
 }
 
 /// Parse the configuration file into an untyped document, or an empty one when there is none.
-fn load_file(path: Option<String>) -> Result<Value, ConfigError> {
+fn load_file(path: Option<PathBuf>) -> Result<Value, ConfigError> {
     let Some(path) = path else {
         return Ok(Value::Mapping(Mapping::new()));
     };
+    let shown = path.display();
     let data = fs::read_to_string(&path)
-        .map_err(|e| ConfigError::File(format!("failed to read CONFIG_FILE '{path}': {e}")))?;
+        .map_err(|e| ConfigError::File(format!("failed to read CONFIG_FILE '{shown}': {e}")))?;
 
-    let parsed = if path.ends_with(".yaml") || path.ends_with(".yml") {
-        yaml_serde::from_str::<Value>(&data)
-            .map_err(|e| ConfigError::File(format!("failed to parse YAML '{path}': {e}")))?
-    } else if path.ends_with(".json") {
-        serde_json::from_str::<Value>(&data)
-            .map_err(|e| ConfigError::File(format!("failed to parse JSON '{path}': {e}")))?
-    } else {
-        return Err(ConfigError::File(format!(
-            "unsupported CONFIG_FILE extension for '{path}', expected .yaml, .yml, or .json"
-        )));
+    let parsed = match path.extension().and_then(std::ffi::OsStr::to_str) {
+        Some("yaml" | "yml") => yaml_serde::from_str::<Value>(&data)
+            .map_err(|e| ConfigError::File(format!("failed to parse YAML '{shown}': {e}")))?,
+        Some("json") => serde_json::from_str::<Value>(&data)
+            .map_err(|e| ConfigError::File(format!("failed to parse JSON '{shown}': {e}")))?,
+        _ => {
+            return Err(ConfigError::File(format!(
+                "unsupported CONFIG_FILE extension for '{shown}', expected .yaml, .yml, or .json"
+            )))
+        }
     };
 
-    // An empty file parses as null, which is a valid document taking every default.
+    // An empty file parses as null and takes every default.
     Ok(match parsed {
         Value::Null => Value::Mapping(Mapping::new()),
         other => other,
@@ -100,9 +110,19 @@ fn load_file(path: Option<String>) -> Result<Value, ConfigError> {
 
 /// Merge every PIRAMID__ variable into the document at the path its name spells out.
 fn apply_env_overrides(document: &mut Value) -> Result<(), ConfigError> {
-    let mut overrides: Vec<(String, String)> = env::vars()
-        .filter(|(name, _)| name.starts_with(ENV_PREFIX))
-        .collect();
+    let mut overrides: Vec<(String, String)> = Vec::new();
+    for (name, raw) in env::vars_os() {
+        if !name.as_encoded_bytes().starts_with(ENV_PREFIX.as_bytes()) {
+            continue;
+        }
+        let (Some(name_text), Some(raw_text)) = (name.to_str(), raw.to_str()) else {
+            return Err(ConfigError::Env {
+                name: name.to_string_lossy().into_owned(),
+                reason: "not valid UTF-8".to_string(),
+            });
+        };
+        overrides.push((name_text.to_string(), raw_text.to_string()));
+    }
     // Overrides are applied in sorted order.
     overrides.sort();
 
@@ -124,21 +144,21 @@ fn apply_env_overrides(document: &mut Value) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// Read the API key from the environment. It has no place in the configuration file.
-fn apply_secret_env(document: &mut Value) -> Result<(), ConfigError> {
-    if let Ok(key) = env::var("OPENAI_API_KEY") {
-        let path = ["startup", "embedding", "api_key"].map(str::to_string);
-        insert_at(document, &path, Value::String(key)).map_err(|reason| ConfigError::Env {
-            name: "OPENAI_API_KEY".to_string(),
-            reason,
-        })?;
+/// Read an environment variable. None when it is unset, an error when it is not UTF-8.
+fn read_env(name: &str) -> Result<Option<String>, ConfigError> {
+    match env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(VarError::NotPresent) => Ok(None),
+        Err(VarError::NotUnicode(_)) => Err(ConfigError::Env {
+            name: name.to_string(),
+            reason: "not valid UTF-8".to_string(),
+        }),
     }
-    Ok(())
 }
 
-/// Read the server API key from the environment. It has no place in the configuration file.
+/// Read the server API key from PIRAMID_API_KEY. None when it is unset.
 fn server_api_key() -> Result<Option<ApiKey>, ConfigError> {
-    let Ok(key) = env::var(API_KEY_ENV) else {
+    let Some(key) = read_env(API_KEY_ENV)? else {
         return Ok(None);
     };
     ApiKey::new(key)

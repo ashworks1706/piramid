@@ -74,7 +74,7 @@ pub fn delete_collection(
     state: &SharedState,
     collection: String,
 ) -> Result<DeleteCollectionResponse> {
-    // Deleting frees disk space, so it is allowed while low disk space has writes disabled.
+    // Deleting is allowed while low disk space has writes disabled.
     state.ensure_available()?;
     state.collection_manager.delete(&collection)?;
     Ok(DeleteCollectionResponse { deleted: true })
@@ -129,7 +129,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
     state.ensure_write_allowed()?;
 
     let collection_handle = state.get_existing_collection(&collection)?;
-    let started_at = piramid_core::clock::unix_secs();
+    let started_at = piramid_core::clock::unix_secs()?;
     let running = RebuildJobStatus {
         status: RebuildState::Running,
         started_at,
@@ -155,8 +155,10 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
     let collection_name = collection.clone();
     let collection_handle_clone = collection_handle.clone();
     let jobs = state.rebuild_jobs.clone();
+    let monitor_jobs = state.rebuild_jobs.clone();
+    let spawned = Instant::now();
 
-    tokio::task::spawn_blocking(move || {
+    let rebuild = tokio::task::spawn_blocking(move || {
         let mut collection_guard = collection_handle_clone.write();
         let start = Instant::now();
         if let Err(e) = collection_guard.rebuild_index() {
@@ -166,7 +168,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
                 error=%e,
                 "index_rebuild_failed"
             );
-            let finished = piramid_core::clock::unix_secs();
+            let finished = started_at.saturating_add(start.elapsed().as_secs());
             jobs.insert(
                 collection_name.clone(),
                 RebuildJobStatus {
@@ -184,7 +186,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
                 elapsed_ms = start.elapsed().as_millis(),
                 "index_rebuild_complete"
             );
-            let finished = piramid_core::clock::unix_secs();
+            let finished = started_at.saturating_add(start.elapsed().as_secs());
             jobs.insert(
                 collection_name.clone(),
                 RebuildJobStatus {
@@ -197,11 +199,47 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
             );
         }
     });
+    tokio::spawn(record_rebuild_panic(
+        rebuild,
+        monitor_jobs,
+        collection,
+        started_at,
+        spawned,
+    ));
 
     Ok(RebuildIndexResponse {
         success: true,
         latency_ms: None,
     })
+}
+
+/// Wait for a rebuild task and record it as failed when it panicked.
+async fn record_rebuild_panic(
+    rebuild: tokio::task::JoinHandle<()>,
+    jobs: std::sync::Arc<dashmap::DashMap<String, RebuildJobStatus>>,
+    collection: String,
+    started_at: u64,
+    spawned: Instant,
+) {
+    let Err(join_error) = rebuild.await else {
+        return;
+    };
+    tracing::error!(
+        target: "piramid::indexing",
+        collection = %collection,
+        error = %join_error,
+        "index_rebuild_failed"
+    );
+    jobs.insert(
+        collection,
+        RebuildJobStatus {
+            status: RebuildState::Failed,
+            started_at,
+            finished_at: Some(started_at.saturating_add(spawned.elapsed().as_secs())),
+            error: Some(join_error.to_string()),
+            elapsed_ms: Some(spawned.elapsed().as_millis()),
+        },
+    );
 }
 
 /// Pairs of near-identical documents in one existing collection.
@@ -300,4 +338,36 @@ pub fn rebuild_index_status(
         elapsed_ms: job.elapsed_ms.map(|ms| ms as f32),
         error: job.error.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_rebuild_that_panics_is_recorded_as_failed() {
+        let jobs = std::sync::Arc::new(dashmap::DashMap::new());
+        jobs.insert(
+            "docs".to_string(),
+            RebuildJobStatus {
+                status: RebuildState::Running,
+                started_at: 7,
+                finished_at: None,
+                error: None,
+                elapsed_ms: None,
+            },
+        );
+        let rebuild = tokio::task::spawn_blocking(|| panic!("index out of bounds"));
+        record_rebuild_panic(rebuild, jobs.clone(), "docs".to_string(), 7, Instant::now()).await;
+
+        let job = jobs.get("docs").unwrap();
+        assert_eq!(job.status, RebuildState::Failed);
+        assert_eq!(job.started_at, 7);
+        assert!(job.finished_at.is_some());
+        assert!(
+            job.error.as_deref().unwrap().contains("panic"),
+            "{:?}",
+            job.error
+        );
+    }
 }

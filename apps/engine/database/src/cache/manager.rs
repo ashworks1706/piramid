@@ -45,8 +45,8 @@ impl CacheManager {
 
     /// Drop id from the metadata cache, and from the store when remove_vector is set.
     ///
-    /// HNSW deletes tombstone a node and keep its vector resident for traversal, which is the case
-    /// where remove_vector is false.
+    /// remove_vector is false for an HNSW delete, which tombstones the node and keeps its vector
+    /// resident.
     pub fn remove(&mut self, id: &Uuid, remove_vector: bool) {
         if remove_vector {
             self.store.remove(id);

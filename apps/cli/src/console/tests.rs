@@ -39,14 +39,35 @@ fn an_unrecognised_word_is_handed_to_just() {
             "main".into()
         ])
     );
-    // The start word with no argument is a recipe name, not a malformed start.
-    assert_eq!(parse_command("start"), Command::Just(vec!["start".into()]));
-    assert_eq!(parse_command("   "), Command::Unknown(String::new()));
+    assert_eq!(
+        parse_command("   "),
+        Command::Unknown("empty command".into())
+    );
+}
+
+#[test]
+fn a_unit_command_without_a_unit_is_refused() {
+    for word in ["start", "stop", "restart"] {
+        assert_eq!(
+            parse_command(word),
+            Command::Unknown(format!("{word} needs a unit name"))
+        );
+    }
+}
+
+#[test]
+fn each_command_has_one_spelling() {
+    assert_eq!(parse_command("quit"), Command::Just(vec!["quit".into()]));
+    assert_eq!(parse_command("h"), Command::Just(vec!["h".into()]));
+    assert_eq!(
+        parse_command("just check"),
+        Command::Just(vec!["just".into(), "check".into()])
+    );
 }
 
 #[test]
 fn the_catalog_is_unique_and_every_unit_is_runnable() {
-    let units = catalog();
+    let units = catalog("http://localhost:6333");
     let ids: std::collections::HashSet<&str> = units.iter().map(|u| u.id.as_str()).collect();
     assert_eq!(ids.len(), units.len(), "two units share an id");
     // Every unit is either a compose service or a just recipe.
@@ -54,13 +75,13 @@ fn the_catalog_is_unique_and_every_unit_is_runnable() {
         .iter()
         .all(|u| u.service().is_some() || !u.args.is_empty()));
     assert!(units.iter().any(|u| u.id == "serve"));
-    // A named task keeps its name rather than its command line.
+    // A named task is identified by its name, not its command line.
     let bundle = units
         .iter()
         .find(|u| u.id == "support-bundle")
         .expect("the catalog offers a support bundle");
     assert_eq!(bundle.args, ["piramid", "support-bundle"]);
-    // The resolved configuration is a view now, not a recipe to shell out to.
+    // The resolved configuration is a view, not a recipe.
     assert!(!units.iter().any(|u| u.id == "config"));
     assert!(
         !units.iter().any(|u| u.id.starts_with("piramid ")),
@@ -89,7 +110,7 @@ fn every_catalog_recipe_exists_in_the_justfile() {
         .map(str::to_owned)
         .collect();
 
-    for unit in catalog() {
+    for unit in catalog("http://localhost:6333") {
         let Some(recipe) = unit.args.first() else {
             continue;
         };
@@ -106,7 +127,7 @@ fn console() -> super::app::App {
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let config = piramid_core::config::Config::default();
     super::app::App::new(
-        Settings::from_config(&config),
+        Settings::from_config(&config).unwrap(),
         Profile::Developer,
         root,
         &tx,
@@ -205,9 +226,9 @@ fn ps_output_parses_as_an_array_or_as_lines() {
     assert_eq!(parsed["piramid"].exit_code, 1);
     assert_eq!(parsed["ollama"].status(), Status::Running);
     assert!(parse_ps("").is_ok_and(|m| m.is_empty()));
-    // A failed query returns an error rather than an empty set of services.
+    // A failed query returns an error.
     assert!(parse_ps("not json").is_err());
-    // A row without an exit code cannot say whether the service exited, so it is refused.
+    // A row without an exit code is refused.
     assert!(parse_ps(r#"{"Service":"piramid","State":"exited","Health":""}"#).is_err());
 }
 
@@ -229,7 +250,7 @@ fn a_log_line_cannot_move_the_cursor_out_of_its_pane() {
 
 #[test]
 fn the_log_buffer_drops_the_oldest_line_and_searches_wrapping() {
-    let mut buffer = LogBuffer::new(3);
+    let mut buffer = LogBuffer::new(std::num::NonZeroUsize::new(3).unwrap());
     for text in ["alpha", "Beta", "gamma", "delta"] {
         buffer.push(LogLine::now(Stream::Out, text));
     }
@@ -268,10 +289,9 @@ fn full_output_is_kept_on_disk_after_the_pane_scrolls_past_it() {
 #[test]
 fn console_settings_come_from_the_one_configuration_file() {
     let config = piramid_core::config::Config::default();
-    let settings = Settings::from_config(&config);
+    let settings = Settings::from_config(&config).unwrap();
 
-    // Unset, the console follows the address the server in the same file binds, so a deployment
-    // that moves the port does not have to say so twice.
+    // Unset, the console follows the address the server in the same file binds.
     assert_eq!(config.console.base_url, "");
     assert_eq!(settings.base_url, "http://127.0.0.1:6333");
     assert_eq!(settings.web_url, "http://localhost:3000");
@@ -283,7 +303,7 @@ fn console_settings_come_from_the_one_configuration_file() {
     let mut moved = piramid_core::config::Config::default();
     moved.startup.bind = "0.0.0.0:7000".to_owned();
     assert_eq!(
-        Settings::from_config(&moved).base_url,
+        Settings::from_config(&moved).unwrap().base_url,
         "http://localhost:7000"
     );
 }
@@ -355,8 +375,7 @@ fn an_unreachable_server_is_reported_rather_than_left_blank() {
         "Connection refused".into(),
     )));
 
-    // The status bar and the empty list both read this, so a console pointed at nothing says so
-    // instead of waiting forever.
+    // A refresh against an unreachable server records the error and leaves no rows.
     assert!(app.collections.error.is_some());
     assert!(app.collections.rows.is_empty());
 }
@@ -368,7 +387,7 @@ fn console_watching(base_url: &str) -> super::app::App {
     let mut config = piramid_core::config::Config::default();
     config.console.base_url = base_url.to_owned();
     super::app::App::new(
-        Settings::from_config(&config),
+        Settings::from_config(&config).unwrap(),
         Profile::Production,
         root,
         &tx,
@@ -494,15 +513,27 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
 
     let start = Instant::now();
     let mut view = DeviceView::new("http://localhost:6333");
-    view.record(start, Some(cpu_reading(Some(10.0))));
+    view.record(start, Some(cpu_reading(Some(10.0))), Vec::new(), None, None);
     view.record(
         start + Duration::from_secs(1),
         Some(cpu_reading(Some(20.0))),
+        Vec::new(),
+        None,
+        None,
     );
-    view.record(start + Duration::from_secs(2), Some(cpu_reading(None)));
+    view.record(
+        start + Duration::from_secs(2),
+        Some(cpu_reading(None)),
+        Vec::new(),
+        None,
+        None,
+    );
     view.record(
         start + Duration::from_secs(3),
         Some(cpu_reading(Some(30.0))),
+        Vec::new(),
+        None,
+        None,
     );
 
     let now = start + Duration::from_secs(3);
@@ -514,6 +545,406 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
     assert!(view
         .series(now, |h| h.memory_used_bytes.map(|b| b as f64))
         .is_empty());
+}
+
+/// Readings of the GPU at index with only utilisation set.
+fn busy_reading(index: u32, busy: Option<f32>) -> super::client::GpuMetrics {
+    super::client::GpuMetrics {
+        index,
+        name: None,
+        memory_used_bytes: None,
+        memory_total_bytes: None,
+        utilization_percent: busy,
+        temperature_celsius: None,
+    }
+}
+
+#[test]
+fn an_absent_gpu_reading_is_a_gap_in_the_graph_and_never_zero() {
+    use super::device::DeviceView;
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let at = |secs| start + Duration::from_secs(secs);
+    let mut view = DeviceView::new("http://localhost:6333");
+    view.record(at(0), None, vec![busy_reading(0, Some(10.0))], None, None);
+    view.record(at(1), None, vec![busy_reading(0, None)], None, None);
+    view.record(at(2), None, vec![busy_reading(0, Some(20.0))], None, None);
+    view.record(at(3), None, Vec::new(), None, None);
+    view.record(
+        at(4),
+        None,
+        vec![busy_reading(1, Some(90.0)), busy_reading(0, Some(30.0))],
+        None,
+        None,
+    );
+
+    let now = at(4);
+    assert_eq!(
+        view.gpu_series(now, 0, |g| g.utilization_percent.map(f64::from)),
+        vec![vec![(-4.0, 10.0)], vec![(-2.0, 20.0)], vec![(-0.0, 30.0)]]
+    );
+    assert_eq!(
+        view.gpu_series(now, 1, |g| g.utilization_percent.map(f64::from)),
+        vec![vec![(-0.0, 90.0)]]
+    );
+    assert!(view
+        .gpu_series(now, 0, |g| g.temperature_celsius.map(f64::from))
+        .is_empty());
+    assert_eq!(view.gpu_indices(), vec![0, 1]);
+    assert_eq!(
+        view.latest_gpu(1).and_then(|g| g.utilization_percent),
+        Some(90.0)
+    );
+}
+
+#[test]
+fn a_server_without_gpu_readings_has_no_gpu_in_the_device_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    assert!(snapshot.metrics.gpus.is_empty());
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert!(app.device.gpu_indices().is_empty());
+
+    app.handle(press('4'));
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("cpu  host 42.0%"), "{drawn}");
+    assert!(!drawn.contains("gpu "), "{drawn}");
+}
+
+#[test]
+fn gpu_readings_are_decoded_and_drawn_in_the_device_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(
+            r#", "host": {"cpu_percent": 42.0},
+            "gpus": [{"index": 0, "name": "Test GPU", "memory_used_bytes": 1024,
+                      "temperature_celsius": 61.0}]"#,
+        ),
+        READY_BODY,
+    );
+    let gpu = snapshot
+        .metrics
+        .gpus
+        .first()
+        .cloned()
+        .expect("one gpu was sent");
+    assert_eq!(gpu.memory_used_bytes, Some(1024));
+    assert_eq!(gpu.memory_total_bytes, None);
+    assert_eq!(gpu.utilization_percent, None);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    let drawn = screen(&mut app);
+    assert!(drawn.contains("gpu 0 Test GPU"), "{drawn}");
+    assert!(drawn.contains("busy not reported"), "{drawn}");
+    assert!(drawn.contains("temperature 61 C"), "{drawn}");
+}
+
+/// Generation readings of a model on cuda:0 with only decode rate and time to first token set
+/// among the averages.
+fn generation_reading(
+    decode: Option<f32>,
+    first_token: Option<f32>,
+) -> super::client::InferenceMetrics {
+    super::client::InferenceMetrics {
+        model: "qwen3-0.6b".into(),
+        device: "cuda:0".into(),
+        avg_time_to_first_token_ms: first_token,
+        decode_tokens_per_second: decode,
+        preemptions: 0,
+        queue_depth: 0,
+        running: 0,
+        last_batch_size: 0,
+        kv_blocks_total: 100,
+        kv_blocks_used: 0,
+        kv_blocks_cached: 0,
+        kv_evictions: 0,
+        prefix_hit_rate: None,
+    }
+}
+
+#[test]
+fn an_absent_generation_average_is_a_gap_in_the_graph_and_never_zero() {
+    use super::device::DeviceView;
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let at = |secs| start + Duration::from_secs(secs);
+    let mut view = DeviceView::new("http://localhost:6333");
+    view.record(
+        at(0),
+        None,
+        Vec::new(),
+        None,
+        Some(generation_reading(None, None)),
+    );
+    view.record(
+        at(1),
+        None,
+        Vec::new(),
+        None,
+        Some(generation_reading(Some(40.0), Some(120.0))),
+    );
+    view.record(at(2), None, Vec::new(), None, None);
+    view.record(
+        at(3),
+        None,
+        Vec::new(),
+        None,
+        Some(generation_reading(Some(50.0), None)),
+    );
+
+    let now = at(3);
+    assert_eq!(
+        view.inference_series(now, |i| i.decode_tokens_per_second.map(f64::from)),
+        vec![vec![(-2.0, 40.0)], vec![(-0.0, 50.0)]]
+    );
+    assert_eq!(
+        view.inference_series(now, |i| i.avg_time_to_first_token_ms.map(f64::from)),
+        vec![vec![(-2.0, 120.0)]]
+    );
+    assert_eq!(
+        view.latest_inference()
+            .and_then(|i| i.avg_time_to_first_token_ms),
+        None
+    );
+}
+
+#[test]
+fn kv_bar_cells_split_the_width_and_always_fill_it() {
+    use super::ui::kv_cells;
+
+    assert_eq!(kv_cells(25, 25, 100, 40), [10, 10, 20]);
+    assert_eq!(kv_cells(0, 0, 0, 40), [0, 0, 40]);
+    assert_eq!(kv_cells(100, 0, 100, 40), [40, 0, 0]);
+    assert_eq!(kv_cells(90, 90, 100, 40), [36, 4, 0]);
+    assert_eq!(kv_cells(1, 1, 3, 0), [0, 0, 0]);
+}
+
+/// The inference block of a metrics body with averages left out as the server leaves them out.
+const INFERENCE_BODY: &str = r#", "host": {"cpu_percent": 42.0},
+    "inference": {
+        "model": "qwen3-0.6b", "device": "cuda:0",
+        "requests_admitted": 9, "requests_finished": 7, "requests_failed": 0,
+        "prompt_tokens": 900, "cached_prompt_tokens": 300, "generated_tokens": 700,
+        "decode_tokens_per_second": 38.5, "avg_decode_step_ms": 26.0,
+        "preemptions": 1, "queue_depth": 2, "running": 4, "last_batch_size": 3,
+        "kv_blocks_total": 1200, "kv_blocks_used": 300, "kv_blocks_cached": 60,
+        "kv_evictions": 5, "prefix_hit_rate": 0.25
+    }"#;
+
+#[test]
+fn inference_readings_decode_with_unmeasured_averages_absent() {
+    use super::client::{parse, Metrics};
+
+    let metrics: Metrics =
+        parse("/api/metrics", &metrics_body(INFERENCE_BODY)).expect("the body decodes");
+    let inference = metrics.inference.expect("the inference block was sent");
+    assert_eq!(inference.model, "qwen3-0.6b");
+    assert_eq!(inference.decode_tokens_per_second, Some(38.5));
+    assert_eq!(inference.avg_time_to_first_token_ms, None);
+    assert_eq!(inference.kv_blocks_cached, 60);
+    assert_eq!(inference.prefix_hit_rate, Some(0.25));
+
+    // A server with no model loaded leaves the block out.
+    let idle: Metrics =
+        parse("/api/metrics", &metrics_body(r#", "host": {}"#)).expect("the body decodes");
+    assert!(idle.inference.is_none());
+
+    // A counter the server always sends is required.
+    let missing = metrics_body(INFERENCE_BODY).replace(r#""queue_depth": 2,"#, "");
+    let error = parse::<Metrics>("/api/metrics", &missing).expect_err("the key is required");
+    assert!(error.to_string().contains("queue_depth"), "{error}");
+}
+
+#[test]
+fn a_server_with_no_model_loaded_draws_no_generation_panels() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert!(app.device.latest_inference().is_none());
+
+    app.handle(press('4'));
+    let drawn = screen_of(&mut app, 200, 40);
+    assert!(drawn.contains("cpu  host 42.0%"), "{drawn}");
+    assert!(!drawn.contains("generation"), "{drawn}");
+    assert!(!drawn.contains("prefix hits"), "{drawn}");
+}
+
+#[test]
+fn inference_readings_are_drawn_in_the_device_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(&metrics_body(INFERENCE_BODY), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 44), (60, 30)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(drawn.contains("decode 38.5 tok/s"), "{drawn}");
+        assert!(drawn.contains("first token not reported"), "{drawn}");
+        assert!(drawn.contains("qwen3-0.6b on cuda:0"), "{drawn}");
+        assert!(
+            drawn.contains("used 300  cached 60  free 840  of 1,200"),
+            "{drawn}"
+        );
+        assert!(drawn.contains("prefix hits 25.0%  evictions 5"), "{drawn}");
+        assert!(
+            drawn.contains("queue 2  running 4  batch 3  preempted 1"),
+            "{drawn}"
+        );
+    }
+}
+
+#[test]
+fn stacked_bar_cells_split_the_width_and_always_fill_it() {
+    use super::ui::stacked_cells;
+
+    assert_eq!(stacked_cells(&[25, 25, 10], 100, 40), vec![10, 10, 4, 16]);
+    assert_eq!(stacked_cells(&[5, 5, 5], 0, 40), vec![0, 0, 0, 40]);
+    assert_eq!(stacked_cells(&[80, 80, 80], 100, 40), vec![32, 8, 0, 0]);
+    assert_eq!(stacked_cells(&[50], 100, 0), vec![0, 0]);
+    assert_eq!(stacked_cells(&[], 100, 10), vec![10]);
+}
+
+/// The device memory budget of a metrics body, shared or split.
+fn budget_body(shared: bool) -> String {
+    let (weights, kv, index) = if shared {
+        (8_u64 << 30, 8_u64 << 30, 8_u64 << 30)
+    } else {
+        (4_u64 << 30, 3_u64 << 30, 1_u64 << 30)
+    };
+    format!(
+        r#", "host": {{"cpu_percent": 42.0}},
+        "gpu_budget": {{
+            "usable_bytes": {usable}, "shared": {shared},
+            "pools": [
+                {{"pool": "weights", "capacity_bytes": {weights}, "used_bytes": {w_used}}},
+                {{"pool": "kv_cache", "capacity_bytes": {kv}, "used_bytes": {k_used}}},
+                {{"pool": "index", "capacity_bytes": {index}, "used_bytes": {i_used}}}
+            ]
+        }}"#,
+        usable = 8_u64 << 30,
+        w_used = 2_u64 << 30,
+        k_used = 1_u64 << 30,
+        i_used = 512_u64 << 20,
+    )
+}
+
+#[test]
+fn a_device_memory_budget_decodes_and_is_absent_without_a_gpu() {
+    use super::client::{parse, Metrics};
+
+    let metrics: Metrics =
+        parse("/api/metrics", &metrics_body(&budget_body(false))).expect("the body decodes");
+    let budget = metrics.gpu_budget.expect("the budget was sent");
+    assert_eq!(budget.usable_bytes, 8 << 30);
+    assert!(!budget.shared);
+    let pools: Vec<(&str, u64, u64)> = budget
+        .pools
+        .iter()
+        .map(|p| (p.pool.as_str(), p.capacity_bytes, p.used_bytes))
+        .collect();
+    assert_eq!(
+        pools,
+        vec![
+            ("weights", 4 << 30, 2 << 30),
+            ("kv_cache", 3 << 30, 1 << 30),
+            ("index", 1 << 30, 512 << 20),
+        ]
+    );
+
+    // A server with no GPU open leaves the block out.
+    let idle: Metrics =
+        parse("/api/metrics", &metrics_body(r#", "host": {}"#)).expect("the body decodes");
+    assert!(idle.gpu_budget.is_none());
+}
+
+#[test]
+fn a_server_without_a_budget_draws_no_device_memory_panel() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    assert!(app.device.latest_budget().is_none());
+
+    app.handle(press('4'));
+    let drawn = screen_of(&mut app, 200, 40);
+    assert!(drawn.contains("cpu  host 42.0%"), "{drawn}");
+    assert!(!drawn.contains("device memory"), "{drawn}");
+}
+
+#[test]
+fn a_shared_budget_draws_total_use_and_each_pool() {
+    let mut app = console();
+    let snapshot = snapshot_from(&metrics_body(&budget_body(true)), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 44), (60, 30)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(
+            drawn.contains("device memory  shared  3.5 GB of 8.0 GB"),
+            "{drawn}"
+        );
+        assert!(
+            drawn.contains("weights 2.0 GB  kv cache 1.0 GB  index 512.0 MB"),
+            "{drawn}"
+        );
+        assert!(drawn.contains("free 4.5 GB"), "{drawn}");
+        assert!(
+            drawn.contains("every pool draws from one budget"),
+            "{drawn}"
+        );
+    }
+}
+
+#[test]
+fn a_split_budget_draws_each_pool_against_its_capacity() {
+    let mut app = console();
+    let snapshot = snapshot_from(&metrics_body(&budget_body(false)), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 44), (60, 30)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(
+            drawn.contains("device memory  split  3.5 GB of 8.0 GB"),
+            "{drawn}"
+        );
+        assert!(drawn.contains("2.0 GB of 4.0 GB"), "{drawn}");
+        assert!(drawn.contains("1.0 GB of 3.0 GB"), "{drawn}");
+        assert!(drawn.contains("512.0 MB of 1.0 GB"), "{drawn}");
+        assert!(!drawn.contains("every pool draws"), "{drawn}");
+    }
+}
+
+#[test]
+fn a_budget_and_generation_panels_share_the_device_view() {
+    let mut app = console();
+    let body = format!(
+        "{}{}",
+        budget_body(true),
+        INFERENCE_BODY.replacen(r#", "host": {"cpu_percent": 42.0},"#, ",", 1)
+    );
+    let snapshot = snapshot_from(&metrics_body(&body), READY_BODY);
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    for (width, height) in [(200, 40), (80, 50)] {
+        let drawn = screen_of(&mut app, width, height);
+        assert!(drawn.contains("device memory  shared"), "{drawn}");
+        assert!(drawn.contains("qwen3-0.6b on cuda:0"), "{drawn}");
+        assert!(drawn.contains("queue 2  running 4"), "{drawn}");
+    }
 }
 
 /// A metrics body with one collection, the host block given, and the rest as the server sends it.
@@ -582,15 +1013,16 @@ fn host_fields_the_server_leaves_out_read_as_absent() {
         &metrics_body(r#", "host": {"memory_total_bytes": 4096, "cpu_percent": 0.0}"#),
     )
     .expect("the body decodes");
-    let host = metrics.host.expect("the host block was sent");
+    let host = metrics.host;
     assert_eq!(host.memory_total_bytes, Some(4096));
     assert_eq!(host.cpu_percent, Some(0.0));
     assert_eq!(host.memory_used_bytes, None);
     assert_eq!(host.process_resident_bytes, None);
 
-    // A server that predates the host block has no host readings at all.
-    let older: Metrics = parse("/api/metrics", &metrics_body("")).expect("the body decodes");
-    assert!(older.host.is_none());
+    // The server always sends the host block, so a body without it is a decode error.
+    let error = parse::<Metrics>("/api/metrics", &metrics_body(""))
+        .expect_err("the host block is required");
+    assert!(error.to_string().contains("host"), "{error}");
 }
 
 #[test]
@@ -608,7 +1040,7 @@ fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
     assert!(parse::<Metrics>("/api/metrics", r#"{"collections": []}"#).is_err());
 
     // A null the server always sends is required as a key, not only as a value.
-    let no_latency = metrics_body("").replace(r#""search_latency_ms": 1.5,"#, "");
+    let no_latency = metrics_body(r#", "host": {}"#).replace(r#""search_latency_ms": 1.5,"#, "");
     let error = parse::<Metrics>("/api/metrics", &no_latency).expect_err("the key is required");
     assert!(error.to_string().contains("search_latency_ms"), "{error}");
 
@@ -620,7 +1052,12 @@ fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
 
 /// The text of every cell of the console drawn at 200 by 20.
 fn screen(app: &mut super::app::App) -> String {
-    let backend = ratatui::backend::TestBackend::new(200, 20);
+    screen_of(app, 200, 20)
+}
+
+/// The text of every cell of the console drawn at width by height.
+fn screen_of(app: &mut super::app::App, width: u16, height: u16) -> String {
+    let backend = ratatui::backend::TestBackend::new(width, height);
     let mut terminal = ratatui::Terminal::new(backend).expect("a test terminal opens");
     terminal
         .draw(|frame| super::ui::draw(frame, app))
@@ -668,7 +1105,7 @@ fn console_with_a_collection() -> super::app::App {
     let mut app = console();
     app.handle(press('2'));
     app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
-        &metrics_body(""),
+        &metrics_body(r#", "host": {}"#),
         READY_BODY,
     )))));
     app
@@ -818,9 +1255,179 @@ async fn a_rejected_key_is_reported_as_an_authentication_failure_not_as_unreacha
 #[test]
 fn the_console_sends_the_key_the_environment_set() {
     let mut config = piramid_core::config::Config::default();
-    assert!(Settings::from_config(&config).api_key.is_none());
+    assert!(Settings::from_config(&config).unwrap().api_key.is_none());
 
     let key = piramid_core::config::ApiKey::new("from-env".into()).unwrap();
     config.startup.http.auth.api_key = Some(key.clone());
-    assert_eq!(Settings::from_config(&config).api_key, Some(key));
+    assert_eq!(Settings::from_config(&config).unwrap().api_key, Some(key));
+}
+
+#[test]
+fn a_server_with_no_model_loaded_gives_the_device_graphs_the_whole_view() {
+    let mut app = console();
+    let snapshot = snapshot_from(
+        &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
+        READY_BODY,
+    );
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+
+    app.handle(press('4'));
+    let (width, height) = (200, 40);
+    let drawn: Vec<char> = screen_of(&mut app, width, height).chars().collect();
+    let last_body_row: String = drawn
+        .chunks(usize::from(width))
+        .nth(usize::from(height) - 2)
+        .expect("the screen has that row")
+        .iter()
+        .collect();
+    assert!(!last_body_row.trim().is_empty(), "{last_body_row:?}");
+}
+
+#[test]
+fn a_unit_killed_by_a_signal_it_was_not_asked_for_is_a_failure() {
+    let mut app = console();
+    app.handle(super::types::Event::Exited {
+        unit: "serve".into(),
+        code: None,
+    });
+    assert_eq!(
+        app.current().status,
+        Status::Failed("killed by a signal".into())
+    );
+
+    app.handle(super::types::Event::Exited {
+        unit: "serve".into(),
+        code: Some(3),
+    });
+    assert_eq!(app.current().status, Status::Exited(3));
+}
+
+#[test]
+fn stopping_a_unit_this_console_did_not_start_is_an_error() {
+    use super::runner::Runner;
+    use super::types::RunnerError;
+
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut runner = Runner::new(std::env::temp_dir(), tx);
+    let serve = catalog("http://localhost:6333")
+        .into_iter()
+        .find(|unit| unit.id == "serve")
+        .expect("the catalog has a serve unit");
+    let error = runner.stop(&serve).expect_err("nothing was started");
+    assert!(
+        matches!(&error, RunnerError::NotTracked { unit } if unit == "serve"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn an_error_body_is_read_from_the_error_key_only() {
+    use super::client::summarize;
+
+    assert_eq!(
+        summarize(r#"{"error": "no such collection"}"#),
+        "no such collection"
+    );
+    assert_eq!(
+        summarize(r#"{"message": "boom"}"#),
+        r#"{"message": "boom"}"#
+    );
+    assert_eq!(summarize(" plain text \n"), "plain text");
+}
+
+#[test]
+fn a_collection_that_is_not_open_has_no_vector_count() {
+    let mut app = console();
+    app.handle(press('2'));
+    let ready = r#"{
+        "ok": true, "version": "0.2.0", "data_dir": "/data", "total_collections": 2,
+        "loaded_collections": 1, "total_vectors": 3,
+        "collections": [
+            {"name": "docs", "loaded": true, "integrity_ok": true},
+            {"name": "cold", "loaded": false}
+        ]
+    }"#;
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
+        &metrics_body(r#", "host": {}"#),
+        ready,
+    )))));
+    let cold = app
+        .collections
+        .rows
+        .iter()
+        .find(|row| row.name == "cold")
+        .expect("readiness lists cold");
+    assert_eq!(cold.vectors(), None);
+    let docs = app
+        .collections
+        .rows
+        .iter()
+        .find(|row| row.name == "docs")
+        .expect("readiness lists docs");
+    assert_eq!(docs.vectors(), Some(3));
+
+    let drawn = screen(&mut app);
+    let cold_line = drawn
+        .lines()
+        .find(|line| line.contains(" cold"))
+        .expect("the sidebar lists cold");
+    assert!(cold_line.contains('-'), "{cold_line}");
+    assert!(!cold_line.contains(" 0 "), "{cold_line}");
+}
+
+#[test]
+fn only_an_unreachable_server_gets_the_start_a_server_hint() {
+    use super::client::ClientError;
+
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(super::types::Event::Snapshot(Box::new(Err(
+        ClientError::Unauthorized {
+            path: "/api/metrics".into(),
+            reason: "the server rejected the key".into(),
+        },
+    ))));
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(!drawn.contains("no server at"), "{drawn}");
+    assert!(!drawn.contains("Start one with"), "{drawn}");
+    assert!(drawn.contains("refused"), "{drawn}");
+
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(super::types::Event::Snapshot(Box::new(Err(
+        ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
+    ))));
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(drawn.contains("no server at"), "{drawn}");
+}
+
+#[test]
+fn the_serve_unit_opens_the_address_the_configuration_binds() {
+    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut config = piramid_core::config::Config::default();
+    config.startup.bind = "0.0.0.0:7000".to_owned();
+    config.console.base_url = "https://piramid.internal:6333".to_owned();
+    let app = super::app::App::new(
+        Settings::from_config(&config).unwrap(),
+        Profile::Developer,
+        root,
+        &tx,
+    )
+    .expect("the log directory is creatable");
+    let url = |id: &str| {
+        app.units
+            .iter()
+            .find(|state| state.unit.id == id)
+            .and_then(|state| state.unit.url.clone())
+    };
+    assert_eq!(url("serve").as_deref(), Some("http://localhost:7000"));
+    assert_eq!(url("piramid").as_deref(), Some("http://localhost:6333"));
+}
+
+#[test]
+fn settings_refuse_a_console_section_that_fails_validation() {
+    let mut config = piramid_core::config::Config::default();
+    config.console.log_lines = 0;
+    assert!(Settings::from_config(&config).is_err());
 }

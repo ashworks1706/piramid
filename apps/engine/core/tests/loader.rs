@@ -3,8 +3,7 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! Configuration loading tests. Loading reads std::env, so these run under one lock and restore
-//! the environment afterwards.
+//! Configuration loading tests. They run under one lock and restore the environment afterwards.
 
 use std::sync::Mutex;
 
@@ -104,15 +103,96 @@ fn an_invalid_value_fails_to_load() {
 }
 
 #[test]
-fn the_api_key_comes_from_the_environment_only() {
+fn the_openai_key_comes_from_the_environment_only() {
     let file = "startup:\n  embedding:\n    provider: openai\n    model: text-embedding-3-small\n";
     let cfg = with_env(Some(file), &[("OPENAI_API_KEY", "sk-test")], || {
         loader::load().unwrap()
     });
+    assert!(!yaml_serde::to_string(&cfg).unwrap().contains("sk-test"));
     assert_eq!(
         cfg.startup.embedding.unwrap().api_key.as_deref(),
         Some("sk-test")
     );
+}
+
+#[test]
+fn the_openai_key_cannot_be_written_in_the_file() {
+    let file =
+        "startup:\n  embedding:\n    provider: openai\n    model: m\n    api_key: in-a-file\n";
+    let error = with_env(Some(file), &[], || loader::load().unwrap_err());
+    assert!(error.to_string().contains("api_key"), "{error}");
+
+    let error = with_env(
+        None,
+        &[
+            ("PIRAMID__STARTUP__EMBEDDING__PROVIDER", "openai"),
+            ("PIRAMID__STARTUP__EMBEDDING__MODEL", "m"),
+            ("PIRAMID__STARTUP__EMBEDDING__API_KEY", "in-an-override"),
+        ],
+        || loader::load().unwrap_err(),
+    );
+    assert!(error.to_string().contains("api_key"), "{error}");
+}
+
+#[test]
+fn the_openai_key_is_not_read_without_the_openai_provider() {
+    let cfg = with_env(None, &[("OPENAI_API_KEY", "sk-test")], || {
+        loader::load().unwrap()
+    });
+    assert!(cfg.startup.embedding.is_none());
+
+    let file = "startup:\n  embedding:\n    provider: ollama\n    model: nomic-embed-text\n";
+    let cfg = with_env(Some(file), &[("OPENAI_API_KEY", "sk-test")], || {
+        loader::load().unwrap()
+    });
+    assert_eq!(cfg.startup.embedding.unwrap().api_key, None);
+}
+
+/// Run body with one variable set to bytes that are not UTF-8, restoring the environment.
+#[cfg(unix)]
+fn with_non_utf8_env<T>(name: &str, body: impl FnOnce() -> T) -> T {
+    use std::os::unix::ffi::OsStrExt;
+    let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    std::env::set_var(name, std::ffi::OsStr::from_bytes(b"bad\xff"));
+    let result = body();
+    std::env::remove_var(name);
+    result
+}
+
+#[cfg(unix)]
+#[test]
+fn a_secret_that_is_not_utf8_is_an_error() {
+    let error = with_non_utf8_env("PIRAMID_API_KEY", || loader::load().unwrap_err());
+    assert!(error.to_string().contains("PIRAMID_API_KEY"), "{error}");
+    assert!(error.to_string().contains("UTF-8"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn an_override_that_is_not_utf8_is_an_error() {
+    let error = with_non_utf8_env("PIRAMID__STARTUP__BIND", || loader::load().unwrap_err());
+    assert!(
+        error.to_string().contains("PIRAMID__STARTUP__BIND"),
+        "{error}"
+    );
+    assert!(error.to_string().contains("UTF-8"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_config_file_path_that_is_not_utf8_is_read() {
+    use std::os::unix::ffi::OsStrExt;
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"));
+    let path = dir.join(std::ffi::OsStr::from_bytes(b"loader_\xff.yaml"));
+    std::fs::write(&path, "startup:\n  bind: 127.0.0.1:4321\n").unwrap();
+    let cfg = with_env(None, &[], || {
+        std::env::set_var("CONFIG_FILE", &path);
+        let cfg = loader::load();
+        std::env::remove_var("CONFIG_FILE");
+        cfg.unwrap()
+    });
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(cfg.startup.bind, "127.0.0.1:4321");
 }
 
 #[test]

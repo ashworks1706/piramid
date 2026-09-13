@@ -119,6 +119,11 @@ impl RateLimitConfig {
                     .into(),
             );
         }
+        if self.requests_per_second > 1_000_000_000 {
+            return Err(
+                "startup.http.rate_limit.requests_per_second: must be <= 1000000000".into(),
+            );
+        }
         if self.burst == 0 {
             return Err(
                 "startup.http.rate_limit.burst: must be > 0, or set rate_limit to null".into(),

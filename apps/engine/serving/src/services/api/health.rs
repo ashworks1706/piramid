@@ -38,20 +38,11 @@ pub struct CollectionHealth {
     /// Schema version from the collection manifest. Absent when not loaded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema_version: Option<u32>,
-    /// Whether the collection opened cleanly. Absent for a collection not yet opened, which has
-    /// not been checked.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub integrity_ok: Option<bool>,
-    /// Why the collection is unhealthy. No check sets it yet.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
 }
 
 /// Readiness of the process and the health of every collection.
 #[derive(Serialize)]
 pub struct ReadyzResponse {
-    /// False when an open collection reports integrity_ok false.
-    pub ok: bool,
     /// Version of the running binary.
     pub version: String,
     /// Data directory the server stores collections in.

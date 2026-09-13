@@ -3,36 +3,62 @@
 use std::marker::PhantomData;
 
 use crate::gpu::device::Device;
-use crate::gpu::error::GpuResult;
+use crate::gpu::error::{GpuError, GpuResult};
 use crate::gpu::stream::Stream;
 
-/// A typed allocation in device memory, generic over element type (f32, f16, u32 and so on).
+/// A typed region of device memory, generic over a numeric [DeviceElement] type.
+///
+/// An owned buffer frees its allocation on drop. A borrowed buffer names memory another runtime
+/// on the same device owns, and never frees it.
 #[derive(Debug)]
 pub struct DeviceBuffer<T> {
     device: Device,
     handle: DeviceAllocation,
     len: usize,
+    owned: bool,
     _marker: PhantomData<T>,
 }
 
-/// Backend-owned pointer to a device allocation, kept opaque to callers.
-#[derive(Debug)]
+/// Address and size of a region of device memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceAllocation {
-    /// Raw device address, interpreted by the owning backend.
+    /// Device address, valid in the context of the device that holds it.
     pub ptr: u64,
-    /// Allocation size in bytes.
+    /// Region size in bytes.
     pub size_bytes: usize,
 }
 
-impl<T: Copy> DeviceBuffer<T> {
-    /// Allocate the given number of uninitialized elements on a device.
+/// A plain numeric type with no padding for which every byte pattern is a valid value.
+pub trait DeviceElement: Copy + Default + sealed::Sealed {}
+
+mod sealed {
+    /// Restricts [super::DeviceElement] to the primitive numeric types listed in this module.
+    pub trait Sealed {}
+}
+
+macro_rules! device_elements {
+    ($($t:ty),*) => {
+        $(
+            impl sealed::Sealed for $t {}
+            impl DeviceElement for $t {}
+        )*
+    };
+}
+
+device_elements!(u8, i8, u16, i16, u32, i32, u64, i64, f32, f64);
+
+impl<T: DeviceElement> DeviceBuffer<T> {
+    /// Allocate the given number of elements on a device. The contents are unspecified.
     pub fn alloc(device: &Device, len: usize) -> GpuResult<Self> {
-        let size_bytes = len * std::mem::size_of::<T>();
-        let handle = crate::gpu::backends::allocate(device, size_bytes)?;
+        let size_bytes = len
+            .checked_mul(std::mem::size_of::<T>())
+            .ok_or_else(|| GpuError::Allocation(format!("{len} elements overflow usize")))?;
+        let handle = device.runtime().allocate(size_bytes)?;
         Ok(Self {
             device: device.clone(),
             handle,
             len,
+            owned: true,
             _marker: PhantomData,
         })
     }
@@ -44,23 +70,65 @@ impl<T: Copy> DeviceBuffer<T> {
         Ok(buffer)
     }
 
-    /// Copy a host slice into this buffer. Enqueued on the stream; may return before the copy
-    /// completes.
+    /// Name len elements of device memory at ptr that another runtime on this device owns.
+    ///
+    /// The caller keeps that memory alive and unaliased for as long as the returned buffer is
+    /// used; the buffer never frees it.
+    pub fn borrowed(device: &Device, ptr: u64, len: usize) -> GpuResult<Self> {
+        let size_bytes = len
+            .checked_mul(std::mem::size_of::<T>())
+            .ok_or_else(|| GpuError::Allocation(format!("{len} elements overflow usize")))?;
+        Ok(Self {
+            device: device.clone(),
+            handle: DeviceAllocation { ptr, size_bytes },
+            len,
+            owned: false,
+            _marker: PhantomData,
+        })
+    }
+
+    /// Copy a host slice of exactly len elements into this buffer.
     pub fn copy_from_host(&mut self, src: &[T], stream: &Stream) -> GpuResult<()> {
-        crate::gpu::backends::copy_to_device(&self.device, &mut self.handle, as_bytes(src), stream)
+        self.check_len(src.len())?;
+        self.device
+            .runtime()
+            .copy_to_device(&self.handle, as_bytes(src), stream.id())
     }
 
-    /// Copy the contents of this buffer into a host slice. Enqueued on the stream.
+    /// Copy the contents of this buffer into a host slice of exactly len elements.
     pub fn copy_to_host(&self, dst: &mut [T], stream: &Stream) -> GpuResult<()> {
-        crate::gpu::backends::copy_to_host(&self.device, &self.handle, as_bytes_mut(dst), stream)
+        self.check_len(dst.len())?;
+        self.device
+            .runtime()
+            .copy_to_host(&self.handle, as_bytes_mut(dst), stream.id())
     }
 
+    /// Copy the contents of this buffer into a new host vector.
+    pub fn to_host(&self, stream: &Stream) -> GpuResult<Vec<T>> {
+        let mut out = vec![T::default(); self.len];
+        self.copy_to_host(&mut out, stream)?;
+        Ok(out)
+    }
+
+    fn check_len(&self, host_len: usize) -> GpuResult<()> {
+        if host_len == self.len {
+            Ok(())
+        } else {
+            Err(GpuError::Transfer(format!(
+                "host slice has {host_len} elements, device buffer has {}",
+                self.len
+            )))
+        }
+    }
+}
+
+impl<T> DeviceBuffer<T> {
     /// Number of elements.
     pub fn len(&self) -> usize {
         self.len
     }
 
-    /// Whether the allocation is empty.
+    /// Whether the buffer holds no elements.
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -70,7 +138,7 @@ impl<T: Copy> DeviceBuffer<T> {
         &self.device
     }
 
-    /// Backend allocation handle, for kernel launch argument binding.
+    /// Address and size, for kernel argument binding.
     pub fn handle(&self) -> &DeviceAllocation {
         &self.handle
     }
@@ -78,23 +146,27 @@ impl<T: Copy> DeviceBuffer<T> {
 
 impl<T> Drop for DeviceBuffer<T> {
     fn drop(&mut self) {
-        // A failed free is discarded.
-        let _ = crate::gpu::backends::free(&self.device, &mut self.handle);
+        if self.owned {
+            if let Err(error) = self.device.runtime().free(&self.handle) {
+                tracing::warn!(target: "piramid::gpu", %error, "device free failed");
+            }
+        }
     }
 }
 
 /// Reinterpret a typed slice as bytes for transfer.
 #[allow(unsafe_code)]
-fn as_bytes<T: Copy>(src: &[T]) -> &[u8] {
-    // SAFETY: T is Copy, so it has no drop glue or interior invariants a byte view can violate,
-    // and the returned slice borrows src for its whole lifetime with a length derived from it.
+fn as_bytes<T: DeviceElement>(src: &[T]) -> &[u8] {
+    // SAFETY: T is a primitive numeric type with no padding, so every byte of src is initialized,
+    // and the returned slice borrows src for its lifetime with a length of size_of_val(src).
     unsafe { std::slice::from_raw_parts(src.as_ptr().cast::<u8>(), std::mem::size_of_val(src)) }
 }
 
 /// Reinterpret a typed slice as mutable bytes for transfer.
 #[allow(unsafe_code)]
-fn as_bytes_mut<T: Copy>(dst: &mut [T]) -> &mut [u8] {
+fn as_bytes_mut<T: DeviceElement>(dst: &mut [T]) -> &mut [u8] {
     let size = std::mem::size_of_val(dst);
-    // SAFETY: as in as_bytes; the returned slice preserves the exclusive borrow of dst.
+    // SAFETY: T is a primitive numeric type for which any byte pattern is valid, and the returned
+    // slice holds the exclusive borrow of dst with a length of size_of_val(dst).
     unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr().cast::<u8>(), size) }
 }

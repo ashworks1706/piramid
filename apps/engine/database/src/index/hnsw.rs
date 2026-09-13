@@ -21,14 +21,20 @@ pub struct HnswStats {
     pub layer_sizes: Vec<usize>,
     /// Nodes removed but still linked for traversal.
     pub tombstones: usize,
-    /// Mean edges per node at layer 0.
-    pub avg_connections: f32,
+    /// Mean edges per live node at layer 0. None when there are no live nodes.
+    pub avg_connections: Option<f32>,
     /// Approximate resident size.
     pub memory_usage_bytes: usize,
 }
 
+/// Total order over distances, with NaN after every number.
 fn cmp_scores(a: f32, b: f32) -> Ordering {
-    a.partial_cmp(&b).unwrap_or(Ordering::Equal)
+    match (a.is_nan(), b.is_nan()) {
+        (false, false) => a.partial_cmp(&b).unwrap_or(Ordering::Equal),
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,7 +108,7 @@ impl HnswIndex {
             node.tombstone = true;
         }
     }
-    /// Draw a layer for a new node, with exponential decay keeping upper layers sparse.
+    /// Draw a layer for a new node from an exponentially decaying distribution.
     fn random_layer(&self) -> usize {
         // floor(-ln(uniform) * ml)
         let r: f32 = rand::random();
@@ -135,7 +141,7 @@ impl HnswIndex {
             return Ok(());
         };
 
-        // Greedy descent from the entry point to find where to link.
+        // Greedy descent from the entry point to the top layer of the new node.
         let mut current_entry = vec![entry_point];
 
         for lc in ((layer as isize + 1)..=self.max_level).rev() {
@@ -146,7 +152,7 @@ impl HnswIndex {
                 lc as usize,
                 &search_context,
                 true,
-            );
+            )?;
         }
 
         // Connect from the target layer down to 0. Connections are staged and applied after
@@ -160,7 +166,7 @@ impl HnswIndex {
                 lc,
                 &search_context,
                 true,
-            );
+            )?;
 
             // Layer 0 allows M_max edges; higher layers allow M.
             let m = if lc == 0 {
@@ -168,7 +174,7 @@ impl HnswIndex {
             } else {
                 self.config.m
             };
-            let neighbors = self.select_neighbors(&current_entry, m, vectors, vector, kernels);
+            let neighbors = self.select_neighbors(&current_entry, m, vectors, vector, kernels)?;
 
             // Edges are undirected, so each link is written in both directions.
             for &neighbor_id in &neighbors {
@@ -180,9 +186,8 @@ impl HnswIndex {
                     if lc < neighbor.connections.len() {
                         neighbor.connections[lc].push(id);
 
-                        // Degree is capped per node, so prune the neighbour once it is over.
+                        // A neighbour over the degree cap is pruned.
                         if neighbor.connections[lc].len() > m {
-                            // Cloned to release the borrow on self.nodes before pruning.
                             let neighbor_connections = neighbor.connections[lc].clone();
                             let neighbor_vec = vectors
                                 .get(&neighbor_id)
@@ -199,7 +204,7 @@ impl HnswIndex {
                                 vectors,
                                 &neighbor_vec,
                                 kernels,
-                            );
+                            )?;
 
                             if let Some(neighbor) = self.nodes.get_mut(&neighbor_id) {
                                 if lc < neighbor.connections.len() {
@@ -258,7 +263,7 @@ impl HnswIndex {
 
         for lc in (1..=self.max_level as usize).rev() {
             current_nearest =
-                self.search_layer(query, &current_nearest, 1, lc, &search_context, true);
+                self.search_layer(query, &current_nearest, 1, lc, &search_context, true)?;
         }
 
         current_nearest = self.search_layer(
@@ -268,7 +273,7 @@ impl HnswIndex {
             0,
             &search_context,
             false,
-        );
+        )?;
 
         let mut filtered: Vec<Uuid> = current_nearest
             .into_iter()
@@ -280,9 +285,8 @@ impl HnswIndex {
 
     /// Walk one layer, returning neighbour ids nearest-first.
     ///
-    /// With admit_all set, every node is admitted regardless of filter or tombstone, which is what
-    /// the greedy descent through the upper layers uses. The layer-0 call clears it, and only
-    /// there does admission narrow.
+    /// With admit_all set, every node is admitted regardless of filter or tombstone. The descent
+    /// through the upper layers sets it, and the layer-0 call clears it.
     fn search_layer(
         &self,
         query: &[f32],
@@ -291,7 +295,7 @@ impl HnswIndex {
         level: usize,
         context: &SearchContext<'_>,
         admit_all: bool,
-    ) -> Vec<Uuid> {
+    ) -> Result<Vec<Uuid>> {
         let mut visited = HashSet::new();
         let mut candidates = BinaryHeap::new();
         let mut nearest = BinaryHeap::new();
@@ -300,7 +304,7 @@ impl HnswIndex {
             let Some(ep_vector) = context.vectors.get(&ep) else {
                 continue;
             };
-            let dist = self.distance(query, ep_vector, context.kernels);
+            let dist = self.distance(query, ep_vector, context.kernels)?;
             // Traversal continues through a node whether or not it is admitted.
             candidates.push(SearchCandidate {
                 id: ep,
@@ -336,7 +340,7 @@ impl HnswIndex {
                 let Some(neighbor_vector) = context.vectors.get(&neighbor_id) else {
                     continue;
                 };
-                let dist = self.distance(query, neighbor_vector, context.kernels);
+                let dist = self.distance(query, neighbor_vector, context.kernels)?;
                 let admissible = admit_all
                     || (!self.is_tombstone(&neighbor_id)
                         && self.passes_filter(&neighbor_id, context));
@@ -353,7 +357,7 @@ impl HnswIndex {
                         });
 
                         if nearest.len() > num_closest {
-                            nearest.pop(); // remove furthest
+                            nearest.pop();
                         }
 
                         furthest_distance = nearest.peek().map_or(f32::INFINITY, |c| c.distance);
@@ -363,12 +367,11 @@ impl HnswIndex {
         }
 
         let mut result: Vec<_> = nearest.into_iter().collect();
-        result.sort_by(|a, b| b.cmp(a)); // reverses the max-heap order back to nearest-first
-        result.into_iter().map(|c| c.id).collect()
+        result.sort_by(|a, b| b.cmp(a)); // Nearest first.
+        Ok(result.into_iter().map(|c| c.id).collect())
     }
 
-    // The metadatas map is a bounded cache, so a miss is admitted here and settled by
-    // search::engine against the resolved document.
+    // A metadata cache miss is admitted, and search::engine filters the resolved document.
     fn passes_filter(&self, id: &Uuid, context: &SearchContext<'_>) -> bool {
         context
             .filter
@@ -383,37 +386,34 @@ impl HnswIndex {
         vectors: &dyn VectorReader,
         query: &[f32],
         kernels: &dyn DistanceKernels,
-    ) -> Vec<Uuid> {
+    ) -> Result<Vec<Uuid>> {
         if candidates.len() <= m {
-            return candidates.to_vec();
+            return Ok(candidates.to_vec());
         }
 
-        let mut distances: Vec<_> = candidates
-            .iter()
-            .filter_map(|&id| {
-                if self.is_tombstone(&id) {
-                    return None;
-                }
-                vectors.get(&id).map(|vec| {
-                    let dist = self.distance(query, vec, kernels);
-                    (id, dist)
-                })
-            })
-            .collect();
+        let mut distances = Vec::with_capacity(candidates.len());
+        for &id in candidates {
+            if self.is_tombstone(&id) {
+                continue;
+            }
+            if let Some(vec) = vectors.get(&id) {
+                distances.push((id, self.distance(query, vec, kernels)?));
+            }
+        }
 
         distances.sort_by(|a, b| cmp_scores(a.1, b.1));
         distances.truncate(m);
-        distances.into_iter().map(|(id, _)| id).collect()
+        Ok(distances.into_iter().map(|(id, _)| id).collect())
     }
 
     /// Distance under the configured metric, normalized so smaller is always nearer.
-    fn distance(&self, a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
-        let score = self.config.metric.calculate(a, b, kernels);
-        match self.config.metric {
+    fn distance(&self, a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> Result<f32> {
+        let score = self.config.metric.calculate(a, b, kernels)?;
+        Ok(match self.config.metric {
             // Similarity metrics score higher for nearer, so they are inverted.
             Metric::Cosine | Metric::DotProduct => 1.0 - score,
             Metric::Euclidean => score,
-        }
+        })
     }
 
     /// Tombstone a node, keeping its edges so traversal stays connected.
@@ -451,12 +451,10 @@ impl HnswIndex {
                 tombstones += 1;
             } else {
                 total_nodes += 1;
-                for (layer, connections) in node.connections.iter().enumerate() {
-                    if layer < layer_sizes.len() {
-                        layer_sizes[layer] += 1;
-                    }
-                    total_connections += connections.len();
+                for size in layer_sizes.iter_mut().take(node.connections.len()) {
+                    *size += 1;
                 }
+                total_connections += node.connections.first().map_or(0, Vec::len);
             }
         }
 
@@ -478,11 +476,8 @@ impl HnswIndex {
             max_layer: self.max_level,
             layer_sizes,
             memory_usage_bytes,
-            avg_connections: if total_nodes > 0 {
-                total_connections as f32 / total_nodes as f32
-            } else {
-                0.0
-            },
+            avg_connections: (total_nodes > 0)
+                .then(|| total_connections as f32 / total_nodes as f32),
         }
     }
 
@@ -494,15 +489,13 @@ impl HnswIndex {
 
 use crate::index::{IndexDetails, IndexSearchRequest, IndexStats, IndexType, VectorIndex};
 
-// Adapts the generic trait call to the inherent search, resolving ef from the per-query config
-// or the index default.
+// Resolves ef from the per-query config, or the index default.
 impl VectorIndex for HnswIndex {
     fn insert(&mut self, id: Uuid, vector: &[f32], vectors: &dyn VectorReader) -> Result<()> {
         self.insert(id, vector, vectors)
     }
 
     fn search(&self, request: IndexSearchRequest<'_>) -> Result<Vec<Uuid>> {
-        // Use the per-query ef override when present, otherwise the configured ef_search.
         let ef = request
             .config
             .ef
@@ -548,6 +541,15 @@ impl VectorIndex for HnswIndex {
 
     fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
         self.config.mode = mode;
+    }
+
+    fn build_config(&self) -> piramid_core::config::IndexConfig {
+        piramid_core::config::IndexConfig::Hnsw {
+            params: piramid_core::config::HnswConfig {
+                mode: piramid_hardware::compute::ExecutionMode::default(),
+                ..self.config
+            },
+        }
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

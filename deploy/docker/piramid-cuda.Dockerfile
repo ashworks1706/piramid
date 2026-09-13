@@ -1,5 +1,4 @@
 # CUDA image. Run with --gpus all and the NVIDIA container toolkit.
-# Until kernels land this behaves like the CPU image, falling back when no device is present.
 
 FROM nvidia/cuda:13.3.1-devel-ubuntu22.04 AS builder
 
@@ -34,7 +33,6 @@ USER piramid
 
 ENV PIRAMID__STARTUP__BIND=0.0.0.0:6333 \
     PIRAMID__STARTUP__DATA_DIR=/data \
-    RUST_LOG=info \
     PIRAMID__STARTUP__HARDWARE__PROFILE=gpu \
     PIRAMID__RUNTIME__EXECUTION=gpu
 

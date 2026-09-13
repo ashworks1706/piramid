@@ -142,7 +142,7 @@ export function BlogImage({ src, alt }: Props) {
             )}
           </div>
 
-          {/* stopPropagation so clicking the image itself doesn't close the lightbox */}
+          {/* A click on the image does not close the lightbox. */}
           <div
             className="relative flex items-center justify-center"
             style={{

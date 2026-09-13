@@ -13,7 +13,7 @@ pub fn warm_file(path: &str) -> Result<()> {
         Err(e) => return Err(e.into()),
     };
     let mut reader = BufReader::new(file);
-    let mut buf = vec![0u8; 4 * 1024 * 1024]; // 4MB window to fault pages
+    let mut buf = vec![0u8; 4 * 1024 * 1024];
     loop {
         let read = reader.read(&mut buf)?;
         if read == 0 {
@@ -30,7 +30,6 @@ pub(crate) fn warm_mmap(mmap: &MmapMut) {
     if len == 0 {
         return;
     }
-    // Step by page-sized chunks to avoid touching every byte.
     const PAGE: usize = 4096;
     let mut offset: usize = 0;
     while offset < len {
@@ -38,7 +37,7 @@ pub(crate) fn warm_mmap(mmap: &MmapMut) {
         std::hint::black_box(byte);
         offset = offset.saturating_add(PAGE);
     }
-    // Touch the tail page, which the stride above may have skipped.
+    // The stride can skip the tail page.
     let last = mmap[len - 1];
     std::hint::black_box(last);
 }

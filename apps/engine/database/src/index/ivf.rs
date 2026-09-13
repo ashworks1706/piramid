@@ -12,15 +12,26 @@ use piramid_hardware::compute::{strategies::for_mode, DistanceKernels};
 /// Centroids at least this similar between iterations count as settled.
 const CONVERGENCE_SIMILARITY: f32 = 0.99;
 
+/// Order two scores highest first, with NaN after every number.
+fn descending_nan_last(a: f32, b: f32) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (a.is_nan(), b.is_nan()) {
+        (false, false) => b.partial_cmp(&a).unwrap_or(Ordering::Equal),
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+    }
+}
+
 /// Vectors partitioned by nearest centroid, searched by probing the closest partitions.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IvfIndex {
     config: IvfConfig,
     centroids: Vec<Vec<f32>>,
-    inverted_lists: Vec<Vec<Uuid>>, // vectors[cluster_id] = [vector_ids]
+    inverted_lists: Vec<Vec<Uuid>>, // Vector ids of each cluster.
     vector_to_cluster: HashMap<Uuid, usize>,
     #[serde(default)]
-    pending_vectors: HashSet<Uuid>, // vectors not yet assigned, before the first clustering run
+    pending_vectors: HashSet<Uuid>, // Vectors not yet assigned to a cluster.
     dimensions: usize,
 }
 
@@ -37,8 +48,7 @@ impl IvfIndex {
         }
     }
 
-    /// Train centroids over the vectors with the Lloyd algorithm. Rebuilt periodically, not per
-    /// insert.
+    /// Train centroids over the vectors with the Lloyd algorithm.
     pub fn build_clusters(&mut self, vectors: &dyn VectorReader) -> Result<()> {
         if vectors.is_empty() {
             return Ok(());
@@ -77,13 +87,13 @@ impl IvfIndex {
 
                 let new_centroid = self.compute_centroid(cluster);
 
-                // Metric::calculate normalises to higher-is-closer, so this is a similarity
-                // rather than a distance. The threshold is meaningful only for a bounded metric.
+                // Metric::calculate returns a similarity, higher is closer. The threshold applies
+                // only to a bounded metric.
                 let similarity =
                     self.config
                         .metric
-                        .calculate(&self.centroids[i], &new_centroid, kernels);
-                if similarity < CONVERGENCE_SIMILARITY {
+                        .calculate(&self.centroids[i], &new_centroid, kernels)?;
+                if similarity.is_nan() || similarity < CONVERGENCE_SIMILARITY {
                     converged = false;
                 }
 
@@ -113,11 +123,15 @@ impl IvfIndex {
         vector: &[f32],
         kernels: &dyn DistanceKernels,
     ) -> Result<usize> {
-        self.centroids
-            .iter()
-            .enumerate()
-            .map(|(i, centroid)| (i, self.config.metric.calculate(vector, centroid, kernels)))
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        let mut nearest: Option<(usize, f32)> = None;
+        for (i, centroid) in self.centroids.iter().enumerate() {
+            let score = self.config.metric.calculate(vector, centroid, kernels)?;
+            let closer = nearest.is_none_or(|(_, best)| best.is_nan() || score >= best);
+            if closer {
+                nearest = Some((i, score));
+            }
+        }
+        nearest
             .map(|(i, _)| i)
             .ok_or_else(|| IndexError::NotInitialized.into())
     }
@@ -150,7 +164,7 @@ impl VectorIndex for IvfIndex {
             return Ok(());
         }
 
-        // Online insert assigns to the nearest existing centroid rather than retraining.
+        // An insert assigns to the nearest existing centroid without retraining.
         if self.centroids.is_empty() {
             self.pending_vectors.insert(id);
 
@@ -186,17 +200,17 @@ impl VectorIndex for IvfIndex {
         }
         let kernels = for_mode(self.config.mode)?;
 
-        let mut centroid_distances: Vec<(usize, f32)> = self
-            .centroids
-            .iter()
-            .enumerate()
-            .map(|(i, centroid)| (i, self.config.metric.calculate(query, centroid, kernels)))
-            .collect();
+        let mut centroid_distances: Vec<(usize, f32)> = Vec::with_capacity(self.centroids.len());
+        for (i, centroid) in self.centroids.iter().enumerate() {
+            centroid_distances.push((i, self.config.metric.calculate(query, centroid, kernels)?));
+        }
 
-        centroid_distances
-            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        centroid_distances.sort_by(|a, b| descending_nan_last(a.1, b.1));
 
         let nprobe = quality.nprobe.unwrap_or(self.config.num_probes);
+        if nprobe == 0 {
+            return Err(IndexError::InvalidConfig("nprobe must be >= 1".into()).into());
+        }
 
         // Only the nprobe nearest partitions are scanned.
         let mut candidates: Vec<(Uuid, f32)> = Vec::new();
@@ -211,8 +225,10 @@ impl VectorIndex for IvfIndex {
                 let vector = vectors.get(id).ok_or_else(|| {
                     IndexError::SearchFailed(format!("IVF index references missing vector {id}"))
                 })?;
-                let score = self.config.metric.calculate(query, vector, kernels);
-                candidates.push((*id, score));
+                let score = self.config.metric.calculate(query, vector, kernels)?;
+                if !score.is_nan() {
+                    candidates.push((*id, score));
+                }
             }
         }
 
@@ -265,6 +281,15 @@ impl VectorIndex for IvfIndex {
 
     fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
         self.config.mode = mode;
+    }
+
+    fn build_config(&self) -> piramid_core::config::IndexConfig {
+        piramid_core::config::IndexConfig::Ivf {
+            params: piramid_core::config::IvfConfig {
+                mode: piramid_hardware::compute::ExecutionMode::default(),
+                ..self.config
+            },
+        }
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

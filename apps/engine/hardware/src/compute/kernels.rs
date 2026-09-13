@@ -11,24 +11,20 @@ pub trait DistanceKernels: Send + Sync {
     /// Stable name for logs, metrics, and error messages.
     fn name(&self) -> &'static str;
 
-    /// Whether this strategy can actually run on this machine right now.
+    /// Whether this strategy can run on this machine.
     fn is_available(&self) -> bool;
 
-    // Pairwise. Callers guarantee equal lengths.
-
-    /// Cosine similarity of two equal-length vectors.
-    fn cosine(&self, a: &[f32], b: &[f32]) -> f32;
+    /// Cosine similarity of two equal-length vectors. NaN when either vector has zero magnitude.
+    fn cosine(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32>;
 
     /// Inner product of two equal-length vectors.
-    fn dot(&self, a: &[f32], b: &[f32]) -> f32;
+    fn dot(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32>;
 
     /// L2 distance between two equal-length vectors.
-    fn euclidean(&self, a: &[f32], b: &[f32]) -> f32;
+    fn euclidean(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32>;
 
     /// Squared L2 distance, skipping the final sqrt.
-    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> f32;
-
-    // Batch. Every strategy implements these itself.
+    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32>;
 
     /// Score query against every row of the row-major candidates slab.
     fn cosine_batch(
@@ -56,6 +52,18 @@ pub trait DistanceKernels: Send + Sync {
         dim: usize,
         out: &mut [f32],
     ) -> ComputeResult<()>;
+}
+
+/// Validate that the two operands of a pairwise kernel have the same length.
+pub fn check_pair_shape(a: &[f32], b: &[f32]) -> ComputeResult<()> {
+    if a.len() == b.len() {
+        Ok(())
+    } else {
+        Err(ComputeError::ShapeMismatch {
+            expected: a.len(),
+            got: b.len(),
+        })
+    }
 }
 
 /// Validate the slab and out shape shared by every batch kernel; returns the row count.

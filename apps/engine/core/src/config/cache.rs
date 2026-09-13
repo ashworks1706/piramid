@@ -121,7 +121,7 @@ impl MetadataCacheConfig {
     }
 }
 
-/// Embeddings kept so identical text is not sent to a provider twice.
+/// Cache of embeddings keyed by input text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct EmbeddingCacheConfig {

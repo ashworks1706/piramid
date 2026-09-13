@@ -74,7 +74,7 @@ Settings resolve in this order, with later winning:
 and a test asserts it stays that way. `startup.logging.config: true` logs what actually resolved.
 
 The file has two blocks and the split is by lifecycle: `startup:` is applied once at boot, so
-changing one of those needs a restart and `POST /config/reload` refuses a file whose startup block
+changing one of those needs a restart and `POST /api/config/reload` refuses a file whose startup block
 differs from the running one. `runtime:` is re-read on reload, from the same file and flags the
 server started with. Search, limits, WAL checkpoint thresholds, the metadata cache budget and
 `execution` reach collections that are already open. The index, quantization, memory, vector and

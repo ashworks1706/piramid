@@ -5,8 +5,7 @@ all-features = true
 version = 2
 yanked = "warn"
 ignore = [
-  # bincode is unmaintained in every version, 2.x included, and there is no patched release.
-  # It defines our on-disk format. The advisory is informational, not a vulnerability.
+  # bincode is unmaintained with no patched release; the advisory is informational.
   "RUSTSEC-2025-0141",
 ]
 
@@ -23,7 +22,7 @@ allow = [
   "MPL-2.0",
   "Unicode-3.0",
   "Unicode-DFS-2016",
-  # webpki-roots ships Mozilla's CA bundle; CDLA is a data licence, right for certificate data.
+  # webpki-roots ships Mozilla's CA bundle under CDLA.
   "CDLA-Permissive-2.0",
   "CC0-1.0",
   "Zlib",

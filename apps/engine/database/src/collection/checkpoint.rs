@@ -17,14 +17,15 @@ pub struct CheckpointManager {
 }
 
 impl CheckpointManager {
-    /// A manager over wal with no operations counted and no checkpoint recorded.
-    pub fn new(wal: Wal) -> Self {
-        Self {
+    /// A manager over wal with no operations counted and no checkpoint recorded. Errors when the
+    /// clock reads before 1970.
+    pub fn new(wal: Wal) -> Result<Self> {
+        Ok(Self {
             wal,
             operation_count: 0,
             last_checkpoint_ts: None,
-            interval_start_ts: piramid_core::clock::unix_secs(),
-        }
+            interval_start_ts: piramid_core::clock::unix_secs()?,
+        })
     }
 
     /// Whether this operation should be followed by a checkpoint.
@@ -86,12 +87,12 @@ pub fn save_manifest(collection: &Collection) -> Result<()> {
 }
 
 pub fn checkpoint(collection: &mut Collection) -> Result<()> {
-    let timestamp = piramid_core::clock::unix_secs();
+    let timestamp = piramid_core::clock::unix_secs()?;
 
-    // All three sidecars land before the WAL is cleared below.
+    // All three sidecars land before the WAL is cleared below, the manifest first.
+    save_manifest(collection)?;
     save_index(collection)?;
     save_vector_index(collection)?;
-    save_manifest(collection)?;
 
     if collection.config.wal.enabled {
         collection.checkpoint.wal.checkpoint(timestamp)?;

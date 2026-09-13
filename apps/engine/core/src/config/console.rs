@@ -33,10 +33,9 @@ impl Default for ConsoleConfig {
 }
 
 impl ConsoleConfig {
-    /// The server to watch, falling back to the address the server binds.
+    /// The server to watch: base_url when set, otherwise the address bind names.
     ///
-    /// A bind of 0.0.0.0 is every interface, which is not an address to connect to, so the
-    /// loopback address is used with the port it names.
+    /// A wildcard or empty bind host resolves to localhost on the same port.
     pub fn resolved_base_url(&self, bind: &str) -> String {
         if !self.base_url.is_empty() {
             return self.base_url.clone();
@@ -73,7 +72,6 @@ mod tests {
     fn an_unset_base_url_follows_the_address_the_server_binds() {
         let config = ConsoleConfig::default();
 
-        // Nothing listens on 0.0.0.0, so the console connects to loopback on the same port.
         assert_eq!(
             config.resolved_base_url("0.0.0.0:6333"),
             "http://localhost:6333"

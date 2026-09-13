@@ -9,8 +9,6 @@ use piramid_core::config::EmbeddingConfig;
 use piramid_core::stats::EmbedMetrics;
 
 /// Owns the embedding stack and its throughput counters.
-///
-/// One of these lives in AppState, and holds every field the embedding domain owns.
 pub struct EmbeddingsManager {
     embedder: Option<Arc<dyn Embedder>>,
     metrics: EmbedMetrics,
@@ -25,10 +23,8 @@ impl EmbeddingsManager {
         }
     }
 
-    /// Wrap an embedder the caller built in the retry layer.
-    ///
-    /// The seam for a provider this crate cannot construct. The binary builds the embedder and
-    /// passes it here.
+    /// Wrap an embedder the caller built, such as a provider this crate cannot construct, in the
+    /// retry layer.
     pub fn with_embedder(embedder: Arc<dyn Embedder>) -> Self {
         Self {
             embedder: Some(Arc::new(RetryEmbedder::new(embedder))),

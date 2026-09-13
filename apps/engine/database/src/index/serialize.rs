@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::contract::VectorIndex;
 
-/// Persistable form of any index. Closed, so adding a family means adding a variant.
+/// Persistable form of any index, one variant per family.
 #[derive(Serialize, Deserialize)]
 pub enum SerializableIndex {
     /// A flat index.

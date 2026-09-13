@@ -337,6 +337,12 @@ pub enum RunnerError {
         /// OS error.
         source: std::io::Error,
     },
+    /// A stop was asked of a unit with no process group this console started.
+    #[error("{unit} has no process group this console started")]
+    NotTracked {
+        /// Unit id.
+        unit: String,
+    },
 }
 
 /// A parsed command line.
@@ -356,6 +362,6 @@ pub enum Command {
     Help,
     /// Clear the logs of the selected unit.
     Clear,
-    /// Not understood.
+    /// Not understood, with the reason.
     Unknown(String),
 }

@@ -3,13 +3,14 @@
 use std::collections::{HashMap, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use crate::console::types::{LogLine, Stream};
 
 /// Persists console output in one file per unit.
 ///
-/// The file is unbounded, unlike the in-memory buffer.
+/// The file is unbounded.
 #[derive(Debug)]
 pub struct LogWriter {
     dir: PathBuf,
@@ -74,21 +75,21 @@ fn log_name(unit: &str) -> String {
 #[derive(Debug)]
 pub struct LogBuffer {
     lines: VecDeque<LogLine>,
-    cap: usize,
+    cap: NonZeroUsize,
 }
 
 impl LogBuffer {
     /// An empty buffer holding at most cap lines.
-    pub fn new(cap: usize) -> Self {
+    pub fn new(cap: NonZeroUsize) -> Self {
         Self {
-            lines: VecDeque::with_capacity(cap.min(1024)),
-            cap: cap.max(1),
+            lines: VecDeque::with_capacity(cap.get().min(1024)),
+            cap,
         }
     }
 
     /// Appends, dropping the oldest line when full.
     pub fn push(&mut self, line: LogLine) {
-        if self.lines.len() == self.cap {
+        if self.lines.len() == self.cap.get() {
             self.lines.pop_front();
         }
         self.lines.push_back(line);

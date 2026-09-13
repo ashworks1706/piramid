@@ -9,7 +9,7 @@ pub struct DiskConfig {
     /// Refuse writes below this much free space. None never checks.
     pub min_free_bytes: Option<u64>,
 
-    /// Drop to read-only at the threshold instead of failing each write.
+    /// Drop to read-only at the threshold. Off fails each write below it.
     pub readonly_on_low_space: bool,
 }
 

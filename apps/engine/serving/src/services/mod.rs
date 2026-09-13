@@ -6,6 +6,7 @@ pub mod api;
 pub mod collection;
 pub mod convert;
 pub mod embedding;
+pub mod generation;
 pub mod vector;
 
 /// Error message for a document id that is not in the collection.

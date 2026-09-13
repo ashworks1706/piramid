@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use piramid_core::config::SearchConfig;
+use piramid_core::config::{IndexConfig, SearchConfig};
 use piramid_core::error::Result;
 use piramid_core::metadata::{Filter, Metadata};
 use piramid_hardware::compute::{ExecutionMode, Metric};
@@ -89,6 +89,10 @@ pub trait VectorIndex: Send + Sync {
 
     /// Set the strategy that runs the math of this index.
     fn set_execution(&mut self, mode: ExecutionMode);
+
+    /// The family and parameters this index was built with, with the execution mode at its
+    /// default.
+    fn build_config(&self) -> IndexConfig;
 
     /// Convert into the persistable form.
     fn to_serializable(&self) -> SerializableIndex;

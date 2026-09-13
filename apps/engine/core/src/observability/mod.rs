@@ -49,14 +49,17 @@ pub fn install(
     if !logging.enabled {
         return Ok(None);
     }
-    init(telemetry, filter_for(logging), logging.json).map(Some)
+    init(telemetry, filter_for(logging)?, logging.json).map(Some)
 }
 
-/// Turn a [LoggingConfig] into a filter. RUST_LOG replaces the level but not the per-target
-/// switches.
-fn filter_for(logging: LoggingConfig) -> EnvFilter {
-    let base = std::env::var("RUST_LOG").unwrap_or_else(|_| level_directive(logging.level).into());
-    EnvFilter::new(directives(&base, logging))
+/// Turn a [LoggingConfig] into a filter.
+fn filter_for(logging: LoggingConfig) -> crate::error::Result<EnvFilter> {
+    let directives = directives(level_directive(logging.level), logging);
+    EnvFilter::try_new(&directives).map_err(|error| {
+        crate::error::PiramidError::other(format!(
+            "log filter '{directives}' does not parse: {error}"
+        ))
+    })
 }
 
 /// Build the filter string: a base level, then one off directive per subsystem switched off.
@@ -94,7 +97,6 @@ fn init(
     filter: EnvFilter,
     json: bool,
 ) -> crate::error::Result<ObservabilityGuard> {
-    // One line per finished operation.
     let span_events = if config.span_events {
         FmtSpan::CLOSE
     } else {
@@ -138,7 +140,6 @@ fn init(
     #[cfg(not(feature = "otel"))]
     registry.init();
 
-    // Report what resolved.
     tracing::info!(
         target: "piramid::observability",
         otlp = config.otlp.as_ref().map_or("off", |c| c.endpoint.as_str()),
@@ -215,16 +216,19 @@ mod tests {
     }
 
     #[test]
-    fn the_base_level_is_whatever_the_caller_resolved() {
-        // RUST_LOG wins over the configured level, but never over the subsystem switches.
+    fn the_filter_comes_from_the_configuration_only() {
+        std::env::set_var("RUST_LOG", "trace");
         let logging = LoggingConfig {
+            level: LogLevel::Warn,
             indexing: false,
             ..LoggingConfig::default()
         };
-        assert_eq!(
-            directives("piramid=trace", logging),
-            "piramid=trace,piramid::indexing=off"
-        );
+        let filter = filter_for(logging);
+        std::env::remove_var("RUST_LOG");
+        let filter = filter.unwrap().to_string();
+        assert!(filter.contains("warn"), "{filter}");
+        assert!(!filter.contains("trace"), "{filter}");
+        assert!(filter.contains("piramid::indexing=off"), "{filter}");
     }
 
     #[test]

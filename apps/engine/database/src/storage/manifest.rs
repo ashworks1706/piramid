@@ -24,23 +24,24 @@ pub struct CollectionMetadata {
 pub const SCHEMA_VERSION: u32 = 1;
 
 impl CollectionMetadata {
-    /// A manifest for an empty collection, created now.
-    pub fn new(name: String) -> Self {
-        let now = piramid_core::clock::unix_secs();
+    /// A manifest for an empty collection, created now. Errors when the clock reads before 1970.
+    pub fn new(name: String) -> Result<Self> {
+        let now = piramid_core::clock::unix_secs()?;
 
-        Self {
+        Ok(Self {
             schema_version: SCHEMA_VERSION,
             name,
             created_at: now,
             updated_at: now,
             dimensions: None,
             vector_count: 0,
-        }
+        })
     }
 
-    /// Set updated_at to now.
-    pub fn touch(&mut self) {
-        self.updated_at = piramid_core::clock::unix_secs();
+    /// Set updated_at to now. Errors when the clock reads before 1970.
+    pub fn touch(&mut self) -> Result<()> {
+        self.updated_at = piramid_core::clock::unix_secs()?;
+        Ok(())
     }
 
     /// Records the vector width of the collection the first time a vector is stored.
@@ -59,9 +60,11 @@ impl CollectionMetadata {
         }
     }
 
-    /// Set the live document count and touch the manifest.
-    pub fn update_vector_count(&mut self, count: usize) {
+    /// Set the live document count and touch the manifest. Errors when the clock reads before
+    /// 1970, leaving the manifest unchanged.
+    pub fn update_vector_count(&mut self, count: usize) -> Result<()> {
+        self.touch()?;
         self.vector_count = count;
-        self.touch();
+        Ok(())
     }
 }

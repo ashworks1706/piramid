@@ -14,8 +14,7 @@
   --accent-dim: #0e7490;
   --fg: #e6ebf2;
   --fg-dim: #7d8da3;
-  /* --font-blocks is unicode-range'd to U+2500-259F, so it only ever supplies the box-drawing and
-     block glyphs the latin subset lacks; everything else still comes from --font-mono. */
+  /* --font-blocks covers only U+2500-259F; every other glyph comes from --font-mono. */
   --mono: var(--font-mono), var(--font-blocks), ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, "Liberation Mono", "Courier New", monospace;
 }
@@ -49,8 +48,7 @@ body {
 }
 
 .landing-inner {
-  /* The art is sized from this box rather than the viewport, so it fills the space it actually
-     has instead of the space the window has. */
+  /* The animation is sized from this container's width. */
   container-type: inline-size;
   display: flex;
   flex-direction: column;
@@ -62,9 +60,8 @@ body {
 
 .cli-animation {
   font-family: var(--mono);
-  /* 83 columns at JetBrains Mono's 0.6em advance is exactly 49.8em wide, so the size that makes the
-     art fill its container is a division rather than a guessed viewport fraction. Capped at 16px so
-     it stops growing on a wide screen. The vw line is the fallback where cqi is unsupported. */
+  /* 83 columns at a 0.6em advance are 49.8em wide. Capped at 16px. The vw line applies where cqi
+     is unsupported. */
   font-size: min(16px, calc((100vw - 2.5rem) / 49.8));
   font-size: min(16px, calc(100cqi / 49.8));
   line-height: 1.2;
@@ -72,12 +69,11 @@ body {
   color: var(--accent);
   margin: 0;
   
-  /* Reserve the full height up front so the shorter early frames don't shift the page. */
+  /* Height of the tallest frame. */
   min-height: calc(14 * 1.2em);
 }
 
-/* Glow blurs a lot of glyphs; repainting it every frame stuttered the build-up, so it only
-   applies once the animation settles. */
+/* Glow applies once the animation settles. */
 .cli-animation.is-settled {
   text-shadow: 0 0 26px rgba(34, 211, 238, 0.28);
   transition: text-shadow 0.5s ease;
@@ -186,7 +182,7 @@ article table {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Explicit rather than Tailwind-generated, since purge can miss classes used only in MDX. */
+/* Button classes used in MDX. */
 .blog-btn,
 .blog-button {
   display: inline-flex;
@@ -296,7 +292,7 @@ article table {
   transform: translateY(-2px);
 }
 
-/* Card is a single click target: the first anchor is stretched to cover it entirely. */
+/* The first anchor is stretched to cover the whole card. */
 .blog-card > a:first-child {
   position: relative;
   z-index: 1;
@@ -482,7 +478,7 @@ article table {
   line-height: 1.6;
 }
 
-/* Panels across the blog read as flat grey without this; navy is the structural colour. */
+/* Translucent white panels are tinted navy. */
 [class*="bg-white/5"],
 [class*="bg-white/[0.03]"],
 [class*="bg-white/[0.02]"] {

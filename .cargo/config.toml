@@ -1,0 +1,3 @@
+# Toolkit root the cudarc build script links against under the gpu-cuda feature.
+[env]
+CUDA_HOME = { value = "/usr/local/cuda", force = false }

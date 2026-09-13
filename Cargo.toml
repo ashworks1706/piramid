@@ -16,10 +16,10 @@ license = "Apache-2.0"
 repository = "https://github.com/ashworks1706/piramid"
 homepage = "https://piramiddb.com"
 documentation = "https://docs.rs/piramid"
-rust-version = "1.87"  # `usize::is_multiple_of` / `next_multiple_of`, used by compute::kernels
+rust-version = "1.87"  # usize::is_multiple_of and next_multiple_of, used by compute::kernels
 
 [workspace.dependencies]
-# in-repo crates, so versions stay in lockstep
+# in-repo crates
 piramid-core = { path = "apps/engine/core", version = "0.2.0" }
 piramid-hardware = { path = "apps/engine/hardware", version = "0.2.0" }
 piramid-database = { path = "apps/engine/database", version = "0.2.0" }
@@ -59,7 +59,7 @@ opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "trace"] }
 
 # cli
 clap = { version = "4.5", features = ["derive", "env"] }
-# `piramid top` and the developer console
+# piramid top and the developer console
 ratatui = "0.30"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
@@ -72,6 +72,15 @@ num_cpus = "1.16"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 rand = "0.8.6"
 
+# device and model runtimes, each confined to its backend module
+candle-core = "0.11"
+candle-nn = "0.11"
+minijinja = { version = "2", features = ["json", "loop_controls"] }
+minijinja-contrib = { version = "2", features = ["pycompat"] }
+tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
+cudarc = { version = "0.19.8", default-features = false, features = ["std", "driver", "nvrtc", "cuda-version-from-build-system", "dynamic-linking"] }
+nvml-wrapper = "0.13"
+
 # storage + concurrency
 memmap2 = "0.9.11"
 lru = "0.18.2"
@@ -80,6 +89,7 @@ parking_lot = "0.12"
 libc = "0.2"
 
 # dev
+candle-transformers = "0.11"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [workspace.lints.rust]
@@ -98,7 +108,7 @@ print_stderr = "deny"
 # Tests opt back in with #[allow] at the module level.
 unwrap_used = "deny"
 expect_used = "deny"
-# Modern idioms, so the codebase does not drift back to older forms.
+# Modern idioms.
 uninlined_format_args = "deny"
 manual_let_else = "deny"
 map_unwrap_or = "deny"

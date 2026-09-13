@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import GithubSlugger from "github-slugger";
 
-// Blog content lives inside this app so the site builds and deploys standalone.
+// Blog content directory inside this app.
 const BLOGS_DIR = path.join(process.cwd(), "content", "blogs");
 const SIDEBAR_CONFIG = path.join(BLOGS_DIR, "_sidebar.json");
 
@@ -16,11 +16,11 @@ export type BlogMeta = {
 export type BlogSearchEntry = {
   slug: string[];
   pageTitle: string;
-  /** The heading text for this section (undefined = page-level entry) */
+  /** Heading text for this section; undefined for the page-level entry. */
   section?: string;
-  /** Anchor fragment id so we can link directly to this heading */
+  /** Anchor fragment id of this heading. */
   headingId?: string;
-  /** Plain-text content of just this section, capped for serialisation */
+  /** Plain-text content of this section, capped in length. */
   text: string;
 };
 
@@ -80,7 +80,7 @@ function slugFromPath(filePath: string): string[] {
   const parts = rel.split(path.sep);
   const last = parts.pop()!;
   const base = last.replace(/\.md$/, "");
-  // Treat folder index.md as the folder slug (e.g., blogs/foo/index.md -> /blogs/foo)
+  // A folder's index.md takes the folder slug: blogs/foo/index.md is /blogs/foo.
   if (base === "index" && parts.length > 0) {
     return parts;
   }
@@ -103,7 +103,7 @@ export function listBlogs(): BlogMeta[] {
         continue;
       }
       if (!isMarkdown(entry.name)) continue;
-      if (entry.name.startsWith("_")) continue; // meta files like _sidebar, not posts
+      if (entry.name.startsWith("_")) continue; // meta files such as _sidebar
       const filePath = path.join(current, entry.name);
       results.push({
         slug: slugFromPath(filePath),
@@ -159,7 +159,7 @@ export function buildSidebar(): SidebarSection[] {
       const match = lookup.get(itemSlug);
       if (match) items.push(match);
     }
-    // Skip sections left with no visible items, so a group doesn't render with an empty heading.
+    // Sections with no visible items are dropped.
     if (items.length > 0) sections.push({ label: section.label, items });
   }
   return sections;
@@ -216,7 +216,6 @@ export function buildSearchIndex(): BlogSearchEntry[] {
       if (end !== -1) body = body.slice(end + 3);
     }
 
-    // Body is split into sections, one per heading.
     type Section = { headingText: string; headingId: string; raw: string };
     const headingRe = /^(#{1,6})[ \t]+(.+)$/m;
     const sections: Section[] = [];
@@ -259,7 +258,7 @@ export function buildSearchIndex(): BlogSearchEntry[] {
       });
     }
 
-    // Page-level entry with no headingId, so title-only matches still resolve.
+    // Page-level entry with no headingId.
     entries.push({
       slug: blog.slug,
       pageTitle: blog.title,
@@ -295,7 +294,7 @@ export function extractHeadings(filePath: string): Heading[] {
         .replace(/\*\*([^*]*)\*\*/g, "$1")
         .replace(/\*([^*]*)\*/g, "$1")
         .trim();
-      // Slugged from the plain text so it matches what rehype-slug generates for the same heading.
+      // Matches the id rehype-slug generates for the same heading.
       const id = slugger.slug(text);
       headings.push({ id, text, level });
     }

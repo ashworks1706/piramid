@@ -5,8 +5,9 @@ use super::read::get;
 use crate::collection::limits;
 use crate::storage::record_store::RecordStore;
 use crate::storage::wal::WalEntry;
-use piramid_core::error::Result;
+use piramid_core::error::{Result, ServerError};
 use piramid_core::Document;
+use piramid_hardware::compute::Metric;
 
 /// Check the width of vector against the width the collection holds, touching nothing.
 fn check_width(collection: &Collection, vector: &[f32]) -> Result<()> {
@@ -16,8 +17,16 @@ fn check_width(collection: &Collection, vector: &[f32]) -> Result<()> {
     }
 }
 
+/// Reject a vector the metric of the collection cannot score, touching nothing.
+fn check_scorable(collection: &Collection, vector: &[f32]) -> Result<()> {
+    match collection.vector_index.metric() {
+        Metric::Cosine => piramid_core::validation::validate_cosine_magnitude(vector),
+        Metric::Euclidean | Metric::DotProduct => Ok(()),
+    }
+}
+
 /// Validate and encode one document, touching nothing. replacing is true when the document takes
-/// the place of one already stored, so the vector count does not grow.
+/// the place of one already stored, which does not grow the vector count.
 fn prepare(collection: &Collection, entry: &Document, replacing: bool) -> Result<Vec<u8>> {
     check_width(collection, entry.vector())?;
     let bytes = RecordStore::encode_document(entry)?;
@@ -38,7 +47,7 @@ fn apply_insert(collection: &mut Collection, entry: Document, bytes: &[u8]) -> R
     collection.cache.put_metadata(id, entry.metadata);
     collection
         .manifest
-        .update_vector_count(collection.index.len());
+        .update_vector_count(collection.index.len())?;
     collection.grow_index_family()?;
     Ok(id)
 }
@@ -50,7 +59,7 @@ pub fn insert_internal(collection: &mut Collection, entry: Document) -> Result<U
     apply_insert(collection, entry, &bytes)
 }
 
-pub fn delete_internal(collection: &mut Collection, id: &Uuid) {
+pub fn delete_internal(collection: &mut Collection, id: &Uuid) -> Result<()> {
     collection.index.remove(id);
     collection.vector_index.remove(id);
     if collection.vector_index.index_type() != crate::index::IndexType::Hnsw {
@@ -60,7 +69,7 @@ pub fn delete_internal(collection: &mut Collection, id: &Uuid) {
     }
     collection
         .manifest
-        .update_vector_count(collection.index.len());
+        .update_vector_count(collection.index.len())
 }
 
 fn insert_wal_entry(entry: &Document) -> WalEntry {
@@ -73,7 +82,20 @@ fn insert_wal_entry(entry: &Document) -> WalEntry {
     }
 }
 
+/// Refuse an id already stored, touching nothing.
+fn check_new_id(collection: &Collection, id: &Uuid) -> Result<()> {
+    if collection.index.contains_key(id) {
+        return Err(ServerError::InvalidRequest(format!(
+            "document {id} already exists; use upsert"
+        ))
+        .into());
+    }
+    Ok(())
+}
+
 pub fn insert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
+    check_new_id(collection, &entry.id)?;
+    check_scorable(collection, entry.vector())?;
     let bytes = prepare(collection, &entry, false)?;
     let mut wal_entry = insert_wal_entry(&entry);
     collection.checkpoint.wal.log(&mut wal_entry)?;
@@ -92,8 +114,18 @@ pub fn insert_batch(collection: &mut Collection, entries: Vec<Document>) -> Resu
         .dimensions
         .unwrap_or(first.vector().len());
     let mut serialized: Vec<(Uuid, Vec<u8>)> = Vec::with_capacity(entries.len());
+    let mut batch_ids = std::collections::HashSet::with_capacity(entries.len());
     for entry in &entries {
+        check_new_id(collection, &entry.id)?;
+        if !batch_ids.insert(entry.id) {
+            return Err(ServerError::InvalidRequest(format!(
+                "document {} appears more than once in the batch",
+                entry.id
+            ))
+            .into());
+        }
         piramid_core::validation::validate_dimensions(entry.vector(), width)?;
+        check_scorable(collection, entry.vector())?;
         serialized.push((entry.id, RecordStore::encode_document(entry)?));
     }
     let total_bytes: u64 = serialized.iter().map(|(_, bytes)| bytes.len() as u64).sum();
@@ -120,7 +152,7 @@ pub fn insert_batch(collection: &mut Collection, entries: Vec<Document>) -> Resu
     }
     collection
         .manifest
-        .update_vector_count(collection.index.len());
+        .update_vector_count(collection.index.len())?;
     collection.grow_index_family()?;
     collection.track_operation()?;
 
@@ -132,6 +164,7 @@ pub fn upsert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
     if !collection.index.contains_key(&id) {
         return insert(collection, entry);
     }
+    check_scorable(collection, entry.vector())?;
     let bytes = prepare(collection, &entry, true)?;
 
     let mut wal_entry = WalEntry::Update {
@@ -143,7 +176,7 @@ pub fn upsert(collection: &mut Collection, entry: Document) -> Result<Uuid> {
     };
     collection.checkpoint.wal.log(&mut wal_entry)?;
 
-    delete_internal(collection, &id);
+    delete_internal(collection, &id)?;
     apply_insert(collection, entry, &bytes)?;
     collection.track_operation()?;
     Ok(id)
@@ -154,7 +187,7 @@ pub fn delete(collection: &mut Collection, id: &Uuid) -> Result<bool> {
         let mut wal_entry = WalEntry::Delete { id: *id, seq: 0 };
         collection.checkpoint.wal.log(&mut wal_entry)?;
 
-        delete_internal(collection, id);
+        delete_internal(collection, id)?;
         collection.track_operation()?;
         Ok(true)
     } else {
@@ -174,7 +207,7 @@ pub fn delete_batch(collection: &mut Collection, ids: &[Uuid]) -> Result<usize> 
 
     for id in ids {
         if collection.index.contains_key(id) {
-            delete_internal(collection, id);
+            delete_internal(collection, id)?;
             deleted_count += 1;
         }
     }

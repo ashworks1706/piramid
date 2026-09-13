@@ -65,14 +65,14 @@ pub async fn embed_text(
     let mut metadata = metadata.into_iter();
     let mut embeddings = Vec::with_capacity(texts.len());
     let mut entries = Vec::with_capacity(texts.len());
-    let mut total_tokens: u32 = 0;
+    let mut total_tokens: Option<u32> = Some(0);
     let start = Instant::now();
     for text in texts {
         let response = embedder.embed(&text).await?;
         embeddings.push(response.embedding.clone());
-        if let Some(tokens) = response.tokens {
-            total_tokens = total_tokens.saturating_add(tokens);
-        }
+        total_tokens = total_tokens
+            .zip(response.tokens)
+            .map(|(total, tokens)| total.saturating_add(tokens));
         let metadata = match metadata.next() {
             Some(map) => json_to_metadata(map)?,
             None => Metadata::new(),
@@ -92,14 +92,14 @@ pub async fn embed_text(
     state.embeddings.metrics().record(
         1,
         ids.len() as u64,
-        u64::from(total_tokens),
+        total_tokens.map(u64::from),
         start.elapsed(),
     );
 
     Ok(EmbedResponse {
         ids: ids.into_iter().map(|id| id.to_string()).collect(),
         embeddings,
-        total_tokens: (total_tokens > 0).then_some(total_tokens),
+        total_tokens,
     })
 }
 
@@ -129,19 +129,24 @@ pub async fn search_by_text(
     let start = Instant::now();
     let response = embedder.embed(&req.query).await?;
     let embed_duration = start.elapsed();
-    state.embeddings.metrics().record(
-        1,
-        1,
-        u64::from(response.tokens.unwrap_or(0)),
-        embed_duration,
-    );
+    state
+        .embeddings
+        .metrics()
+        .record(1, 1, response.tokens.map(u64::from), embed_duration);
 
     let filter = parse_filter(req.filter)?;
     let base_search = {
         let collection_guard = collection_handle.read();
         collection_guard.config().search
     };
-    let effective_search = apply_search_overrides(base_search, &req.tuning)?;
+    let effective_search = apply_search_overrides(
+        base_search,
+        &SearchTuning {
+            ef: req.ef,
+            nprobe: req.nprobe,
+            filter_overfetch: req.filter_overfetch,
+        },
+    )?;
 
     let lock_start = Instant::now();
     let collection_guard = collection_handle.read();
@@ -159,7 +164,6 @@ pub async fn search_by_text(
         piramid_database::search::SearchParams {
             mode: collection_guard.config().execution,
             filter: filter.as_ref(),
-            filter_overfetch_override: req.tuning.filter_overfetch,
             search_config_override: Some(effective_search),
             min_score: None,
         },

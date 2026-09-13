@@ -18,8 +18,7 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
 
-# crates.io publishing is release-plz's job; it knows the workspace publish order.
-# This builds the tag's artifacts: binaries, images, SBOMs, and the GitHub release.
+# Builds a tag's binaries, images, SBOMs and GitHub release. release-plz publishes to crates.io.
 
 jobs:
   resolve:
@@ -85,7 +84,6 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
         run: cargo build --release --locked --target ${{ matrix.target }} --bin piramid
 
-      # release profile already strips; this covers cross builds.
       - name: Package (unix)
         if: matrix.os != 'windows-latest'
         run: |

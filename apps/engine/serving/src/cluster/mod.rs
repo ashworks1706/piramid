@@ -1,7 +1,4 @@
-//! Cluster boundary for local-first and distributed routing.
-//!
-//! Local-only today. Distributed placement and fan-out route through this boundary, keeping
-//! network concerns out of services and storage.
+//! Node identity and the routing of collections onto nodes. Every collection routes locally.
 
 mod node;
 mod routing;

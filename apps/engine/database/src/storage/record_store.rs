@@ -51,31 +51,39 @@ impl RecordStore {
 
     /// Write bytes at the end of the file and return where they landed.
     pub fn append(&mut self, bytes: &[u8]) -> Result<EntryPointer> {
+        let length = record_length(bytes.len())?;
         let offset = self.append_cursor;
-        let required_size = offset + bytes.len() as u64;
+        let required_size = offset + u64::from(length);
         grow_mmap_if_needed(&mut self.mmap, &self.data_file, required_size)?;
         self.write_at(offset, bytes)?;
         self.append_cursor = required_size;
-        Ok(EntryPointer::new(offset, bytes.len() as u32))
+        Ok(EntryPointer::new(offset, length))
     }
 
-    /// The bytes a document is stored as.
+    /// The bytes a document is stored as. A document whose bytes a pointer cannot address is an
+    /// error.
     pub fn encode_document(document: &Document) -> Result<Vec<u8>> {
-        codec::encode(document)
+        let bytes = codec::encode(document)?;
+        record_length(bytes.len())?;
+        Ok(bytes)
     }
 
     /// Write each entry's bytes at the end of the file, in order, and return where each landed.
     pub fn append_batch(&mut self, entries: &[(uuid::Uuid, Vec<u8>)]) -> Result<Vec<EntryPointer>> {
-        let total_bytes: u64 = entries.iter().map(|(_, bytes)| bytes.len() as u64).sum();
+        let lengths = entries
+            .iter()
+            .map(|(_, bytes)| record_length(bytes.len()))
+            .collect::<Result<Vec<u32>>>()?;
+        let total_bytes: u64 = lengths.iter().copied().map(u64::from).sum();
         let required_size = self.append_cursor + total_bytes;
         grow_mmap_if_needed(&mut self.mmap, &self.data_file, required_size)?;
 
         let mut pointers = Vec::with_capacity(entries.len());
-        for (_, bytes) in entries {
+        for ((_, bytes), length) in entries.iter().zip(lengths) {
             let offset = self.append_cursor;
             self.write_at(offset, bytes)?;
-            self.append_cursor += bytes.len() as u64;
-            pointers.push(EntryPointer::new(offset, bytes.len() as u32));
+            self.append_cursor += u64::from(length);
+            pointers.push(EntryPointer::new(offset, length));
         }
         Ok(pointers)
     }
@@ -129,9 +137,14 @@ impl RecordStore {
         let offset = pointer.offset as usize;
         let length = pointer.length as usize;
         if let Some(mmap) = self.mmap.as_ref() {
-            if let Some(end) = offset.checked_add(length).filter(|&end| end <= mmap.len()) {
-                return Ok(mmap[offset..end].to_vec());
-            }
+            return match offset.checked_add(length).filter(|&end| end <= mmap.len()) {
+                Some(end) => Ok(mmap[offset..end].to_vec()),
+                None => Err(StorageError::CorruptedIndex(format!(
+                    "pointer offset {offset} length {length} lies outside the {} byte mapping",
+                    mmap.len()
+                ))
+                .into()),
+            };
         }
 
         let mut file = self.data_file.try_clone()?;
@@ -154,6 +167,13 @@ impl RecordStore {
     }
 }
 
+/// The length of a record as a pointer stores it, or an error when it does not fit in a u32.
+fn record_length(len: usize) -> Result<u32> {
+    u32::try_from(len).map_err(|_| {
+        StorageError::InvalidVectorData("encoded document exceeds 4 GiB".into()).into()
+    })
+}
+
 fn next_append_offset(index: &std::collections::HashMap<uuid::Uuid, EntryPointer>) -> u64 {
     index
         .values()
@@ -167,5 +187,21 @@ fn initial_size(config: &CollectionConfig) -> u64 {
         config.memory.initial_mmap_size as u64
     } else {
         1024 * 1024
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "a failed assertion is the point of a test"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_record_longer_than_a_pointer_can_address_is_refused() {
+        assert_eq!(record_length(u32::MAX as usize).unwrap(), u32::MAX);
+        let error = record_length(u32::MAX as usize + 1).unwrap_err();
+        assert!(error.to_string().contains("exceeds 4 GiB"), "{error}");
     }
 }

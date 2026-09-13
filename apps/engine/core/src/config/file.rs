@@ -20,8 +20,30 @@ pub struct Config {
 }
 
 impl Config {
-    /// Validate every block and reject a GPU profile paired with any execution mode but gpu.
+    /// Validate every block, and reject a GPU profile paired with any execution mode but gpu, gpu
+    /// execution without the GPU profile, and an inference device the profile does not open.
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(ordinal) = self
+            .runtime
+            .inference
+            .device
+            .as_deref()
+            .and_then(|device| device.strip_prefix("cuda:"))
+        {
+            let ordinal = ordinal.parse::<usize>().ok();
+            if !self.startup.hardware.gpu_enabled() {
+                return Err(
+                    "runtime.inference.device: a cuda device needs startup.hardware.profile: gpu"
+                        .into(),
+                );
+            }
+            if ordinal != Some(self.startup.hardware.gpu.device_ordinal) {
+                return Err(format!(
+                    "runtime.inference.device: must be cuda:{}, the device startup.hardware.gpu.device_ordinal opens",
+                    self.startup.hardware.gpu.device_ordinal
+                ));
+            }
+        }
         self.startup.validate()?;
         self.runtime.validate()?;
         self.console.validate()?;
@@ -32,6 +54,14 @@ impl Config {
                 "startup.hardware.profile: gpu requires runtime.execution: gpu, not '{}'",
                 self.runtime.execution.as_str()
             ));
+        }
+        if self.runtime.execution == super::ExecutionMode::Gpu
+            && !self.startup.hardware.gpu_enabled()
+        {
+            return Err(
+                "runtime.execution: gpu needs startup.hardware.profile: gpu to open a device"
+                    .into(),
+            );
         }
         Ok(())
     }

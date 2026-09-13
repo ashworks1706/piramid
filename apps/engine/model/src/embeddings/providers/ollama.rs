@@ -94,15 +94,6 @@ impl Embedder for OllamaEmbedder {
     fn model_name(&self) -> &str {
         &self.model
     }
-
-    fn dimensions(&self) -> Option<usize> {
-        match self.model.as_str() {
-            "nomic-embed-text" => Some(768),
-            "mxbai-embed-large" => Some(1024),
-            "all-minilm" => Some(384),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]

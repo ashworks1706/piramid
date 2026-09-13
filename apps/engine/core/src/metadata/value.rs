@@ -53,7 +53,7 @@ impl MetadataValue {
     }
 }
 
-// Conversions that let a caller pass a plain value where a MetadataValue is expected.
+// Conversions from plain values into MetadataValue.
 impl From<String> for MetadataValue {
     fn from(s: String) -> Self {
         MetadataValue::String(s)

@@ -2,11 +2,10 @@
 //!
 //! - [http] holds axum routes, handlers and request ids. Handlers parse the request, call a
 //!   service, and serialize the result.
-//! - [services] holds admission checks, lock acquisition, metrics, and the canonical API DTOs.
-//!   Durability belongs to the collection layer, not here.
+//! - [services] holds admission checks, lock acquisition, metrics, and the API shapes.
 //! - [state] holds [AppState], the process-wide shared state, and [disk] the pressure watcher.
 //! - [machine] holds the host readings, sampled on a background thread.
-//! - [cluster] holds node identity and routing. Local-only today.
+//! - [cluster] holds node identity and routing. Every collection routes locally.
 
 pub mod cluster;
 pub mod disk;

@@ -4,19 +4,22 @@
     reason = "criterion_group generates the undocumented harness functions"
 )]
 
-//! Scalar vs SIMD vs parallel, at the dimensions embeddings actually come in.
+//! Scalar, SIMD, parallel and CUDA strategies at common embedding dimensions. The CUDA
+//! strategy rows include the upload of query and candidates and the download of scores; the
+//! batch_resident group scores a slab already on the device.
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
 
 use piramid_hardware::compute::{strategies, DistanceKernels, ExecutionMode};
 
-const COMPARED: [ExecutionMode; 3] = [
+const COMPARED: [ExecutionMode; 4] = [
     ExecutionMode::Scalar,
     ExecutionMode::Simd,
     ExecutionMode::Parallel,
+    ExecutionMode::Gpu,
 ];
 
-/// Dimensions real embedding models emit: MiniLM, OpenAI small/ada, OpenAI large.
+/// Embedding dimensions of MiniLM, OpenAI small and ada, and OpenAI large.
 const DIMS: [usize; 4] = [384, 768, 1536, 3072];
 
 /// Candidate counts spanning one HNSW ef list up to a small flat collection.
@@ -30,14 +33,35 @@ fn vectors(count: usize, dim: usize) -> Vec<f32> {
             state = state
                 .wrapping_mul(6_364_136_223_846_793_005)
                 .wrapping_add(1);
-            // Top bits are the well-mixed ones in an LCG; map them onto [-1, 1).
+            // Maps the high bits of the LCG state onto the range -1 to 1.
             f32::from(((state >> 33) & 0xFFFF) as u16) / 32_768.0 - 1.0
         })
         .collect()
 }
 
-/// Available strategies, resolved once. Auto resolves to one of these and is not listed twice.
+/// Install device 0 for the gpu mode when this build has a GPU backend and a device is present.
+#[cfg(feature = "gpu-cuda")]
+fn install_device() {
+    use piramid_hardware::gpu::{BudgetSettings, GpuManager};
+    static MANAGER: std::sync::OnceLock<Option<GpuManager>> = std::sync::OnceLock::new();
+    MANAGER.get_or_init(|| {
+        let settings = BudgetSettings {
+            limit_bytes: None,
+            reserve_bytes: 0,
+            shares: None,
+        };
+        let manager = GpuManager::open(0, settings, 1).ok()?;
+        strategies::install_gpu(&manager, 256).ok()?;
+        Some(manager)
+    });
+}
+
+#[cfg(not(feature = "gpu-cuda"))]
+fn install_device() {}
+
+/// Available strategies, resolved once, excluding Auto.
 fn available() -> Vec<(&'static str, &'static dyn DistanceKernels)> {
+    install_device();
     COMPARED
         .iter()
         .filter_map(|mode| strategies::for_mode(*mode).ok())
@@ -45,7 +69,7 @@ fn available() -> Vec<(&'static str, &'static dyn DistanceKernels)> {
         .collect()
 }
 
-/// One query against one candidate: the call every index makes per candidate today.
+/// One query against one candidate.
 fn pairwise(c: &mut Criterion) {
     let mut group = c.benchmark_group("pairwise/cosine");
 
@@ -66,7 +90,7 @@ fn pairwise(c: &mut Criterion) {
 /// One query against many candidates in a single batch call.
 fn batch(c: &mut Criterion) {
     let mut group = c.benchmark_group("batch/cosine");
-    // Held at a mid-range embedding size so the axis being varied is candidate count alone.
+    // Dimension is fixed; candidate count varies.
     let dim = 768;
     let query = vectors(1, dim);
 
@@ -88,5 +112,46 @@ fn batch(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, pairwise, batch);
+/// One query against a candidate slab uploaded once, scores left on the device.
+#[cfg(feature = "gpu-cuda")]
+fn batch_resident(c: &mut Criterion) {
+    use piramid_hardware::gpu::kernels::distance::{DistanceLaunch, DistanceModule};
+    use piramid_hardware::gpu::{Device, DeviceBuffer, Stream};
+
+    let Ok(device) = Device::open(0) else {
+        return;
+    };
+    let stream = Stream::new(&device).unwrap();
+    let module = DistanceModule::compile(&device, 256).unwrap();
+    let mut group = c.benchmark_group("batch_resident/cosine");
+    let dim = 768;
+    let query = vectors(1, dim);
+    let norm: f32 = query.iter().map(|x| x * x).sum();
+    let query_gpu = DeviceBuffer::from_host(&device, &query, &stream).unwrap();
+
+    for rows in ROWS {
+        let slab_gpu = DeviceBuffer::from_host(&device, &vectors(rows, dim), &stream).unwrap();
+        let mut out_gpu = DeviceBuffer::<f32>::alloc(&device, rows).unwrap();
+        group.throughput(Throughput::Elements((rows * dim) as u64));
+        group.bench_with_input(BenchmarkId::new("cuda", rows), &rows, |bencher, _| {
+            bencher.iter(|| {
+                let launch = DistanceLaunch {
+                    query: &query_gpu,
+                    candidates: &slab_gpu,
+                    out: &mut out_gpu,
+                    dim,
+                    rows,
+                };
+                module.cosine_batch(launch, norm, &stream).unwrap();
+                stream.synchronize().unwrap();
+            });
+        });
+    }
+    group.finish();
+}
+
+#[cfg(not(feature = "gpu-cuda"))]
+fn batch_resident(_c: &mut Criterion) {}
+
+criterion_group!(benches, pairwise, batch, batch_resident);
 criterion_main!(benches);

@@ -9,7 +9,7 @@ pub mod quantization;
 pub mod strategies;
 
 pub use error::{ComputeError, ComputeResult};
-pub use kernels::{check_batch_shape, DistanceKernels};
+pub use kernels::{check_batch_shape, check_pair_shape, DistanceKernels};
 pub use metric::Metric;
 pub use mode::ExecutionMode;
 pub use pairwise::{

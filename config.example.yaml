@@ -1,24 +1,22 @@
 # Piramid configuration.
 #
 # Every value below is the default, so an empty file and this file behave identically. Point the
-# server at one with CONFIG_FILE=config.yaml, and check what actually resolved with
-# `piramid show config`.
+# server at one with CONFIG_FILE=config.yaml, and read what resolved from GET /api/config.
 #
 # There are two blocks, split by when a setting takes effect:
 #
-#   startup:  applied once at boot. Changing one needs a restart, and POST /config/reload
+#   startup:  applied once at boot. Changing one needs a restart, and POST /api/config/reload
 #             refuses a file whose startup block differs from the running one.
-#   runtime:  re-read on POST /config/reload. Search, limits, WAL checkpoint thresholds, the
+#   runtime:  re-read on POST /api/config/reload. Search, limits, WAL checkpoint thresholds, the
 #             metadata cache budget and execution reach open collections; a change to anything
 #             read when a collection opens is refused while one is open.
 #
 # Any key can also be set from the environment, spelled from its path:
-# `runtime.wal.max_log_size` is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so
-# `8`, `true` and `null` mean what they do here. Environment wins over the file.
+# runtime.wal.max_log_size is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so
+# 8, true and null mean what they do here. Environment wins over the file.
 #
-# An unknown or misspelled key is a startup error, never a silent default. So is a setting that
-# is not implemented yet — the ones marked "not implemented" below exist so the shape is settled,
-# and turning one on fails loudly rather than being ignored.
+# An unknown or misspelled key is a startup error. So is changing a setting marked not
+# implemented below from its default.
 
 startup:
   # address:port to listen on. A non-loopback address, such as 0.0.0.0:6333, needs an API key
@@ -33,7 +31,7 @@ startup:
 
   logging:
     enabled: true
-    # error | warn | info | debug | trace. RUST_LOG overrides this entirely.
+    # error | warn | info | debug | trace
     level: info
     # per-subsystem switches, each one a tracing target
     config: true
@@ -48,7 +46,7 @@ startup:
     slow_query_ms: 500
 
   telemetry:
-    # OTLP trace export; null disables it. Requires a build with the `otel` feature.
+    # OTLP trace export; null disables it. Requires a build with the otel feature.
     otlp: null
     #   endpoint: http://localhost:4317
     #   service_name: piramid
@@ -56,33 +54,33 @@ startup:
     span_events: false
 
   hardware:
-    # auto | cpu-only | gpu | 8gb | 16gb | 32gb. `gpu` requires runtime.execution: gpu. The memory
-    # classes set a host memory budget, which is not enforced yet, so they are refused.
-    profile: auto
-    # host memory the process will use; null is unbounded. Not enforced yet, so setting it is an
-    # error.
+    # cpu-only | gpu | 8gb | 16gb | 32gb. gpu requires runtime.execution: gpu. The memory
+    # classes set a host memory budget, which is not implemented, so they are refused.
+    profile: cpu-only
+    # host memory the process will use; null is unbounded. Not implemented; setting it is an error.
     memory_budget_bytes: null
-    # device memory to claim; null is unbounded
+    # device memory to claim before gpu.reserve_bytes is held back; null is the whole device
     gpu_memory_budget_bytes: null
 
     gpu:
-      # Which device to open when the host has more than one.
+      # device to open when the host has more than one
       device_ordinal: 0
-      # Threads per block for distance kernels. Must be a multiple of 32.
+      # threads per block for distance kernels; a multiple of 32
       distance_block_size: 256
-      # Retrieval and the forward pass each want one, so they overlap rather than serialise.
+      # device streams opened with the device. Retrieval kernels queue on the first; the model
+      # queues on the per-thread stream.
       streams: 2
-      # Held back for fragmentation and library workspaces.
+      # bytes held back for fragmentation and library workspaces
       reserve_bytes: 1073741824
     vram:
-      # Divide device memory between weights, KV and the index instead of first-come-first-served.
-      # Not implemented (roadmap v0.6.0).
+      # divide the device budget between weights, KV and the index; off, all three share one
+      # budget. Each pool refuses an allocation past its share.
       enabled: false
       weights_ratio: 0.6
       kv_ratio: 0.15
       index_ratio: 0.25
-      # Bandwidth retrieval may take while a pass is decoding. Decode reads every weight per
-      # token, so a search kernel streaming the slab contends with it.
+      # bandwidth retrieval may take while a pass is decoding. Not implemented; any other value
+      # is refused.
       retrieval_bandwidth_share: 0.25
 
   disk:
@@ -93,12 +91,12 @@ startup:
 
   http:
     # With PIRAMID_API_KEY set, every route except /api/health and /api/readyz requires
-    # Authorization: Bearer <key>. The key is read from the environment only, never from this file.
+    # Authorization: Bearer <key>. The key is read from the environment only.
     auth:
       # serve a non-loopback bind with no key; setting this while PIRAMID_API_KEY is set is an error
       allow_unauthenticated: false
-    # Per-client token bucket, keyed by peer address; a request over it gets 429 with
-    # Retry-After. null disables it. Behind a reverse proxy every client shares one bucket.
+    # per-client token bucket keyed by peer address; a request over it gets 429 with Retry-After.
+    # null disables it. Behind a reverse proxy every client shares one bucket.
     rate_limit:
       requests_per_second: 100
       burst: 200
@@ -107,27 +105,27 @@ startup:
     drain_timeout_secs: 30
 
   # embedding provider, built once at boot; null disables server-side embedding.
-  # Set the key with OPENAI_API_KEY rather than writing it here.
+  # The openai provider reads its key from OPENAI_API_KEY only; no provider takes one here.
   embedding: null
-  #   provider: openai        # openai (or any server speaking that format) | ollama
+  #   provider: openai        # openai (or any server speaking that format) | ollama | piramid
   #   model: text-embedding-3-small
-  #   base_url: null          # for self-hosted or proxied endpoints
+  #   base_url: null          # endpoint override for self-hosted or proxied providers
   #   timeout: null           # request timeout in seconds
-  #   options: {}             # openai: merged into the request body; ollama: sent as options
+  #   options: {}             # openai: merged into the request body; ollama: sent as options;
+  #                           # piramid: device (cpu | cuda:N), dtype, max_tokens
   #   cache:
-  #     # Identical text is not sent to the provider twice. Size this above your corpus, or the
-  #     # tail is re-embedded on every pass.
+  #     # identical text is embedded once; entries past the limit are re-embedded
   #     enabled: true
   #     entries: 10000
   #
-  # provider: piramid — an in-process encoder reusing the device retrieval holds.
-  # Not implemented (roadmap v0.4.0).
+  # provider: piramid runs a Qwen3 embedding checkpoint in this process: model is the checkpoint
+  # directory, and the build needs the inference-candle feature (gpu-cuda for a GPU device).
 
 runtime:
   index:
-    # auto | flat | hnsw | ivf. `auto` picks a family from the collection's size and rebuilds into
+    # auto | flat | hnsw | ivf. auto picks a family from the collection's size and rebuilds into
     # the next family as an insert crosses a threshold, keeping it if the collection shrinks. The
-    # others take that family's parameters inline (see the commented examples below).
+    # others take that family's parameters inline, as in the examples below.
     type: auto
     # cosine | euclidean | dot
     metric: cosine
@@ -136,11 +134,13 @@ runtime:
       flat_max_vectors: 10000
       # under this many, use IVF; above it, HNSW
       ivf_max_vectors: 100000
-      # IVF: null sizes clusters and probes from the collection
+      # IVF: null sizes clusters from the collection and probes from the cluster count.
+      # ivf_num_probes needs ivf_num_clusters and must not exceed it.
       ivf_num_clusters: null
       ivf_num_probes: null
       ivf_max_iterations: 10
-      # HNSW shape used when auto-selected
+      # HNSW shape used when auto-selected; m_max is 2 * hnsw_m and ml is 1 / ln(hnsw_m), so
+      # hnsw_m must be >= 2
       hnsw_m: 16
       hnsw_ef_construction: 200
       hnsw_ef_search: 200
@@ -150,28 +150,28 @@ runtime:
   # m: 16                 # max connections per node above layer 0
   # m_max: 32             # max connections at layer 0, conventionally 2 * m
   # ef_construction: 200  # candidate width while linking a new node
-  # ef_search: 200        # candidate width while searching: the recall/speed dial
+  # ef_search: 200        # candidate width while searching; higher is better recall and slower
   # ml: 0.36067376        # layer multiplier, conventionally 1 / ln(m)
   #
   # type: ivf
   # metric: cosine
-  # num_clusters: 256     # partitions; sqrt(N) is a reasonable starting point
+  # num_clusters: 256     # partitions
   # num_probes: 8         # partitions scanned per query; higher is better recall and slower
-  # max_iterations: 10    # Lloyd's-algorithm cap when training centroids
+  # max_iterations: 10    # iteration cap when training centroids
   #
   # type: flat
   # metric: cosine
 
   search:
-    # per-query overrides; null uses the index's own ef_search / num_probes
+    # per-query overrides; null uses the index's own ef_search and num_probes
     ef: null
     nprobe: null
-    # multiplier on k when a filter is present, since candidates get filtered out
+    # multiplier on k when a filter is present
     filter_overfetch: 10
     # fan a batch of queries across the worker threads
     parallel: true
 
-  # Nothing applies quantization yet: every key here must stay at its default.
+  # Quantization is not implemented: every key here must stay at its default.
   quantization:
     # none | int8 | pq | int4 | float16
     level: none
@@ -183,11 +183,11 @@ runtime:
     preserve_raw_vectors: true
 
   memory:
-    # byte ceiling per collection. Not enforced yet, so setting one is an error.
+    # byte ceiling per collection. Not implemented; setting one is an error.
     max_memory_per_collection: null
     # size the data file is first mapped at; it grows from here
     initial_mmap_size: 1048576
-    # map the data file; with this off, records go through ordinary file reads
+    # map the data file; off, records go through ordinary file reads
     use_mmap: true
 
   wal:
@@ -207,13 +207,10 @@ runtime:
     max_bytes: null
     max_vector_bytes: null
 
-  # Three caches with different jobs, configured separately because the cost of a miss differs:
-  # a dropped metadata entry is a disk read, a dropped resident vector is a document search cannot
-  # score, and a dropped embedding is a paid API call.
   cache:
     vectors:
-      # Vectors held resident for search. Not really a cache — an evicted vector is missing from
-      # results, not just slower. Bounds are not enforced yet, so setting one is an error.
+      # vectors held resident for search; an evicted vector is missing from results. Bounds are
+      # not implemented; setting one is an error.
       entries: null
       max_bytes_per_collection: null
       # none | oldest | lru. Not implemented for this store.
@@ -221,129 +218,136 @@ runtime:
     metadata:
       enabled: true
       entries: 10000
-      # Entry lifetime in seconds. Not implemented yet.
+      # entry lifetime in seconds. Not implemented.
       ttl_seconds: null
-      # none | oldest | lru. Only `oldest` is implemented.
+      # none | oldest | lru. Only oldest is implemented.
       eviction: oldest
-      # Byte budget for cached metadata across every loaded collection; past it the largest
+      # byte budget for cached metadata across every loaded collection; past it the largest
       # metadata caches are cleared. null is unbounded.
       max_bytes: null
 
-  # auto | scalar | simd | parallel | gpu. The one place a distance strategy is chosen.
-  # `gpu` is rejected at startup until GPU distance kernels exist.
+  # auto | scalar | simd | parallel | gpu. The distance strategy for every collection.
+  # gpu needs a build with the gpu-cuda feature and startup.hardware.profile: gpu.
   execution: auto
 
-  # Model execution. None of this is implemented — the shape is settled so the forward-pass work
-  # lands into a surface that already exists, and every switch below fails at startup rather than
-  # parsing and doing nothing.
+  # Model execution: a Qwen2 or Qwen3 checkpoint served from this process. Needs a build with the
+  # inference-candle feature, and gpu-cuda to run on a GPU. Read once at startup; a reload that
+  # changes anything here is refused.
   inference:
-    # Not implemented (roadmap v0.4.0).
+    # load the model at startup and serve /api/generate and /v1/chat/completions
     enabled: false
+    # directory holding config.json, tokenizer.json, tokenizer_config.json and the safetensors
     model_path: null
-    # Only needed when the tokenizer does not sit beside the weights.
+    # name clients address the model by, including the OpenAI model id; null is the model_path
+    # directory name
+    model_name: null
+    # directory holding tokenizer.json and tokenizer_config.json when not beside the weights
     tokenizer_path: null
-    # Which forked model file drives the pass. null reads it from the checkpoint.
+    # qwen2 | qwen3, checked against the checkpoint; null reads it from the checkpoint
     architecture: null
-    # cuda:0, or null to follow startup.hardware.
+    # cpu | cuda:N. cuda needs the gpu profile and must name hardware.gpu.device_ordinal. null is
+    # that device under the gpu profile, else cpu.
     device: null
-    # auto | fp32 | fp16 | bf16. Weight precision at load.
+    # auto | fp32 | fp16 | bf16. auto is the checkpoint precision on a GPU and fp32 on the cpu.
     dtype: auto
     max_sequence_length: 4096
-    # A throwaway pass at boot, so the first real request does not pay for allocation.
+    # run one discarded pass at boot
     warmup: true
 
     batching:
-      # Sequences in one forward pass.
+      # sequences in one forward pass
       max_batch_size: 8
-      # Sequences admitted and waiting, across all passes.
+      # sequences admitted and waiting, across all passes
       max_queue_depth: 256
-      # Token ceiling per step, so one long prefill cannot crowd out every decode.
+      # token ceiling per step
       max_batched_tokens: 8192
-      # Keep admitting into a running batch instead of draining it first.
+      # admit into a running batch instead of draining it first
       continuous: false
-      # Split a long prefill across steps so decode is not starved.
+      # split a long prefill across steps
       chunked_prefill: false
       prefill_chunk_tokens: 2048
-      # How long a request may wait for a slot. null waits forever.
+      # milliseconds a request may wait for a slot; null waits forever
       queue_timeout_ms: 30000
 
     kv_cache:
-      # Budget across every live sequence; null is unbounded.
+      # bytes across every live sequence. Required on the cpu; on a GPU it caps device_fraction.
       max_bytes: null
-      # Tokens per page: the unit of allocation and eviction.
+      # tokens per page, the unit of allocation and eviction
       page_size: 16
-      # The largest single lever on cache size. A 7B model's 8k cache is ~2 GB at fp16.
-      dtype: fp16
-      # Fraction of what device memory remains after weights.
+      # auto | fp32 | fp16 | bf16. auto matches the weights.
+      dtype: auto
+      # fraction of the device memory remaining after weights
       device_fraction: 0.9
-      # Share pages between sequences with an identical prefix, such as a common system prompt.
+      # share pages between sequences with an identical prefix
       prefix_sharing: true
-      # recompute | swap. What a preempted sequence does with its pages.
+      # recompute: a preempted sequence recomputes its pages when it resumes. swap is not
+      # implemented and is refused.
       preemption: recompute
 
     sampling:
       temperature: 0.0  # 0.0 is greedy
+      # top_p, top_k and seed need temperature > 0
       top_p: null
       top_k: null
-      # 1.0 is no penalty.
+      # 1.0 is no penalty
       repetition_penalty: 1.0
       repetition_window: 64
-      # Default completion length when a request does not say.
+      # completion length when a request does not set one
       max_new_tokens: 512
       stop: []
-      # Fixed seed, so a benchmark's control arm is reproducible.
+      # fixed sampling seed
       seed: null
 
-    # Where retrieval enters the forward pass. Not implemented (roadmap v0.6.0).
+    # Where retrieval enters the forward pass. Not implemented: every key except chunk_tokens
+    # must stay at its default.
     fusion:
       enabled: false
-      # Which hook implementation to install, by registered name.
+      # registered name of the hook implementation to install
       hook: null
-      # Which collection it queries. null uses the request's.
+      # collection the hook queries; null uses the request's
       collection: null
-      # sequence-start | chunk-boundary | layer-entry.
+      # sequence-start | chunk-boundary | layer-entry
       point: sequence-start
       top_k: 8
-      # Candidates fetched before filtering, as a multiple of top_k.
+      # candidates fetched before filtering, as a multiple of top_k
       overfetch: 1
       score_threshold: null
-      # Tokens between calls at chunk-boundary. ~16 calls in a 512-token generation.
+      # tokens between calls at chunk-boundary
       chunk_tokens: 32
-      # Fire every Nth decoder layer at layer-entry.
+      # fire every Nth decoder layer at layer-entry
       layer_stride: 1
       max_calls_per_sequence: null
-      # Abandon a retrieval that misses this budget rather than stalling the pass.
+      # microseconds a retrieval may take before it is abandoned
       deadline_us: 100
-      # skip | stall | error.
+      # skip | stall | error
       on_deadline_miss: skip
-      # Run retrieval on its own device stream so it overlaps the pass beside it.
+      # run retrieval on its own device stream
       own_stream: true
       dedupe_across_calls: true
-      # Tokens the prompt-stuffed control arm may spend, so a comparison is at equal budget.
+      # tokens the prompt-stuffed control arm may spend
       token_budget: null
-      # Store token ids for retrieved documents, so the hot path skips tokenization.
+      # store token ids for retrieved documents
       pretokenize_documents: true
-      # Trained adapter weights, for architectures that have not been forked.
+      # trained adapter weights
       adapter_path: null
 
-    # Precomputed KV for retrieved documents, reused at prefill. Not context-independent —
-    # position and preceding context change it — so a fraction is recomputed on reuse.
-    # Not implemented (roadmap v0.6.0).
+    # Precomputed KV for retrieved documents, reused at prefill with a fraction recomputed.
+    # Not implemented: every key must stay at its default.
     document_kv:
       enabled: false
       max_bytes: null
-      # device | host | disk.
+      # device | host | disk
       storage: host
       recompute_ratio: 0.15
 
-# The terminal UI. Read when `piramid` starts with no subcommand.
+# The terminal UI. Read when piramid starts with no subcommand.
 console:
-  # Server to watch. Empty follows startup.bind, so moving the port is said once.
+  # server to watch; empty follows startup.bind
   base_url: ""
-  # Website to probe. Shown only inside a checkout.
+  # website to probe; shown only inside a checkout
   web_url: http://localhost:3000
-  # Lines kept in memory per unit. Full output goes to log_dir regardless.
+  # lines kept in memory per unit; full output goes to log_dir
   log_lines: 5000
   log_dir: target/console-logs
-  # Seconds between health probes and collection refreshes.
+  # seconds between health probes and collection refreshes
   refresh_secs: 5

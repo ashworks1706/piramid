@@ -15,7 +15,7 @@ use crate::console::types::{Event, Kind, LogLine, RunnerError, ServiceState, Str
 
 const COMPOSE_FILE: &str = "deploy/compose.yml";
 
-/// Every compose profile in deploy/compose.yml, so ps and logs see optional services too.
+/// Every compose profile in deploy/compose.yml, passed to ps and logs.
 const PROFILES: [&str; 1] = ["ollama"];
 
 /// Owns the children the console started.
@@ -57,6 +57,8 @@ impl Runner {
     }
 
     /// Stops a unit. Host trees get SIGTERM, services get a compose stop.
+    ///
+    /// Returns an error for a host process or task with no process group this runner started.
     pub fn stop(&mut self, unit: &Unit) -> Result<(), RunnerError> {
         match &unit.kind {
             Kind::Service { service, profile } => {
@@ -66,16 +68,20 @@ impl Runner {
                 self.spawn_streaming(&unit.id, cmd, false)
             }
             Kind::Process | Kind::Task => {
-                if let Some(pgid) = self.groups.remove(&unit.id) {
-                    self.note(&unit.id, format!("stopping process group {pgid}"));
-                    let mut kill = Command::new("kill");
-                    kill.args(["-TERM", "--", &format!("-{pgid}")]);
-                    kill.stdout(Stdio::null()).stderr(Stdio::null());
-                    kill.spawn().map_err(|source| RunnerError::Spawn {
-                        cmd: format!("kill -TERM -- -{pgid}"),
-                        source,
+                let pgid = self
+                    .groups
+                    .remove(&unit.id)
+                    .ok_or_else(|| RunnerError::NotTracked {
+                        unit: unit.id.clone(),
                     })?;
-                }
+                self.note(&unit.id, format!("stopping process group {pgid}"));
+                let mut kill = Command::new("kill");
+                kill.args(["-TERM", "--", &format!("-{pgid}")]);
+                kill.stdout(Stdio::null()).stderr(Stdio::null());
+                kill.spawn().map_err(|source| RunnerError::Spawn {
+                    cmd: format!("kill -TERM -- -{pgid}"),
+                    source,
+                })?;
                 Ok(())
             }
         }
@@ -173,9 +179,13 @@ impl Runner {
     ) -> Result<(), RunnerError> {
         let mut child = self.spawn_piped(unit_id, cmd, true)?;
         if track {
-            if let Some(pid) = child.id() {
-                self.groups.insert(unit_id.to_owned(), pid);
-            }
+            let Some(pid) = child.id() else {
+                let _ = child.start_kill();
+                return Err(RunnerError::NotTracked {
+                    unit: unit_id.to_owned(),
+                });
+            };
+            self.groups.insert(unit_id.to_owned(), pid);
         }
         let tx = self.tx.clone();
         let id = unit_id.to_owned();
@@ -256,7 +266,7 @@ where
             let text = match lines.next_line().await {
                 Ok(Some(text)) => text,
                 Ok(None) => break,
-                // A capture failure is reported into the pane rather than ending silently.
+                // A capture failure is reported into the pane.
                 Err(e) => {
                     let _ = tx.send(Event::Log {
                         unit: unit.clone(),
@@ -279,7 +289,7 @@ where
     });
 }
 
-/// Strips escape sequences so coloured output from children renders as plain text.
+/// Strips escape sequences from child output, leaving plain text.
 pub fn sanitize_line(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let mut chars = line.chars().peekable();
@@ -305,7 +315,7 @@ pub fn sanitize_line(line: &str) -> String {
 }
 
 /// Parses the JSON output of docker compose ps: an array on older releases, one object per line
-/// on newer ones. Anything else returns an error rather than an empty set of services.
+/// on newer ones. Anything else is an error.
 pub fn parse_ps(raw: &str) -> Result<HashMap<String, ServiceState>, String> {
     #[derive(serde::Deserialize)]
     struct Row {

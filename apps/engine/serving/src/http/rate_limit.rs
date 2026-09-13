@@ -25,10 +25,11 @@ pub struct RateLimit {
 }
 
 impl RateLimit {
-    /// A limiter for the configured rate and burst. A zero rate or burst is an error.
+    /// A limiter for the configured rate and burst. A zero rate or burst, or a rate above one
+    /// request per nanosecond, is an error.
     pub fn new(config: &RateLimitConfig) -> Result<Self, String> {
         config.validate()?;
-        let period_nanos = (1_000_000_000 / u64::from(config.requests_per_second)).max(1);
+        let period_nanos = 1_000_000_000 / u64::from(config.requests_per_second);
         let limiter = GovernorConfigBuilder::default()
             .period(Duration::from_nanos(period_nanos))
             .burst_size(config.burst)
@@ -68,5 +69,25 @@ fn rejection(error: GovernorError) -> Response {
         other => {
             ApiError::from(ServerError::Internal(format!("rate limit: {other}"))).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_rate_above_one_request_per_nanosecond_is_refused() {
+        let at_limit = RateLimitConfig {
+            requests_per_second: 1_000_000_000,
+            burst: 1,
+        };
+        assert!(RateLimit::new(&at_limit).is_ok());
+        let above = RateLimitConfig {
+            requests_per_second: 1_000_000_001,
+            burst: 1,
+        };
+        let error = RateLimit::new(&above).err().expect("the rate is refused");
+        assert!(error.contains("requests_per_second"), "{error}");
     }
 }

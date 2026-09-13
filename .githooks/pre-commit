@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs the gate for whatever the staged changes touch. Install with `just hooks`.
-# Skip once with `git commit --no-verify`.
+# Runs the gate for whatever the staged changes touch. Install with just hooks.
+# Skip once with git commit --no-verify.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

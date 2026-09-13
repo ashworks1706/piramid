@@ -34,7 +34,7 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
     async fn embed(&self, text: &str) -> EmbeddingResult<EmbeddingResponse> {
         {
             let mut cache = self.cache.lock();
-            // A hit sends nothing to the provider, so it consumes no tokens.
+            // A hit sends nothing to the provider and reports no token count.
             if let Some(hit) = cache.get(text) {
                 return Ok(EmbeddingResponse {
                     embedding: hit.embedding.clone(),
@@ -66,9 +66,5 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
 
     fn model_name(&self) -> &str {
         self.inner.model_name()
-    }
-
-    fn dimensions(&self) -> Option<usize> {
-        self.inner.dimensions()
     }
 }

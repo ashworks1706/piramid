@@ -1,4 +1,4 @@
-//! Vector layout and access, separately from [crate::storage::record_store].
+//! Vector layout and read access for indexes.
 
 pub mod reader;
 

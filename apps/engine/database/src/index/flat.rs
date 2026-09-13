@@ -30,7 +30,7 @@ impl FlatIndex {
         }
     }
 
-    /// Score every vector this index owns, one batch call per block rather than one per vector.
+    /// Score every vector this index owns, one batch call per block.
     fn score_all(
         &self,
         query: &[f32],
@@ -40,8 +40,7 @@ impl FlatIndex {
         if self.vector_ids.is_empty() {
             return Ok(Vec::new());
         }
-        // The store is already the whole candidate set laid out row-major, so the buffer goes
-        // straight to the kernel.
+        // A slab covering every indexed row goes to the kernel in one call.
         if let Some(slab) = vectors.as_slab() {
             if slab.rows() == self.vector_ids.len() {
                 debug_assert!(
@@ -120,6 +119,7 @@ impl VectorIndex for FlatIndex {
         let kernels = for_mode(self.config.mode)?;
         let mut scored = self.score_all(query, vectors, kernels)?;
 
+        scored.retain(|(_, score)| !score.is_nan());
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(scored.into_iter().take(k).map(|(id, _)| id).collect())
@@ -148,6 +148,15 @@ impl VectorIndex for FlatIndex {
 
     fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
         self.config.mode = mode;
+    }
+
+    fn build_config(&self) -> piramid_core::config::IndexConfig {
+        piramid_core::config::IndexConfig::Flat {
+            params: piramid_core::config::FlatConfig {
+                mode: piramid_hardware::compute::ExecutionMode::default(),
+                ..self.config
+            },
+        }
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

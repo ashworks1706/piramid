@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 /// Insert one or more documents. Always a list, even for one document.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InsertRequest {
     /// Vector of each document. Must not be empty.
     pub vectors: Vec<Vec<f32>>,
@@ -45,6 +46,7 @@ pub struct VectorResponse {
 
 /// Query parameters for paging through the documents of a collection.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListVectorsQuery {
     /// Maximum number of documents returned. 100 when omitted.
     #[serde(default = "default_limit")]
@@ -60,6 +62,7 @@ fn default_limit() -> usize {
 
 /// Delete several documents by id.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeleteVectorsRequest {
     /// Ids of the documents to delete, each a UUID.
     pub ids: Vec<String>,
@@ -76,6 +79,7 @@ pub struct DeleteResponse {
 
 /// Insert a document, replacing any existing one with the same id.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UpsertRequest {
     /// Id of the document, a UUID. A new id is generated when omitted.
     pub id: Option<String>,

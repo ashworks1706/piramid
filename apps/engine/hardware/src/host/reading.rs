@@ -16,3 +16,22 @@ pub struct HostReading {
     /// Resident memory of this process, in bytes.
     pub process_resident_bytes: Option<u64>,
 }
+
+/// Memory, utilisation and temperature of one GPU at one instant.
+///
+/// A field is None when the driver could not measure it for this device.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct GpuReading {
+    /// Index of the device as the driver enumerates it.
+    pub index: u32,
+    /// Product name the driver reports for the device.
+    pub name: Option<String>,
+    /// Device memory in use, in bytes.
+    pub memory_used_bytes: Option<u64>,
+    /// Device memory installed, in bytes.
+    pub memory_total_bytes: Option<u64>,
+    /// Share of the last sample period during which a kernel ran on the device, from 0 to 100.
+    pub utilization_percent: Option<f32>,
+    /// Temperature of the device die, in degrees Celsius.
+    pub temperature_celsius: Option<f32>,
+}

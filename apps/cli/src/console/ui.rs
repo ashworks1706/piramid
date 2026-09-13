@@ -2,18 +2,18 @@
 
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::symbols::Marker;
+use ratatui::symbols::{self, Marker};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState,
-    Paragraph, Sparkline,
+    Paragraph, Sparkline, Wrap,
 };
 use ratatui::Frame;
 
 use crate::console::app::{App, UnitState};
-use crate::console::client::HostMetrics;
+use crate::console::client::{ClientError, GpuBudget, HostMetrics, InferenceMetrics};
 use crate::console::collections::Row;
-use crate::console::device::Run;
+use crate::console::device::{DeviceView, Run};
 use crate::console::types::{
     ConfigState, Focus, Group, Mode, Probe, Profile, Status, Stream, View,
 };
@@ -59,7 +59,7 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
         .rows
         .iter()
         .map(|row| {
-            let count = thousands(row.vectors());
+            let count = row.vectors().map_or_else(|| "-".to_owned(), thousands);
             let name_width = width.saturating_sub(count.len() + 3);
             let (glyph, color) = match (row.problem().is_some(), row.loaded()) {
                 (true, _) => ("!", Color::Red),
@@ -76,7 +76,7 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
     let title = format!(" collections {} ", view.rows.len());
     if items.is_empty() {
         let note: Vec<Line> = match (&view.error, view.snapshot.is_some()) {
-            (Some(_), _) => vec![
+            (Some(ClientError::Unreachable(..)), _) => vec![
                 Line::from(Span::styled(
                     "  no server at",
                     Style::default().fg(Color::Red),
@@ -99,6 +99,10 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
                     Style::default().fg(DIM),
                 )),
             ],
+            (Some(error), _) => vec![Line::from(Span::styled(
+                format!("  {error}"),
+                Style::default().fg(Color::Red),
+            ))],
             (None, true) => vec![Line::from(Span::styled(
                 "  no collections yet",
                 Style::default().fg(DIM),
@@ -108,7 +112,12 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(DIM),
             ))],
         };
-        frame.render_widget(Paragraph::new(note).block(pane(&title, true)), left);
+        frame.render_widget(
+            Paragraph::new(note)
+                .wrap(Wrap { trim: false })
+                .block(pane(&title, true)),
+            left,
+        );
     } else {
         let list = List::new(items).block(pane(&title, true)).highlight_style(
             Style::default()
@@ -236,16 +245,35 @@ fn collection_detail(row: &Row) -> Vec<Line<'static>> {
     lines
 }
 
-/// Host processor and memory of the watched server, graphed over the refresh history.
+/// Host processor and memory of the watched server, each of its GPUs, and generation on its
+/// loaded model, graphed over the refresh history, with the device memory budget of the newest
+/// refresh.
 fn device(frame: &mut Frame, app: &App, area: Rect) {
-    let [about, cpu_area, memory_area] = Layout::vertical([
+    let view = &app.device;
+    let inference = view.latest_inference();
+    let budget = view.latest_budget();
+    let [about, cpu_row, memory_row, budget_row, inference_row] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(6),
         Constraint::Min(6),
+        Constraint::Length(budget.map_or(0, |_| BUDGET_HEIGHT)),
+        match inference {
+            None => Constraint::Length(0),
+            Some(_) if area.width >= KV_BESIDE => Constraint::Min(KV_HEIGHT.max(GENERATION_HEIGHT)),
+            Some(_) => Constraint::Min(KV_HEIGHT + GENERATION_HEIGHT),
+        },
     ])
     .areas(area);
-    let view = &app.device;
     let latest = view.latest();
+    let gpu_indices = view.gpu_indices();
+    let columns = vec![Constraint::Fill(1); gpu_indices.len() + 1];
+    let cpu_cells = Layout::horizontal(columns.clone()).split(cpu_row);
+    let memory_cells = Layout::horizontal(columns).split(memory_row);
+    let ([cpu_area, gpu_compute_cells @ ..], [memory_area, gpu_memory_cells @ ..]) =
+        (&cpu_cells[..], &memory_cells[..])
+    else {
+        return;
+    };
 
     let where_line = if view.local() {
         Line::from(vec![
@@ -304,7 +332,7 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
             100.0,
             ["0%".to_owned(), "50%".to_owned(), "100%".to_owned()],
         ),
-        cpu_area,
+        *cpu_area,
     );
 
     let used = view.series(now, |h| h.memory_used_bytes.map(|b| b as f64));
@@ -345,6 +373,397 @@ fn device(frame: &mut Frame, app: &App, area: Rect) {
                 bytes(ceiling as u64),
             ],
         ),
+        *memory_area,
+    );
+
+    for ((index, compute_area), memory_area) in gpu_indices
+        .iter()
+        .zip(gpu_compute_cells)
+        .zip(gpu_memory_cells)
+    {
+        gpu(
+            frame,
+            view,
+            *index,
+            now,
+            window,
+            *compute_area,
+            *memory_area,
+        );
+    }
+
+    if let Some(budget) = budget {
+        device_memory(frame, budget, budget_row);
+    }
+
+    if let Some(latest) = inference {
+        generation(frame, view, latest, now, window, inference_row);
+    }
+}
+
+/// Rows of the device memory panel, borders included.
+const BUDGET_HEIGHT: u16 = 5;
+
+/// Width the pool names of the device memory panel are padded to.
+const POOL_LABEL: usize = 8;
+
+/// Colours of the pools of the device memory budget, in the order the server sends them.
+const POOL_COLORS: [Color; 3] = [ACCENT, Color::Magenta, Color::Yellow];
+
+/// The device memory budget of the newest refresh: under a shared budget one bar of every pool
+/// against the usable bytes, and under a split budget one bar per pool against its capacity.
+fn device_memory(frame: &mut Frame, budget: &GpuBudget, area: Rect) {
+    let used: Vec<u64> = budget.pools.iter().map(|pool| pool.used_bytes).collect();
+    let total_used = used
+        .iter()
+        .fold(0u64, |sum, bytes| sum.saturating_add(*bytes));
+    let mode = if budget.shared { "shared" } else { "split" };
+    let block = pane(
+        &format!(
+            " device memory  {mode}  {} of {} ",
+            bytes(total_used),
+            bytes(budget.usable_bytes)
+        ),
+        false,
+    );
+    let inner = usize::from(block.inner(area).width);
+    let color = |index: usize| POOL_COLORS.get(index).copied().unwrap_or(DIM);
+
+    let lines: Vec<Line<'static>> = if budget.shared {
+        let cells = stacked_cells(&used, budget.usable_bytes, inner.saturating_sub(4));
+        let mut bar = vec![Span::raw("  ")];
+        for (index, count) in cells.iter().enumerate() {
+            bar.push(if index < used.len() {
+                Span::styled(
+                    symbols::block::FULL.repeat(*count),
+                    Style::default().fg(color(index)),
+                )
+            } else {
+                Span::styled(
+                    symbols::shade::LIGHT.repeat(*count),
+                    Style::default().fg(DIM),
+                )
+            });
+        }
+        let mut legend = Vec::new();
+        for (index, pool) in budget.pools.iter().enumerate() {
+            legend.push(Span::styled(
+                format!("  {} ", pool_label(&pool.pool)),
+                Style::default().fg(color(index)),
+            ));
+            legend.push(Span::raw(bytes(pool.used_bytes)));
+        }
+        vec![
+            Line::from(bar),
+            Line::from(legend),
+            Line::from(vec![
+                Span::styled("  free ", Style::default().fg(DIM)),
+                Span::raw(bytes(budget.usable_bytes.saturating_sub(total_used))),
+                Span::styled(
+                    "  every pool draws from one budget",
+                    Style::default().fg(DIM),
+                ),
+            ]),
+        ]
+    } else {
+        budget
+            .pools
+            .iter()
+            .enumerate()
+            .map(|(index, pool)| {
+                let figures = format!(
+                    "  {} of {}",
+                    bytes(pool.used_bytes),
+                    bytes(pool.capacity_bytes)
+                );
+                let width = inner.saturating_sub(2 + POOL_LABEL + 1 + figures.len() + 2);
+                let cells = stacked_cells(&[pool.used_bytes], pool.capacity_bytes, width);
+                let (used_cells, free_cells) = match cells[..] {
+                    [used_cells, free_cells] => (used_cells, free_cells),
+                    _ => (0, width),
+                };
+                Line::from(vec![
+                    Span::styled(
+                        format!("  {:<POOL_LABEL$} ", pool_label(&pool.pool)),
+                        Style::default().fg(color(index)),
+                    ),
+                    Span::styled(
+                        symbols::block::FULL.repeat(used_cells),
+                        Style::default().fg(color(index)),
+                    ),
+                    Span::styled(
+                        symbols::shade::LIGHT.repeat(free_cells),
+                        Style::default().fg(DIM),
+                    ),
+                    Span::raw(figures),
+                ])
+            })
+            .collect()
+    };
+    frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+/// The name of a device memory pool as the console shows it.
+fn pool_label(pool: &str) -> String {
+    pool.replace('_', " ")
+}
+
+/// Width of the key/value cache panel beside the generation chart.
+const KV_PANEL: u16 = 52;
+
+/// Rows of the key/value cache panel, borders included.
+const KV_HEIGHT: u16 = 6;
+
+/// Fewest rows of the generation chart, borders included.
+const GENERATION_HEIGHT: u16 = 7;
+
+/// Terminal widths below this stack the generation chart above the key/value cache panel.
+const KV_BESIDE: u16 = 100;
+
+/// Decode rate and time to first token graphed over the refresh history, beside the key/value
+/// cache and scheduler state of the newest refresh.
+fn generation(
+    frame: &mut Frame,
+    view: &DeviceView,
+    latest: &InferenceMetrics,
+    now: std::time::Instant,
+    window: f64,
+    area: Rect,
+) {
+    let [chart_area, kv_area] = if area.width >= KV_BESIDE {
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(KV_PANEL)]).areas(area)
+    } else {
+        Layout::vertical([
+            Constraint::Min(GENERATION_HEIGHT),
+            Constraint::Length(KV_HEIGHT),
+        ])
+        .areas(area)
+    };
+
+    let decode = view.inference_series(now, |i| i.decode_tokens_per_second.map(f64::from));
+    let first_token = view.inference_series(now, |i| i.avg_time_to_first_token_ms.map(f64::from));
+    let top = decode
+        .iter()
+        .chain(first_token.iter())
+        .flatten()
+        .map(|(_, value)| *value)
+        .fold(1.0, f64::max);
+    let title = format!(
+        " generation  decode {}  first token {} ",
+        latest
+            .decode_tokens_per_second
+            .map_or_else(unmeasured, |v| format!("{v:.1} tok/s")),
+        latest
+            .avg_time_to_first_token_ms
+            .map_or_else(unmeasured, |v| format!("{v:.0} ms"))
+    );
+    frame.render_widget(
+        chart(
+            &title,
+            [
+                Series {
+                    runs: &decode,
+                    color: ACCENT,
+                    name: "decode tok/s",
+                },
+                Series {
+                    runs: &first_token,
+                    color: Color::Yellow,
+                    name: "first token ms",
+                },
+            ],
+            window,
+            top,
+            [
+                "0".to_owned(),
+                format!("{:.0}", top / 2.0),
+                format!("{top:.0}"),
+            ],
+        ),
+        chart_area,
+    );
+
+    let block = pane(&format!(" {} on {} ", latest.model, latest.device), false);
+    let width = usize::from(block.inner(kv_area).width.saturating_sub(4));
+    let free = latest
+        .kv_blocks_total
+        .saturating_sub(latest.kv_blocks_used)
+        .saturating_sub(latest.kv_blocks_cached);
+    let [used_cells, cached_cells, free_cells] = kv_cells(
+        latest.kv_blocks_used,
+        latest.kv_blocks_cached,
+        latest.kv_blocks_total,
+        width,
+    );
+    let lines = vec![
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                symbols::block::FULL.repeat(used_cells),
+                Style::default().fg(ACCENT),
+            ),
+            Span::styled(
+                symbols::block::FULL.repeat(cached_cells),
+                Style::default().fg(Color::Magenta),
+            ),
+            Span::styled(
+                symbols::shade::LIGHT.repeat(free_cells),
+                Style::default().fg(DIM),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  used ", Style::default().fg(ACCENT)),
+            Span::raw(thousands_u64(latest.kv_blocks_used)),
+            Span::styled("  cached ", Style::default().fg(Color::Magenta)),
+            Span::raw(thousands_u64(latest.kv_blocks_cached)),
+            Span::styled("  free ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(free)),
+            Span::styled("  of ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.kv_blocks_total)),
+        ]),
+        Line::from(vec![
+            Span::styled("  prefix hits ", Style::default().fg(DIM)),
+            Span::raw(percent(latest.prefix_hit_rate.map(|rate| rate * 100.0))),
+            Span::styled("  evictions ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.kv_evictions)),
+        ]),
+        Line::from(vec![
+            Span::styled("  queue ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.queue_depth)),
+            Span::styled("  running ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.running)),
+            Span::styled("  batch ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.last_batch_size)),
+            Span::styled("  preempted ", Style::default().fg(DIM)),
+            Span::raw(thousands_u64(latest.preemptions)),
+        ]),
+    ];
+    frame.render_widget(Paragraph::new(lines).block(block), kv_area);
+}
+
+/// Cells of a bar width wide given to used, cached and free key/value blocks out of total.
+pub fn kv_cells(used: u64, cached: u64, total: u64, width: usize) -> [usize; 3] {
+    match stacked_cells(&[used, cached], total, width)[..] {
+        [used_cells, cached_cells, free_cells] => [used_cells, cached_cells, free_cells],
+        _ => [0, 0, width],
+    }
+}
+
+/// Cells of a bar width wide given to each of parts out of total, followed by the cells left
+/// free. Parts are stacked in order and clipped at total, and the cells sum to width.
+pub fn stacked_cells(parts: &[u64], total: u64, width: usize) -> Vec<usize> {
+    let mut cells = Vec::with_capacity(parts.len() + 1);
+    if total == 0 {
+        cells.resize(parts.len(), 0);
+        cells.push(width);
+        return cells;
+    }
+    let edge = |amount: u64| -> usize {
+        let share = u128::from(amount.min(total)) * width as u128;
+        let rounded = (share + u128::from(total) / 2) / u128::from(total);
+        usize::try_from(rounded).unwrap_or(width).min(width)
+    };
+    let mut held = 0u64;
+    let mut filled = 0usize;
+    for part in parts {
+        held = held.saturating_add(*part);
+        let reached = edge(held).max(filled);
+        cells.push(reached - filled);
+        filled = reached;
+    }
+    cells.push(width - filled);
+    cells
+}
+
+/// Utilisation, temperature and memory of the GPU at index, graphed over the refresh history.
+/// Utilisation and temperature are drawn in compute_area and device memory in memory_area.
+fn gpu(
+    frame: &mut Frame,
+    view: &DeviceView,
+    index: u32,
+    now: std::time::Instant,
+    window: f64,
+    compute_area: Rect,
+    memory_area: Rect,
+) {
+    let latest = view.latest_gpu(index);
+    let label = latest.and_then(|g| g.name.as_deref()).map_or_else(
+        || format!("gpu {index}"),
+        |name| format!("gpu {index} {name}"),
+    );
+
+    let busy = view.gpu_series(now, index, |g| g.utilization_percent.map(f64::from));
+    let temperature = view.gpu_series(now, index, |g| g.temperature_celsius.map(f64::from));
+    let top = temperature
+        .iter()
+        .flatten()
+        .map(|(_, celsius)| *celsius)
+        .fold(100.0, f64::max);
+    let compute_title = format!(
+        " {label}  busy {}  temperature {} ",
+        percent(latest.and_then(|g| g.utilization_percent)),
+        celsius(latest.and_then(|g| g.temperature_celsius))
+    );
+    frame.render_widget(
+        chart(
+            &compute_title,
+            [
+                Series {
+                    runs: &busy,
+                    color: ACCENT,
+                    name: "busy %",
+                },
+                Series {
+                    runs: &temperature,
+                    color: Color::Red,
+                    name: "temperature C",
+                },
+            ],
+            window,
+            top,
+            [
+                "0".to_owned(),
+                format!("{:.0}", top / 2.0),
+                format!("{top:.0}"),
+            ],
+        ),
+        compute_area,
+    );
+
+    let used = view.gpu_series(now, index, |g| g.memory_used_bytes.map(|b| b as f64));
+    let ceiling = view
+        .samples
+        .iter()
+        .flat_map(|sample| sample.gpus.iter())
+        .filter(|g| g.index == index)
+        .filter_map(|g| g.memory_total_bytes.or(g.memory_used_bytes))
+        .max()
+        .map_or(1.0, |top| (top as f64).max(1.0));
+    let memory_title = format!(
+        " {label} memory {} of {} ",
+        latest
+            .and_then(|g| g.memory_used_bytes)
+            .map_or_else(unmeasured, bytes),
+        latest
+            .and_then(|g| g.memory_total_bytes)
+            .map_or_else(unmeasured, bytes)
+    );
+    frame.render_widget(
+        chart(
+            &memory_title,
+            [Series {
+                runs: &used,
+                color: ACCENT,
+                name: "used",
+            }],
+            window,
+            ceiling,
+            [
+                "0".to_owned(),
+                bytes((ceiling / 2.0) as u64),
+                bytes(ceiling as u64),
+            ],
+        ),
         memory_area,
     );
 }
@@ -356,10 +775,10 @@ struct Series<'a> {
     name: &'static str,
 }
 
-/// A line chart of two series over the last window seconds, from zero to ceiling.
-fn chart<'a>(
+/// A line chart of the series over the last window seconds, from zero to ceiling.
+fn chart<'a, const N: usize>(
     title: &str,
-    series: [Series<'a>; 2],
+    series: [Series<'a>; N],
     window: f64,
     ceiling: f64,
     y_labels: [String; 3],
@@ -413,6 +832,11 @@ fn memory_ceiling<'a>(readings: impl Iterator<Item = &'a HostMetrics>) -> f64 {
 /// A percentage reading, or a phrase saying it was not measured.
 fn percent(value: Option<f32>) -> String {
     value.map_or_else(unmeasured, |v| format!("{v:.1}%"))
+}
+
+/// A temperature reading in degrees Celsius, or a phrase saying it was not measured.
+fn celsius(value: Option<f32>) -> String {
+    value.map_or_else(unmeasured, |v| format!("{v:.0} C"))
 }
 
 /// The phrase shown in place of a reading the server did not report.
@@ -473,7 +897,7 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::styled(mode, Style::default().fg(Color::Black).bg(Color::White)),
     ];
-    // One digit per view, so the tabs are also their own key hints.
+    // Each tab label carries the digit that selects it.
     for (index, view) in app.profile.views().iter().enumerate() {
         let selected = *view == app.view;
         let style = if selected {
@@ -497,7 +921,7 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
     if app.profile == Profile::Developer {
         spans.push(probe_span("web", &app.health.web));
     }
-    // The notice comes first so a long line of probe reasons cannot push it off the bar.
+    // The notice is drawn before the probe reasons.
     if let Some(notice) = &app.notice {
         spans.push(Span::styled(
             format!("  {notice}"),
@@ -521,8 +945,7 @@ fn status_bar(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Red),
         ));
     }
-    // A failed refresh is the whole story on a console that only watches a server, so it goes in
-    // the bar rather than staying inside the view that collected it.
+    // A failed collections refresh is shown on the status bar.
     if let Some(error) = &app.collections.error {
         spans.push(Span::styled(
             format!("  {error}"),

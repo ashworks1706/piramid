@@ -90,10 +90,6 @@ impl Embedder for RetryEmbedder {
     fn model_name(&self) -> &str {
         self.inner.model_name()
     }
-
-    fn dimensions(&self) -> Option<usize> {
-        self.inner.dimensions()
-    }
 }
 
 fn is_retryable_error(error: &EmbeddingError) -> bool {

@@ -28,7 +28,7 @@ fn an_empty_file_is_all_defaults() {
 
     assert_eq!(cfg, Config::default());
     assert_eq!(cfg.startup.bind, "127.0.0.1:6333");
-    assert_eq!(cfg.startup.hardware.profile, HardwareProfile::Auto);
+    assert_eq!(cfg.startup.hardware.profile, HardwareProfile::CpuOnly);
     assert_eq!(cfg.startup.logging.level, LogLevel::Info);
     assert_eq!(cfg.runtime.quantization.stage, QuantizationStage::Disabled);
     assert_eq!(cfg.runtime.search.filter_overfetch, 10);
@@ -97,6 +97,95 @@ fn auto_index_thresholds_are_configurable() {
 }
 
 #[test]
+fn a_misspelled_index_key_is_an_error() {
+    let parse = |yaml: &str| yaml_serde::from_str::<Config>(yaml).map_err(|e| e.to_string());
+
+    let hnsw = "runtime:\n  index:\n    type: hnsw\n    m: 16\n    m_max: 32\n    ef_construction: 200\n    ef_search: 200\n    ml: 0.36\n    metric: cosine\n";
+    parse(hnsw).unwrap();
+    let err = parse(&format!("{hnsw}    ef_serch: 100\n")).unwrap_err();
+    assert!(err.contains("ef_serch"), "{err}");
+
+    let auto = "runtime:\n  index:\n    type: auto\n    metric: cosine\n";
+    parse(auto).unwrap();
+    let err = parse(&format!("{auto}    hnsw_m: 8\n")).unwrap_err();
+    assert!(err.contains("hnsw_m"), "{err}");
+
+    let err =
+        parse("runtime:\n  index:\n    type: flat\n    metric: cosine\n    m: 4\n").unwrap_err();
+    assert!(err.contains("unknown field"), "{err}");
+
+    let err = parse("runtime:\n  index:\n    type: annoy\n").unwrap_err();
+    assert!(err.contains("annoy"), "{err}");
+}
+
+#[test]
+fn the_index_config_round_trips_through_yaml() {
+    for index in [
+        IndexConfig::default(),
+        IndexConfig::Hnsw {
+            params: piramid_core::config::HnswConfig::default(),
+        },
+        IndexConfig::Ivf {
+            params: piramid_core::config::IvfConfig::default(),
+        },
+        IndexConfig::Flat {
+            params: piramid_core::config::FlatConfig::default(),
+        },
+    ] {
+        let yaml = yaml_serde::to_string(&index).unwrap();
+        let parsed: IndexConfig = yaml_serde::from_str(&yaml).unwrap();
+        assert_eq!(parsed, index, "{yaml}");
+    }
+}
+
+#[test]
+fn hnsw_from_m_derives_the_layer_multiplier_from_m() {
+    let cfg = piramid_core::config::HnswConfig::from_m(4, 64, 32);
+    assert_eq!(cfg.m_max, 8);
+    assert!((cfg.ml - 1.0 / 4.0_f32.ln()).abs() < 1e-6, "{}", cfg.ml);
+}
+
+#[test]
+fn auto_index_parameters_are_validated() {
+    let check = |mutate: fn(&mut AutoIndexConfig)| {
+        let mut auto = AutoIndexConfig::default();
+        mutate(&mut auto);
+        IndexConfig::Auto {
+            metric: Metric::Cosine,
+            auto,
+        }
+        .validate()
+    };
+
+    check(|_| {}).unwrap();
+    check(|a| a.ivf_num_clusters = Some(4)).unwrap();
+    check(|a| {
+        a.ivf_num_clusters = Some(4);
+        a.ivf_num_probes = Some(4);
+    })
+    .unwrap();
+
+    let err = check(|a| a.hnsw_m = 1).unwrap_err();
+    assert!(err.contains("hnsw_m"), "{err}");
+    let err = check(|a| a.ivf_num_clusters = Some(0)).unwrap_err();
+    assert!(err.contains("ivf_num_clusters"), "{err}");
+    let err = check(|a| {
+        a.ivf_num_clusters = Some(4);
+        a.ivf_num_probes = Some(0);
+    })
+    .unwrap_err();
+    assert!(err.contains("ivf_num_probes"), "{err}");
+    let err = check(|a| {
+        a.ivf_num_clusters = Some(4);
+        a.ivf_num_probes = Some(10);
+    })
+    .unwrap_err();
+    assert!(err.contains("ivf_num_probes"), "{err}");
+    let err = check(|a| a.ivf_num_probes = Some(2)).unwrap_err();
+    assert!(err.contains("ivf_num_clusters"), "{err}");
+}
+
+#[test]
 fn unimplemented_settings_are_rejected_rather_than_ignored() {
     let mut cfg = Config::default();
 
@@ -120,13 +209,17 @@ fn unimplemented_settings_are_rejected_rather_than_ignored() {
     assert!(cfg.validate().is_err());
 
     let mut cfg = Config::default();
-    cfg.runtime.inference.enabled = true;
+    cfg.runtime.inference.kv_cache.preemption = piramid_core::config::Preemption::Swap;
     let err = cfg.validate().unwrap_err();
     assert!(err.contains("not implemented"), "{err}");
 
     let mut cfg = Config::default();
     cfg.runtime.inference.fusion.enabled = true;
     assert!(cfg.validate().unwrap_err().contains("not implemented"));
+
+    let mut cfg = Config::default();
+    cfg.runtime.inference.fusion.chunk_tokens = 64;
+    cfg.validate().unwrap();
 }
 
 #[test]
@@ -141,21 +234,25 @@ fn a_bad_bind_address_is_rejected() {
 fn every_unimplemented_subsystem_refuses_to_start() {
     for (name, mutate) in [
         (
-            "inference",
-            Box::new(|c: &mut Config| c.runtime.inference.enabled = true)
+            "fusion",
+            Box::new(|c: &mut Config| c.runtime.inference.fusion.enabled = true)
                 as Box<dyn Fn(&mut Config)>,
         ),
         (
-            "fusion",
-            Box::new(|c: &mut Config| c.runtime.inference.fusion.enabled = true),
+            "fusion top_k",
+            Box::new(|c: &mut Config| c.runtime.inference.fusion.top_k = 4),
         ),
         (
             "document_kv",
             Box::new(|c: &mut Config| c.runtime.inference.document_kv.enabled = true),
         ),
         (
-            "vram split",
-            Box::new(|c: &mut Config| c.startup.hardware.vram.enabled = true),
+            "document_kv max_bytes",
+            Box::new(|c: &mut Config| c.runtime.inference.document_kv.max_bytes = Some(1 << 20)),
+        ),
+        (
+            "retrieval bandwidth share",
+            Box::new(|c: &mut Config| c.startup.hardware.vram.retrieval_bandwidth_share = 0.5),
         ),
         (
             "vector cache bounds",
@@ -193,13 +290,13 @@ fn a_memory_class_profile_supplies_the_memory_budget() {
     cfg.startup.hardware.memory_budget_bytes = Some(4_000_000_000);
     assert_eq!(cfg.startup.hardware.memory_budget(), Some(4_000_000_000));
 
-    // The profiles that name which hardware rather than how much imply no budget.
+    // The cpu-only profile implies no budget.
     cfg.startup.hardware.memory_budget_bytes = None;
     cfg.startup.hardware.profile = HardwareProfile::CpuOnly;
     assert_eq!(cfg.startup.hardware.memory_budget(), None);
 }
 
-// Nothing enforces a host memory budget yet, so one is refused rather than accepted and ignored.
+// A host memory budget is refused, from a memory-class profile or set explicitly.
 #[test]
 fn a_memory_budget_is_refused_until_it_is_enforced() {
     use piramid_core::config::HardwareProfile;
@@ -218,7 +315,7 @@ fn a_memory_budget_is_refused_until_it_is_enforced() {
     assert!(cfg.validate().unwrap_err().contains("not enforced"));
 }
 
-// The gpu profile is a promise to run on a device, so it cannot pair with a CPU strategy.
+// The gpu profile refuses a CPU execution mode.
 #[test]
 fn the_gpu_profile_refuses_a_cpu_execution_mode() {
     use piramid_core::config::HardwareProfile;
@@ -239,11 +336,20 @@ fn the_gpu_profile_refuses_a_cpu_execution_mode() {
 
 #[test]
 fn memory_class_profiles_round_trip_through_yaml() {
-    for name in ["auto", "cpu-only", "gpu", "8gb", "16gb", "32gb"] {
+    for name in ["cpu-only", "gpu", "8gb", "16gb", "32gb"] {
         let yaml = format!("startup:\n  hardware:\n    profile: {name}\n");
         let cfg: Config = yaml_serde::from_str(&yaml).unwrap();
         assert_eq!(cfg.startup.hardware.profile.as_str(), name);
     }
+}
+
+#[test]
+fn an_auto_hardware_profile_is_an_unknown_value() {
+    let yaml = "startup:\n  hardware:\n    profile: auto\n";
+    let err = yaml_serde::from_str::<Config>(yaml)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("auto"), "{err}");
 }
 
 #[test]
@@ -274,4 +380,72 @@ fn embedding_options_and_cache_are_validated() {
         "{base}    cache:\n      enabled: false\n      entries: 0\n"
     ))
     .unwrap();
+}
+
+#[test]
+fn enabling_inference_needs_a_model_path_and_a_known_device() {
+    let mut cfg = Config::default();
+    cfg.runtime.inference.enabled = true;
+    assert!(cfg.validate().unwrap_err().contains("model_path"));
+
+    cfg.runtime.inference.model_path = Some("/models/qwen".to_string());
+    cfg.validate().unwrap();
+
+    for device in ["gpu", "cuda:", "cuda:x"] {
+        cfg.runtime.inference.device = Some(device.to_string());
+        assert!(cfg
+            .validate()
+            .unwrap_err()
+            .contains("runtime.inference.device"));
+    }
+    cfg.runtime.inference.device = Some("cuda:0".to_string());
+    assert!(cfg.validate().unwrap_err().contains("profile: gpu"));
+    cfg.startup.hardware.profile = piramid_core::config::HardwareProfile::Gpu;
+    cfg.runtime.inference.device = Some("cuda:1".to_string());
+    assert!(cfg.validate().unwrap_err().contains("device_ordinal"));
+}
+
+#[test]
+fn a_vram_split_must_fit_the_budget() {
+    let mut cfg = Config::default();
+    cfg.startup.hardware.vram.enabled = true;
+    cfg.validate().unwrap();
+    cfg.startup.hardware.vram.kv_ratio = 0.5;
+    assert!(cfg.validate().unwrap_err().contains("sum"));
+}
+
+#[test]
+fn a_sampling_temperature_or_penalty_that_is_not_finite_is_rejected() {
+    for value in [f32::NAN, f32::INFINITY] {
+        let mut cfg = Config::default();
+        cfg.runtime.inference.sampling.temperature = value;
+        assert!(
+            cfg.validate().unwrap_err().contains("temperature"),
+            "{value}"
+        );
+
+        let mut cfg = Config::default();
+        cfg.runtime.inference.sampling.repetition_penalty = value;
+        assert!(
+            cfg.validate().unwrap_err().contains("repetition_penalty"),
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn a_zero_embedding_timeout_is_rejected() {
+    let yaml = "startup:\n  embedding:\n    provider: openai\n    model: m\n    timeout: 0\n";
+    let cfg: Config = yaml_serde::from_str(yaml).unwrap();
+    assert!(cfg.validate().unwrap_err().contains("timeout"));
+}
+
+#[test]
+fn the_piramid_embedding_provider_refuses_a_timeout() {
+    let base = "startup:\n  embedding:\n    provider: piramid\n    model: /models/e\n";
+    let parse = |yaml: &str| yaml_serde::from_str::<Config>(yaml).unwrap().validate();
+    parse(base).unwrap();
+    assert!(parse(&format!("{base}    timeout: 30\n"))
+        .unwrap_err()
+        .contains("startup.embedding.timeout: the piramid provider takes none"));
 }

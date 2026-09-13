@@ -6,14 +6,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EmbeddingConfig {
-    /// Provider name: openai, including any server speaking that wire format, or ollama.
+    /// Provider name: openai, including any server speaking that wire format, ollama, or piramid
+    /// for a checkpoint run by this process.
     pub provider: String,
 
-    /// Model identifier as the provider understands it.
+    /// Model identifier as the provider understands it; for piramid, the checkpoint directory.
     pub model: String,
 
-    /// API key. OPENAI_API_KEY sets it from the environment.
-    #[serde(default)]
+    /// API key for the openai provider. Set from OPENAI_API_KEY only.
+    #[serde(skip)]
     pub api_key: Option<String>,
 
     /// Base URL, for self-hosted or proxied endpoints.
@@ -21,11 +22,12 @@ pub struct EmbeddingConfig {
     pub base_url: Option<String>,
 
     /// Extra request fields. For openai they are merged into the request body; for ollama they
-    /// are sent as the options object of the request. Null or an object.
+    /// are sent as the options object of the request; for piramid they are device, dtype and
+    /// max_tokens. Null or an object.
     #[serde(default)]
     pub options: serde_json::Value,
 
-    /// Embeddings kept so identical text is not sent to the provider twice.
+    /// Cache of embeddings keyed by input text.
     #[serde(default)]
     pub cache: super::EmbeddingCacheConfig,
 
@@ -38,6 +40,9 @@ impl EmbeddingConfig {
     /// Reject a provider this build cannot construct.
     pub fn validate(&self) -> Result<(), String> {
         self.cache.validate()?;
+        if self.timeout == Some(0) {
+            return Err("startup.embedding.timeout: must be >= 1".into());
+        }
         match &self.options {
             serde_json::Value::Null => {}
             serde_json::Value::Object(fields) => {
@@ -56,13 +61,37 @@ impl EmbeddingConfig {
             _ => return Err("startup.embedding.options: must be null or a mapping".into()),
         }
         match self.provider.as_str() {
-            "openai" | "ollama" => Ok(()),
+            "openai" => Ok(()),
+            "ollama" => {
+                if self.api_key.is_some() {
+                    return Err("startup.embedding.api_key: the ollama provider takes none".into());
+                }
+                Ok(())
+            }
             "piramid" => {
-                Err("startup.embedding.provider: 'piramid' is not implemented yet (roadmap v0.4.0)"
-                    .into())
+                if self.base_url.is_some() {
+                    return Err("startup.embedding.base_url: the piramid provider takes none".into());
+                }
+                if self.api_key.is_some() {
+                    return Err("startup.embedding.api_key: the piramid provider takes none".into());
+                }
+                if self.timeout.is_some() {
+                    return Err("startup.embedding.timeout: the piramid provider takes none".into());
+                }
+                if let serde_json::Value::Object(fields) = &self.options {
+                    if let Some(unknown) = fields
+                        .keys()
+                        .find(|key| !["device", "dtype", "max_tokens"].contains(&key.as_str()))
+                    {
+                        return Err(format!(
+                            "startup.embedding.options: '{unknown}' is not a piramid option; expected device, dtype or max_tokens"
+                        ));
+                    }
+                }
+                Ok(())
             }
             other => Err(format!(
-                "startup.embedding.provider: unknown provider '{other}', expected 'openai' or 'ollama'"
+                "startup.embedding.provider: unknown provider '{other}', expected 'openai', 'ollama' or 'piramid'"
             )),
         }
     }

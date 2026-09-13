@@ -4,15 +4,13 @@ use serde::{Deserialize, Serialize};
 
 /// Which hardware to run on, and at what memory class.
 ///
-/// The memory-class profiles name a machine size, which sets the host memory budget when
-/// memory_budget_bytes is unset. No budget is enforced yet, so validation refuses them.
+/// The memory-class profiles set the host memory budget when memory_budget_bytes is unset.
+/// Validation refuses them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum HardwareProfile {
-    /// The CPU. Nothing detects a GPU yet.
-    #[default]
-    Auto,
     /// Never touch the GPU.
+    #[default]
     CpuOnly,
     /// Require a GPU; fail to start without one.
     Gpu,
@@ -30,21 +28,20 @@ pub enum HardwareProfile {
 impl HardwareProfile {
     /// Host memory this profile assumes, when it names one.
     ///
-    /// None for the profiles that name which hardware to use rather than how much of it.
+    /// None for cpu-only and gpu.
     pub fn memory_class_bytes(&self) -> Option<u64> {
         const GB: u64 = 1024 * 1024 * 1024;
         match self {
             HardwareProfile::Memory8Gb => Some(8 * GB),
             HardwareProfile::Memory16Gb => Some(16 * GB),
             HardwareProfile::Memory32Gb => Some(32 * GB),
-            HardwareProfile::Auto | HardwareProfile::CpuOnly | HardwareProfile::Gpu => None,
+            HardwareProfile::CpuOnly | HardwareProfile::Gpu => None,
         }
     }
 
     /// Stable lowercase name, matching the serde representation.
     pub fn as_str(&self) -> &'static str {
         match self {
-            HardwareProfile::Auto => "auto",
             HardwareProfile::CpuOnly => "cpu-only",
             HardwareProfile::Gpu => "gpu",
             HardwareProfile::Memory8Gb => "8gb",
@@ -64,7 +61,7 @@ pub struct HardwareConfig {
     /// Host memory the process will use. None takes the profile's memory class, or is unbounded.
     pub memory_budget_bytes: Option<u64>,
 
-    /// Device memory to claim. None is unbounded.
+    /// Device memory to claim, before gpu.reserve_bytes is held back. None is the whole device.
     pub gpu_memory_budget_bytes: Option<u64>,
 
     /// Device selection and kernel launch shapes.
@@ -94,10 +91,11 @@ pub struct GpuConfig {
     /// Which device to open when more than one is present.
     pub device_ordinal: usize,
 
-    /// Threads per block for distance kernels. Tuned per architecture; 256 suits most.
+    /// Threads per block for distance kernels.
     pub distance_block_size: u32,
 
-    /// Streams to create. Retrieval and the forward pass each take one.
+    /// Independent streams opened with the device. Retrieval kernels queue on the first; the
+    /// model queues on the per-thread stream.
     pub streams: usize,
 
     /// Device bytes held back for fragmentation and library workspaces.
@@ -119,7 +117,7 @@ impl Default for GpuConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct VramSplit {
-    /// Enforce the split. Off means first-come-first-served.
+    /// Enforce the split. Off means every pool draws from one budget, first come first served.
     pub enabled: bool,
 
     /// Share for model weights.
@@ -150,10 +148,23 @@ impl Default for VramSplit {
 impl VramSplit {
     /// Reject a split that cannot be honoured.
     pub fn validate(&self) -> Result<(), String> {
+        if self.retrieval_bandwidth_share != VramSplit::default().retrieval_bandwidth_share {
+            return Err(
+                "startup.hardware.vram.retrieval_bandwidth_share: not implemented yet (roadmap v0.6.0)"
+                    .into(),
+            );
+        }
         if !self.enabled {
             return Ok(());
         }
-        Err("startup.hardware.vram.enabled: not implemented yet (roadmap v0.6.0)".into())
+        let shares = [self.weights_ratio, self.kv_ratio, self.index_ratio];
+        if shares.iter().any(|share| !(0.0..=1.0).contains(share)) {
+            return Err("startup.hardware.vram: each ratio must be within 0.0..=1.0".into());
+        }
+        if shares.iter().sum::<f32>() > 1.0 + 1e-6 {
+            return Err("startup.hardware.vram: the ratios must sum to at most 1.0".into());
+        }
+        Ok(())
     }
 }
 

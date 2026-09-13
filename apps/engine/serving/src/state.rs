@@ -3,8 +3,7 @@
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    atomic::{AtomicU64, Ordering as AtomicOrdering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
 
@@ -13,24 +12,27 @@ use crate::cluster::{
 };
 use crate::machine::{MachineReadings, SAMPLE_INTERVAL};
 use piramid_core::config::loader::ConfigSource;
+use piramid_core::config::InferenceConfig;
 use piramid_core::config::{Config, HttpConfig, StartupConfig};
 use piramid_core::error::{PiramidError, Result, ServerError};
 use piramid_database::{CollectionHandle, CollectionManager};
+use piramid_hardware::gpu::GpuManager;
 use piramid_model::embeddings::EmbeddingsManager;
+use piramid_model::inference::InferenceManager;
 
 /// Phase of an index rebuild job.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RebuildState {
     /// The rebuild has started and not yet finished.
     Running,
     /// The rebuild finished without error.
     Completed,
-    /// The rebuild returned an error.
+    /// The rebuild returned an error or panicked.
     Failed,
 }
 
 /// Record of the most recent index rebuild of one collection.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RebuildJobStatus {
     /// Current phase of the job.
     pub status: RebuildState,
@@ -54,6 +56,12 @@ pub struct AppState {
     pub cluster_router: Arc<dyn ClusterRouter>,
     /// The embedding provider, if configured, and its usage metrics.
     pub embeddings: EmbeddingsManager,
+    /// The opened device and its memory budget, under the gpu profile.
+    pub gpu: Option<Arc<GpuManager>>,
+    /// The loaded model, when runtime.inference.enabled is set.
+    pub inference: Option<Arc<InferenceManager>>,
+    /// When the model was loaded, in seconds since the Unix epoch.
+    pub inference_loaded_at: u64,
     /// Readings of the machine the server runs on.
     pub machine: MachineReadings,
     /// Set once shutdown begins; requests are refused with 503 afterwards.
@@ -64,6 +72,8 @@ pub struct AppState {
     pub app_config: Arc<RwLock<Config>>,
     /// The startup block the process booted with. A reload that changes it is refused.
     booted_with: StartupConfig,
+    /// The inference settings the model was loaded with. A reload that changes them is refused.
+    booted_inference: InferenceConfig,
     /// Where a reload reads configuration from.
     config_source: ConfigSource,
     /// Most recent index rebuild of each collection, keyed by collection name.
@@ -87,6 +97,7 @@ impl AppState {
             .into());
         }
         let booted_with = config.startup.clone();
+        let booted_inference = config.runtime.inference.clone();
         let cluster_router: Arc<dyn ClusterRouter> =
             Arc::new(LocalClusterRouter::new(NodeRuntimeState {
                 id: NodeId::default(),
@@ -104,18 +115,37 @@ impl AppState {
             data_dir,
             cluster_router,
             embeddings,
+            gpu: None,
+            inference: None,
+            inference_loaded_at: 0,
             machine: MachineReadings::start(SAMPLE_INTERVAL)?,
             shutting_down: Arc::new(AtomicBool::new(false)),
             read_only: Arc::new(AtomicBool::new(false)),
             app_config,
             booted_with,
+            booted_inference,
             config_source: ConfigSource::default(),
             rebuild_jobs: Arc::new(DashMap::new()),
-            config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs())),
+            config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs()?)),
         })
     }
 
+    /// Account device memory against an opened GPU.
+    #[must_use]
+    pub fn with_gpu(mut self, manager: Arc<GpuManager>) -> Self {
+        self.gpu = Some(manager);
+        self
+    }
+
+    /// Serve generations from a loaded model. Errors when the clock reads before 1970.
+    pub fn with_inference(mut self, manager: Arc<InferenceManager>) -> Result<Self> {
+        self.inference = Some(manager);
+        self.inference_loaded_at = piramid_core::clock::unix_secs()?;
+        Ok(self)
+    }
+
     /// Read reloads from source, the one the process booted from.
+    #[must_use]
     pub fn with_config_source(mut self, source: ConfigSource) -> Self {
         self.config_source = source;
         self
@@ -203,6 +233,13 @@ impl AppState {
             )
             .into());
         }
+        if new_cfg.runtime.inference != self.booted_inference {
+            return Err(ServerError::InvalidRequest(
+                "runtime.inference changed; the model is loaded with it at boot, so this needs a restart"
+                    .to_string(),
+            )
+            .into());
+        }
         let next = new_cfg.to_collection_config();
         for (name, handle) in self.collection_manager.loaded_collections() {
             if let Some(setting) = handle.read().setting_needing_reopen(&next) {
@@ -225,8 +262,8 @@ impl AppState {
                 ))
             })?;
         }
-        let now = piramid_core::clock::unix_secs();
-        self.config_last_reload.store(now, AtomicOrdering::Relaxed);
+        let now = piramid_core::clock::unix_secs()?;
+        self.config_last_reload.store(now, Ordering::Relaxed);
         Ok(new_cfg)
     }
 
@@ -244,8 +281,8 @@ impl AppState {
         super::disk::free_bytes(&self.data_dir)
     }
 
-    /// Error with 503 when shutting down, or below the free-space floor with read-only on low
-    /// space enabled. Read-only lifts at the first write that finds the space back.
+    /// Error with 503 when shutting down or below the free-space floor. With read-only on low
+    /// space enabled the server stays read-only until the first write that finds the space back.
     pub fn ensure_write_allowed(&self) -> Result<()> {
         self.ensure_available()?;
         let Some(min_free) = self.disk_min_free_bytes() else {
@@ -276,7 +313,10 @@ impl AppState {
                 min_free = min_free,
                 "disk_space_low"
             );
-            return Ok(());
+            return Err(ServerError::ServiceUnavailable(format!(
+                "free disk space {free} bytes is below startup.disk.min_free_bytes {min_free}"
+            ))
+            .into());
         }
         self.read_only.store(true, Ordering::Relaxed);
         Err(
@@ -287,8 +327,7 @@ impl AppState {
 
     /// Clear the largest metadata caches until cached metadata fits runtime.cache.metadata.max_bytes.
     pub fn enforce_cache_budget(&self) {
-        let metadata_config = self.current_config().runtime.cache.metadata;
-        let Some(max_bytes) = metadata_config.max_bytes else {
+        let Some(max_bytes) = self.app_config.read().runtime.cache.metadata.max_bytes else {
             return;
         };
         let mut total: u64 = 0;

@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use axum::http::header::{HeaderName, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use axum::http::HeaderValue;
 use axum::{
     extract::DefaultBodyLimit,
@@ -81,7 +82,6 @@ fn api_router(state: SharedState) -> Router<SharedState> {
             "/collections/{collection}/upsert",
             post(handlers::upsert_vector),
         )
-        // The query vector goes in the request body.
         .route(
             "/collections/{collection}/search",
             post(handlers::search_vectors),
@@ -98,24 +98,31 @@ fn api_router(state: SharedState) -> Router<SharedState> {
             "/collections/{collection}/search/text",
             post(handlers::search_by_text),
         )
+        .route("/model", get(handlers::model))
+        .route("/generate", post(handlers::generate))
         .with_state(state)
 }
 
-/// Build the router: API routes under /api, the Prometheus endpoint, and middleware.
+/// Build the router: API routes under /api, the Prometheus endpoint, the OpenAI-compatible routes
+/// under /v1, and middleware.
 ///
 /// When the process booted with an API key, every route except /api/health and /api/readyz
-/// requires it. A rate limit keys on peer addresses, so the router is served with connect info.
+/// requires it. With a rate limit, the router must be served with connect info.
 pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // The API is mounted at one prefix, with no version segment.
     let mut router = Router::<SharedState>::new()
         .nest("/api", api_router(state.clone()))
-        // The Prometheus endpoint sits outside the API prefix.
-        .route("/metrics", get(handlers::prometheus_metrics));
+        .route("/metrics", get(handlers::prometheus_metrics))
+        // OpenAI-compatible clients take a base URL ending in /v1.
+        .route("/v1/models", get(handlers::openai_models))
+        .route(
+            "/v1/chat/completions",
+            post(handlers::openai_chat_completions),
+        );
     if let Some(key) = state.http_config().auth.api_key.clone() {
         router = router.route_layer(middleware::from_fn_with_state(
             Arc::new(key),
@@ -126,7 +133,7 @@ pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Rout
     let mut router = router
         .route("/api/health", get(handlers::health))
         .route("/api/readyz", get(handlers::readyz))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB for batch operations
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(cors);
     if let Some(rate_limit) = rate_limit {
         router = router.layer(rate_limit.layer());
@@ -134,15 +141,15 @@ pub fn create_router(state: SharedState, rate_limit: Option<&RateLimit>) -> Rout
     router
         .layer(middleware::from_fn(assign_request_id))
         .layer(SetResponseHeaderLayer::if_not_present(
-            axum::http::header::HeaderName::from_static("x-api-version"),
+            HeaderName::from_static("x-api-version"),
             HeaderValue::from_static("v1"),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
-            axum::http::header::HeaderName::from_static("x-content-type-options"),
+            X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
         ))
         .layer(SetResponseHeaderLayer::if_not_present(
-            axum::http::header::HeaderName::from_static("x-frame-options"),
+            X_FRAME_OPTIONS,
             HeaderValue::from_static("DENY"),
         ))
         .with_state(state)

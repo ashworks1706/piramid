@@ -1,7 +1,7 @@
 //! Model execution: the forward pass, its memory, and how retrieval enters it.
 //!
-//! None of this is implemented. Every knob here is refused by [InferenceConfig::validate] until
-//! the code behind it is written.
+//! Fusion and document key/value reuse are not implemented; [InferenceConfig::validate] refuses
+//! any of their settings away from its default, except fusion.chunk_tokens.
 
 use serde::{Deserialize, Serialize};
 
@@ -9,28 +9,35 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct InferenceConfig {
-    /// Load a model at startup and serve /api/infer.
+    /// Load a model at startup and serve the generation endpoints.
     pub enabled: bool,
 
     /// Directory or file holding the weights.
     pub model_path: Option<String>,
 
-    /// Tokenizer location, when it does not sit beside the weights.
+    /// Name clients address the model by, the OpenAI model id. None is the model_path directory
+    /// name.
+    pub model_name: Option<String>,
+
+    /// Directory holding tokenizer.json and tokenizer_config.json, when it is not the checkpoint
+    /// directory.
     pub tokenizer_path: Option<String>,
 
     /// Which forked model file drives the pass. None reads it from the checkpoint.
     pub architecture: Option<String>,
 
-    /// Device to load onto, such as cuda:0. None follows startup.hardware.
+    /// Device to load onto: cpu or cuda:N. None is cuda at startup.hardware.gpu.device_ordinal
+    /// under the gpu profile and cpu otherwise.
     pub device: Option<String>,
 
-    /// Precision weights are held at.
+    /// Precision weights are held at. Auto is the checkpoint precision on a GPU and fp32 on the
+    /// cpu.
     pub dtype: Dtype,
 
     /// Longest prompt plus completion, in tokens.
     pub max_sequence_length: usize,
 
-    /// Run a throwaway pass at boot, allocating before the first real request.
+    /// Run a throwaway pass at boot.
     pub warmup: bool,
 
     /// How requests become forward passes.
@@ -50,6 +57,7 @@ impl Default for InferenceConfig {
         InferenceConfig {
             enabled: false,
             model_path: None,
+            model_name: None,
             tokenizer_path: None,
             architecture: None,
             device: None,
@@ -65,11 +73,11 @@ impl Default for InferenceConfig {
     }
 }
 
-/// Numeric precision weights are held at.
+/// Numeric precision of weights or cached keys and values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum Dtype {
-    /// Whatever the checkpoint stores.
+    /// Chosen by the setting that holds it.
     #[default]
     Auto,
     /// 32-bit float.
@@ -93,7 +101,7 @@ pub struct BatchingConfig {
     /// Token ceiling per step.
     pub max_batched_tokens: usize,
 
-    /// Keep admitting into a running batch instead of draining it first.
+    /// Admit new requests into a running batch between steps.
     pub continuous: bool,
 
     /// Split a long prefill across steps.
@@ -124,13 +132,14 @@ impl Default for BatchingConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct KvCacheConfig {
-    /// Total budget across every live sequence. None is unbounded.
+    /// Total budget across every live sequence. Required on the cpu; on a GPU it caps the
+    /// device_fraction share.
     pub max_bytes: Option<u64>,
 
     /// Tokens per page. Pages are the unit of allocation and eviction.
     pub page_size: usize,
 
-    /// Precision the cache is held at.
+    /// Precision the cache is held at. Auto is the precision of the weights.
     pub dtype: Dtype,
 
     /// Fraction of device memory left after weights that the cache may claim.
@@ -148,7 +157,7 @@ impl Default for KvCacheConfig {
         KvCacheConfig {
             max_bytes: None,
             page_size: 16,
-            dtype: Dtype::Fp16,
+            dtype: Dtype::Auto,
             device_fraction: 0.9,
             prefix_sharing: true,
             preemption: Preemption::Recompute,
@@ -163,7 +172,7 @@ pub enum Preemption {
     /// Drop them and recompute from the prompt when the sequence resumes.
     #[default]
     Recompute,
-    /// Copy them to host memory and back.
+    /// Copy them to host memory and back. Not implemented.
     Swap,
 }
 
@@ -318,9 +327,6 @@ pub enum DeadlineMiss {
 }
 
 /// Precomputed key/value states for retrieved documents, reused at prefill.
-///
-/// Position and preceding context change these states, so they are not concatenated as they
-/// stand. recompute_ratio is the fraction repaired on reuse.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct DocumentKvConfig {
@@ -364,24 +370,60 @@ pub enum DocumentKvStorage {
 impl InferenceConfig {
     /// Reject anything the build cannot honour.
     ///
-    /// Turning the subsystem on is an error naming the roadmap version that will implement it.
+    /// A fusion setting other than chunk_tokens, or a document_kv setting, away from its default
+    /// is an error naming the roadmap version that will implement it.
     pub fn validate(&self) -> Result<(), String> {
-        if self.enabled {
-            return Err("runtime.inference.enabled: not implemented yet (roadmap v0.4.0)".into());
+        if self.enabled && self.model_path.is_none() {
+            return Err("runtime.inference.model_path: required when inference is enabled".into());
         }
-        if self.fusion.enabled {
+        if self.model_name.as_deref().is_some_and(str::is_empty) {
+            return Err("runtime.inference.model_name: must not be empty".into());
+        }
+        if let Some(device) = &self.device {
+            let cuda = device
+                .strip_prefix("cuda:")
+                .is_some_and(|ordinal| ordinal.parse::<usize>().is_ok());
+            if device != "cpu" && !cuda {
+                return Err(format!(
+                    "runtime.inference.device: {device} is not cpu or cuda:N"
+                ));
+            }
+        }
+        if let Some(name) = &self.architecture {
+            if name != "qwen2" && name != "qwen3" {
+                return Err(format!(
+                    "runtime.inference.architecture: {name} is not qwen2 or qwen3"
+                ));
+            }
+        }
+        if self.max_sequence_length == 0 {
+            return Err("runtime.inference.max_sequence_length: must be >= 1".into());
+        }
+        if self.kv_cache.preemption == Preemption::Swap {
             return Err(
-                "runtime.inference.fusion.enabled: not implemented yet (roadmap v0.6.0)".into(),
+                "runtime.inference.kv_cache.preemption: swap is not implemented yet; use recompute"
+                    .into(),
             );
         }
-        if self.document_kv.enabled {
+        let fusion_defaults = FusionConfig {
+            chunk_tokens: self.fusion.chunk_tokens,
+            ..FusionConfig::default()
+        };
+        if self.fusion != fusion_defaults {
             return Err(
-                "runtime.inference.document_kv.enabled: not implemented yet (roadmap v0.6.0)"
+                "runtime.inference.fusion: not implemented yet (roadmap v0.6.0), so every key \
+                 except chunk_tokens must stay at its default"
+                    .into(),
+            );
+        }
+        if self.document_kv != DocumentKvConfig::default() {
+            return Err(
+                "runtime.inference.document_kv: not implemented yet (roadmap v0.6.0), so every \
+                 key must stay at its default"
                     .into(),
             );
         }
 
-        // Shape checks for the settings that are not yet honoured.
         if self.batching.max_batch_size == 0 {
             return Err("runtime.inference.batching.max_batch_size: must be >= 1".into());
         }
@@ -398,25 +440,33 @@ impl InferenceConfig {
                 "runtime.inference.kv_cache.device_fraction: must be within 0.0..=1.0".into(),
             );
         }
-        if self.fusion.top_k == 0 {
-            return Err("runtime.inference.fusion.top_k: must be >= 1".into());
-        }
-        if self.fusion.overfetch == 0 {
-            return Err("runtime.inference.fusion.overfetch: must be >= 1".into());
-        }
         if self.fusion.chunk_tokens == 0 {
             return Err("runtime.inference.fusion.chunk_tokens: must be >= 1".into());
         }
-        if self.fusion.layer_stride == 0 {
-            return Err("runtime.inference.fusion.layer_stride: must be >= 1".into());
+        if self.batching.max_batched_tokens == 0 {
+            return Err("runtime.inference.batching.max_batched_tokens: must be >= 1".into());
         }
-        if !(0.0..=1.0).contains(&self.document_kv.recompute_ratio) {
+        if self.batching.prefill_chunk_tokens == 0 {
+            return Err("runtime.inference.batching.prefill_chunk_tokens: must be >= 1".into());
+        }
+        let penalty = self.sampling.repetition_penalty;
+        if !(penalty > 0.0 && penalty.is_finite()) {
             return Err(
-                "runtime.inference.document_kv.recompute_ratio: must be within 0.0..=1.0".into(),
+                "runtime.inference.sampling.repetition_penalty: must be finite and > 0".into(),
             );
         }
-        if self.sampling.repetition_penalty <= 0.0 {
-            return Err("runtime.inference.sampling.repetition_penalty: must be > 0".into());
+        let temperature = self.sampling.temperature;
+        if !(temperature >= 0.0 && temperature.is_finite()) {
+            return Err("runtime.inference.sampling.temperature: must be finite and >= 0".into());
+        }
+        if self.sampling.top_p.is_some_and(|p| !(p > 0.0 && p <= 1.0)) {
+            return Err("runtime.inference.sampling.top_p: must be within (0.0, 1.0]".into());
+        }
+        if self.sampling.top_k == Some(0) {
+            return Err("runtime.inference.sampling.top_k: must be >= 1".into());
+        }
+        if self.sampling.max_new_tokens == 0 {
+            return Err("runtime.inference.sampling.max_new_tokens: must be >= 1".into());
         }
         Ok(())
     }

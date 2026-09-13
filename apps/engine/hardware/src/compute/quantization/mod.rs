@@ -1,4 +1,4 @@
-//! Compressed vector representations, beside the kernels that will score them.
+//! Compressed vector representations.
 
 mod config;
 
@@ -101,20 +101,25 @@ pub struct ProductQuantizedVector {
 }
 
 impl ProductQuantizedVector {
-    /// Quantize block-by-block into the requested number of blocks with per-block ranges.
-    pub fn from_f32(vector: &[f32], subquantizers: usize) -> Self {
+    /// Quantize block-by-block into the requested number of blocks with per-block ranges. A block
+    /// count of zero, or one larger than the dimension of a non-empty vector, is an error.
+    pub fn from_f32(vector: &[f32], subquantizers: usize) -> ComputeResult<Self> {
         if vector.is_empty() {
-            return ProductQuantizedVector {
+            return Ok(ProductQuantizedVector {
                 codes: Vec::new(),
                 block_mins: Vec::new(),
                 block_maxs: Vec::new(),
                 dim: 0,
                 subquantizers: 0,
-            };
+            });
         }
 
         let dim = vector.len();
-        let subquantizers = subquantizers.max(1).min(dim);
+        if subquantizers == 0 || subquantizers > dim {
+            return Err(ComputeError::InvalidEncoding(format!(
+                "pq subquantizers {subquantizers} must be between 1 and the dimension {dim}"
+            )));
+        }
         let block_len = dim.div_ceil(subquantizers);
 
         let mut codes = Vec::with_capacity(dim);
@@ -144,13 +149,13 @@ impl ProductQuantizedVector {
             }
         }
 
-        ProductQuantizedVector {
+        Ok(ProductQuantizedVector {
             codes,
             block_mins,
             block_maxs,
             dim,
             subquantizers,
-        }
+        })
     }
 
     /// Decode, erroring when the encoding is internally inconsistent.
@@ -221,17 +226,21 @@ pub struct QuantizedVector {
     pub max: f32,
     /// The PQ payload, when kind is [QuantizationKind::Pq].
     pub pq: Option<ProductQuantizedVector>,
-    /// Which encoding the values and pq fields actually hold.
+    /// Which encoding the values and pq fields hold.
     pub kind: QuantizationKind,
 }
 
 impl QuantizedVector {
-    /// Quantizes a vector according to the config; errors on Int4 and Float16, which have no
-    /// encoder.
+    /// Quantizes a vector according to the config. None has no quantized encoding, and Int4 and
+    /// Float16 have no encoder; all three are errors, as is a Pq block count the vector cannot
+    /// hold.
     pub fn from_f32(vector: &[f32], cfg: &QuantizationConfig) -> ComputeResult<Self> {
         match cfg.level {
-            QuantizationLevel::None | QuantizationLevel::Int8 => Ok(Self::from_scalar(vector)),
-            QuantizationLevel::Pq { subquantizers } => Ok(Self::from_pq(vector, subquantizers)),
+            QuantizationLevel::Int8 => Ok(Self::from_scalar(vector)),
+            QuantizationLevel::Pq { subquantizers } => Self::from_pq(vector, subquantizers),
+            QuantizationLevel::None => Err(ComputeError::InvalidEncoding(
+                "quantization level None has no quantized encoding".to_string(),
+            )),
             unsupported @ (QuantizationLevel::Int4 | QuantizationLevel::Float16) => {
                 Err(ComputeError::InvalidEncoding(format!(
                     "quantization level {unsupported:?} has no encoder"
@@ -251,15 +260,15 @@ impl QuantizedVector {
         }
     }
 
-    fn from_pq(vector: &[f32], subquantizers: usize) -> Self {
-        let pq = ProductQuantizedVector::from_f32(vector, subquantizers);
-        QuantizedVector {
+    fn from_pq(vector: &[f32], subquantizers: usize) -> ComputeResult<Self> {
+        let pq = ProductQuantizedVector::from_f32(vector, subquantizers)?;
+        Ok(QuantizedVector {
             values: Vec::new(),
             min: 0.0,
             max: 0.0,
             pq: Some(pq),
             kind: QuantizationKind::Pq,
-        }
+        })
     }
 
     /// Decode, erroring when the encoding is internally inconsistent.

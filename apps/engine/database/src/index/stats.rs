@@ -27,8 +27,8 @@ pub enum IndexDetails {
         max_layer: isize,
         /// Node count per layer.
         layer_sizes: Vec<usize>,
-        /// Mean out-degree.
-        avg_connections: f32,
+        /// Mean edges per live node at layer 0. None when there are no live nodes.
+        avg_connections: Option<f32>,
         /// Candidate list width a search uses when the query sets none.
         ef_search: usize,
     },

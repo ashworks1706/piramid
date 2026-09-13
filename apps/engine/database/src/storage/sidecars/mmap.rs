@@ -35,7 +35,6 @@ pub fn grow_mmap_if_needed(
             file.set_len(new_size)?;
         }
     }
-    // Already large enough.
     Ok(())
 }
 

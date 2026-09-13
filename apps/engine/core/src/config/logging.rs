@@ -26,7 +26,7 @@ pub struct LoggingConfig {
     /// Install a log subscriber. Off emits nothing.
     #[serde(default = "crate::config::default_true")]
     pub enabled: bool,
-    /// Base level. RUST_LOG replaces it when set.
+    /// Base level.
     #[serde(default)]
     pub level: LogLevel,
     /// Emit events on the piramid::config target.
@@ -47,7 +47,7 @@ pub struct LoggingConfig {
     /// Emit events on the piramid::http target.
     #[serde(default = "crate::config::default_true")]
     pub http: bool,
-    /// Emit structured JSON lines instead of human-readable console output.
+    /// Emit structured JSON lines. Off writes human-readable console output.
     #[serde(default)]
     pub json: bool,
     /// Threshold in milliseconds above which a query is logged at warn.

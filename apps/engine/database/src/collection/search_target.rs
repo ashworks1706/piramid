@@ -27,6 +27,14 @@ pub(crate) fn ensure_indexed_metric(collection: &Collection, requested: Metric) 
     }
 }
 
+/// Refuse a query the metric cannot score.
+fn ensure_scorable(query: &[f32], metric: Metric) -> Result<()> {
+    match metric {
+        Metric::Cosine => piramid_core::validation::validate_cosine_magnitude(query),
+        Metric::Euclidean | Metric::DotProduct => Ok(()),
+    }
+}
+
 /// Search one query, filling unset params from the configuration of the collection.
 pub fn search(
     collection: &Collection,
@@ -36,11 +44,9 @@ pub fn search(
     mut params: SearchParams,
 ) -> Result<Vec<Hit>> {
     ensure_indexed_metric(collection, metric)?;
+    ensure_scorable(query, metric)?;
     if matches!(params.mode, ExecutionMode::Auto) {
         params.mode = collection.config().execution;
-    }
-    if params.filter_overfetch_override.is_none() {
-        params.filter_overfetch_override = Some(collection.config.search.filter_overfetch);
     }
     crate::search::search(&target(collection), query, k, metric, params, &|id| {
         collection.get(id)
@@ -56,6 +62,9 @@ pub fn search_batch(
     params: SearchParams,
 ) -> Result<Vec<Vec<Hit>>> {
     ensure_indexed_metric(collection, metric)?;
+    for query in queries {
+        ensure_scorable(query, metric)?;
+    }
     let mut params = params;
     if matches!(params.mode, ExecutionMode::Auto) {
         params.mode = collection.config().execution;

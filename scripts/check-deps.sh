@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 # Verify the workspace dependency rule from docs/ARCHITECTURE.md.
-#
-# Cargo rejects an undeclared edge; this rejects a declared one. Run by just check-rust, the
-# pre-commit hook, and CI.
+# Run by just check-rust, the pre-commit hook, and CI.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 command -v jq >/dev/null || { echo "check-deps: jq is required"; exit 1; }
 
-# Allowed in-repo dependencies, one "crate -> dependency" per line.
-# Anything not listed is a violation. Keep this in sync with docs/ARCHITECTURE.md.
+# Allowed in-repo dependencies, one edge per line. Any other edge is a violation.
 ALLOWED=$(cat <<'EOF'
 piramid-core -> piramid-hardware
 piramid-database -> piramid-core
@@ -46,8 +43,7 @@ while IFS= read -r edge; do
   fi
 done <<<"$ACTUAL"
 
-# hardware is a leaf, so kernels stay liftable into a standalone benchmark and nothing above
-# has to be present to measure them.
+# Leaf crates depend on no workspace crate.
 for leaf in piramid-hardware; do
   if grep -q "^$leaf -> " <<<"$ACTUAL"; then
     echo "FAIL $leaf must be a leaf crate but depends on:"
@@ -56,10 +52,7 @@ for leaf in piramid-hardware; do
   fi
 done
 
-# The model runtime must not depend on retrieval, or a collection stops being queryable without a
-# model loaded. A hook implementation belongs in its own crate depending on both.
-# The model runtime must not depend on the database, or a collection stops being queryable with
-# no model loaded. A hook implementation belongs in its own crate depending on both.
+# piramid-model must not depend on piramid-database.
 if grep -q "^piramid-model -> piramid-database\$" <<<"$ACTUAL"; then
   echo "FAIL piramid-model must not depend on piramid-database"
   echo "     a hook implementation belongs in its own crate depending on both"

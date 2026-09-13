@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 /// Cached per-document metadata, bounded by CacheConfig::max_size entries.
 ///
-/// A miss re-reads the record store, so every entry here is droppable.
+/// A miss re-reads the record store.
 pub struct MetadataCache {
     config: CacheConfig,
     entries: HashMap<Uuid, Metadata>,

@@ -22,8 +22,8 @@ path = "src/main.rs"
 
 [features]
 default = []
-gpu-cuda = ["piramid-hardware/gpu-cuda"]
-inference-candle = ["piramid-model/inference-candle"]
+gpu-cuda = ["piramid-hardware/gpu-cuda", "piramid-model/gpu-cuda", "piramid-serving/gpu-cuda"]
+inference-candle = ["piramid-model/inference-candle", "piramid-serving/inference-candle"]
 # Export traces over OTLP to any collector (Axiom, Tempo, Honeycomb, Jaeger).
 otel = ["piramid-core/otel"]
 
@@ -47,8 +47,7 @@ crossterm.workspace = true
 futures.workspace = true
 chrono.workspace = true
 
-# Restates the workspace lints (Cargo forbids partial overrides) with one change: the CLI is the
-# one place that talks to a terminal, so `println!`/`eprintln!` are allowed here.
+# The workspace lints, restated in full, with println and eprintln allowed.
 [lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"

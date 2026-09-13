@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use piramid::config::Config;
@@ -20,25 +20,29 @@ const SECRET_MARKERS: &[&str] = &[
 ];
 
 /// Environment variables Piramid reads, by prefix, reported beside the resolved config.
-const REPORTED_PREFIXES: &[&str] = &["PIRAMID_", "CONFIG_FILE", "OPENAI_API_KEY", "RUST_LOG"];
-
-/// Clone the config with the embedding API key replaced by a redaction marker.
-fn redacted(config: &Config) -> Config {
-    let mut config = config.clone();
-    if let Some(embedding) = config.startup.embedding.as_mut() {
-        if embedding.api_key.is_some() {
-            embedding.api_key = Some("<redacted>".to_string());
-        }
-    }
-    config
-}
+const REPORTED_PREFIXES: &[&str] = &["PIRAMID_", "CONFIG_FILE", "OPENAI_API_KEY"];
 
 fn is_secret(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     SECRET_MARKERS.iter().any(|marker| upper.contains(marker))
 }
 
-pub fn render(config: &Config, state: &Arc<AppState>) -> String {
+/// The inputs a support bundle is rendered from.
+pub struct Bundle<'a> {
+    /// The resolved configuration.
+    pub config: &'a Config,
+    /// The config file named on the command line, if any.
+    pub config_file: Option<&'a Path>,
+    /// The state whose open collections are reported.
+    pub state: &'a Arc<AppState>,
+    /// The name and error of each collection that failed to open.
+    pub failed_collections: &'a [(String, String)],
+}
+
+/// Render the bundle as markdown.
+pub fn render(bundle: &Bundle<'_>) -> String {
+    let config = bundle.config;
+    let state = bundle.state;
     let mut out = String::new();
 
     let _ = writeln!(out, "# Piramid support bundle");
@@ -86,6 +90,13 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
 
     let _ = writeln!(out, "## Runtime");
     let _ = writeln!(out);
+    let _ = writeln!(
+        out,
+        "config_file         {}",
+        bundle
+            .config_file
+            .map_or_else(|| "none".to_string(), |p| p.display().to_string())
+    );
     let _ = writeln!(out, "bind                {}", config.startup.bind);
     let _ = writeln!(out, "data_dir            {}", config.startup.data_dir);
     let _ = writeln!(
@@ -127,7 +138,7 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
         .collect();
     vars.sort();
     if vars.is_empty() {
-        let _ = writeln!(out, "(none set; running on defaults)");
+        let _ = writeln!(out, "(none set)");
     }
     for (name, value) in vars {
         let _ = writeln!(out, "{name}={value}");
@@ -180,9 +191,18 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
     }
     let _ = writeln!(out);
 
+    if !bundle.failed_collections.is_empty() {
+        let _ = writeln!(out, "## Collections that failed to open");
+        let _ = writeln!(out);
+        for (name, error) in bundle.failed_collections {
+            let _ = writeln!(out, "{name}: {error}");
+        }
+        let _ = writeln!(out);
+    }
+
     let _ = writeln!(out, "## Resolved configuration");
     let _ = writeln!(out);
-    match yaml_serde::to_string(&redacted(config)) {
+    match yaml_serde::to_string(config) {
         Ok(yaml) => {
             let _ = writeln!(out, "```yaml");
             let _ = write!(out, "{yaml}");
@@ -196,13 +216,64 @@ pub fn render(config: &Config, state: &Arc<AppState>) -> String {
     out
 }
 
-/// Write the bundle to path, defaulting to piramid-support-bundle.md in the working directory.
-pub fn write(
-    config: &Config,
-    state: &Arc<AppState>,
-    path: Option<PathBuf>,
-) -> std::io::Result<PathBuf> {
-    let path = path.unwrap_or_else(|| Path::new("piramid-support-bundle.md").to_path_buf());
-    fs::write(&path, render(config, state))?;
-    Ok(path)
+/// Write the rendered bundle to path.
+pub fn write(bundle: &Bundle<'_>, path: &Path) -> std::io::Result<()> {
+    fs::write(path, render(bundle))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use piramid::embeddings::EmbeddingsManager;
+
+    fn state(name: &str) -> (Config, Arc<AppState>) {
+        let dir =
+            std::env::temp_dir().join(format!("piramid-support-{name}-{}", std::process::id()));
+        let mut config = Config::default();
+        config.startup.data_dir = dir.to_string_lossy().into_owned();
+        let state = Arc::new(AppState::new(config.clone(), EmbeddingsManager::disabled()).unwrap());
+        (config, state)
+    }
+
+    #[test]
+    fn bundle_lists_collections_that_failed_to_open() {
+        let (config, state) = state("failed");
+        let failed = vec![("broken".to_string(), "manifest is corrupt".to_string())];
+        let text = render(&Bundle {
+            config: &config,
+            config_file: None,
+            state: &state,
+            failed_collections: &failed,
+        });
+        assert!(
+            text.contains("## Collections that failed to open"),
+            "{text}"
+        );
+        assert!(text.contains("broken: manifest is corrupt"), "{text}");
+    }
+
+    #[test]
+    fn bundle_names_the_config_file() {
+        let (config, state) = state("config-file");
+        let file = Path::new("/etc/piramid/config.yaml");
+        let named = render(&Bundle {
+            config: &config,
+            config_file: Some(file),
+            state: &state,
+            failed_collections: &[],
+        });
+        assert!(
+            named.contains("config_file         /etc/piramid/config.yaml"),
+            "{named}"
+        );
+        assert!(!named.contains("running on defaults"), "{named}");
+        let unnamed = render(&Bundle {
+            config: &config,
+            config_file: None,
+            state: &state,
+            failed_collections: &[],
+        });
+        assert!(unnamed.contains("config_file         none"), "{unnamed}");
+        assert!(!unnamed.contains("failed to open"), "{unnamed}");
+    }
 }

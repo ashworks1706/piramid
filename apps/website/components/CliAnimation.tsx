@@ -3,20 +3,13 @@
 import { useEffect, useState } from "react";
 import { CLI_FRAMES } from "../lib/cli-frames";
 
-/** Milliseconds per frame. Eleven frames, so the build runs in a little over half a second. */
+/** Milliseconds per frame. */
 const FRAME_MS = 55;
 const LAST = CLI_FRAMES.length - 1;
 
 /**
- * Plays the same ASCII animation the `piramid` binary prints on startup.
- *
- * Rendered as preformatted text rather than an image, so it stays crisp at any zoom and costs no
- * network request. It holds on the final frame.
- *
- * Stepped with setTimeout rather than requestAnimationFrame. rAF is smoother in principle, but it
- * does not advance in every environment that renders the page, and a stalled clock here leaves a
- * half-drawn logo on screen. Each timeout is scheduled against elapsed wall time rather than a
- * fixed delay, so a slow tick catches up on the next one instead of dragging the whole sequence.
+ * Plays the ASCII animation the piramid binary prints on startup, as preformatted text, and holds
+ * on the final frame. Each frame is chosen from elapsed wall time.
  */
 export function CliAnimation() {
   const [frame, setFrame] = useState(0);
@@ -24,8 +17,7 @@ export function CliAnimation() {
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      // Scheduled rather than set here: a synchronous setState inside an effect body cascades a
-      // render. One tick later the reader sees the finished logo with no build-up.
+      // With reduced motion the final frame is shown after one tick.
       const id = window.setTimeout(() => setFrame(LAST), 0);
       return () => window.clearTimeout(id);
     }

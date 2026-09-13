@@ -186,7 +186,29 @@ fn index_selector_prefers_expected_types() {
     assert_eq!(cfg.select_type(500_000), IndexKind::Hnsw);
 }
 
-// HNSW evaluates filters during traversal rather than after it.
+// Under auto, an ivf_num_clusters without ivf_num_probes sizes the probes from that cluster count.
+#[test]
+fn auto_ivf_probes_are_sized_from_the_configured_cluster_count() {
+    use piramid_database::index::{create_index, AutoIndexConfig, IndexDetails};
+
+    let cfg = IndexConfig::Auto {
+        metric: piramid_hardware::compute::Metric::Cosine,
+        auto: AutoIndexConfig {
+            flat_max_vectors: 1,
+            ivf_max_vectors: 1_000_000,
+            ivf_num_clusters: Some(4),
+            ivf_num_probes: None,
+            ..AutoIndexConfig::default()
+        },
+    };
+    let index = create_index(&cfg, piramid_core::config::ExecutionMode::default(), 10_000);
+    match index.stats().details {
+        IndexDetails::Ivf { num_probes, .. } => assert_eq!(num_probes, 1),
+        other => panic!("expected IVF stats, got {other:?}"),
+    }
+}
+
+// HNSW evaluates filters during traversal.
 #[test]
 fn hnsw_search_applies_a_filter_during_traversal() {
     use piramid_core::metadata::{metadata, Filter, Metadata};
@@ -266,8 +288,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
             ..FlatConfig::default()
         };
 
-        // Contiguous: the index owns every row the store does, so the buffer goes straight to
-        // the kernel.
+        // Contiguous: the store buffer goes straight to the kernel.
         let mut cache = CacheManager::new(CacheConfig::default());
         let mut contiguous = FlatIndex::new(config);
         for (id, vector) in &rows {
@@ -281,7 +302,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
             "the store should be offering its buffer"
         );
 
-        // Scattered: no slab, so every block is gathered before it is scored.
+        // Scattered: every block is gathered before it is scored.
         let map: HashMap<Uuid, Vec<f32>> = rows.iter().cloned().collect();
         let scattered_reader = HashMapVectorReader::new(&map);
         assert!(scattered_reader.as_slab().is_none());
@@ -290,7 +311,7 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
             scattered.insert(*id, vector, &scattered_reader).unwrap();
         }
 
-        // A hole withdraws the buffer, so the same index falls back mid-life.
+        // A hole withdraws the buffer, and the same index gathers instead.
         let mut holed = VectorStore::new();
         for (id, vector) in &rows {
             holed.put(*id, vector).unwrap();
@@ -333,11 +354,11 @@ fn every_flat_scoring_path_ranks_a_collection_the_same_way() {
         assert_eq!(from_slab, from_gather, "{metric:?}: slab vs gather");
         assert_eq!(from_slab, from_holed, "{metric:?}: slab vs holed fallback");
 
-        // And against scoring one pair at a time.
+        // Compared against scoring one pair at a time.
         let kernels = for_mode(config.mode).unwrap();
         let mut pairwise: Vec<(Uuid, f32)> = rows
             .iter()
-            .map(|(id, vector)| (*id, metric.calculate(&query, vector, kernels)))
+            .map(|(id, vector)| (*id, metric.calculate(&query, vector, kernels).unwrap()))
             .collect();
         pairwise.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let expected: Vec<Uuid> = pairwise.into_iter().take(k).map(|(id, _)| id).collect();
@@ -410,15 +431,15 @@ fn ivf_probing_every_partition_ranks_as_pairwise_scoring_does() {
         let kernels = for_mode(config.mode).unwrap();
         let mut pairwise: Vec<(Uuid, f32)> = rows
             .iter()
-            .map(|(id, vector)| (*id, metric.calculate(&query, vector, kernels)))
+            .map(|(id, vector)| (*id, metric.calculate(&query, vector, kernels).unwrap()))
             .collect();
         pairwise.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let expected: Vec<(Uuid, f32)> = pairwise.into_iter().take(k).collect();
 
         assert_eq!(from_scattered.len(), k);
         assert_eq!(from_scattered, from_cache, "{metric:?}: scattered vs cache");
-        // Rows repeat with period 7, so ties are compared by score rather than by id.
-        let score_of = |id: &Uuid| metric.calculate(&query, &map[id], kernels);
+        // Rows repeat with period 7, so ties are compared by score and not by id.
+        let score_of = |id: &Uuid| metric.calculate(&query, &map[id], kernels).unwrap();
         for (got, (_, want)) in from_scattered.iter().zip(&expected) {
             assert!(
                 (score_of(got) - want).abs() < 1e-5,
@@ -459,4 +480,133 @@ fn ivf_search_fails_when_a_posting_list_names_a_missing_vector() {
         &empty_meta,
     ));
     assert!(result.is_err());
+}
+
+/// A stored zero vector under cosine scores NaN; every index leaves it out and still fills k.
+#[test]
+fn a_stored_zero_vector_is_left_out_of_cosine_results() {
+    use piramid_core::config::SearchConfig;
+
+    let mut vectors = HashMap::new();
+    let zero_id = Uuid::new_v4();
+    vectors.insert(zero_id, vec![0.0, 0.0, 0.0]);
+    for i in 0..30 {
+        let f = i as f32;
+        vectors.insert(
+            Uuid::new_v4(),
+            vec![1.0 + f, (f % 5.0) - 2.0, (f % 3.0) - 1.0],
+        );
+    }
+    let reader = HashMapVectorReader::new(&vectors);
+    let empty_meta: HashMap<Uuid, piramid_core::metadata::Metadata> = HashMap::new();
+    let query = [1.0, 0.5, 0.25];
+    let k = 5;
+
+    let mut flat = FlatIndex::new(FlatConfig::default());
+    let mut hnsw = HnswIndex::new(HnswConfig::default());
+    for (id, vector) in &vectors {
+        flat.insert(*id, vector, &reader).unwrap();
+        hnsw.insert(*id, vector, &reader).unwrap();
+    }
+    let mut ivf = IvfIndex::new(IvfConfig {
+        num_clusters: 3,
+        ..IvfConfig::default()
+    });
+    ivf.build_clusters(&reader).unwrap();
+    let probe_all = SearchConfig {
+        nprobe: Some(3),
+        ..SearchConfig::default()
+    };
+
+    let from_flat = flat
+        .search(IndexSearchRequest::new(
+            &query,
+            k,
+            &reader,
+            SearchConfig::default(),
+            &empty_meta,
+        ))
+        .unwrap();
+    let from_ivf = ivf
+        .search(IndexSearchRequest::new(
+            &query,
+            k,
+            &reader,
+            probe_all,
+            &empty_meta,
+        ))
+        .unwrap();
+    let from_hnsw = hnsw
+        .search(&query, k, 200, &reader, None, &empty_meta)
+        .unwrap();
+    for (name, ids) in [("flat", from_flat), ("ivf", from_ivf), ("hnsw", from_hnsw)] {
+        assert_eq!(ids.len(), k, "{name}");
+        assert!(!ids.contains(&zero_id), "{name} ranked the zero vector");
+    }
+}
+
+#[test]
+fn an_ivf_search_with_zero_probes_is_refused() {
+    let config = IvfConfig {
+        num_clusters: 1,
+        ..IvfConfig::default()
+    };
+    let mut idx = IvfIndex::new(config);
+    let mut vectors = HashMap::new();
+    let id = Uuid::new_v4();
+    vectors.insert(id, vec![1.0, 0.0]);
+    let reader = HashMapVectorReader::new(&vectors);
+    idx.insert(id, &[1.0, 0.0], &reader).unwrap();
+
+    let empty_meta: HashMap<Uuid, piramid_core::metadata::Metadata> = HashMap::new();
+    let search = piramid_core::config::SearchConfig {
+        nprobe: Some(0),
+        ..piramid_core::config::SearchConfig::default()
+    };
+    let error = idx
+        .search(IndexSearchRequest::new(
+            &[1.0, 0.0],
+            1,
+            &reader,
+            search,
+            &empty_meta,
+        ))
+        .unwrap_err();
+    assert!(error.to_string().contains("nprobe must be >= 1"), "{error}");
+}
+
+#[test]
+fn hnsw_mean_connections_count_layer_zero_and_are_absent_when_empty() {
+    use piramid_database::index::IndexDetails;
+
+    let config = HnswConfig {
+        m: 2,
+        m_max: 2,
+        ml: 1.0 / 2.0_f32.ln(),
+        ..HnswConfig::default()
+    };
+    let mut idx = HnswIndex::new(config);
+    assert_eq!(idx.stats().avg_connections, None);
+
+    let mut vectors = HashMap::new();
+    let ids: Vec<Uuid> = (0..64).map(|_| Uuid::new_v4()).collect();
+    for (i, id) in ids.iter().enumerate() {
+        let angle = i as f32 * 0.1;
+        vectors.insert(*id, vec![angle.cos(), angle.sin(), 1.0]);
+    }
+    let reader = HashMapVectorReader::new(&vectors);
+    for id in &ids {
+        idx.insert(*id, &vectors[id], &reader).unwrap();
+    }
+
+    let stats = idx.stats();
+    let mean = stats.avg_connections.unwrap();
+    assert!(stats.max_layer > 0, "upper layers exist");
+    assert!(mean > 0.0 && mean <= config.m_max as f32, "{mean}");
+    match VectorIndex::stats(&idx).details {
+        IndexDetails::Hnsw {
+            avg_connections, ..
+        } => assert_eq!(avg_connections, Some(mean)),
+        other => panic!("expected HNSW stats, got {other:?}"),
+    }
 }

@@ -106,14 +106,14 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
         });
 
         let wal_size = optional_file_size(&SidecarManager::at(&collection_guard.path).wal_path())?;
-        let checkpoint_age_secs = collection_guard
-            .checkpoint
-            .last_checkpoint()
-            .and_then(|timestamp| piramid_core::clock::unix_secs().checked_sub(timestamp));
+        let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
+        let checkpoint_age_secs = match last_checkpoint {
+            Some(timestamp) => piramid_core::clock::unix_secs()?.checked_sub(timestamp),
+            None => None,
+        };
         wal_stats.push(WalStats {
-            // Keyed by collection name, matching every other field keyed by collection.
             collection: collection_name,
-            last_checkpoint: collection_guard.checkpoint.last_checkpoint(),
+            last_checkpoint,
             checkpoint_age_secs,
             wal_size_bytes: wal_size,
         });
@@ -133,6 +133,55 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
             avg_latency_ms: embed_metrics.avg_latency_ms,
         },
         host: crate::services::convert::host_to_response(state.machine.host()),
+        gpus: state
+            .machine
+            .gpus()
+            .into_iter()
+            .map(crate::services::convert::gpu_to_response)
+            .collect(),
+        gpu_budget: state.gpu.as_ref().map(|gpu| {
+            let budget = gpu.budget();
+            GpuBudgetResponse {
+                usable_bytes: budget.usable_bytes(),
+                shared: budget.is_shared(),
+                pools: budget
+                    .usage()
+                    .into_iter()
+                    .map(|usage| GpuPoolResponse {
+                        pool: usage.pool.as_str(),
+                        capacity_bytes: usage.capacity_bytes,
+                        used_bytes: usage.used_bytes,
+                    })
+                    .collect(),
+            }
+        }),
+        inference: state.inference.as_ref().map(|manager| {
+            let info = manager.info();
+            let m = manager.metrics().snapshot();
+            InferenceMetricsResponse {
+                model: info.name,
+                device: info.device,
+                requests_admitted: m.requests_admitted,
+                requests_finished: m.requests_finished,
+                requests_failed: m.requests_failed,
+                prompt_tokens: m.prompt_tokens,
+                cached_prompt_tokens: m.cached_prompt_tokens,
+                generated_tokens: m.generated_tokens,
+                avg_time_to_first_token_ms: m.avg_time_to_first_token_ms,
+                decode_tokens_per_second: m.decode_tokens_per_second,
+                avg_decode_step_ms: m.avg_decode_step_ms,
+                prefill_tokens_per_second: m.prefill_tokens_per_second,
+                preemptions: m.preemptions,
+                queue_depth: m.queue_depth,
+                running: m.running,
+                last_batch_size: m.last_batch_size,
+                kv_blocks_total: m.kv_blocks_total,
+                kv_blocks_used: m.kv_blocks_used,
+                kv_blocks_cached: m.kv_blocks_cached,
+                kv_evictions: m.kv_evictions,
+                prefix_hit_rate: m.prefix_hit_rate,
+            }
+        }),
     })
 }
 
@@ -154,8 +203,10 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
         let count = collection_guard.count();
         total_vectors += count;
         let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
-        let checkpoint_age_secs = last_checkpoint
-            .and_then(|timestamp| piramid_core::clock::unix_secs().checked_sub(timestamp));
+        let checkpoint_age_secs = match last_checkpoint {
+            Some(timestamp) => piramid_core::clock::unix_secs()?.checked_sub(timestamp),
+            None => None,
+        };
         let wal_size_bytes =
             optional_file_size(&SidecarManager::at(&collection_guard.path).wal_path())?;
 
@@ -168,12 +219,10 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             checkpoint_age_secs,
             wal_size_bytes,
             schema_version: Some(collection_guard.manifest.schema_version),
-            integrity_ok: Some(true),
-            error: None,
         });
     }
 
-    // Collections load lazily. One present on disk but not yet opened is listed unchecked.
+    // Collections load lazily. One present on disk but not yet opened is listed with loaded false.
     for name in state.collection_manager.discover_on_disk()? {
         if state.collection_manager.contains_loaded(&name) {
             continue;
@@ -187,19 +236,13 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             checkpoint_age_secs: None,
             wal_size_bytes: None,
             schema_version: None,
-            integrity_ok: None,
-            error: None,
         });
     }
 
     let loaded_collections = state.collection_manager.len();
     let (disk_total_bytes, disk_available_bytes) = crate::disk::stats(&state.data_dir)?;
-    let ok = collections
-        .iter()
-        .all(|collection| collection.integrity_ok != Some(false));
 
     Ok(ReadyzResponse {
-        ok,
         version: env!("CARGO_PKG_VERSION").to_string(),
         data_dir: state.data_dir.clone(),
         total_collections: collections.len(),

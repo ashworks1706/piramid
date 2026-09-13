@@ -31,10 +31,6 @@ impl Embedder for MockEmbedder {
     fn model_name(&self) -> &str {
         "mock-model"
     }
-
-    fn dimensions(&self) -> Option<usize> {
-        Some(1)
-    }
 }
 
 #[tokio::test]
@@ -49,20 +45,19 @@ async fn cache_hits_and_eviction() {
     assert_eq!(call_count.load(Ordering::SeqCst), 1);
 
     cached.embed("hello").await.unwrap();
-    assert_eq!(call_count.load(Ordering::SeqCst), 1); // cache hit
+    assert_eq!(call_count.load(Ordering::SeqCst), 1);
 
     cached.embed("world").await.unwrap();
     assert_eq!(call_count.load(Ordering::SeqCst), 2);
 
-    cached.embed("third").await.unwrap(); // evicts LRU
+    cached.embed("third").await.unwrap();
     assert_eq!(call_count.load(Ordering::SeqCst), 3);
 
-    cached.embed("hello").await.unwrap(); // hello likely evicted, another call
+    cached.embed("hello").await.unwrap();
     assert!(call_count.load(Ordering::SeqCst) >= 4);
 }
 
-// A hit returns the model the provider reported when the text was embedded, and no token count,
-// since nothing was sent.
+// A hit returns the model the provider reported when the text was embedded, and no token count.
 #[tokio::test]
 async fn a_hit_reports_what_the_provider_said() {
     let call_count = Arc::new(AtomicUsize::new(0));

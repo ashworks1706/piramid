@@ -30,7 +30,7 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
         docs.len(),
     );
     let mut new_manifest = collection.manifest.clone();
-    new_manifest.update_vector_count(0);
+    new_manifest.update_vector_count(0)?;
 
     for doc in docs {
         let id = doc.id;
@@ -43,7 +43,7 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
         let reader = HashMapVectorReader::new(&new_vectors);
         new_vector_index.insert(id, &vector, &reader)?;
     }
-    new_manifest.update_vector_count(new_index.len());
+    new_manifest.update_vector_count(new_index.len())?;
 
     temp_store.sync()?;
     drop(temp_store);
@@ -57,9 +57,9 @@ pub fn compact(collection: &mut Collection) -> Result<CompactStats> {
     collection.rebuild_vector_cache()?;
 
     let sidecars = SidecarManager::at(&collection.path);
+    sidecars.save_manifest(&collection.manifest)?;
     sidecars.save_offsets(&collection.index)?;
     save_vector_index(&collection.path, collection.vector_index())?;
-    sidecars.save_manifest(&collection.manifest)?;
     // Sidecars are durable before the WAL entries they made redundant are dropped.
     collection.checkpoint.wal.rotate()?;
 

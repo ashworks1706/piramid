@@ -34,8 +34,7 @@ yaml_serde.workspace = true
 [features]
 default = []
 
-# Export traces over OTLP. Any OTLP collector works — Axiom, Grafana Tempo, Honeycomb,
-# Jaeger — so this is one feature rather than one per vendor.
+# Export traces over OTLP to any OTLP collector.
 otel = [
     "dep:opentelemetry",
     "dep:opentelemetry_sdk",

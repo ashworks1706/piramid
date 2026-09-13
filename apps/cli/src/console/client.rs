@@ -32,8 +32,54 @@ pub struct Version {
 pub struct Metrics {
     pub collections: Vec<CollectionMetrics>,
     pub wal_stats: Vec<WalStats>,
-    /// Host readings. None from a server that predates the host block.
-    pub host: Option<HostMetrics>,
+    /// Host readings.
+    pub host: HostMetrics,
+    /// One entry per GPU the server measured. Empty when the server left the list out.
+    #[serde(default)]
+    pub gpus: Vec<GpuMetrics>,
+    /// How the device memory budget is divided and used. None when the server has no GPU open.
+    pub gpu_budget: Option<GpuBudget>,
+    /// Generation counters and scheduler state. None when the server has no model loaded.
+    pub inference: Option<InferenceMetrics>,
+}
+
+/// Generation counters of the loaded model and the state of its scheduler and key/value cache.
+/// An absent average is one the server has not yet measured.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct InferenceMetrics {
+    pub model: String,
+    pub device: String,
+    pub avg_time_to_first_token_ms: Option<f32>,
+    pub decode_tokens_per_second: Option<f32>,
+    pub preemptions: u64,
+    pub queue_depth: u64,
+    pub running: u64,
+    pub last_batch_size: u64,
+    pub kv_blocks_total: u64,
+    pub kv_blocks_used: u64,
+    pub kv_blocks_cached: u64,
+    pub kv_evictions: u64,
+    pub prefix_hit_rate: Option<f32>,
+}
+
+/// The device memory budget: the bytes it covers and the use of each pool drawing from it.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct GpuBudget {
+    /// Bytes the budget covers after the reserve.
+    pub usable_bytes: u64,
+    /// Whether every pool draws from one shared budget.
+    pub shared: bool,
+    /// Capacity and use of each pool, in the order the server sends them.
+    pub pools: Vec<GpuPool>,
+}
+
+/// One pool of the device memory budget. Under a shared budget the capacity is the whole budget.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct GpuPool {
+    /// The pool name: weights, kv_cache or index.
+    pub pool: String,
+    pub capacity_bytes: u64,
+    pub used_bytes: u64,
 }
 
 /// Processor and memory use of the host and of the server process. An absent field is one the
@@ -47,9 +93,21 @@ pub struct HostMetrics {
     pub process_resident_bytes: Option<u64>,
 }
 
+/// Memory, utilisation and temperature of one GPU. An absent field is one the server did not
+/// measure.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct GpuMetrics {
+    pub index: u32,
+    pub name: Option<String>,
+    pub memory_used_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
+    pub utilization_percent: Option<f32>,
+    pub temperature_celsius: Option<f32>,
+}
+
 /// The counters of one collection.
 ///
-/// The server sends every Option here as null when it has no value, so each key is required.
+/// The server sends every Option here as null when it has no value, and each key is required.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CollectionMetrics {
     pub name: String,
@@ -72,7 +130,7 @@ pub struct CollectionMetrics {
 
 /// The durability state of one collection.
 ///
-/// The server sends every Option here as null when it has no value, so each key is required.
+/// The server sends every Option here as null when it has no value, and each key is required.
 #[derive(Debug, Clone, Deserialize)]
 pub struct WalStats {
     pub collection: String,
@@ -138,7 +196,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// A client for base, with a request timeout so a hung server does not freeze the UI.
+    /// A client for base, with a request timeout.
     ///
     /// A key is sent as a bearer token on every request.
     pub fn new(base: &str, timeout: Duration, key: Option<ApiKey>) -> Result<Self, ClientError> {
@@ -180,9 +238,8 @@ impl Client {
 
     /// The configuration the server resolved, rendered as YAML.
     ///
-    /// The response nests the configuration under the app_config key, which is unwrapped here so
-    /// the view shows the same shape as the file on disk. A response without that key is a
-    /// decode error.
+    /// The configuration is unwrapped from the app_config key of the response. A response without
+    /// that key is a decode error.
     pub async fn config(&self) -> Result<String, ClientError> {
         let value: serde_json::Value = self.get(CONFIG_PATH).await?;
         render_config(&value)
@@ -292,14 +349,10 @@ pub fn root_cause(error: &reqwest::Error) -> String {
 }
 
 /// An error body trimmed to something that fits on the status line.
-fn summarize(body: &str) -> String {
+pub fn summarize(body: &str) -> String {
     let text = serde_json::from_str::<serde_json::Value>(body)
         .ok()
-        .and_then(|v| {
-            v.get("error")
-                .or_else(|| v.get("message"))
-                .and_then(|m| m.as_str().map(str::to_owned))
-        })
+        .and_then(|v| v.get("error").and_then(|m| m.as_str().map(str::to_owned)))
         .unwrap_or_else(|| body.trim().to_owned());
     text.chars().take(140).collect()
 }

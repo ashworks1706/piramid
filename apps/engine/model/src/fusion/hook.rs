@@ -67,13 +67,12 @@ pub struct ForwardContext<'a> {
 pub trait PendingRetrieval: Send {
     /// Wait for the result and fuse it into the hidden state carried by ctx.
     ///
-    /// On a device this orders the model stream against the hook stream rather than
-    /// synchronizing the host.
+    /// On a device this orders the model stream against the hook stream without synchronizing the
+    /// host.
     fn join(self: Box<Self>, ctx: &mut ForwardContext<'_>) -> Result<()>;
 }
 
-/// A retrieval strategy that participates in the forward pass. An implementation lives in its
-/// own crate; inference never depends on the retrieval stack.
+/// A retrieval strategy that participates in the forward pass.
 pub trait RetrievalHook: Send + Sync {
     /// Name for logs and configuration.
     fn name(&self) -> &'static str;
@@ -119,7 +118,7 @@ mod tests {
 
     use super::*;
 
-    /// Stands in for a real hook: records what it was asked for, then adds a constant on join.
+    /// A hook that records the point it launched at and adds one to the host hidden state on join.
     struct AddOne;
 
     struct AddOnePending {
@@ -169,7 +168,6 @@ mod tests {
             hidden_dim: hidden.len(),
             stream: None,
         };
-        // The driver may do model work between these two calls.
         let pending = hook.launch(&request).unwrap();
 
         let mut ctx = ForwardContext {

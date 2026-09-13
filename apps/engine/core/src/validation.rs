@@ -34,15 +34,29 @@ pub fn validate_vectors(vectors: &[Vec<f32>]) -> Result<()> {
     Ok(())
 }
 
-/// Scale a vector to unit length; a zero or non-finite magnitude returns a zero vector.
-pub fn normalize_vector(vector: &[f32]) -> Vec<f32> {
+/// Reject a vector with zero magnitude, which has no cosine similarity to anything.
+pub fn validate_cosine_magnitude(vector: &[f32]) -> Result<()> {
+    if vector.iter().map(|&x| x * x).sum::<f32>() == 0.0 {
+        return Err(ServerError::InvalidRequest(
+            "Vector has zero magnitude, cosine similarity is undefined".to_string(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Scale a vector to unit length. A zero or non-finite magnitude is an error.
+pub fn normalize_vector(vector: &[f32]) -> Result<Vec<f32>> {
     let magnitude: f32 = vector.iter().map(|&x| x * x).sum::<f32>().sqrt();
 
-    if magnitude == 0.0 || magnitude.is_nan() || magnitude.is_infinite() {
-        return vec![0.0; vector.len()];
+    if magnitude == 0.0 || !magnitude.is_finite() {
+        return Err(ServerError::InvalidRequest(
+            "vector has zero or non-finite magnitude and cannot be normalized".to_string(),
+        )
+        .into());
     }
 
-    vector.iter().map(|&x| x / magnitude).collect()
+    Ok(vector.iter().map(|&x| x / magnitude).collect())
 }
 
 /// Check a vector against the collection's dimensionality.

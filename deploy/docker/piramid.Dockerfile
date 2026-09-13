@@ -1,13 +1,12 @@
 # CPU image. Built and pushed by .github/workflows/cd.yml.
 #
-# cargo-chef caches dependency builds in their own layer.
-# Builder tracks stable, not the MSRV: cargo-chef needs newer, and CI checks MSRV separately.
+# cargo-chef caches dependency builds in their own layer. The builder uses stable Rust.
 
 FROM rust:1-slim AS chef
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
-# Record the dependency graph only, so source edits don't bust the cache.
+# Record the dependency graph only.
 FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
@@ -39,8 +38,7 @@ RUN mkdir -p /data && chown piramid:piramid /data
 USER piramid
 
 ENV PIRAMID__STARTUP__BIND=0.0.0.0:6333 \
-    PIRAMID__STARTUP__DATA_DIR=/data \
-    RUST_LOG=info
+    PIRAMID__STARTUP__DATA_DIR=/data
 
 VOLUME ["/data"]
 EXPOSE 6333

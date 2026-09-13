@@ -28,28 +28,32 @@ impl Filter {
         self
     }
 
-    /// Add a condition that field is numeric and greater than value.
+    /// Add a condition that field is numeric and greater than value. A non-numeric value matches
+    /// nothing.
     pub fn gt(mut self, field: &str, value: impl Into<MetadataValue>) -> Self {
         self.conditions
             .push(FilterCondition::Gt(field.to_string(), value.into()));
         self
     }
 
-    /// Add a condition that field is numeric and greater than or equal to value.
+    /// Add a condition that field is numeric and greater than or equal to value. A non-numeric value
+    /// matches nothing.
     pub fn gte(mut self, field: &str, value: impl Into<MetadataValue>) -> Self {
         self.conditions
             .push(FilterCondition::Gte(field.to_string(), value.into()));
         self
     }
 
-    /// Add a condition that field is numeric and less than value.
+    /// Add a condition that field is numeric and less than value. A non-numeric value matches
+    /// nothing.
     pub fn lt(mut self, field: &str, value: impl Into<MetadataValue>) -> Self {
         self.conditions
             .push(FilterCondition::Lt(field.to_string(), value.into()));
         self
     }
 
-    /// Add a condition that field is numeric and less than or equal to value.
+    /// Add a condition that field is numeric and less than or equal to value. A non-numeric value
+    /// matches nothing.
     pub fn lte(mut self, field: &str, value: impl Into<MetadataValue>) -> Self {
         self.conditions
             .push(FilterCondition::Lte(field.to_string(), value.into()));
@@ -75,8 +79,7 @@ impl Filter {
 
     /// Whether metadata that may be incomplete still leaves the document a candidate.
     ///
-    /// [Filter::matches] needs the whole document. This admits absent metadata, leaving the
-    /// decision to be settled against the resolved document.
+    /// Absent metadata returns true. Present metadata is checked with [Filter::matches].
     pub fn may_match(&self, metadata: Option<&Metadata>) -> bool {
         metadata.is_none_or(|metadata| self.matches(metadata))
     }

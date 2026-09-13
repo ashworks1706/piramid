@@ -1,4 +1,4 @@
-# Contributor tasks. Run `just` to list them.
+# Contributor tasks. Run just to list them.
 #
 # Not the shipped CLI. Nothing here is needed to run Piramid.
 
@@ -59,6 +59,18 @@ fmt:
 check-gpu:
     cargo check --workspace --features gpu-cuda --all-targets
 
+# Run the device tests on the local CUDA device
+test-gpu:
+    cargo test -p piramid-hardware --features gpu-cuda --test gpu -- --ignored
+
+# Generation on a real checkpoint: PIRAMID_TEST_MODEL names a Qwen2.5-0.5B-Instruct directory
+test-model:
+    cargo test --release -p piramid-model --features inference-candle --lib --test generation -- --ignored
+
+# Generation on the local CUDA device as well
+test-model-gpu:
+    cargo test --release -p piramid-model --features inference-candle,gpu-cuda --test generation -- --ignored
+
 # Compile-check the inference backend
 check-inference:
     cargo check --workspace --features inference-candle --all-targets
@@ -95,6 +107,17 @@ doc-open: doc
 bench *ARGS:
     cargo bench --workspace {{ARGS}}
 
+# Required: PIRAMID_BENCH_MODEL (checkpoint dir), PIRAMID_BENCH_DATASET (JSONL, see
+# scripts/fetch-bench-dataset.sh), PIRAMID_BENCH_EMBEDDING (JSON: provider, model, base_url).
+# Optional: PIRAMID_BENCH_DEVICE (cpu|cuda:N), PIRAMID_BENCH_QUESTIONS, PIRAMID_BENCH_K,
+# PIRAMID_BENCH_ARMS (closed-book, before-prefill-http, before-prefill-host,
+# before-prefill-device), PIRAMID_BENCH_SEARCH_URL (for the http arm), PIRAMID_BENCH_OUT
+# (default target/rag_e2e.json), PIRAMID_BENCH_MAX_NEW_TOKENS, PIRAMID_BENCH_KV_CACHE_BYTES,
+# PIRAMID_BENCH_WARMUP. The device arm needs --features gpu-cuda in ARGS.
+# End-to-end RAG benchmark: embed, search, fetch, prefill, decode per arm, results as JSON.
+bench-rag *ARGS:
+    cargo bench -p piramid-serving --features inference-candle --bench rag_e2e {{ARGS}}
+
 # Advisories, licences, bans, sources
 audit:
     cargo deny check advisories bans licenses sources
@@ -105,11 +128,11 @@ audit:
 web:
     cd apps/website && npm run dev
 
-# Production build. Catches type errors and prerender failures that `just web` does not.
+# Production build, including type checks and prerendering.
 web-build:
     cd apps/website && npm run build
 
-# Build and serve the production bundle. `just web` hides prerender and font problems.
+# Build and serve the production bundle.
 web-preview: web-build
     cd apps/website && npm run start
 

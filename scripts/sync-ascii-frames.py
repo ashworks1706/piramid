@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 """Copy the CLI's ASCII animation frames into the website.
 
-The binary and the landing page play the same animation. The Rust side is the source of truth;
-this regenerates the TypeScript copy. Run after editing
-apps/cli/assets/ascii_motion_frames.rs_inc.
-
-Blank rows and columns are trimmed by the same amount from every frame, never per frame. Trimming
-each one independently would give them different dimensions and the animation would jump.
+Regenerates apps/website/lib/cli-frames.ts from apps/cli/assets/ascii_motion_frames.rs_inc.
+Rows and columns blank in every frame are trimmed, so all frames keep the same dimensions.
 """
 import json
 import pathlib
