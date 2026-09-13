@@ -73,6 +73,11 @@ sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 rand = "0.8.6"
 
 # device and model runtimes, each confined to its backend module
+candle-core = "0.11"
+candle-nn = "0.11"
+minijinja = { version = "2", features = ["json", "loop_controls"] }
+minijinja-contrib = { version = "2", features = ["pycompat"] }
+tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
 cudarc = { version = "0.19.8", default-features = false, features = ["std", "driver", "nvrtc", "cuda-version-from-build-system", "dynamic-linking"] }
 
 # storage + concurrency
@@ -83,6 +88,7 @@ parking_lot = "0.12"
 libc = "0.2"
 
 # dev
+candle-transformers = "0.11"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [workspace.lints.rust]

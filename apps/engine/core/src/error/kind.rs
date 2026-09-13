@@ -50,6 +50,10 @@ pub enum PiramidError {
     #[error("Embedding error: {0}")]
     Embedding(#[from] super::embedding::EmbeddingError),
 
+    /// A model load or generation failure.
+    #[error("Inference error: {0}")]
+    Inference(#[from] super::inference::InferenceError),
+
     /// A distance kernel or strategy failure.
     #[error("Compute error: {0}")]
     Compute(#[from] piramid_hardware::compute::ComputeError),
@@ -89,6 +93,15 @@ impl PiramidError {
         match self {
             Self::Server(e) => e.kind(),
             Self::Embedding(_) => ErrorKind::Upstream,
+            Self::Inference(e) => match e {
+                super::inference::InferenceError::InvalidRequest(_) => ErrorKind::BadRequest,
+                super::inference::InferenceError::Timeout(_) => ErrorKind::Timeout,
+                super::inference::InferenceError::Unavailable(_)
+                | super::inference::InferenceError::QueueFull(_)
+                | super::inference::InferenceError::Stopped(_) => ErrorKind::Unavailable,
+                super::inference::InferenceError::Load(_)
+                | super::inference::InferenceError::Runtime(_) => ErrorKind::Internal,
+            },
             Self::Index(super::index::IndexError::MetricMismatch { .. })
             | Self::Storage(
                 super::storage::StorageError::InvalidDimension { .. }

@@ -11,5 +11,6 @@ pub mod forward;
 pub mod kv_cache;
 pub mod manager;
 pub mod sampling;
+pub mod tokenizer;
 
 pub use manager::InferenceManager;

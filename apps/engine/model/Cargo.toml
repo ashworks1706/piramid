@@ -20,10 +20,17 @@ lru.workspace = true
 parking_lot.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+rand.workspace = true
+minijinja.workspace = true
+minijinja-contrib.workspace = true
+candle-core = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
 
 [features]
 default = []
-inference-candle = []
+inference-candle = ["dep:candle-core", "dep:candle-nn", "dep:tokenizers"]
+gpu-cuda = ["piramid-hardware/gpu-cuda", "candle-core?/cuda"]
 
 [lints]
 workspace = true
