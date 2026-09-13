@@ -1,9 +1,5 @@
 //! Compressed vector representations.
 
-mod config;
-
-pub use config::{QuantizationConfig, QuantizationLevel, QuantizationStage};
-
 use serde::{Deserialize, Serialize};
 
 use crate::compute::error::{ComputeError, ComputeResult};
@@ -231,25 +227,8 @@ pub struct QuantizedVector {
 }
 
 impl QuantizedVector {
-    /// Quantizes a vector according to the config. None has no quantized encoding, and Int4 and
-    /// Float16 have no encoder; all three are errors, as is a Pq block count the vector cannot
-    /// hold.
-    pub fn from_f32(vector: &[f32], cfg: &QuantizationConfig) -> ComputeResult<Self> {
-        match cfg.level {
-            QuantizationLevel::Int8 => Ok(Self::from_scalar(vector)),
-            QuantizationLevel::Pq { subquantizers } => Self::from_pq(vector, subquantizers),
-            QuantizationLevel::None => Err(ComputeError::InvalidEncoding(
-                "quantization level None has no quantized encoding".to_string(),
-            )),
-            unsupported @ (QuantizationLevel::Int4 | QuantizationLevel::Float16) => {
-                Err(ComputeError::InvalidEncoding(format!(
-                    "quantization level {unsupported:?} has no encoder"
-                )))
-            }
-        }
-    }
-
-    fn from_scalar(vector: &[f32]) -> Self {
+    /// Quantize to one code per dimension over a single min/max range.
+    pub fn scalar(vector: &[f32]) -> Self {
         let scalar = ScalarQuantizedVector::from_f32(vector);
         QuantizedVector {
             values: scalar.values,
@@ -260,7 +239,9 @@ impl QuantizedVector {
         }
     }
 
-    fn from_pq(vector: &[f32], subquantizers: usize) -> ComputeResult<Self> {
+    /// Quantize block by block into subquantizers blocks. A block count of zero, or one larger
+    /// than the dimension of a non-empty vector, is an error.
+    pub fn pq(vector: &[f32], subquantizers: usize) -> ComputeResult<Self> {
         let pq = ProductQuantizedVector::from_f32(vector, subquantizers)?;
         Ok(QuantizedVector {
             values: Vec::new(),

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use yaml_serde::{Mapping, Value};
 
-use crate::config::{ApiKey, Config, API_KEY_ENV};
+use crate::config::{ApiKey, Config, EmbeddingProvider, API_KEY_ENV};
 use crate::error::ConfigError;
 
 /// Name of the environment variable holding the key for the openai embedding provider.
@@ -71,7 +71,7 @@ pub fn load_from(source: &ConfigSource) -> Result<Config, ConfigError> {
         .startup
         .embedding
         .as_mut()
-        .filter(|embedding| embedding.provider == "openai")
+        .filter(|embedding| embedding.provider == EmbeddingProvider::OpenAI)
     {
         embedding.api_key = read_env(OPENAI_API_KEY_ENV)?;
     }

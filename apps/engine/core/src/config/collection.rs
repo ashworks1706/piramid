@@ -2,9 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use piramid_hardware::compute::ExecutionMode;
+
 use super::{
-    CacheConfig, ExecutionMode, HardwareConfig, IndexConfig, LimitsConfig, MemoryConfig,
-    QuantizationConfig, SearchConfig, WalConfig,
+    CacheConfig, HardwareConfig, IndexConfig, LimitsConfig, MemoryConfig, QuantizationConfig,
+    SearchConfig, WalConfig,
 };
 
 /// The settings one collection runs with.

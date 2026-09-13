@@ -7,7 +7,7 @@
 
 use piramid_model::embeddings::retry::RetryConfig;
 use piramid_model::embeddings::{
-    Embedder, EmbeddingError, EmbeddingProvider, EmbeddingResponse, EmbeddingResult, RetryEmbedder,
+    Embedder, EmbeddingError, EmbeddingResponse, EmbeddingResult, RetryEmbedder,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -81,19 +81,4 @@ async fn retry_exhausts_and_errors() {
 
     let res = retry.embed("hello").await;
     assert!(res.is_err());
-}
-
-#[test]
-fn provider_from_str_roundtrip() {
-    assert_eq!(
-        "openai".parse::<EmbeddingProvider>(),
-        Ok(EmbeddingProvider::OpenAI)
-    );
-    assert_eq!(
-        "ollama".parse::<EmbeddingProvider>(),
-        Ok(EmbeddingProvider::Ollama)
-    );
-    assert!("unknown".parse::<EmbeddingProvider>().is_err());
-    // Provider names are case-sensitive.
-    assert!("OpenAI".parse::<EmbeddingProvider>().is_err());
 }

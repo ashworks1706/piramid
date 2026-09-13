@@ -121,7 +121,7 @@ mod plan_tests {
         assert_eq!(plan.arms, vec![Arm::ClosedBook, Arm::BeforePrefillHost]);
         assert_eq!(plan.out, PathBuf::from("target/out.json"));
         assert_eq!(plan.questions, None);
-        assert_eq!(plan.embedding.provider, "ollama");
+        assert_eq!(plan.embedding.provider.as_str(), "ollama");
         assert!(!plan.embedding.cache.enabled);
     }
 

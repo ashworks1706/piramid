@@ -1,15 +1,22 @@
-//! Unit tests for the parts of the console that are not drawing.
+//! Tests for the parts of the console that are not drawing.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "assertions in tests"
+)]
 
 use std::collections::HashMap;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::parse_command;
-use super::logs::{LogBuffer, LogWriter};
-use super::runner::{parse_ps, sanitize_line};
-use super::settings::{repo_root, Settings};
-use super::types::{Command, Group, LogLine, Profile, ServiceState, Status, Stream, View};
-use super::units::catalog;
+use piramid::console::app::parse_command;
+use piramid::console::logs::{LogBuffer, LogWriter};
+use piramid::console::runner::{parse_ps, sanitize_line};
+use piramid::console::settings::{repo_root, Settings};
+use piramid::console::types::{
+    Command, Group, LogLine, Profile, ServiceState, Status, Stream, View,
+};
+use piramid::console::units::catalog;
 
 #[test]
 fn commands_parse_into_actions() {
@@ -122,11 +129,12 @@ fn every_catalog_recipe_exists_in_the_justfile() {
 }
 
 /// A console over a scratch directory, with no repo behind it.
-fn console() -> super::app::App {
-    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+fn console() -> piramid::console::app::App {
+    let root = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-console-{}", std::process::id()));
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let config = piramid_core::config::Config::default();
-    super::app::App::new(
+    piramid::console::app::App::new(
         Settings::from_config(&config).unwrap(),
         Profile::Developer,
         root,
@@ -135,8 +143,8 @@ fn console() -> super::app::App {
     .expect("the log directory is creatable")
 }
 
-fn press(key: char) -> super::types::Event {
-    super::types::Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE))
+fn press(key: char) -> piramid::console::types::Event {
+    piramid::console::types::Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE))
 }
 
 #[test]
@@ -185,7 +193,7 @@ fn quitting_is_q_or_ctrl_c() {
     assert!(app.should_quit);
 
     let mut app = console();
-    app.handle(super::types::Event::Key(KeyEvent::new(
+    app.handle(piramid::console::types::Event::Key(KeyEvent::new(
         KeyCode::Char('c'),
         KeyModifiers::CONTROL,
     )));
@@ -265,7 +273,8 @@ fn the_log_buffer_drops_the_oldest_line_and_searches_wrapping() {
 #[test]
 fn full_output_is_kept_on_disk_after_the_pane_scrolls_past_it() {
     // Unit tests get their scratch directory from the system temp dir.
-    let dir = std::env::temp_dir().join(format!("piramid-console-logs-{}", std::process::id()));
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-console-logs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut writer = LogWriter::new(&dir).expect("the log directory is creatable");
 
@@ -367,7 +376,7 @@ fn keys_reach_the_view_that_is_showing() {
 
 #[test]
 fn an_unreachable_server_is_reported_rather_than_left_blank() {
-    use super::client::ClientError;
+    use piramid::console::client::ClientError;
 
     let mut app = console();
     app.collections.snapshot(Err(ClientError::Unreachable(
@@ -381,12 +390,13 @@ fn an_unreachable_server_is_reported_rather_than_left_blank() {
 }
 
 /// A console watching the server at base_url.
-fn console_watching(base_url: &str) -> super::app::App {
-    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+fn console_watching(base_url: &str) -> piramid::console::app::App {
+    let root = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-console-{}", std::process::id()));
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let mut config = piramid_core::config::Config::default();
     config.console.base_url = base_url.to_owned();
-    super::app::App::new(
+    piramid::console::app::App::new(
         Settings::from_config(&config).unwrap(),
         Profile::Production,
         root,
@@ -397,7 +407,7 @@ fn console_watching(base_url: &str) -> super::app::App {
 
 #[test]
 fn loopback_urls_are_this_machine_and_every_other_host_is_not() {
-    use super::device::is_loopback;
+    use piramid::console::device::is_loopback;
 
     for local in [
         "http://localhost:6333",
@@ -425,7 +435,8 @@ fn loopback_urls_are_this_machine_and_every_other_host_is_not() {
 fn scratch_path(name: &str) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = std::env::temp_dir().join(format!("piramid-console-{name}-{}", std::process::id()));
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-console-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("the scratch directory is creatable");
     let tool = dir.join("htop");
     std::fs::write(&tool, "#!/bin/sh\n").expect("the stand-in is writable");
@@ -441,7 +452,7 @@ fn scratch_path(name: &str) -> std::path::PathBuf {
 #[cfg(unix)]
 #[test]
 fn a_program_is_found_only_as_an_executable_on_path() {
-    use super::device::find_program;
+    use piramid::console::device::find_program;
 
     let dir = scratch_path("find");
     let path = std::env::join_paths([std::path::Path::new("/nonexistent"), dir.as_path()])
@@ -455,7 +466,7 @@ fn a_program_is_found_only_as_an_executable_on_path() {
 #[cfg(unix)]
 #[test]
 fn a_handoff_needs_a_local_server_and_an_installed_monitor() {
-    use super::device::{DeviceView, Monitor};
+    use piramid::console::device::{DeviceView, Monitor};
 
     let dir = scratch_path("handoff");
     let path = dir.clone().into_os_string();
@@ -496,8 +507,8 @@ fn a_remote_console_says_why_it_will_not_open_htop() {
 }
 
 /// Host readings with only the processor reading set.
-fn cpu_reading(cpu: Option<f32>) -> super::client::HostMetrics {
-    super::client::HostMetrics {
+fn cpu_reading(cpu: Option<f32>) -> piramid::console::client::HostMetrics {
+    piramid::console::client::HostMetrics {
         cpu_percent: cpu,
         memory_used_bytes: None,
         memory_total_bytes: None,
@@ -508,7 +519,7 @@ fn cpu_reading(cpu: Option<f32>) -> super::client::HostMetrics {
 
 #[test]
 fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
-    use super::device::DeviceView;
+    use piramid::console::device::DeviceView;
     use std::time::{Duration, Instant};
 
     let start = Instant::now();
@@ -548,8 +559,8 @@ fn an_absent_reading_is_a_gap_in_the_graph_and_never_zero() {
 }
 
 /// Readings of the GPU at index with only utilisation set.
-fn busy_reading(index: u32, busy: Option<f32>) -> super::client::GpuMetrics {
-    super::client::GpuMetrics {
+fn busy_reading(index: u32, busy: Option<f32>) -> piramid::console::client::GpuMetrics {
+    piramid::console::client::GpuMetrics {
         index,
         name: None,
         memory_used_bytes: None,
@@ -561,7 +572,7 @@ fn busy_reading(index: u32, busy: Option<f32>) -> super::client::GpuMetrics {
 
 #[test]
 fn an_absent_gpu_reading_is_a_gap_in_the_graph_and_never_zero() {
-    use super::device::DeviceView;
+    use piramid::console::device::DeviceView;
     use std::time::{Duration, Instant};
 
     let start = Instant::now();
@@ -606,7 +617,9 @@ fn a_server_without_gpu_readings_has_no_gpu_in_the_device_view() {
         READY_BODY,
     );
     assert!(snapshot.metrics.gpus.is_empty());
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
     assert!(app.device.gpu_indices().is_empty());
 
     app.handle(press('4'));
@@ -635,7 +648,9 @@ fn gpu_readings_are_decoded_and_drawn_in_the_device_view() {
     assert_eq!(gpu.memory_used_bytes, Some(1024));
     assert_eq!(gpu.memory_total_bytes, None);
     assert_eq!(gpu.utilization_percent, None);
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
 
     app.handle(press('4'));
     let drawn = screen(&mut app);
@@ -649,8 +664,8 @@ fn gpu_readings_are_decoded_and_drawn_in_the_device_view() {
 fn generation_reading(
     decode: Option<f32>,
     first_token: Option<f32>,
-) -> super::client::InferenceMetrics {
-    super::client::InferenceMetrics {
+) -> piramid::console::client::InferenceMetrics {
+    piramid::console::client::InferenceMetrics {
         model: "qwen3-0.6b".into(),
         device: "cuda:0".into(),
         avg_time_to_first_token_ms: first_token,
@@ -669,7 +684,7 @@ fn generation_reading(
 
 #[test]
 fn an_absent_generation_average_is_a_gap_in_the_graph_and_never_zero() {
-    use super::device::DeviceView;
+    use piramid::console::device::DeviceView;
     use std::time::{Duration, Instant};
 
     let start = Instant::now();
@@ -716,7 +731,7 @@ fn an_absent_generation_average_is_a_gap_in_the_graph_and_never_zero() {
 
 #[test]
 fn kv_bar_cells_split_the_width_and_always_fill_it() {
-    use super::ui::kv_cells;
+    use piramid::console::ui::kv_cells;
 
     assert_eq!(kv_cells(25, 25, 100, 40), [10, 10, 20]);
     assert_eq!(kv_cells(0, 0, 0, 40), [0, 0, 40]);
@@ -739,7 +754,7 @@ const INFERENCE_BODY: &str = r#", "host": {"cpu_percent": 42.0},
 
 #[test]
 fn inference_readings_decode_with_unmeasured_averages_absent() {
-    use super::client::{parse, Metrics};
+    use piramid::console::client::{parse, Metrics};
 
     let metrics: Metrics =
         parse("/api/metrics", &metrics_body(INFERENCE_BODY)).expect("the body decodes");
@@ -768,7 +783,9 @@ fn a_server_with_no_model_loaded_draws_no_generation_panels() {
         &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
         READY_BODY,
     );
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
     assert!(app.device.latest_inference().is_none());
 
     app.handle(press('4'));
@@ -782,7 +799,9 @@ fn a_server_with_no_model_loaded_draws_no_generation_panels() {
 fn inference_readings_are_drawn_in_the_device_view() {
     let mut app = console();
     let snapshot = snapshot_from(&metrics_body(INFERENCE_BODY), READY_BODY);
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
 
     app.handle(press('4'));
     for (width, height) in [(200, 40), (80, 44), (60, 30)] {
@@ -804,7 +823,7 @@ fn inference_readings_are_drawn_in_the_device_view() {
 
 #[test]
 fn stacked_bar_cells_split_the_width_and_always_fill_it() {
-    use super::ui::stacked_cells;
+    use piramid::console::ui::stacked_cells;
 
     assert_eq!(stacked_cells(&[25, 25, 10], 100, 40), vec![10, 10, 4, 16]);
     assert_eq!(stacked_cells(&[5, 5, 5], 0, 40), vec![0, 0, 0, 40]);
@@ -839,7 +858,7 @@ fn budget_body(shared: bool) -> String {
 
 #[test]
 fn a_device_memory_budget_decodes_and_is_absent_without_a_gpu() {
-    use super::client::{parse, Metrics};
+    use piramid::console::client::{parse, Metrics};
 
     let metrics: Metrics =
         parse("/api/metrics", &metrics_body(&budget_body(false))).expect("the body decodes");
@@ -873,7 +892,9 @@ fn a_server_without_a_budget_draws_no_device_memory_panel() {
         &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
         READY_BODY,
     );
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
     assert!(app.device.latest_budget().is_none());
 
     app.handle(press('4'));
@@ -886,7 +907,9 @@ fn a_server_without_a_budget_draws_no_device_memory_panel() {
 fn a_shared_budget_draws_total_use_and_each_pool() {
     let mut app = console();
     let snapshot = snapshot_from(&metrics_body(&budget_body(true)), READY_BODY);
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
 
     app.handle(press('4'));
     for (width, height) in [(200, 40), (80, 44), (60, 30)] {
@@ -911,7 +934,9 @@ fn a_shared_budget_draws_total_use_and_each_pool() {
 fn a_split_budget_draws_each_pool_against_its_capacity() {
     let mut app = console();
     let snapshot = snapshot_from(&metrics_body(&budget_body(false)), READY_BODY);
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
 
     app.handle(press('4'));
     for (width, height) in [(200, 40), (80, 44), (60, 30)] {
@@ -936,7 +961,9 @@ fn a_budget_and_generation_panels_share_the_device_view() {
         INFERENCE_BODY.replacen(r#", "host": {"cpu_percent": 42.0},"#, ",", 1)
     );
     let snapshot = snapshot_from(&metrics_body(&body), READY_BODY);
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
 
     app.handle(press('4'));
     for (width, height) in [(200, 40), (80, 50)] {
@@ -977,9 +1004,9 @@ const READY_BODY: &str = r#"{
 }"#;
 
 /// A snapshot decoded from bodies shaped like the server's.
-fn snapshot_from(metrics: &str, ready: &str) -> super::client::Snapshot {
-    use super::client::parse;
-    super::client::Snapshot {
+fn snapshot_from(metrics: &str, ready: &str) -> piramid::console::client::Snapshot {
+    use piramid::console::client::parse;
+    piramid::console::client::Snapshot {
         metrics: parse("/api/metrics", metrics).expect("the metrics body decodes"),
         ready: parse("/api/readyz", ready).expect("the readiness body decodes"),
     }
@@ -987,17 +1014,19 @@ fn snapshot_from(metrics: &str, ready: &str) -> super::client::Snapshot {
 
 #[test]
 fn a_failed_refresh_records_a_sample_with_nothing_measured() {
-    use super::client::ClientError;
+    use piramid::console::client::ClientError;
 
     let mut app = console();
     let snapshot = snapshot_from(
         &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
         READY_BODY,
     );
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
     assert_eq!(app.device.latest().and_then(|h| h.cpu_percent), Some(42.0));
 
-    app.handle(super::types::Event::Snapshot(Box::new(Err(
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Err(
         ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
     ))));
     assert_eq!(app.device.samples.len(), 2);
@@ -1006,7 +1035,7 @@ fn a_failed_refresh_records_a_sample_with_nothing_measured() {
 
 #[test]
 fn host_fields_the_server_leaves_out_read_as_absent() {
-    use super::client::{parse, Metrics};
+    use piramid::console::client::{parse, Metrics};
 
     let metrics: Metrics = parse(
         "/api/metrics",
@@ -1027,7 +1056,9 @@ fn host_fields_the_server_leaves_out_read_as_absent() {
 
 #[test]
 fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
-    use super::client::{parse, ClientError, CollectionHealth, Metrics, Readyz, Version};
+    use piramid::console::client::{
+        parse, ClientError, CollectionHealth, Metrics, Readyz, Version,
+    };
 
     // Readiness always sends loaded; without it the collection must not read as not loaded.
     let error = parse::<CollectionHealth>("/api/readyz", r#"{"name": "docs"}"#)
@@ -1051,16 +1082,16 @@ fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
 }
 
 /// The text of every cell of the console drawn at 200 by 20.
-fn screen(app: &mut super::app::App) -> String {
+fn screen(app: &mut piramid::console::app::App) -> String {
     screen_of(app, 200, 20)
 }
 
 /// The text of every cell of the console drawn at width by height.
-fn screen_of(app: &mut super::app::App, width: u16, height: u16) -> String {
+fn screen_of(app: &mut piramid::console::app::App, width: u16, height: u16) -> String {
     let backend = ratatui::backend::TestBackend::new(width, height);
     let mut terminal = ratatui::Terminal::new(backend).expect("a test terminal opens");
     terminal
-        .draw(|frame| super::ui::draw(frame, app))
+        .draw(|frame| piramid::console::ui::draw(frame, app))
         .expect("the frame draws");
     terminal
         .backend()
@@ -1073,13 +1104,15 @@ fn screen_of(app: &mut super::app::App, width: u16, height: u16) -> String {
 
 #[test]
 fn a_decode_error_in_a_refresh_is_on_the_screen() {
-    use super::client::{parse, Readyz};
+    use piramid::console::client::{parse, Readyz};
 
     let mut app = console();
     app.handle(press('2'));
     let error = parse::<Readyz>("/api/readyz", r#"{"collections": [{"name": "docs"}]}"#)
         .expect_err("loaded is required");
-    app.handle(super::types::Event::Snapshot(Box::new(Err(error))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Err(
+        error,
+    ))));
 
     let drawn = screen(&mut app);
     assert!(drawn.contains("/api/readyz"), "{drawn}");
@@ -1088,7 +1121,7 @@ fn a_decode_error_in_a_refresh_is_on_the_screen() {
 
 #[test]
 fn a_config_response_without_the_config_key_is_an_error() {
-    use super::client::{render_config, ClientError};
+    use piramid::console::client::{render_config, ClientError};
 
     let error =
         render_config(&serde_json::json!({ "startup": {} })).expect_err("the key is required");
@@ -1101,13 +1134,12 @@ fn a_config_response_without_the_config_key_is_an_error() {
 }
 
 /// A console on the collections view holding the snapshot of one collection.
-fn console_with_a_collection() -> super::app::App {
+fn console_with_a_collection() -> piramid::console::app::App {
     let mut app = console();
     app.handle(press('2'));
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
-        &metrics_body(r#", "host": {}"#),
-        READY_BODY,
-    )))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot_from(&metrics_body(r#", "host": {}"#), READY_BODY),
+    ))));
     app
 }
 
@@ -1132,26 +1164,28 @@ fn collections_messages_reach_the_status_bar() {
     app.handle(press('y'));
     assert_eq!(
         app.pending_action,
-        Some(super::collections::Pending::Rebuild("docs".into()))
+        Some(piramid::console::collections::Pending::Rebuild(
+            "docs".into()
+        ))
     );
     assert!(screen(&mut app).contains("rebuild of docs running"));
 
-    app.handle(super::types::Event::Acted(Err(
+    app.handle(piramid::console::types::Event::Acted(Err(
         "rebuild of docs failed: /api/collections/docs/index/rebuild returned 500: boom".into(),
     )));
     assert!(screen(&mut app).contains("rebuild of docs failed"));
-    app.handle(super::types::Event::Acted(Ok(
-        "compaction of docs done".into()
+    app.handle(piramid::console::types::Event::Acted(Ok(
+        "compaction of docs done".into(),
     )));
     assert!(screen(&mut app).contains("compaction of docs done"));
 }
 
 #[test]
 fn a_probe_failure_shows_its_reason() {
-    use super::types::{Health, Probe};
+    use piramid::console::types::{Health, Probe};
 
     let mut app = console();
-    app.handle(super::types::Event::Health(Box::new(Health {
+    app.handle(piramid::console::types::Event::Health(Box::new(Health {
         live: Probe::Down("Connection refused".into()),
         ready: Probe::Down("Connection refused".into()),
         web: Probe::Degraded("502 Bad Gateway: upstream".into()),
@@ -1160,7 +1194,7 @@ fn a_probe_failure_shows_its_reason() {
     assert!(drawn.contains("server: Connection refused"), "{drawn}");
     assert!(drawn.contains("web: 502 Bad Gateway"), "{drawn}");
 
-    app.handle(super::types::Event::ProbesStopped(
+    app.handle(piramid::console::types::Event::ProbesStopped(
         "health probes are off: http client: no TLS backend".into(),
     ));
     assert!(screen(&mut app).contains("health probes are off"));
@@ -1168,17 +1202,21 @@ fn a_probe_failure_shows_its_reason() {
 
 #[test]
 fn the_reload_key_asks_for_the_configuration_again() {
-    use super::types::ConfigState;
+    use piramid::console::types::ConfigState;
 
     let mut app = console();
-    app.handle(super::types::Event::Config(Ok("startup: {}".into())));
+    app.handle(piramid::console::types::Event::Config(Ok(
+        "startup: {}".into()
+    )));
     assert_eq!(app.config, Some(ConfigState::Loaded("startup: {}".into())));
     app.handle(press('3'));
     app.handle(press('R'));
     // The loop fetches whenever the configuration is None.
     assert!(app.config.is_none());
 
-    app.handle(super::types::Event::Config(Err("/api/config: boom".into())));
+    app.handle(piramid::console::types::Event::Config(Err(
+        "/api/config: boom".into(),
+    )));
     assert!(screen(&mut app).contains("/api/config: boom"));
 }
 
@@ -1189,7 +1227,8 @@ async fn server_requiring(
     key: &str,
     name: &str,
 ) -> (String, tokio::sync::oneshot::Sender<()>, ServeTask) {
-    let dir = std::env::temp_dir().join(format!("piramid-{name}-{}", std::process::id()));
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut config = piramid_core::config::Config::default();
     config.startup.data_dir = dir.to_string_lossy().into_owned();
@@ -1217,7 +1256,7 @@ async fn server_requiring(
 
 #[tokio::test]
 async fn a_rejected_key_is_reported_as_an_authentication_failure_not_as_unreachable() {
-    use super::client::{Client, ClientError};
+    use piramid::console::client::{Client, ClientError};
     use piramid_core::config::ApiKey;
 
     let (base, stop, task) = server_requiring("console-test-key", "console_auth").await;
@@ -1248,7 +1287,8 @@ async fn a_rejected_key_is_reported_as_an_authentication_failure_not_as_unreacha
 
     stop.send(()).unwrap();
     task.await.unwrap().unwrap();
-    let dir = std::env::temp_dir().join(format!("piramid-console_auth-{}", std::process::id()));
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-console_auth-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1269,7 +1309,9 @@ fn a_server_with_no_model_loaded_gives_the_device_graphs_the_whole_view() {
         &metrics_body(r#", "host": {"cpu_percent": 42.0}"#),
         READY_BODY,
     );
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot,
+    ))));
 
     app.handle(press('4'));
     let (width, height) = (200, 40);
@@ -1286,7 +1328,7 @@ fn a_server_with_no_model_loaded_gives_the_device_graphs_the_whole_view() {
 #[test]
 fn a_unit_killed_by_a_signal_it_was_not_asked_for_is_a_failure() {
     let mut app = console();
-    app.handle(super::types::Event::Exited {
+    app.handle(piramid::console::types::Event::Exited {
         unit: "serve".into(),
         code: None,
     });
@@ -1295,7 +1337,7 @@ fn a_unit_killed_by_a_signal_it_was_not_asked_for_is_a_failure() {
         Status::Failed("killed by a signal".into())
     );
 
-    app.handle(super::types::Event::Exited {
+    app.handle(piramid::console::types::Event::Exited {
         unit: "serve".into(),
         code: Some(3),
     });
@@ -1304,11 +1346,11 @@ fn a_unit_killed_by_a_signal_it_was_not_asked_for_is_a_failure() {
 
 #[test]
 fn stopping_a_unit_this_console_did_not_start_is_an_error() {
-    use super::runner::Runner;
-    use super::types::RunnerError;
+    use piramid::console::runner::Runner;
+    use piramid::console::types::RunnerError;
 
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut runner = Runner::new(std::env::temp_dir(), tx);
+    let mut runner = Runner::new(std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")), tx);
     let serve = catalog("http://localhost:6333")
         .into_iter()
         .find(|unit| unit.id == "serve")
@@ -1322,7 +1364,7 @@ fn stopping_a_unit_this_console_did_not_start_is_an_error() {
 
 #[test]
 fn an_error_body_is_read_from_the_error_key_only() {
-    use super::client::summarize;
+    use piramid::console::client::summarize;
 
     assert_eq!(
         summarize(r#"{"error": "no such collection"}"#),
@@ -1347,10 +1389,9 @@ fn a_collection_that_is_not_open_has_no_vector_count() {
             {"name": "cold", "loaded": false}
         ]
     }"#;
-    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
-        &metrics_body(r#", "host": {}"#),
-        ready,
-    )))));
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Ok(
+        snapshot_from(&metrics_body(r#", "host": {}"#), ready),
+    ))));
     let cold = app
         .collections
         .rows
@@ -1377,11 +1418,11 @@ fn a_collection_that_is_not_open_has_no_vector_count() {
 
 #[test]
 fn only_an_unreachable_server_gets_the_start_a_server_hint() {
-    use super::client::ClientError;
+    use piramid::console::client::ClientError;
 
     let mut app = console();
     app.handle(press('2'));
-    app.handle(super::types::Event::Snapshot(Box::new(Err(
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Err(
         ClientError::Unauthorized {
             path: "/api/metrics".into(),
             reason: "the server rejected the key".into(),
@@ -1394,7 +1435,7 @@ fn only_an_unreachable_server_gets_the_start_a_server_hint() {
 
     let mut app = console();
     app.handle(press('2'));
-    app.handle(super::types::Event::Snapshot(Box::new(Err(
+    app.handle(piramid::console::types::Event::Snapshot(Box::new(Err(
         ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
     ))));
     let drawn = screen_of(&mut app, 200, 30);
@@ -1403,12 +1444,13 @@ fn only_an_unreachable_server_gets_the_start_a_server_hint() {
 
 #[test]
 fn the_serve_unit_opens_the_address_the_configuration_binds() {
-    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+    let root = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("piramid-console-{}", std::process::id()));
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let mut config = piramid_core::config::Config::default();
     config.startup.bind = "0.0.0.0:7000".to_owned();
     config.console.base_url = "https://piramid.internal:6333".to_owned();
-    let app = super::app::App::new(
+    let app = piramid::console::app::App::new(
         Settings::from_config(&config).unwrap(),
         Profile::Developer,
         root,

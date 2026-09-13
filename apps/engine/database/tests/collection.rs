@@ -999,3 +999,56 @@ fn an_index_built_with_other_settings_is_rebuilt_at_open() {
     let collection = Collection::open_with_options(&path, hnsw(4).into()).unwrap();
     assert_eq!(collection.vector_index().stats().total_vectors, 8);
 }
+
+/// A manager over a fresh directory holding empty files with the given names.
+fn manager_over_files(dir_name: &str, file_names: &[&str]) -> piramid_database::CollectionManager {
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(dir_name);
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    for name in file_names {
+        fs::write(dir.join(name), b"").unwrap();
+    }
+    piramid_database::CollectionManager::new(
+        dir.to_string_lossy().into_owned(),
+        std::sync::Arc::new(parking_lot::RwLock::new(
+            piramid_core::config::Config::default(),
+        )),
+    )
+}
+
+#[test]
+fn sidecars_are_not_collections() {
+    let manager = manager_over_files(
+        "manager-sidecars",
+        &[
+            "docs.db",
+            "docs.db.wal.db",
+            "docs.db.offsets.db",
+            "docs.db.vecindex.db",
+            "docs.db.manifest.db",
+        ],
+    );
+    assert_eq!(manager.discover_on_disk().unwrap(), ["docs"]);
+}
+
+#[test]
+fn unrelated_files_are_ignored() {
+    let manager = manager_over_files(
+        "manager-unrelated",
+        &["notes.txt", ".db", "docs.db.wal.meta", "docs.db.compact"],
+    );
+    assert!(manager.discover_on_disk().unwrap().is_empty());
+}
+
+#[test]
+fn an_unreadable_data_directory_is_an_error_not_an_empty_listing() {
+    let missing = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("piramid-missing-data-dir/does-not-exist");
+    let manager = piramid_database::CollectionManager::new(
+        missing.to_string_lossy().into_owned(),
+        std::sync::Arc::new(parking_lot::RwLock::new(
+            piramid_core::config::Config::default(),
+        )),
+    );
+    assert!(manager.discover_on_disk().is_err());
+}

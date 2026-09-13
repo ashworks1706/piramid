@@ -168,7 +168,7 @@ impl RecordStore {
 }
 
 /// The length of a record as a pointer stores it, or an error when it does not fit in a u32.
-fn record_length(len: usize) -> Result<u32> {
+pub fn record_length(len: usize) -> Result<u32> {
     u32::try_from(len).map_err(|_| {
         StorageError::InvalidVectorData("encoded document exceeds 4 GiB".into()).into()
     })
@@ -187,21 +187,5 @@ fn initial_size(config: &CollectionConfig) -> u64 {
         config.memory.initial_mmap_size as u64
     } else {
         1024 * 1024
-    }
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_record_longer_than_a_pointer_can_address_is_refused() {
-        assert_eq!(record_length(u32::MAX as usize).unwrap(), u32::MAX);
-        let error = record_length(u32::MAX as usize + 1).unwrap_err();
-        assert!(error.to_string().contains("exceeds 4 GiB"), "{error}");
     }
 }

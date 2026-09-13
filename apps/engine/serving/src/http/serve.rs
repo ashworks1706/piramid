@@ -152,7 +152,7 @@ where
 }
 
 /// The first failure of serving, checkpointing and inference shutdown, in that order.
-fn shutdown_outcome(
+pub fn shutdown_outcome(
     served: std::io::Result<()>,
     checkpointed: Result<(), ServeError>,
     inference_shutdown: Result<(), tokio::task::JoinError>,
@@ -182,61 +182,4 @@ async fn checkpoint(state: SharedState) -> Result<(), ServeError> {
     Err(ServeError::Checkpoint(
         failures.into_iter().map(|(name, _)| name).collect(),
     ))
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-    use piramid_core::config::ApiKey;
-
-    #[test]
-    fn loopback_addresses_serve_without_a_key() {
-        let auth = AuthConfig::default();
-        assert!(check_exposure("127.0.0.1:6333".parse().unwrap(), &auth).is_ok());
-        assert!(check_exposure("[::1]:6333".parse().unwrap(), &auth).is_ok());
-    }
-
-    #[test]
-    fn an_exposed_address_needs_a_key_or_the_explicit_opt_out() {
-        let exposed: SocketAddr = "0.0.0.0:6333".parse().unwrap();
-        assert!(check_exposure(exposed, &AuthConfig::default()).is_err());
-
-        let with_key = AuthConfig {
-            api_key: Some(ApiKey::new("key".to_string()).unwrap()),
-            ..AuthConfig::default()
-        };
-        assert!(check_exposure(exposed, &with_key).is_ok());
-
-        let opted_out = AuthConfig {
-            allow_unauthenticated: true,
-            ..AuthConfig::default()
-        };
-        assert!(check_exposure(exposed, &opted_out).is_ok());
-    }
-
-    #[tokio::test]
-    async fn a_panicked_inference_shutdown_fails_serve_after_the_checkpoint() {
-        let panicked = || async {
-            let task: tokio::task::JoinHandle<()> =
-                tokio::task::spawn_blocking(|| panic!("shutdown"));
-            task.await
-        };
-        assert!(shutdown_outcome(Ok(()), Ok(()), Ok(())).is_ok());
-        assert!(matches!(
-            shutdown_outcome(Ok(()), Ok(()), panicked().await),
-            Err(ServeError::InferenceShutdownTask(_))
-        ));
-        assert!(matches!(
-            shutdown_outcome(
-                Ok(()),
-                Err(ServeError::Checkpoint(vec![])),
-                panicked().await
-            ),
-            Err(ServeError::Checkpoint(_))
-        ));
-    }
 }

@@ -5,8 +5,8 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use piramid::config::Config;
-use piramid::state::AppState;
+use crate::config::Config;
+use crate::state::AppState;
 
 /// Substrings matched case-insensitively against env var names to redact their values.
 const SECRET_MARKERS: &[&str] = &[
@@ -74,7 +74,7 @@ pub fn render(bundle: &Bundle<'_>) -> String {
 
     let _ = writeln!(out, "## Compute strategies");
     let _ = writeln!(out);
-    for strategy in piramid::compute::strategies::all() {
+    for strategy in crate::compute::strategies::all() {
         let _ = writeln!(
             out,
             "{:<10} {}",
@@ -147,7 +147,7 @@ pub fn render(bundle: &Bundle<'_>) -> String {
 
     let _ = writeln!(out, "## Collections");
     let _ = writeln!(out);
-    match piramid::services::admin::metrics(state) {
+    match crate::services::admin::metrics(state) {
         Ok(metrics) => {
             let _ = writeln!(out, "collections   {}", metrics.total_collections);
             let _ = writeln!(out, "vectors       {}", metrics.total_vectors);
@@ -219,61 +219,4 @@ pub fn render(bundle: &Bundle<'_>) -> String {
 /// Write the rendered bundle to path.
 pub fn write(bundle: &Bundle<'_>, path: &Path) -> std::io::Result<()> {
     fs::write(path, render(bundle))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use piramid::embeddings::EmbeddingsManager;
-
-    fn state(name: &str) -> (Config, Arc<AppState>) {
-        let dir =
-            std::env::temp_dir().join(format!("piramid-support-{name}-{}", std::process::id()));
-        let mut config = Config::default();
-        config.startup.data_dir = dir.to_string_lossy().into_owned();
-        let state = Arc::new(AppState::new(config.clone(), EmbeddingsManager::disabled()).unwrap());
-        (config, state)
-    }
-
-    #[test]
-    fn bundle_lists_collections_that_failed_to_open() {
-        let (config, state) = state("failed");
-        let failed = vec![("broken".to_string(), "manifest is corrupt".to_string())];
-        let text = render(&Bundle {
-            config: &config,
-            config_file: None,
-            state: &state,
-            failed_collections: &failed,
-        });
-        assert!(
-            text.contains("## Collections that failed to open"),
-            "{text}"
-        );
-        assert!(text.contains("broken: manifest is corrupt"), "{text}");
-    }
-
-    #[test]
-    fn bundle_names_the_config_file() {
-        let (config, state) = state("config-file");
-        let file = Path::new("/etc/piramid/config.yaml");
-        let named = render(&Bundle {
-            config: &config,
-            config_file: Some(file),
-            state: &state,
-            failed_collections: &[],
-        });
-        assert!(
-            named.contains("config_file         /etc/piramid/config.yaml"),
-            "{named}"
-        );
-        assert!(!named.contains("running on defaults"), "{named}");
-        let unnamed = render(&Bundle {
-            config: &config,
-            config_file: None,
-            state: &state,
-            failed_collections: &[],
-        });
-        assert!(unnamed.contains("config_file         none"), "{unnamed}");
-        assert!(!unnamed.contains("failed to open"), "{unnamed}");
-    }
 }

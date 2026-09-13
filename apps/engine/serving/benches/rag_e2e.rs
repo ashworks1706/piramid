@@ -54,13 +54,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use piramid_core::config::{
-    CollectionConfig, ExecutionMode, HardwareConfig, InferenceConfig, SamplingConfig,
-};
+use piramid_core::config::{CollectionConfig, HardwareConfig, InferenceConfig, SamplingConfig};
 use piramid_core::metadata::{Metadata, MetadataValue};
 use piramid_core::Document;
 use piramid_database::search::SearchParams;
 use piramid_database::{Collection, CollectionOpenOptions};
+use piramid_hardware::compute::ExecutionMode;
 use piramid_hardware::host::GpuSampler;
 use piramid_model::embeddings::{create_embedder, Embedder};
 use piramid_model::fusion::NoopRetrievalHook;
@@ -299,7 +298,7 @@ async fn run(plan: &Plan) -> Result<Results, Failure> {
             model: plan.model.clone(),
             dataset: plan.dataset.clone(),
             device: plan.device.clone(),
-            embedding_provider: plan.embedding.provider.clone(),
+            embedding_provider: plan.embedding.provider.to_string(),
             embedding_model: plan.embedding.model.clone(),
             embedding_base_url: plan.embedding.base_url.clone(),
             questions: questions.len(),

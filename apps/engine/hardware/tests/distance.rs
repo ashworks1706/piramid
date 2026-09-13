@@ -250,3 +250,45 @@ fn every_batch_kernel_rejects_a_misshapen_slab() {
 fn the_gpu_mode_is_refused_rather_than_served_by_the_cpu() {
     assert!(for_mode(ExecutionMode::Gpu).is_err());
 }
+
+/// A batch row scores identically to the pairwise call.
+#[test]
+fn a_batch_row_scores_exactly_as_the_pairwise_call_would() {
+    let kernels = for_mode(ExecutionMode::Scalar).unwrap();
+    let query = [1.0, 2.0, 3.0];
+    let rows: [[f32; 3]; 4] = [
+        [1.0, 2.0, 3.0],
+        [-1.0, -2.0, -3.0],
+        [3.0, 2.0, 1.0],
+        [0.0, 0.0, 1.0],
+    ];
+    let slab: Vec<f32> = rows.iter().flatten().copied().collect();
+
+    for metric in [Metric::Cosine, Metric::Euclidean, Metric::DotProduct] {
+        let mut batch = vec![0.0; rows.len()];
+        metric
+            .calculate_batch(&query, &slab, 3, &mut batch, kernels)
+            .unwrap();
+
+        for (row, scored) in rows.iter().zip(&batch) {
+            let pairwise = metric.calculate(&query, row, kernels).unwrap();
+            assert!(
+                (pairwise - scored).abs() < f32::EPSILON,
+                "{metric:?}: batch {scored} != pairwise {pairwise}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_slab_that_is_not_a_whole_number_of_rows_is_refused() {
+    let kernels = for_mode(ExecutionMode::Scalar).unwrap();
+    let mut out = [0.0; 2];
+
+    // Five floats at width three is not a whole number of rows.
+    let error = Metric::Cosine
+        .calculate_batch(&[1.0, 2.0, 3.0], &[1.0; 5], 3, &mut out, kernels)
+        .unwrap_err();
+
+    assert!(matches!(error, ComputeError::ShapeMismatch { .. }));
+}

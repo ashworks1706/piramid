@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::HardwareConfig;
+
 /// Model execution and everything under it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
@@ -368,6 +370,16 @@ pub enum DocumentKvStorage {
 }
 
 impl InferenceConfig {
+    /// The device the model loads onto: device when set, otherwise cuda at the configured ordinal
+    /// under the gpu profile and cpu under any other.
+    pub fn resolved_device(&self, hardware: &HardwareConfig) -> String {
+        match &self.device {
+            Some(device) => device.clone(),
+            None if hardware.gpu_enabled() => format!("cuda:{}", hardware.gpu.device_ordinal),
+            None => "cpu".to_string(),
+        }
+    }
+
     /// Reject anything the build cannot honour.
     ///
     /// A fusion setting other than chunk_tokens, or a document_kv setting, away from its default
@@ -380,14 +392,7 @@ impl InferenceConfig {
             return Err("runtime.inference.model_name: must not be empty".into());
         }
         if let Some(device) = &self.device {
-            let cuda = device
-                .strip_prefix("cuda:")
-                .is_some_and(|ordinal| ordinal.parse::<usize>().is_ok());
-            if device != "cpu" && !cuda {
-                return Err(format!(
-                    "runtime.inference.device: {device} is not cpu or cuda:N"
-                ));
-            }
+            DeviceSelection::parse(device).map_err(|e| format!("runtime.inference.device: {e}"))?;
         }
         if let Some(name) = &self.architecture {
             if name != "qwen2" && name != "qwen3" {
@@ -449,24 +454,81 @@ impl InferenceConfig {
         if self.batching.prefill_chunk_tokens == 0 {
             return Err("runtime.inference.batching.prefill_chunk_tokens: must be >= 1".into());
         }
-        let penalty = self.sampling.repetition_penalty;
-        if !(penalty > 0.0 && penalty.is_finite()) {
-            return Err(
-                "runtime.inference.sampling.repetition_penalty: must be finite and > 0".into(),
-            );
+        self.sampling
+            .validate()
+            .map_err(|e| format!("runtime.inference.sampling: {e}"))
+    }
+}
+
+/// The device a model loads onto, parsed from a device setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceSelection {
+    /// The host processor.
+    Cpu,
+    /// A CUDA device by ordinal.
+    Cuda(usize),
+}
+
+impl DeviceSelection {
+    /// Parse cpu or cuda:N.
+    ///
+    /// Returns an error for any other name.
+    pub fn parse(name: &str) -> Result<Self, String> {
+        if name == "cpu" {
+            return Ok(Self::Cpu);
         }
-        let temperature = self.sampling.temperature;
-        if !(temperature >= 0.0 && temperature.is_finite()) {
-            return Err("runtime.inference.sampling.temperature: must be finite and >= 0".into());
+        name.strip_prefix("cuda:")
+            .and_then(|ordinal| ordinal.parse().ok())
+            .map(Self::Cuda)
+            .ok_or_else(|| format!("{name} is not cpu or cuda:N"))
+    }
+}
+
+impl SamplingConfig {
+    /// Check sampling settings, naming the field that is out of range.
+    ///
+    /// Returns an error for a negative or non-finite temperature, a top_p outside (0, 1], a zero
+    /// top_k or max_new_tokens, a non-positive or non-finite repetition_penalty, an empty stop
+    /// string, or top_p, top_k or seed set with temperature 0.
+    pub fn validate(&self) -> Result<(), String> {
+        if !(self.temperature >= 0.0 && self.temperature.is_finite()) {
+            return Err(format!(
+                "temperature must be >= 0, got {}",
+                self.temperature
+            ));
         }
-        if self.sampling.top_p.is_some_and(|p| !(p > 0.0 && p <= 1.0)) {
-            return Err("runtime.inference.sampling.top_p: must be within (0.0, 1.0]".into());
+        if let Some(top_p) = self.top_p {
+            if !(top_p > 0.0 && top_p <= 1.0) {
+                return Err(format!("top_p must be within (0, 1], got {top_p}"));
+            }
         }
-        if self.sampling.top_k == Some(0) {
-            return Err("runtime.inference.sampling.top_k: must be >= 1".into());
+        if self.top_k == Some(0) {
+            return Err("top_k must be >= 1".into());
         }
-        if self.sampling.max_new_tokens == 0 {
-            return Err("runtime.inference.sampling.max_new_tokens: must be >= 1".into());
+        if !(self.repetition_penalty > 0.0 && self.repetition_penalty.is_finite()) {
+            return Err(format!(
+                "repetition_penalty must be > 0, got {}",
+                self.repetition_penalty
+            ));
+        }
+        if self.max_new_tokens == 0 {
+            return Err("max_new_tokens must be >= 1".into());
+        }
+        if self.stop.iter().any(String::is_empty) {
+            return Err("stop strings must not be empty".into());
+        }
+        if self.temperature == 0.0 {
+            for (field, set) in [
+                ("top_p", self.top_p.is_some()),
+                ("top_k", self.top_k.is_some()),
+                ("seed", self.seed.is_some()),
+            ] {
+                if set {
+                    return Err(format!(
+                        "{field} requires temperature > 0; temperature 0 is greedy"
+                    ));
+                }
+            }
         }
         Ok(())
     }

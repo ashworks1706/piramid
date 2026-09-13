@@ -6,10 +6,8 @@ use serde::Deserialize;
 use std::time::Duration;
 
 use crate::embeddings::embedder::{Embedder, EmbeddingResponse, EmbeddingResult};
-use piramid_core::config::EmbeddingConfig;
+use piramid_core::config::{EmbeddingConfig, DEFAULT_OPENAI_BASE_URL};
 use piramid_core::error::embedding::EmbeddingError;
-
-const DEFAULT_OPENAI_API_URL: &str = "https://api.openai.com/v1/embeddings";
 
 /// Embeds text through an endpoint speaking the OpenAI embeddings format.
 pub struct OpenAIEmbedder {
@@ -22,7 +20,7 @@ pub struct OpenAIEmbedder {
 
 impl OpenAIEmbedder {
     /// The JSON body for one text: the configured options, then the fields the provider sets.
-    fn request_body(&self, text: &str) -> serde_json::Map<String, serde_json::Value> {
+    pub fn request_body(&self, text: &str) -> serde_json::Map<String, serde_json::Value> {
         let mut request = self.options.clone();
         request.insert("model".into(), self.model.clone().into());
         request.insert("input".into(), text.into());
@@ -36,7 +34,7 @@ impl OpenAIEmbedder {
         let base_url = config
             .base_url
             .clone()
-            .unwrap_or_else(|| DEFAULT_OPENAI_API_URL.to_string());
+            .unwrap_or_else(|| DEFAULT_OPENAI_BASE_URL.to_string());
 
         let client = if let Some(timeout_secs) = config.timeout {
             reqwest::Client::builder()
@@ -52,7 +50,9 @@ impl OpenAIEmbedder {
             api_key: config.api_key.clone(),
             model: config.model.clone(),
             base_url,
-            options: super::options::request_options(&config.options)?,
+            options: config
+                .request_options()
+                .map_err(EmbeddingError::ConfigError)?,
         })
     }
 }
@@ -112,7 +112,7 @@ impl Embedder for OpenAIEmbedder {
 }
 
 /// The error for a response with a failure status and its body.
-fn status_error(status: reqwest::StatusCode, body: String) -> EmbeddingError {
+pub fn status_error(status: reqwest::StatusCode, body: String) -> EmbeddingError {
     match status.as_u16() {
         400 | 422 => EmbeddingError::InvalidInput(format!("{status}: {body}")),
         401 => EmbeddingError::AuthenticationFailed(body),
@@ -137,50 +137,4 @@ struct EmbeddingData {
 #[derive(Debug, Deserialize)]
 struct Usage {
     total_tokens: u32,
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn options_are_merged_into_the_request_body() {
-        let config: EmbeddingConfig = serde_json::from_value(serde_json::json!({
-            "provider": "openai",
-            "model": "text-embedding-3-small",
-            "options": { "dimensions": 256, "user": "docs" }
-        }))
-        .unwrap();
-        let body = OpenAIEmbedder::new(&config).unwrap().request_body("hello");
-        assert_eq!(body["dimensions"], 256);
-        assert_eq!(body["user"], "docs");
-        assert_eq!(body["model"], "text-embedding-3-small");
-        assert_eq!(body["input"], "hello");
-    }
-
-    #[test]
-    fn refused_input_and_unknown_models_are_not_retried() {
-        let error =
-            |code: u16| status_error(reqwest::StatusCode::from_u16(code).unwrap(), "no".into());
-        for code in [400, 422] {
-            assert!(
-                matches!(error(code), EmbeddingError::InvalidInput(_)),
-                "{code}"
-            );
-            assert!(!error(code).is_recoverable(), "{code}");
-        }
-        assert!(matches!(error(404), EmbeddingError::InvalidModel(_)));
-        assert!(!error(404).is_recoverable());
-        assert!(matches!(
-            error(401),
-            EmbeddingError::AuthenticationFailed(_)
-        ));
-        assert!(matches!(error(429), EmbeddingError::RateLimitExceeded));
-        assert!(matches!(error(503), EmbeddingError::ApiError(_)));
-        assert!(error(503).is_recoverable());
-    }
 }

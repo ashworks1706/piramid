@@ -102,33 +102,3 @@ impl VectorReader for CacheManager {
         self.store.gather_into(ids, out)
     }
 }
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_wrapper_forwards_every_reader_method_to_the_store() {
-        let mut cache = CacheManager::new(CacheConfig::default());
-        let id = Uuid::new_v4();
-        cache.put_vector(id, &[1.0, 2.0]).unwrap();
-        cache.put_vector(Uuid::new_v4(), &[3.0, 4.0]).unwrap();
-
-        assert_eq!(VectorReader::len(&cache), 2);
-        assert_eq!(VectorReader::dim(&cache), Some(2));
-        assert_eq!(cache.get(&id), Some([1.0, 2.0].as_slice()));
-
-        let slab = cache.as_slab().expect("the store underneath is contiguous");
-        assert_eq!(slab.dim, 2);
-        assert_eq!(slab.data.len(), 4);
-        assert_eq!(slab.rows(), 2);
-
-        let mut out = [0.0; 2];
-        cache.gather_into(&[id], &mut out).unwrap();
-        assert_eq!(out, [1.0, 2.0]);
-    }
-}

@@ -1,8 +1,9 @@
 //! The configuration file: blocks split by when a setting takes effect.
 
+use piramid_hardware::compute::ExecutionMode;
 use serde::{Deserialize, Serialize};
 
-use super::{CollectionConfig, ConsoleConfig, RuntimeConfig, StartupConfig};
+use super::{CollectionConfig, ConsoleConfig, DeviceSelection, RuntimeConfig, StartupConfig};
 
 /// The whole of config.yaml.
 ///
@@ -23,21 +24,20 @@ impl Config {
     /// Validate every block, and reject a GPU profile paired with any execution mode but gpu, gpu
     /// execution without the GPU profile, and an inference device the profile does not open.
     pub fn validate(&self) -> Result<(), String> {
-        if let Some(ordinal) = self
+        if let Some(Ok(DeviceSelection::Cuda(ordinal))) = self
             .runtime
             .inference
             .device
             .as_deref()
-            .and_then(|device| device.strip_prefix("cuda:"))
+            .map(DeviceSelection::parse)
         {
-            let ordinal = ordinal.parse::<usize>().ok();
             if !self.startup.hardware.gpu_enabled() {
                 return Err(
                     "runtime.inference.device: a cuda device needs startup.hardware.profile: gpu"
                         .into(),
                 );
             }
-            if ordinal != Some(self.startup.hardware.gpu.device_ordinal) {
+            if ordinal != self.startup.hardware.gpu.device_ordinal {
                 return Err(format!(
                     "runtime.inference.device: must be cuda:{}, the device startup.hardware.gpu.device_ordinal opens",
                     self.startup.hardware.gpu.device_ordinal
@@ -47,17 +47,13 @@ impl Config {
         self.startup.validate()?;
         self.runtime.validate()?;
         self.console.validate()?;
-        if self.startup.hardware.gpu_enabled()
-            && self.runtime.execution != super::ExecutionMode::Gpu
-        {
+        if self.startup.hardware.gpu_enabled() && self.runtime.execution != ExecutionMode::Gpu {
             return Err(format!(
                 "startup.hardware.profile: gpu requires runtime.execution: gpu, not '{}'",
                 self.runtime.execution.as_str()
             ));
         }
-        if self.runtime.execution == super::ExecutionMode::Gpu
-            && !self.startup.hardware.gpu_enabled()
-        {
+        if self.runtime.execution == ExecutionMode::Gpu && !self.startup.hardware.gpu_enabled() {
             return Err(
                 "runtime.execution: gpu needs startup.hardware.profile: gpu to open a device"
                     .into(),

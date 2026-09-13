@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use piramid_core::config::EmbeddingConfig;
+use piramid_core::config::{EmbeddingConfig, EmbeddingProvider};
 use serde::Serialize;
 
 /// One way of answering a question.
@@ -111,7 +111,7 @@ impl Plan {
             serde_json::from_str(&required("PIRAMID_BENCH_EMBEDDING")?)
                 .map_err(|e| format!("PIRAMID_BENCH_EMBEDDING: {e}"))?;
         embedding.cache.enabled = false;
-        if embedding.provider == "openai" {
+        if embedding.provider == EmbeddingProvider::OpenAI {
             embedding.api_key = lookup("OPENAI_API_KEY")?;
         }
         embedding

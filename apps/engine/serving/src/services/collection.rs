@@ -214,7 +214,7 @@ pub fn rebuild_index(state: &SharedState, collection: String) -> Result<RebuildI
 }
 
 /// Wait for a rebuild task and record it as failed when it panicked.
-async fn record_rebuild_panic(
+pub async fn record_rebuild_panic(
     rebuild: tokio::task::JoinHandle<()>,
     jobs: std::sync::Arc<dashmap::DashMap<String, RebuildJobStatus>>,
     collection: String,
@@ -338,36 +338,4 @@ pub fn rebuild_index_status(
         elapsed_ms: job.elapsed_ms.map(|ms| ms as f32),
         error: job.error.clone(),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn a_rebuild_that_panics_is_recorded_as_failed() {
-        let jobs = std::sync::Arc::new(dashmap::DashMap::new());
-        jobs.insert(
-            "docs".to_string(),
-            RebuildJobStatus {
-                status: RebuildState::Running,
-                started_at: 7,
-                finished_at: None,
-                error: None,
-                elapsed_ms: None,
-            },
-        );
-        let rebuild = tokio::task::spawn_blocking(|| panic!("index out of bounds"));
-        record_rebuild_panic(rebuild, jobs.clone(), "docs".to_string(), 7, Instant::now()).await;
-
-        let job = jobs.get("docs").unwrap();
-        assert_eq!(job.status, RebuildState::Failed);
-        assert_eq!(job.started_at, 7);
-        assert!(job.finished_at.is_some());
-        assert!(
-            job.error.as_deref().unwrap().contains("panic"),
-            "{:?}",
-            job.error
-        );
-    }
 }

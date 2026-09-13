@@ -71,23 +71,3 @@ fn rejection(error: GovernorError) -> Response {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_rate_above_one_request_per_nanosecond_is_refused() {
-        let at_limit = RateLimitConfig {
-            requests_per_second: 1_000_000_000,
-            burst: 1,
-        };
-        assert!(RateLimit::new(&at_limit).is_ok());
-        let above = RateLimitConfig {
-            requests_per_second: 1_000_000_001,
-            burst: 1,
-        };
-        let error = RateLimit::new(&above).err().expect("the rate is refused");
-        assert!(error.contains("requests_per_second"), "{error}");
-    }
-}

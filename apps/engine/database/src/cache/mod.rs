@@ -10,4 +10,4 @@ mod vector_store;
 
 pub use manager::CacheManager;
 pub use metadata_cache::MetadataCache;
-pub use vector_store::VectorStore;
+pub use vector_store::{ordinal_for_row, VectorStore};

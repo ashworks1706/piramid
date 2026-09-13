@@ -6,8 +6,8 @@
 //! Configuration parsing, defaults and validation.
 
 use piramid_core::config::{
-    AutoIndexConfig, Config, HardwareProfile, IndexConfig, IndexKind, LogLevel, QuantizationLevel,
-    QuantizationStage,
+    AutoIndexConfig, Config, ConsoleConfig, HardwareProfile, IndexConfig, IndexKind, LogLevel,
+    QuantizationLevel, QuantizationStage,
 };
 use piramid_hardware::compute::Metric;
 
@@ -448,4 +448,127 @@ fn the_piramid_embedding_provider_refuses_a_timeout() {
     assert!(parse(&format!("{base}    timeout: 30\n"))
         .unwrap_err()
         .contains("startup.embedding.timeout: the piramid provider takes none"));
+}
+
+#[test]
+fn an_unset_base_url_follows_the_address_the_server_binds() {
+    let config = ConsoleConfig::default();
+
+    assert_eq!(
+        config.resolved_base_url("0.0.0.0:6333"),
+        "http://localhost:6333"
+    );
+    assert_eq!(
+        config.resolved_base_url("127.0.0.1:7000"),
+        "http://127.0.0.1:7000"
+    );
+}
+
+#[test]
+fn a_set_base_url_wins_so_a_remote_server_can_be_watched() {
+    let config = ConsoleConfig {
+        base_url: "https://piramid.internal:6333".into(),
+        ..ConsoleConfig::default()
+    };
+
+    assert_eq!(
+        config.resolved_base_url("0.0.0.0:6333"),
+        "https://piramid.internal:6333"
+    );
+}
+
+#[test]
+fn zero_valued_knobs_are_refused() {
+    let no_lines = ConsoleConfig {
+        log_lines: 0,
+        ..ConsoleConfig::default()
+    };
+    assert!(no_lines.validate().is_err());
+
+    let no_interval = ConsoleConfig {
+        refresh_secs: 0,
+        ..ConsoleConfig::default()
+    };
+    assert!(no_interval.validate().is_err());
+}
+
+#[test]
+fn devices_parse_as_cpu_or_a_cuda_ordinal() {
+    use piramid_core::config::DeviceSelection;
+
+    assert_eq!(DeviceSelection::parse("cpu").unwrap(), DeviceSelection::Cpu);
+    assert_eq!(
+        DeviceSelection::parse("cuda:1").unwrap(),
+        DeviceSelection::Cuda(1)
+    );
+    assert!(DeviceSelection::parse("gpu").is_err());
+    assert!(DeviceSelection::parse("cuda:x").is_err());
+}
+
+#[test]
+fn embedding_providers_parse_by_their_lowercase_names() {
+    use piramid_core::config::EmbeddingProvider;
+
+    let parse = |yaml: &str| {
+        yaml_serde::from_str::<Config>(&format!(
+            "startup:\n  embedding:\n    provider: {yaml}\n    model: m\n"
+        ))
+    };
+    for provider in [
+        EmbeddingProvider::OpenAI,
+        EmbeddingProvider::Ollama,
+        EmbeddingProvider::Piramid,
+    ] {
+        let cfg = parse(provider.as_str()).unwrap();
+        assert_eq!(cfg.startup.embedding.unwrap().provider, provider);
+    }
+    assert!(parse("unknown").is_err());
+    assert!(parse("OpenAI").is_err());
+}
+
+#[test]
+fn piramid_embedding_options_default_and_refuse_unknown_keys() {
+    let parse = |options: &str| {
+        yaml_serde::from_str::<Config>(&format!(
+            "startup:\n  embedding:\n    provider: piramid\n    model: /models/e\n{options}"
+        ))
+        .unwrap()
+        .startup
+        .embedding
+        .unwrap()
+    };
+
+    let options = parse("").piramid_options().unwrap();
+    assert_eq!(options.device, "cpu");
+    assert_eq!(options.max_tokens, 512);
+    for (options, field) in [
+        ("    options:\n      pooling: mean\n", "pooling"),
+        ("    options:\n      max_tokens: 0\n", "max_tokens"),
+        ("    options:\n      device: gpu\n", "device"),
+    ] {
+        let error = parse(options).validate().unwrap_err();
+        assert!(error.contains(field), "{error}");
+    }
+}
+
+#[test]
+fn an_unset_inference_device_follows_the_hardware_profile() {
+    let mut cfg = Config::default();
+    assert_eq!(
+        cfg.runtime.inference.resolved_device(&cfg.startup.hardware),
+        "cpu"
+    );
+
+    cfg.startup.hardware.profile = HardwareProfile::Gpu;
+    cfg.startup.hardware.gpu.device_ordinal = 2;
+    assert_eq!(
+        cfg.runtime.inference.resolved_device(&cfg.startup.hardware),
+        "cuda:2"
+    );
+
+    cfg.runtime.inference.device = Some("cpu".into());
+    assert_eq!(
+        cfg.runtime.inference.resolved_device(&cfg.startup.hardware),
+        "cpu"
+    );
 }

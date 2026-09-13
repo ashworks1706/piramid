@@ -3,16 +3,22 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! The generation endpoints over TCP. Without a model they answer 503; with PIRAMID_TEST_MODEL
-//! naming a Qwen2.5-0.5B-Instruct directory, the ignored tests generate for real.
+//! The generation endpoints over TCP, and the prompt and sampling rules behind them. Without a
+//! model they answer 503; with PIRAMID_TEST_MODEL naming a Qwen2.5-0.5B-Instruct directory, the
+//! ignored tests generate for real.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use piramid_core::config::Config;
+use piramid_core::config::{Config, SamplingConfig};
 use piramid_model::embeddings::EmbeddingsManager;
+use piramid_model::inference::tokenizer::ChatMessage;
 use piramid_serving::http::serve::{serve, ServeError};
+use piramid_serving::services::api::{ChatCompletionRequest, PassageDto, RetrievalDto};
+use piramid_serving::services::generation::{
+    apply_overrides, chat_retrieval_query, insert_passages, refuse_unsupported, Overrides,
+};
 use piramid_serving::state::AppState;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -97,6 +103,133 @@ async fn without_a_model_the_generation_endpoints_say_so() {
         .unwrap();
     assert!(metrics.get("inference").is_none());
     server.stop().await;
+}
+
+fn passage(text: &str) -> PassageDto {
+    PassageDto {
+        id: "id".to_string(),
+        score: 1.0,
+        text: text.to_string(),
+    }
+}
+
+fn message(role: &str, content: &str) -> ChatMessage {
+    ChatMessage {
+        role: role.to_string(),
+        content: content.to_string(),
+    }
+}
+
+#[test]
+fn passages_join_an_existing_system_message_or_become_one() {
+    let passages = [passage("Paris is in France."), passage("Lyon too.")];
+    let mut messages = vec![message("user", "Where is Paris?")];
+    insert_passages(&mut messages, &passages);
+    assert_eq!(messages[0].role, "system");
+    assert_eq!(
+        messages[0].content,
+        "Answer using these passages where they are relevant.\n\n[1] Paris is in France.\n\n[2] Lyon too."
+    );
+
+    let mut messages = vec![message("system", "Be brief."), message("user", "q")];
+    insert_passages(&mut messages, &passages[..1]);
+    assert_eq!(messages.len(), 2);
+    assert!(messages[0].content.starts_with("Be brief.\n\nAnswer using"));
+}
+
+fn retrieval(query: Option<&str>) -> RetrievalDto {
+    RetrievalDto {
+        collection: "facts".to_string(),
+        k: 1,
+        query: query.map(str::to_string),
+    }
+}
+
+#[test]
+fn a_given_retrieval_query_needs_no_user_message() {
+    let messages = [message("system", "Be brief.")];
+    assert_eq!(
+        chat_retrieval_query(&retrieval(Some("vault code")), &messages).ok(),
+        Some("vault code")
+    );
+    assert!(chat_retrieval_query(&retrieval(None), &messages).is_err());
+}
+
+#[test]
+fn without_a_query_retrieval_searches_with_the_last_user_message() {
+    let messages = [
+        message("user", "first"),
+        message("assistant", "reply"),
+        message("user", "second"),
+    ];
+    assert_eq!(
+        chat_retrieval_query(&retrieval(None), &messages).ok(),
+        Some("second")
+    );
+}
+
+fn chat_request(body: serde_json::Value) -> ChatCompletionRequest {
+    let mut request = serde_json::json!({
+        "model": "m",
+        "messages": [{"role": "user", "content": "hi"}]
+    });
+    if let (Some(request), Some(body)) = (request.as_object_mut(), body.as_object()) {
+        request.extend(body.clone());
+    }
+    serde_json::from_value(request).unwrap()
+}
+
+#[test]
+fn a_chat_request_naming_a_user_is_refused() {
+    assert!(refuse_unsupported(&chat_request(serde_json::json!({}))).is_ok());
+    let error = refuse_unsupported(&chat_request(serde_json::json!({"user": "u1"})))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("user is not supported"), "{error}");
+}
+
+#[test]
+fn a_content_part_with_extra_keys_is_refused() {
+    let part = |extra: serde_json::Value| {
+        let mut part = serde_json::json!({"type": "text", "text": "hi"});
+        if let (Some(part), Some(extra)) = (part.as_object_mut(), extra.as_object()) {
+            part.extend(extra.clone());
+        }
+        serde_json::from_value::<ChatCompletionRequest>(serde_json::json!({
+            "model": "m",
+            "messages": [{"role": "user", "content": [part]}]
+        }))
+    };
+    assert!(part(serde_json::json!({})).is_ok());
+    assert!(part(serde_json::json!({"cache_control": {"type": "ephemeral"}})).is_err());
+    let error = part(serde_json::json!({"image_url": {"url": "u"}}))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("unknown field `image_url`"), "{error}");
+}
+
+#[test]
+fn overrides_replace_only_what_they_name() {
+    let mut sampling = SamplingConfig {
+        temperature: 0.7,
+        max_new_tokens: 100,
+        ..SamplingConfig::default()
+    };
+    apply_overrides(
+        &mut sampling,
+        Overrides {
+            max_new_tokens: Some(5),
+            temperature: None,
+            top_p: None,
+            top_k: Some(3),
+            repetition_penalty: None,
+            seed: None,
+            stop: None,
+        },
+    );
+    assert_eq!(sampling.max_new_tokens, 5);
+    assert_eq!(sampling.temperature, 0.7);
+    assert_eq!(sampling.top_k, Some(3));
 }
 
 #[cfg(feature = "inference-candle")]

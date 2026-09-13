@@ -17,7 +17,8 @@ use piramid_database::Collection;
 use piramid_serving::http::handlers::{collections, vectors};
 use piramid_serving::http::ApiResult;
 use piramid_serving::services::api::{InsertRequest, ListVectorsQuery, SearchRequest};
-use piramid_serving::state::AppState;
+use piramid_serving::services::collection::record_rebuild_panic;
+use piramid_serving::state::{AppState, RebuildJobStatus, RebuildState};
 use std::{fs, sync::Arc};
 
 fn cleanup_dir(path: &str) {
@@ -433,4 +434,38 @@ async fn embed_total_tokens_is_absent_when_any_text_went_uncounted() {
         .unwrap();
     assert_eq!(mixed.total_tokens, None);
     cleanup_dir(data_dir);
+}
+
+#[tokio::test]
+async fn a_rebuild_that_panics_is_recorded_as_failed() {
+    let jobs = Arc::new(dashmap::DashMap::new());
+    jobs.insert(
+        "docs".to_string(),
+        RebuildJobStatus {
+            status: RebuildState::Running,
+            started_at: 7,
+            finished_at: None,
+            error: None,
+            elapsed_ms: None,
+        },
+    );
+    let rebuild = tokio::task::spawn_blocking(|| panic!("index out of bounds"));
+    record_rebuild_panic(
+        rebuild,
+        jobs.clone(),
+        "docs".to_string(),
+        7,
+        std::time::Instant::now(),
+    )
+    .await;
+
+    let job = jobs.get("docs").unwrap();
+    assert_eq!(job.status, RebuildState::Failed);
+    assert_eq!(job.started_at, 7);
+    assert!(job.finished_at.is_some());
+    assert!(
+        job.error.as_deref().unwrap().contains("panic"),
+        "{:?}",
+        job.error
+    );
 }

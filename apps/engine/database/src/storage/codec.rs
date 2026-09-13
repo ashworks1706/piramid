@@ -27,23 +27,3 @@ pub fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     }
     Ok(value)
 }
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn trailing_bytes_after_a_value_are_corruption() {
-        let mut bytes = encode(&7u64).unwrap();
-        assert_eq!(decode::<u64>(&bytes).unwrap(), 7);
-
-        bytes.extend_from_slice(&[0, 0]);
-        let error = decode::<u64>(&bytes).unwrap_err();
-
-        assert!(error.to_string().contains("2 trailing bytes"), "{error}");
-    }
-}

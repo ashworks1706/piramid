@@ -52,7 +52,8 @@ One repo, one binary. Everything we author is under `apps/`. The library crates 
 folder and neither is hardware.
 
 ```
-apps/engine/core            errors (every one the app wraps), config (the whole surface), the
+apps/engine/core            errors (every one the app wraps), config (the whole surface, one flat
+                            file per domain; no config type lives in another crate), the
                             document and hit shapes, metadata and its filters, validation, stats,
                             observability (subscriber, OTLP, Prometheus)
 apps/engine/hardware        compute (distance kernels, strategy registry, quantization),
@@ -147,8 +148,11 @@ retrieval stack.
 
 ## Conventions
 
-- Unit tests next to the code in `#[cfg(test)] mod tests`, integration tests in the crate's
-  `tests/`. Test data goes to `CARGO_TARGET_TMPDIR`, never a path relative to the crate.
+- Every test lives in the crate's `tests/`; `src/` holds no `#[cfg(test)]` modules. An item a test
+  needs is `pub` with a `///` doc. Test-only helpers (fixtures, tiny models, fake tokenizers) sit
+  behind the crate's off-by-default `test-support` feature, which the crate turns on through a
+  dev-dependency on itself. Test data goes to `CARGO_TARGET_TMPDIR`, never a path relative to the
+  crate.
 - Every public item has a `///` comment saying what it is, not how it works. Every module has a
   `//!`.
 - Comments say what the code does, in plain ASCII, in one register. No backticks, quotation marks,

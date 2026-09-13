@@ -7,11 +7,10 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 mod animation;
-mod console;
-mod support;
 use piramid::config::StartupConfig;
 use piramid::observability;
 use piramid::state::AppState;
+use piramid::{console, support};
 use piramid::{embeddings, http};
 use tokio::runtime::Runtime;
 
@@ -94,9 +93,9 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let (profile, root) = match console::repo_root(&cwd) {
-                Some(root) => (console::Profile::Developer, root),
-                None => (console::Profile::Production, cwd),
+            let (profile, root) = match console::settings::repo_root(&cwd) {
+                Some(root) => (console::types::Profile::Developer, root),
+                None => (console::types::Profile::Production, cwd),
             };
             run_or_exit(
                 || console::run(&config, profile, root),

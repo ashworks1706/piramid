@@ -1,6 +1,7 @@
 //! Device selection and precision mapping for candle.
 
 use candle_core::{DType, Device};
+use piramid_core::config::DeviceSelection;
 use piramid_core::error::InferenceError;
 
 use crate::inference::architecture::Precision;
@@ -10,28 +11,6 @@ use crate::inference::architecture::Precision;
 pub struct CandleRuntime {
     device: Device,
     ordinal: Option<usize>,
-}
-
-/// The device a model loads onto, parsed from configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeviceSelection {
-    /// The host processor.
-    Cpu,
-    /// A CUDA device by ordinal.
-    Cuda(usize),
-}
-
-impl DeviceSelection {
-    /// Parse cpu or cuda:N.
-    pub fn parse(name: &str) -> Result<Self, InferenceError> {
-        if name == "cpu" {
-            return Ok(Self::Cpu);
-        }
-        name.strip_prefix("cuda:")
-            .and_then(|ordinal| ordinal.parse().ok())
-            .map(Self::Cuda)
-            .ok_or_else(|| InferenceError::Load(format!("device {name} is not cpu or cuda:N")))
-    }
 }
 
 impl CandleRuntime {
@@ -92,22 +71,4 @@ pub fn dtype(precision: Precision) -> DType {
 /// A candle failure as an inference runtime error.
 pub fn runtime(error: candle_core::Error) -> InferenceError {
     InferenceError::Runtime(error.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, reason = "assertions in tests")]
-
-    use super::*;
-
-    #[test]
-    fn devices_parse_as_cpu_or_a_cuda_ordinal() {
-        assert_eq!(DeviceSelection::parse("cpu").unwrap(), DeviceSelection::Cpu);
-        assert_eq!(
-            DeviceSelection::parse("cuda:1").unwrap(),
-            DeviceSelection::Cuda(1)
-        );
-        assert!(DeviceSelection::parse("gpu").is_err());
-        assert!(DeviceSelection::parse("cuda:x").is_err());
-    }
 }

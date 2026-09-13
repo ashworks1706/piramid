@@ -464,3 +464,18 @@ fn a_deleted_document_is_not_reported_as_a_duplicate() {
     drop(collection);
     cleanup(path);
 }
+
+#[test]
+fn a_nan_score_is_not_ranked() {
+    use piramid_core::Hit;
+    use piramid_database::search::engine::rank_top_k;
+
+    let hit = |score: f32, text: &str| Hit {
+        score,
+        document: Document::new(vec![1.0], text.to_string()),
+    };
+    let mut results = vec![hit(0.5, "half"), hit(f32::NAN, "nan"), hit(0.9, "high")];
+    rank_top_k(&mut results, 3);
+    let texts: Vec<&str> = results.iter().map(|h| h.document.text.as_str()).collect();
+    assert_eq!(texts, ["high", "half"]);
+}

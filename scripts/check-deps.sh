@@ -25,10 +25,12 @@ piramid -> piramid-serving
 EOF
 )
 
-# Every in-repo edge Cargo actually sees (path dependencies between workspace members).
+# Every in-repo edge Cargo actually sees (path dependencies between workspace members). A crate's
+# dev-dependency on itself turns on its test-support feature and is not an edge.
 ACTUAL=$(cargo metadata --format-version 1 --no-deps \
   | jq -r '.packages[] | .name as $from | .dependencies[]
            | select(.path != null)
+           | select(.name != $from)
            | "\($from) -> \(.name)"' \
   | sort -u)
 

@@ -35,7 +35,8 @@ apps/                     everything we author
     database/             storage, index, search, cache, document, collection
     model/                inference, fusion, embeddings
     serving/              http, services, state, machine, disk, cluster
-  cli/                    the piramid binary and the piramid umbrella crate
+  cli/                    the piramid binary, and a library with the console, the support
+                          bundle and the piramid umbrella re-exports
   website/                piramiddb.com, with blog content and images inside it
   sdk/                    npm and python clients
 
@@ -48,7 +49,8 @@ There are no grouping folders, and folder order is not dependency order.
 ## The crates
 
 `hardware` is the code that changes when the machine changes. `compute` defines the distance metrics
-and the strategies that run them, and holds the quantization encodings. `gpu` owns the device
+and the strategies that run them, and holds the quantization encodings. `hardware` cannot see core's configuration, so its quantization encoders
+and its GPU manager take plain values. `gpu` owns the device
 runtime: opening a device, memory, streams, compiled kernels, and the device memory budget. `host`
 reads processor, memory and GPU use for the console and metrics. It depends on nothing else in the
 workspace, so kernels can be benchmarked on their own and both retrieval and the model can use a
@@ -56,7 +58,11 @@ device without going through each other.
 
 `core` is the vocabulary everything shares: every error the app wraps, the whole configuration
 surface, the document and hit shapes, metadata and its filters, validation, and the counters the
-engine keeps about itself. It depends on `hardware` only for types that configuration and errors
+engine keeps about itself. All configuration lives in `core/src/config`, one flat file per domain:
+the structs, their defaults, their validation, and the typed values parsed out of a setting, such
+as the embedding provider, the `piramid` provider's options and a device name. No other crate
+defines a configuration type. A crate that needs a setting receives the core type, or plain values
+built from it. It depends on `hardware` only for types that configuration and errors
 carry, such as `ExecutionMode`, `Metric` and the compute and GPU error types. `core::stats` is what
 the engine measures, held as plain atomics so any crate can record into it. `core::observability` is
 where those numbers go: the tracing subscriber, OTLP export and the Prometheus text format.
@@ -97,8 +103,10 @@ their wire shapes in `services/api`, and conversion. `state` holds `AppState`, w
 collection manager, the embeddings manager, the optional GPU manager and the optional inference
 manager.
 
-`apps/cli` parses arguments, loads configuration, opens the GPU and loads the model at boot, starts
-the server, and runs the terminal console. It is the only crate that may end the process.
+`apps/cli` has two targets. The binary, `main.rs`, parses arguments, loads configuration, opens the
+GPU and loads the model at boot, starts the server, and ends the process on failure; it is the only
+code that may. The library holds the terminal console and the support bundle, so their tests can
+reach them, and the `piramid` umbrella re-exports of the engine crates.
 
 ## The dependency rule
 
@@ -144,13 +152,18 @@ with `tokenizers`, and render chat templates with `minijinja`. The CUDA runtime 
 kernels compiled at run time by NVRTC, and GPU readings come from `nvml-wrapper`. The website is
 separate and ships nothing into the binary.
 
-Three features exist, all additive and off by default:
+Three product features exist, all additive and off by default:
 
 - `gpu-cuda` enables `cudarc` in `hardware::gpu::backends`, `nvml-wrapper` in `hardware::host`, and
   candle's CUDA support.
 - `inference-candle` enables `candle` and `tokenizers` in `model::inference::backends`, and with it
   model loading and the `piramid` embedding provider.
 - `otel` enables OTLP trace export.
+
+Every test lives in its crate's `tests/` directory and uses the crate's public API; `src/` holds no
+test modules. A crate whose tests need fixtures, such as the tiny random Qwen models and fake
+tokenizers in `model`, puts them behind its own `test-support` feature. The crate turns that feature
+on through a dev-dependency on itself, so the fixtures are compiled only for its tests.
 
 So `cargo build` needs no CUDA toolkit and no model runtime. A build without a feature refuses the
 settings that need it: enabling inference or the `piramid` embedding provider without
@@ -588,17 +601,21 @@ Three rules keep the surface legible:
 - One place per setting. A setting that can be spelled two ways is a bug.
 - Nothing is silently ignored. Every block uses `deny_unknown_fields`. Settings whose code is not
   written yet exist so the shape is fixed before the work lands, and validation refuses any value
-  other than the default, naming the key. Today that includes `runtime.inference.fusion.enabled`,
-  `runtime.inference.document_kv.enabled`, `runtime.inference.kv_cache.preemption: swap` and every
-  key under `runtime.quantization`.
+  other than the default, naming the key. Today that is every key under `runtime.inference.fusion`
+  except `chunk_tokens`, every key under `runtime.inference.document_kv`,
+  `runtime.inference.kv_cache.preemption: swap`, `startup.hardware.vram.retrieval_bandwidth_share`
+  and every key under `runtime.quantization`. Unknown keys inside `runtime.index` are refused too,
+  which needs a hand-written deserializer because that block is tagged by `type`.
 - The example is tested. `config.example.yaml` is the whole surface at its defaults, and tests assert
   it deserializes to exactly `Config::default()` and that every key appears in it.
 
 Environment variables are overrides only, spelled mechanically from the path:
 `runtime.wal.max_log_size` is `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`, parsed as YAML so `8`, `true`
-and `null` mean what they mean in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are read from the
-environment, so a key never has to be written into a file that gets shared, and the support bundle
-redacts them.
+and `null` mean what they mean in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are read only from the
+environment, never from the file or an override, so a key is never written into a file that gets
+shared. `OPENAI_API_KEY` is read only when `startup.embedding.provider` is `openai`. A variable that
+is not valid UTF-8 is an error rather than being treated as unset. The support bundle lists which
+variables are set and redacts credential values.
 
 ## Errors
 

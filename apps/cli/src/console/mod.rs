@@ -4,22 +4,17 @@
 //! Inside a checkout it drives just recipes and docker compose. Outside one it offers only the
 //! views that need a server.
 
-mod app;
-mod client;
-mod collections;
-mod device;
+pub mod app;
+pub mod client;
+pub mod collections;
+pub mod device;
 mod health;
-mod logs;
+pub mod logs;
 mod run;
-mod runner;
-mod settings;
-mod types;
-mod ui;
-mod units;
+pub mod runner;
+pub mod settings;
+pub mod types;
+pub mod ui;
+pub mod units;
 
 pub use run::run;
-pub use settings::repo_root;
-pub use types::Profile;
-
-#[cfg(test)]
-mod tests;

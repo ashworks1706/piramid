@@ -23,14 +23,18 @@ pub struct Snapshot {
 /// The version response, read once at startup.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Version {
+    /// The server version.
     pub version: String,
+    /// The commit the server was built from, if known.
     pub git_commit: Option<String>,
 }
 
 /// The metrics response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Metrics {
+    /// The counters of each open collection.
     pub collections: Vec<CollectionMetrics>,
+    /// The durability state of each open collection.
     pub wal_stats: Vec<WalStats>,
     /// Host readings.
     pub host: HostMetrics,
@@ -47,18 +51,31 @@ pub struct Metrics {
 /// An absent average is one the server has not yet measured.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct InferenceMetrics {
+    /// Checkpoint name of the loaded model.
     pub model: String,
+    /// The device the model runs on.
     pub device: String,
+    /// Mean time from admission to the first token, in milliseconds.
     pub avg_time_to_first_token_ms: Option<f32>,
+    /// Decode tokens per second.
     pub decode_tokens_per_second: Option<f32>,
+    /// Sequences preempted for recompute.
     pub preemptions: u64,
+    /// Requests waiting for admission.
     pub queue_depth: u64,
+    /// Sequences being generated.
     pub running: u64,
+    /// Sequences in the most recent step.
     pub last_batch_size: u64,
+    /// Pages in the key/value pool.
     pub kv_blocks_total: u64,
+    /// Pages held by a sequence.
     pub kv_blocks_used: u64,
+    /// Free pages still carrying a reusable prefix.
     pub kv_blocks_cached: u64,
+    /// Prefix pages evicted to make room.
     pub kv_evictions: u64,
+    /// Share of looked-up prompt tokens served from shared pages.
     pub prefix_hit_rate: Option<f32>,
 }
 
@@ -78,7 +95,9 @@ pub struct GpuBudget {
 pub struct GpuPool {
     /// The pool name: weights, kv_cache or index.
     pub pool: String,
+    /// Bytes the pool may use.
     pub capacity_bytes: u64,
+    /// Bytes the pool uses.
     pub used_bytes: u64,
 }
 
@@ -86,10 +105,15 @@ pub struct GpuPool {
 /// server did not measure.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct HostMetrics {
+    /// Processor use of the whole host, 0 to 100.
     pub cpu_percent: Option<f32>,
+    /// Host memory in use, in bytes.
     pub memory_used_bytes: Option<u64>,
+    /// Host memory installed, in bytes.
     pub memory_total_bytes: Option<u64>,
+    /// Server process processor use, in percent.
     pub process_cpu_percent: Option<f32>,
+    /// Server process resident memory, in bytes.
     pub process_resident_bytes: Option<u64>,
 }
 
@@ -97,11 +121,17 @@ pub struct HostMetrics {
 /// measure.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct GpuMetrics {
+    /// The device ordinal.
     pub index: u32,
+    /// The device name.
     pub name: Option<String>,
+    /// Device memory in use, in bytes.
     pub memory_used_bytes: Option<u64>,
+    /// Device memory installed, in bytes.
     pub memory_total_bytes: Option<u64>,
+    /// Device utilisation, 0 to 100.
     pub utilization_percent: Option<f32>,
+    /// Device temperature, in degrees Celsius.
     pub temperature_celsius: Option<f32>,
 }
 
@@ -110,20 +140,30 @@ pub struct GpuMetrics {
 /// The server sends every Option here as null when it has no value, and each key is required.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CollectionMetrics {
+    /// The collection name.
     pub name: String,
+    /// Number of stored documents.
     pub vector_count: usize,
+    /// Index family: Flat, HNSW or IVF.
     pub index_type: String,
+    /// Approximate resident size of records, offsets, caches and index, in bytes.
     pub memory_usage_bytes: usize,
+    /// Moving average of insert duration, in milliseconds.
     #[serde(deserialize_with = "Option::deserialize")]
     pub insert_latency_ms: Option<f32>,
+    /// Moving average of search duration, in milliseconds.
     #[serde(deserialize_with = "Option::deserialize")]
     pub search_latency_ms: Option<f32>,
+    /// Moving average of read-lock wait, in milliseconds.
     #[serde(deserialize_with = "Option::deserialize")]
     pub lock_read_ms: Option<f32>,
+    /// Moving average of write-lock wait, in milliseconds.
     #[serde(deserialize_with = "Option::deserialize")]
     pub lock_write_ms: Option<f32>,
+    /// Configured HNSW candidate-list width.
     #[serde(deserialize_with = "Option::deserialize")]
     pub hnsw_ef_search: Option<usize>,
+    /// Configured IVF partitions to scan.
     #[serde(deserialize_with = "Option::deserialize")]
     pub ivf_nprobe: Option<usize>,
 }
@@ -133,9 +173,12 @@ pub struct CollectionMetrics {
 /// The server sends every Option here as null when it has no value, and each key is required.
 #[derive(Debug, Clone, Deserialize)]
 pub struct WalStats {
+    /// The collection name.
     pub collection: String,
+    /// Seconds since the last checkpoint.
     #[serde(deserialize_with = "Option::deserialize")]
     pub checkpoint_age_secs: Option<u64>,
+    /// Size of the write-ahead log file, in bytes.
     #[serde(deserialize_with = "Option::deserialize")]
     pub wal_size_bytes: Option<u64>,
 }
@@ -143,22 +186,29 @@ pub struct WalStats {
 /// The readiness response.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Readyz {
+    /// The health of each collection, loaded or on disk only.
     pub collections: Vec<CollectionHealth>,
 }
 
 /// One collection as readiness sees it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CollectionHealth {
+    /// The collection name.
     pub name: String,
+    /// True when the collection is open in memory.
     pub loaded: bool,
+    /// Whether the collection passed its integrity check, when reported.
     pub integrity_ok: Option<bool>,
+    /// The error reported for the collection, if any.
     pub error: Option<String>,
 }
 
 /// Where a rebuild is, from the rebuild status endpoint.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RebuildStatus {
+    /// One of running, completed or failed.
     pub status: String,
+    /// Why the rebuild failed, if it did.
     pub error: Option<String>,
 }
 

@@ -189,3 +189,23 @@ fn a_pointer_outside_the_mapping_is_corruption() {
 
     assert!(error.to_string().contains("outside the"), "{error}");
 }
+
+#[test]
+fn trailing_bytes_after_a_value_are_corruption() {
+    let mut bytes = codec::encode(&7u64).unwrap();
+    assert_eq!(codec::decode::<u64>(&bytes).unwrap(), 7);
+
+    bytes.extend_from_slice(&[0, 0]);
+    let error = codec::decode::<u64>(&bytes).unwrap_err();
+
+    assert!(error.to_string().contains("2 trailing bytes"), "{error}");
+}
+
+#[test]
+fn a_record_longer_than_a_pointer_can_address_is_refused() {
+    use piramid_database::storage::record_store::record_length;
+
+    assert_eq!(record_length(u32::MAX as usize).unwrap(), u32::MAX);
+    let error = record_length(u32::MAX as usize + 1).unwrap_err();
+    assert!(error.to_string().contains("exceeds 4 GiB"), "{error}");
+}

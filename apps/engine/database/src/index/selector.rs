@@ -2,9 +2,8 @@
 
 use crate::index::{FlatIndex, HnswIndex, IvfIndex};
 use crate::index::{IndexType, VectorIndex};
-use piramid_core::config::{
-    ExecutionMode, FlatConfig, HnswConfig, IndexConfig, IndexKind, IvfConfig,
-};
+use piramid_core::config::{FlatConfig, HnswConfig, IndexConfig, IndexKind, IvfConfig};
+use piramid_hardware::compute::ExecutionMode;
 
 /// Construct the index the config describes, sized for num_vectors.
 pub fn create_index(

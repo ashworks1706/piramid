@@ -18,6 +18,7 @@ mod limits;
 pub mod loader;
 mod logging;
 mod memory;
+mod quantization;
 mod runtime;
 mod search;
 mod startup;
@@ -30,30 +31,28 @@ pub use cache::{
 pub use collection::CollectionConfig;
 pub use console::ConsoleConfig;
 pub use disk::DiskConfig;
-pub use embedding::EmbeddingConfig;
+pub use embedding::{
+    EmbeddingConfig, EmbeddingProvider, PiramidEmbeddingOptions, DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OPENAI_BASE_URL,
+};
 pub use file::Config;
 pub use hardware::{GpuConfig, HardwareConfig, HardwareProfile, VramSplit};
 pub use http::{ApiKey, AuthConfig, HttpConfig, RateLimitConfig, API_KEY_ENV};
 pub use index::{AutoIndexConfig, IndexConfig, IndexKind};
 pub use index_params::{FlatConfig, HnswConfig, IvfConfig};
 pub use inference::{
-    BatchingConfig, DeadlineMiss, DocumentKvConfig, DocumentKvStorage, Dtype, FusionConfig,
-    InferenceConfig, KvCacheConfig, Preemption, RetrievalPointKind, SamplingConfig,
+    BatchingConfig, DeadlineMiss, DeviceSelection, DocumentKvConfig, DocumentKvStorage, Dtype,
+    FusionConfig, InferenceConfig, KvCacheConfig, Preemption, RetrievalPointKind, SamplingConfig,
 };
 pub use limits::LimitsConfig;
 pub use logging::{LogLevel, LoggingConfig};
 pub use memory::MemoryConfig;
+pub use quantization::{QuantizationConfig, QuantizationLevel, QuantizationStage};
 pub use runtime::RuntimeConfig;
 pub use search::SearchConfig;
 pub use startup::StartupConfig;
 pub use telemetry::{OtlpConfig, TelemetryConfig};
 pub use wal::WalConfig;
-
-// ExecutionMode and the quantization types are owned by compute and re-exported here.
-pub use piramid_hardware::compute::quantization::{
-    QuantizationConfig, QuantizationLevel, QuantizationStage,
-};
-pub use piramid_hardware::compute::ExecutionMode;
 
 /// Shared serde default target for fields that default to on.
 pub(crate) fn default_true() -> bool {

@@ -119,14 +119,15 @@ impl InferenceManager {
     /// Load the model configuration names and start its engine thread. On a GPU, gpu is the
     /// process's device manager, and the weights and key/value cache are reserved from its budget.
     ///
-    /// Errors when the build has no model runtime, the checkpoint cannot be read, or the device or
-    /// its budget cannot hold the model.
+    /// Errors when the configuration fails validation, the build has no model runtime, the
+    /// checkpoint cannot be read, or the device or its budget cannot hold the model.
     pub fn load(
         config: &InferenceConfig,
         hardware: &HardwareConfig,
         gpu: Option<&GpuManager>,
         hook: Arc<dyn RetrievalHook>,
     ) -> Result<Self, InferenceError> {
+        config.validate().map_err(InferenceError::Load)?;
         let dir = checkpoint_dir(config)?;
         let spec = ModelSpec::from_dir(&dir)?;
         if let Some(named) = &config.architecture {
@@ -139,13 +140,7 @@ impl InferenceManager {
         }
         let tokenizer_dir = tokenizer_dir(config, &dir)?;
         let template = ChatTemplate::from_dir(&tokenizer_dir)?;
-        crate::inference::sampling::validate(&config.sampling)
-            .map_err(|e| InferenceError::Load(format!("runtime.inference.sampling: {e}")))?;
-        let device = match &config.device {
-            Some(device) => device.clone(),
-            None if hardware.gpu_enabled() => format!("cuda:{}", hardware.gpu.device_ordinal),
-            None => "cpu".to_string(),
-        };
+        let device = config.resolved_device(hardware);
         let model_name = config.model_name.clone().unwrap_or_else(|| {
             dir.file_name().map_or_else(
                 || dir.display().to_string(),
@@ -338,8 +333,6 @@ fn start(
 ) -> Result<Started, InferenceError> {
     use piramid_hardware::gpu::MemoryPool;
 
-    use piramid_core::config::Preemption;
-
     use crate::inference::architecture::{DecoderModel, StepBatch, StepSequence};
     use crate::inference::backends::candle::loader::load_decoder;
     use crate::inference::backends::tokenizers::JsonTokenizer;
@@ -348,12 +341,6 @@ fn start(
     use crate::inference::forward::{Driver, SequenceProgress};
     use crate::inference::kv_cache::BlockAllocator;
 
-    if config.kv_cache.preemption == Preemption::Swap {
-        return Err(InferenceError::Load(
-            "runtime.inference.kv_cache.preemption: swap is not implemented; use recompute"
-                .to_string(),
-        ));
-    }
     let tokenizer: Arc<dyn Tokenizer> = Arc::new(JsonTokenizer::load(tokenizer_dir)?);
     let eos_token_ids = eos_set(&spec.eos_token_ids, eos_text, tokenizer.as_ref())?;
     let architecture = spec.architecture;
@@ -469,7 +456,7 @@ fn start(
 /// The token ids that end a generation: those the checkpoint names and the chat template's
 /// eos_token. Errors when the eos_token is not in the vocabulary or the set is empty.
 #[cfg(feature = "inference-candle")]
-fn eos_set(
+pub fn eos_set(
     checkpoint: &[u32],
     eos_text: Option<&str>,
     tokenizer: &dyn Tokenizer,
@@ -523,56 +510,5 @@ fn kv_budget(
                     .to_string(),
             )
         }),
-    }
-}
-
-#[cfg(all(test, feature = "inference-candle"))]
-mod tests {
-    #![allow(clippy::unwrap_used, reason = "assertions in tests")]
-
-    use super::*;
-
-    struct Vocabulary;
-
-    impl Tokenizer for Vocabulary {
-        fn encode(&self, _text: &str) -> Result<Vec<u32>, InferenceError> {
-            Ok(Vec::new())
-        }
-
-        fn encode_with_template(&self, _text: &str) -> Result<Vec<u32>, InferenceError> {
-            Ok(Vec::new())
-        }
-
-        fn decode(&self, _tokens: &[u32], _skip_special: bool) -> Result<String, InferenceError> {
-            Ok(String::new())
-        }
-
-        fn token_id(&self, token: &str) -> Option<u32> {
-            (token == "<|im_end|>").then_some(9)
-        }
-    }
-
-    #[test]
-    fn the_eos_set_joins_the_checkpoint_ids_and_the_template_token() {
-        let ids = eos_set(&[2], Some("<|im_end|>"), &Vocabulary).unwrap();
-        assert_eq!(ids, [2, 9].into_iter().collect());
-        let ids = eos_set(&[2], None, &Vocabulary).unwrap();
-        assert_eq!(ids, [2].into_iter().collect());
-    }
-
-    #[test]
-    fn an_eos_token_outside_the_vocabulary_is_a_load_error() {
-        let error = eos_set(&[2], Some("</s>"), &Vocabulary).unwrap_err();
-        assert!(matches!(error, InferenceError::Load(_)), "{error}");
-        assert!(error.to_string().contains("</s>"), "{error}");
-    }
-
-    #[test]
-    fn a_checkpoint_with_no_end_of_sequence_token_is_a_load_error() {
-        let error = eos_set(&[], None, &Vocabulary).unwrap_err();
-        assert!(
-            error.to_string().contains("no end-of-sequence token"),
-            "{error}"
-        );
     }
 }

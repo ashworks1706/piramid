@@ -22,9 +22,9 @@ pub enum QuantizationLevel {
     Float16,
 }
 
+/// Which point in the pipeline quantization applies at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-/// Which point in the pipeline quantization applies at.
 pub enum QuantizationStage {
     /// No quantization anywhere.
     #[default]
@@ -53,7 +53,7 @@ pub struct QuantizationConfig {
     pub stage: QuantizationStage,
 
     /// Keep full-precision vectors alongside the quantized copies.
-    #[serde(default = "default_preserve_raw_vectors")]
+    #[serde(default = "super::default_true")]
     pub preserve_raw_vectors: bool,
 }
 
@@ -66,30 +66,4 @@ impl Default for QuantizationConfig {
             preserve_raw_vectors: true,
         }
     }
-}
-
-impl QuantizationConfig {
-    /// Quantize for index and search while keeping raw vectors on disk.
-    pub fn int8() -> Self {
-        QuantizationConfig {
-            level: QuantizationLevel::Int8,
-            disk_only: false,
-            stage: QuantizationStage::Index,
-            preserve_raw_vectors: true,
-        }
-    }
-
-    /// Product quantization for the index, raw vectors kept on disk.
-    pub fn pq(subquantizers: usize) -> Self {
-        QuantizationConfig {
-            level: QuantizationLevel::Pq { subquantizers },
-            disk_only: false,
-            stage: QuantizationStage::Index,
-            preserve_raw_vectors: true,
-        }
-    }
-}
-
-fn default_preserve_raw_vectors() -> bool {
-    true
 }

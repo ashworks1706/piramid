@@ -6,10 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use crate::embeddings::embedder::{Embedder, EmbeddingResponse, EmbeddingResult};
-use piramid_core::config::EmbeddingConfig;
+use piramid_core::config::{EmbeddingConfig, DEFAULT_OLLAMA_BASE_URL};
 use piramid_core::error::embedding::EmbeddingError;
-
-const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 
 /// Embeds text through an Ollama server's embeddings endpoint.
 pub struct OllamaEmbedder {
@@ -25,7 +23,7 @@ impl OllamaEmbedder {
         let base_url = config
             .base_url
             .clone()
-            .unwrap_or_else(|| DEFAULT_OLLAMA_URL.to_string());
+            .unwrap_or_else(|| DEFAULT_OLLAMA_BASE_URL.to_string());
 
         let client = if let Some(timeout_secs) = config.timeout {
             reqwest::Client::builder()
@@ -40,7 +38,9 @@ impl OllamaEmbedder {
             client,
             model: config.model.clone(),
             base_url,
-            options: super::options::request_options(&config.options)?,
+            options: config
+                .request_options()
+                .map_err(EmbeddingError::ConfigError)?,
         })
     }
 }

@@ -6,9 +6,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use piramid_hardware::compute::ExecutionMode;
+
 use super::{
-    CacheConfig, ExecutionMode, IndexConfig, InferenceConfig, LimitsConfig, MemoryConfig,
-    QuantizationConfig, SearchConfig, WalConfig,
+    CacheConfig, IndexConfig, InferenceConfig, LimitsConfig, MemoryConfig, QuantizationConfig,
+    SearchConfig, WalConfig,
 };
 
 /// Everything that can change without a restart.

@@ -1,5 +1,9 @@
 //! Umbrella crate: re-exports every workspace crate under one namespace. Crate boundaries and the
-//! dependency rule are in docs/ARCHITECTURE.md.
+//! dependency rule are in docs/ARCHITECTURE.md. Also holds the console and the support
+//! bundle that the binary drives.
+
+pub mod console;
+pub mod support;
 
 pub use piramid_core::{config, document, error, metadata, observability, stats, validation};
 

@@ -53,7 +53,7 @@ pub fn install(
 }
 
 /// Turn a [LoggingConfig] into a filter.
-fn filter_for(logging: LoggingConfig) -> crate::error::Result<EnvFilter> {
+pub fn filter_for(logging: LoggingConfig) -> crate::error::Result<EnvFilter> {
     let directives = directives(level_directive(logging.level), logging);
     EnvFilter::try_new(&directives).map_err(|error| {
         crate::error::PiramidError::other(format!(
@@ -63,7 +63,7 @@ fn filter_for(logging: LoggingConfig) -> crate::error::Result<EnvFilter> {
 }
 
 /// Build the filter string: a base level, then one off directive per subsystem switched off.
-fn directives(base: &str, logging: LoggingConfig) -> String {
+pub fn directives(base: &str, logging: LoggingConfig) -> String {
     let mut out = vec![base.to_string()];
     for (enabled, target) in [
         (logging.config, "piramid::config"),
@@ -81,7 +81,7 @@ fn directives(base: &str, logging: LoggingConfig) -> String {
 }
 
 /// Level name for the tracing filter syntax.
-fn level_directive(level: LogLevel) -> &'static str {
+pub fn level_directive(level: LogLevel) -> &'static str {
     match level {
         LogLevel::Error => "error",
         LogLevel::Warn => "warn",
@@ -191,56 +191,4 @@ where
     let tracer = provider.tracer("piramid");
     opentelemetry::global::set_tracer_provider(provider.clone());
     Ok((tracing_opentelemetry::layer().with_tracer(tracer), provider))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn defaults_produce_a_bare_level() {
-        assert_eq!(directives("info", LoggingConfig::default()), "info");
-    }
-
-    #[test]
-    fn a_disabled_subsystem_becomes_an_off_directive() {
-        let logging = LoggingConfig {
-            search: false,
-            http: false,
-            ..LoggingConfig::default()
-        };
-        assert_eq!(
-            directives("info", logging),
-            "info,piramid::search=off,piramid::http=off"
-        );
-    }
-
-    #[test]
-    fn the_filter_comes_from_the_configuration_only() {
-        std::env::set_var("RUST_LOG", "trace");
-        let logging = LoggingConfig {
-            level: LogLevel::Warn,
-            indexing: false,
-            ..LoggingConfig::default()
-        };
-        let filter = filter_for(logging);
-        std::env::remove_var("RUST_LOG");
-        let filter = filter.unwrap().to_string();
-        assert!(filter.contains("warn"), "{filter}");
-        assert!(!filter.contains("trace"), "{filter}");
-        assert!(filter.contains("piramid::indexing=off"), "{filter}");
-    }
-
-    #[test]
-    fn every_level_maps_to_a_tracing_name() {
-        for (level, name) in [
-            (LogLevel::Error, "error"),
-            (LogLevel::Warn, "warn"),
-            (LogLevel::Info, "info"),
-            (LogLevel::Debug, "debug"),
-            (LogLevel::Trace, "trace"),
-        ] {
-            assert_eq!(level_directive(level), name);
-        }
-    }
 }

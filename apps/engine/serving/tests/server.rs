@@ -3,16 +3,19 @@
     clippy::expect_used,
     reason = "assertions in tests"
 )]
-//! Starts the real server on a loopback port and talks to it over TCP.
+//! Starts the real server on a loopback port and talks to it over TCP, and checks the
+//! authentication, rate limit and shutdown rules it serves under.
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use piramid_core::config::{ApiKey, Config, RateLimitConfig};
+use piramid_core::config::{ApiKey, AuthConfig, Config, RateLimitConfig};
 use piramid_model::embeddings::EmbeddingsManager;
-use piramid_serving::http::serve::{serve, ServeError};
+use piramid_serving::http::auth::{bearer_token, key_matches};
+use piramid_serving::http::rate_limit::RateLimit;
+use piramid_serving::http::serve::{check_exposure, serve, shutdown_outcome, ServeError};
 use piramid_serving::state::AppState;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -389,4 +392,82 @@ async fn a_reload_reaches_open_collections_and_refuses_what_needs_a_reopen() {
     assert_eq!(state.current_config().runtime.search.filter_overfetch, 3);
 
     server.stop().await.unwrap();
+}
+
+#[test]
+fn the_bearer_scheme_is_case_insensitive_and_others_are_refused() {
+    assert_eq!(bearer_token("Bearer abc"), Some("abc"));
+    assert_eq!(bearer_token("bearer abc"), Some("abc"));
+    assert_eq!(bearer_token("Basic abc"), None);
+    assert_eq!(bearer_token("abc"), None);
+}
+
+#[test]
+fn only_the_exact_key_matches() {
+    let key = ApiKey::new("secret-key".to_string()).unwrap();
+    assert!(key_matches(&key, "secret-key"));
+    assert!(!key_matches(&key, "secret-kez"));
+    assert!(!key_matches(&key, "secret-key-longer"));
+    assert!(!key_matches(&key, ""));
+}
+
+#[test]
+fn a_rate_above_one_request_per_nanosecond_is_refused() {
+    let at_limit = RateLimitConfig {
+        requests_per_second: 1_000_000_000,
+        burst: 1,
+    };
+    assert!(RateLimit::new(&at_limit).is_ok());
+    let above = RateLimitConfig {
+        requests_per_second: 1_000_000_001,
+        burst: 1,
+    };
+    let error = RateLimit::new(&above).err().expect("the rate is refused");
+    assert!(error.contains("requests_per_second"), "{error}");
+}
+
+#[test]
+fn loopback_addresses_serve_without_a_key() {
+    let auth = AuthConfig::default();
+    assert!(check_exposure("127.0.0.1:6333".parse().unwrap(), &auth).is_ok());
+    assert!(check_exposure("[::1]:6333".parse().unwrap(), &auth).is_ok());
+}
+
+#[test]
+fn an_exposed_address_needs_a_key_or_the_explicit_opt_out() {
+    let exposed: SocketAddr = "0.0.0.0:6333".parse().unwrap();
+    assert!(check_exposure(exposed, &AuthConfig::default()).is_err());
+
+    let with_key = AuthConfig {
+        api_key: Some(ApiKey::new("key".to_string()).unwrap()),
+        ..AuthConfig::default()
+    };
+    assert!(check_exposure(exposed, &with_key).is_ok());
+
+    let opted_out = AuthConfig {
+        allow_unauthenticated: true,
+        ..AuthConfig::default()
+    };
+    assert!(check_exposure(exposed, &opted_out).is_ok());
+}
+
+#[tokio::test]
+async fn a_panicked_inference_shutdown_fails_serve_after_the_checkpoint() {
+    let panicked = || async {
+        let task: tokio::task::JoinHandle<()> = tokio::task::spawn_blocking(|| panic!("shutdown"));
+        task.await
+    };
+    assert!(shutdown_outcome(Ok(()), Ok(()), Ok(())).is_ok());
+    assert!(matches!(
+        shutdown_outcome(Ok(()), Ok(()), panicked().await),
+        Err(ServeError::InferenceShutdownTask(_))
+    ));
+    assert!(matches!(
+        shutdown_outcome(
+            Ok(()),
+            Err(ServeError::Checkpoint(vec![])),
+            panicked().await
+        ),
+        Err(ServeError::Checkpoint(_))
+    ));
 }

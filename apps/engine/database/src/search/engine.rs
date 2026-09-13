@@ -163,7 +163,7 @@ pub fn search_batch(
 }
 
 /// Drop hits scored NaN, sort by score descending and keep the top k.
-fn rank_top_k(results: &mut Vec<Hit>, k: usize) {
+pub fn rank_top_k(results: &mut Vec<Hit>, k: usize) {
     results.retain(|hit| !hit.score.is_nan());
     results.sort_by(|a, b| {
         b.score
@@ -171,21 +171,4 @@ fn rank_top_k(results: &mut Vec<Hit>, k: usize) {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     results.truncate(k);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_nan_score_is_not_ranked() {
-        let hit = |score: f32, text: &str| Hit {
-            score,
-            document: Document::new(vec![1.0], text.to_string()),
-        };
-        let mut results = vec![hit(0.5, "half"), hit(f32::NAN, "nan"), hit(0.9, "high")];
-        rank_top_k(&mut results, 3);
-        let texts: Vec<&str> = results.iter().map(|h| h.document.text.as_str()).collect();
-        assert_eq!(texts, ["high", "half"]);
-    }
 }

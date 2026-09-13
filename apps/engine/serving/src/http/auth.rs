@@ -38,7 +38,7 @@ pub async fn require_api_key(
 }
 
 /// The token of a Bearer authorization header value. The scheme matches case-insensitively.
-fn bearer_token(value: &str) -> Option<&str> {
+pub fn bearer_token(value: &str) -> Option<&str> {
     let (scheme, token) = value.split_once(' ')?;
     scheme
         .eq_ignore_ascii_case("bearer")
@@ -46,7 +46,7 @@ fn bearer_token(value: &str) -> Option<&str> {
 }
 
 /// Compares the presented token with the key in constant time for tokens of equal length.
-fn key_matches(key: &ApiKey, presented: &str) -> bool {
+pub fn key_matches(key: &ApiKey, presented: &str) -> bool {
     key.expose().as_bytes().ct_eq(presented.as_bytes()).into()
 }
 
@@ -60,30 +60,4 @@ fn unauthorized() -> Response {
         .headers_mut()
         .insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
     response
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    reason = "a failed assertion is the point of a test"
-)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_bearer_scheme_is_case_insensitive_and_others_are_refused() {
-        assert_eq!(bearer_token("Bearer abc"), Some("abc"));
-        assert_eq!(bearer_token("bearer abc"), Some("abc"));
-        assert_eq!(bearer_token("Basic abc"), None);
-        assert_eq!(bearer_token("abc"), None);
-    }
-
-    #[test]
-    fn only_the_exact_key_matches() {
-        let key = ApiKey::new("secret-key".to_string()).unwrap();
-        assert!(key_matches(&key, "secret-key"));
-        assert!(!key_matches(&key, "secret-kez"));
-        assert!(!key_matches(&key, "secret-key-longer"));
-        assert!(!key_matches(&key, ""));
-    }
 }

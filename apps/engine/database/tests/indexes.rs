@@ -201,7 +201,11 @@ fn auto_ivf_probes_are_sized_from_the_configured_cluster_count() {
             ..AutoIndexConfig::default()
         },
     };
-    let index = create_index(&cfg, piramid_core::config::ExecutionMode::default(), 10_000);
+    let index = create_index(
+        &cfg,
+        piramid_hardware::compute::ExecutionMode::default(),
+        10_000,
+    );
     match index.stats().details {
         IndexDetails::Ivf { num_probes, .. } => assert_eq!(num_probes, 1),
         other => panic!("expected IVF stats, got {other:?}"),

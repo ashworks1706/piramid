@@ -2843,6 +2843,7 @@ dependencies = [
  "parking_lot",
  "piramid-core",
  "piramid-hardware",
+ "piramid-model",
  "rand 0.8.8",
  "reqwest 0.12.28",
  "serde",

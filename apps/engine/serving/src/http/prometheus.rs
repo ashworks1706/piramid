@@ -154,7 +154,7 @@ pub fn render(metrics: &MetricsResponse) -> String {
 }
 
 /// Write the host readings, leaving out each one the server could not measure.
-fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
+pub fn render_host(registry: &mut Registry, host: &HostMetricsResponse) {
     registry.optional_metric(
         "piramid_host_cpu_percent",
         "Processor use across every logical CPU of the host, from 0 to 100.",
@@ -331,7 +331,7 @@ fn render_inference(registry: &mut Registry, inference: &InferenceMetricsRespons
 
 /// Write the GPU readings, one sample per device labelled by its index, leaving out each one the
 /// server could not measure.
-fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
+pub fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
     let by_device = |extract: fn(&GpuMetricsResponse) -> Option<f64>| {
         gpus.iter()
             .filter_map(|gpu| {
@@ -363,117 +363,4 @@ fn render_gpus(registry: &mut Registry, gpus: &[GpuMetricsResponse]) {
         MetricType::Gauge,
         by_device(|gpu| gpu.temperature_celsius.map(f64::from)),
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const HOST_FAMILIES: [&str; 5] = [
-        "piramid_host_cpu_percent",
-        "piramid_host_memory_used_bytes",
-        "piramid_host_memory_total_bytes",
-        "piramid_process_cpu_percent",
-        "piramid_process_resident_memory_bytes",
-    ];
-
-    fn rendered(host: &HostMetricsResponse) -> String {
-        let mut registry = Registry::new();
-        render_host(&mut registry, host);
-        registry.render()
-    }
-
-    #[test]
-    fn an_unmeasured_host_writes_no_family() {
-        assert_eq!(rendered(&HostMetricsResponse::default()), "");
-    }
-
-    #[test]
-    fn a_measured_host_writes_every_family() {
-        let out = rendered(&HostMetricsResponse {
-            cpu_percent: Some(12.5),
-            memory_used_bytes: Some(1024),
-            memory_total_bytes: Some(4096),
-            process_cpu_percent: Some(0.0),
-            process_resident_bytes: Some(512),
-        });
-        for family in HOST_FAMILIES {
-            assert!(
-                out.contains(&format!("# TYPE {family} gauge\n")),
-                "{family} in {out}"
-            );
-        }
-        assert!(out.contains("piramid_host_cpu_percent 12.5\n"));
-        assert!(out.contains("piramid_host_memory_total_bytes 4096\n"));
-        assert!(out.contains("piramid_process_cpu_percent 0\n"));
-    }
-
-    #[test]
-    fn only_the_measured_fields_are_written() {
-        let out = rendered(&HostMetricsResponse {
-            memory_total_bytes: Some(4096),
-            ..HostMetricsResponse::default()
-        });
-        assert!(out.contains("piramid_host_memory_total_bytes 4096\n"));
-        assert!(!out.contains("piramid_host_cpu_percent"));
-        assert!(!out.contains("piramid_host_memory_used_bytes"));
-        assert!(!out.contains("piramid_process_"));
-    }
-
-    fn rendered_gpus(gpus: &[GpuMetricsResponse]) -> String {
-        let mut registry = Registry::new();
-        render_gpus(&mut registry, gpus);
-        registry.render()
-    }
-
-    #[test]
-    fn no_measured_gpu_writes_no_family() {
-        assert_eq!(rendered_gpus(&[]), "");
-        assert_eq!(rendered_gpus(&[GpuMetricsResponse::default()]), "");
-    }
-
-    #[test]
-    fn a_measured_gpu_writes_every_family_labelled_by_index() {
-        let out = rendered_gpus(&[GpuMetricsResponse {
-            index: 1,
-            name: Some("device".to_owned()),
-            memory_used_bytes: Some(1024),
-            memory_total_bytes: Some(4096),
-            utilization_percent: Some(0.0),
-            temperature_celsius: Some(54.0),
-        }]);
-        for family in [
-            "piramid_gpu_memory_used_bytes",
-            "piramid_gpu_memory_total_bytes",
-            "piramid_gpu_utilization_percent",
-            "piramid_gpu_temperature_celsius",
-        ] {
-            assert!(
-                out.contains(&format!("# TYPE {family} gauge\n")),
-                "{family} in {out}"
-            );
-        }
-        assert!(out.contains("piramid_gpu_memory_total_bytes{gpu=\"1\"} 4096\n"));
-        assert!(out.contains("piramid_gpu_utilization_percent{gpu=\"1\"} 0\n"));
-        assert!(out.contains("piramid_gpu_temperature_celsius{gpu=\"1\"} 54\n"));
-    }
-
-    #[test]
-    fn only_the_measured_gpu_fields_are_written() {
-        let out = rendered_gpus(&[
-            GpuMetricsResponse {
-                index: 0,
-                temperature_celsius: Some(40.0),
-                ..GpuMetricsResponse::default()
-            },
-            GpuMetricsResponse {
-                index: 1,
-                ..GpuMetricsResponse::default()
-            },
-        ]);
-        assert!(out.contains("piramid_gpu_temperature_celsius{gpu=\"0\"} 40\n"));
-        assert!(!out.contains("gpu=\"1\""));
-        assert!(!out.contains("piramid_gpu_memory"));
-        assert!(!out.contains("piramid_gpu_utilization_percent"));
-    }
 }

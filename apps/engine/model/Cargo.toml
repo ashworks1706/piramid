@@ -31,6 +31,11 @@ tokenizers = { workspace = true, optional = true }
 default = []
 inference-candle = ["dep:candle-core", "dep:candle-nn", "dep:tokenizers"]
 gpu-cuda = ["piramid-hardware/gpu-cuda", "candle-core?/cuda"]
+# Tiny randomly initialised models for the crate's own tests; compiled only for them.
+test-support = []
+
+[dev-dependencies]
+piramid-model = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true
