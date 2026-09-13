@@ -26,6 +26,8 @@ a language model after looking up relevant documents). It runs on one GPU, or on
 single process that holds three things together: the documents, the model weights, and the KV
 cache (the attention state the model keeps for every sequence it is generating).
 
+<img width="2816" height="1358" alt="image" src="https://github.com/user-attachments/assets/08f7c7b7-7e89-45a4-97d9-5f211995cb55" />
+
 You use it through `piramid serve`. The server loads a model, keeps collections of documents on
 disk, and answers questions over HTTP. A request to `/api/generate` can name a collection: the
 server embeds the question, searches the collection, places the best passages in the prompt, and
@@ -295,8 +297,6 @@ changed port without a second setting. Run inside a checkout, it also shows a `u
 run a terminal UI.
 
 ## How it is built
-
-<img width="2368" height="1076" alt="image" src="https://github.com/user-attachments/assets/2bf0d1b8-3085-4c25-8930-15ff66d451c9" />
 
 Five library crates under `apps/engine`, plus the binary in `apps/cli` that links them. A crate may
 depend on one below it in the diagram; the reverse fails CI.
