@@ -148,8 +148,7 @@ pub struct ModelResponse {
 }
 
 /// Content of an OpenAI message: a string, or a list of text parts.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone)]
 pub enum OpenAiContent {
     /// Plain text.
     Text(String),
@@ -157,8 +156,25 @@ pub enum OpenAiContent {
     Parts(Vec<OpenAiContentPart>),
 }
 
+impl<'de> Deserialize<'de> for OpenAiContent {
+    /// Reads a string as text and a list as content parts, keeping the error of a part that fails.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        match serde_json::Value::deserialize(deserializer)? {
+            serde_json::Value::String(text) => Ok(Self::Text(text)),
+            parts @ serde_json::Value::Array(_) => serde_json::from_value(parts)
+                .map(Self::Parts)
+                .map_err(D::Error::custom),
+            _ => Err(D::Error::custom(
+                "content must be a string or a list of content parts",
+            )),
+        }
+    }
+}
+
 /// One content part of an OpenAI message.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OpenAiContentPart {
     /// Part type; only text is accepted.
     #[serde(rename = "type")]
@@ -229,7 +245,7 @@ pub struct ChatCompletionRequest {
     pub frequency_penalty: Option<f32>,
     /// Not supported unless 0.
     pub presence_penalty: Option<f32>,
-    /// End-user identifier; recorded nowhere.
+    /// End-user identifier; not supported.
     pub user: Option<String>,
 }
 

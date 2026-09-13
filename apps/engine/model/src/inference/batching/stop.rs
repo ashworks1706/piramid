@@ -18,10 +18,10 @@ pub struct StopOutcome {
 }
 
 impl StopMatcher {
-    /// A matcher for the given stop strings. Empty strings are ignored.
+    /// A matcher for the given stop strings.
     pub fn new(stops: &[String]) -> Self {
         Self {
-            stops: stops.iter().filter(|s| !s.is_empty()).cloned().collect(),
+            stops: stops.to_vec(),
             held: String::new(),
         }
     }

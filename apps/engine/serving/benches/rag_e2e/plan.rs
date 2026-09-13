@@ -95,14 +95,15 @@ pub const DEFAULT_K: usize = 5;
 
 impl Plan {
     /// Read the settings through lookup, writing to default_out when PIRAMID_BENCH_OUT is unset.
+    /// lookup returns None for an unset variable and an error for one it cannot read.
     ///
     /// The embedding response cache is turned off.
     pub fn from_lookup(
-        lookup: impl Fn(&str) -> Option<String>,
+        lookup: impl Fn(&str) -> Result<Option<String>, String>,
         default_out: PathBuf,
     ) -> Result<Plan, String> {
         let required = |name: &str| {
-            lookup(name)
+            lookup(name)?
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| format!("{name} is required"))
         };
@@ -110,11 +111,14 @@ impl Plan {
             serde_json::from_str(&required("PIRAMID_BENCH_EMBEDDING")?)
                 .map_err(|e| format!("PIRAMID_BENCH_EMBEDDING: {e}"))?;
         embedding.cache.enabled = false;
+        if embedding.provider == "openai" {
+            embedding.api_key = lookup("OPENAI_API_KEY")?;
+        }
         embedding
             .validate()
             .map_err(|e| format!("PIRAMID_BENCH_EMBEDDING: {e}"))?;
 
-        let arms = lookup("PIRAMID_BENCH_ARMS")
+        let arms = lookup("PIRAMID_BENCH_ARMS")?
             .unwrap_or_else(|| DEFAULT_ARMS.to_string())
             .split(',')
             .map(str::trim)
@@ -153,13 +157,13 @@ impl Plan {
         Ok(Plan {
             model: PathBuf::from(required("PIRAMID_BENCH_MODEL")?),
             dataset: PathBuf::from(required("PIRAMID_BENCH_DATASET")?),
-            device: lookup("PIRAMID_BENCH_DEVICE").unwrap_or_else(|| "cpu".to_string()),
+            device: lookup("PIRAMID_BENCH_DEVICE")?.unwrap_or_else(|| "cpu".to_string()),
             embedding,
             questions,
             k,
             arms,
-            out: lookup("PIRAMID_BENCH_OUT").map_or(default_out, PathBuf::from),
-            search_url: lookup("PIRAMID_BENCH_SEARCH_URL"),
+            out: lookup("PIRAMID_BENCH_OUT")?.map_or(default_out, PathBuf::from),
+            search_url: lookup("PIRAMID_BENCH_SEARCH_URL")?,
             max_new_tokens,
             kv_cache_bytes: number(&lookup, "PIRAMID_BENCH_KV_CACHE_BYTES")?
                 .unwrap_or(DEFAULT_KV_CACHE_BYTES),
@@ -178,6 +182,12 @@ impl Plan {
                         arm.as_str()
                     ))
                 }
+                Arm::BeforePrefillDevice if !self.device.starts_with("cuda:") => {
+                    return Err(format!(
+                        "{} needs PIRAMID_BENCH_DEVICE set to cuda:N",
+                        arm.as_str()
+                    ))
+                }
                 Arm::BeforePrefillHttp => {
                     let url = self.search_url.as_deref().ok_or_else(|| {
                         format!("{} needs PIRAMID_BENCH_SEARCH_URL", arm.as_str())
@@ -193,13 +203,13 @@ impl Plan {
 
 /// Parse the variable name as a non-negative integer. None when unset.
 fn number<T: std::str::FromStr>(
-    lookup: &impl Fn(&str) -> Option<String>,
+    lookup: &impl Fn(&str) -> Result<Option<String>, String>,
     name: &str,
 ) -> Result<Option<T>, String>
 where
     T::Err: std::fmt::Display,
 {
-    lookup(name)
+    lookup(name)?
         .map(|value| {
             value
                 .trim()

@@ -108,7 +108,7 @@ mod plan_tests {
             vars.insert((*name).to_string(), (*value).to_string());
         }
         Plan::from_lookup(
-            |name| vars.get(name).cloned(),
+            |name| Ok(vars.get(name).cloned()),
             PathBuf::from("target/out.json"),
         )
     }
@@ -129,7 +129,7 @@ mod plan_tests {
     fn a_missing_required_variable_is_named() {
         let vars: HashMap<&str, &str> = HashMap::new();
         let error = Plan::from_lookup(
-            |name| vars.get(name).map(|v| (*v).to_string()),
+            |name| Ok(vars.get(name).map(|v| (*v).to_string())),
             PathBuf::new(),
         )
         .unwrap_err();
@@ -170,10 +170,48 @@ mod plan_tests {
 
     #[test]
     fn the_device_arm_is_refused_without_the_gpu_feature() {
-        let plan = plan(&[("PIRAMID_BENCH_ARMS", "before-prefill-device")]).unwrap();
+        let plan = plan(&[
+            ("PIRAMID_BENCH_ARMS", "before-prefill-device"),
+            ("PIRAMID_BENCH_DEVICE", "cuda:0"),
+        ])
+        .unwrap();
         let error = plan.check_arms(false).unwrap_err();
         assert!(error.contains("gpu-cuda"));
         assert!(plan.check_arms(true).is_ok());
+    }
+
+    #[test]
+    fn the_device_arm_is_refused_without_a_cuda_device() {
+        let plan = plan(&[("PIRAMID_BENCH_ARMS", "before-prefill-device")]).unwrap();
+        let error = plan.check_arms(true).unwrap_err();
+        assert!(
+            error.contains("PIRAMID_BENCH_DEVICE set to cuda:N"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_variable_the_lookup_cannot_read_is_an_error() {
+        let error = Plan::from_lookup(
+            |name| {
+                if name == "PIRAMID_BENCH_DEVICE" {
+                    Err(format!("{name} is not valid UTF-8"))
+                } else {
+                    Ok(match name {
+                        "PIRAMID_BENCH_MODEL" => Some("/models/qwen".to_string()),
+                        "PIRAMID_BENCH_DATASET" => Some("/data/q.jsonl".to_string()),
+                        "PIRAMID_BENCH_EMBEDDING" => Some(EMBEDDING.to_string()),
+                        _ => None,
+                    })
+                }
+            },
+            PathBuf::new(),
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("PIRAMID_BENCH_DEVICE is not valid UTF-8"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -9,6 +9,7 @@ use piramid_hardware::compute::{ExecutionMode, Metric};
 
 /// Brute-force scan parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FlatConfig {
     /// What to measure.
     pub metric: Metric,
@@ -29,6 +30,7 @@ impl Default for FlatConfig {
 
 /// Graph index parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HnswConfig {
     /// Max connections per node above layer 0.
     pub m: usize,
@@ -70,6 +72,7 @@ impl HnswConfig {
             m_max: m * 2,
             ef_construction,
             ef_search,
+            ml: 1.0 / (m as f32).ln(),
             ..Self::default()
         }
     }
@@ -77,6 +80,7 @@ impl HnswConfig {
 
 /// Inverted-file index parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IvfConfig {
     /// Partition count.
     pub num_clusters: usize,
@@ -107,7 +111,11 @@ impl Default for IvfConfig {
 impl IvfConfig {
     /// Cluster and probe counts sized for a collection of the given vector count.
     pub fn auto(num_vectors: usize) -> Self {
-        let num_clusters = (num_vectors as f32).sqrt().max(10.0) as usize;
+        Self::with_clusters((num_vectors as f32).sqrt().max(10.0) as usize)
+    }
+
+    /// The given cluster count, with the probe count sized from it.
+    pub fn with_clusters(num_clusters: usize) -> Self {
         Self {
             num_clusters,
             num_probes: (num_clusters as f32 * 0.1).clamp(1.0, 10.0) as usize,

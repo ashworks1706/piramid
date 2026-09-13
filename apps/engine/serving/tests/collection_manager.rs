@@ -16,9 +16,7 @@ use piramid_core::Document;
 use piramid_database::Collection;
 use piramid_serving::http::handlers::{collections, vectors};
 use piramid_serving::http::ApiResult;
-use piramid_serving::services::api::{
-    InsertRequest, ListVectorsQuery, SearchRequest, SearchTuning,
-};
+use piramid_serving::services::api::{InsertRequest, ListVectorsQuery, SearchRequest};
 use piramid_serving::state::AppState;
 use std::{fs, sync::Arc};
 
@@ -228,7 +226,9 @@ async fn search_applies_a_metadata_filter_from_the_request() {
             k: 10,
             metric: None,
             filter: Some(filter),
-            tuning: SearchTuning::default(),
+            ef: None,
+            nprobe: None,
+            filter_overfetch: None,
         }),
     )
     .await
@@ -330,6 +330,22 @@ fn read_only_lifts_once_there_is_space_again() {
     cleanup_dir(data_dir);
 }
 
+#[test]
+fn a_write_below_the_disk_floor_fails_without_read_only() {
+    use std::sync::atomic::Ordering;
+
+    let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/collection_manager_low_disk");
+    let mut config = Config::default();
+    config.startup.disk.min_free_bytes = Some(u64::MAX);
+    config.startup.disk.readonly_on_low_space = false;
+    let state = test_state_with_config(data_dir, config);
+
+    let error = state.ensure_write_allowed().unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Unavailable);
+    assert!(!state.read_only.load(Ordering::Relaxed));
+    cleanup_dir(data_dir);
+}
+
 #[tokio::test]
 async fn a_rebuild_while_one_is_running_is_a_conflict() {
     use piramid_serving::state::{RebuildJobStatus, RebuildState};
@@ -354,5 +370,67 @@ async fn a_rebuild_while_one_is_running_is_a_conflict() {
         .err()
         .unwrap();
     assert_eq!(error.kind(), ErrorKind::Conflict);
+    cleanup_dir(data_dir);
+}
+
+/// Reports a token count for texts that start with a digit and none for the rest.
+struct CountsSome;
+
+#[async_trait::async_trait]
+impl piramid_model::embeddings::Embedder for CountsSome {
+    async fn embed(
+        &self,
+        text: &str,
+    ) -> piramid_model::embeddings::EmbeddingResult<piramid_model::embeddings::EmbeddingResponse>
+    {
+        Ok(piramid_model::embeddings::EmbeddingResponse {
+            embedding: vec![1.0, 0.0, 0.0],
+            tokens: text.starts_with(char::is_numeric).then_some(3),
+            model: "counts-some".to_string(),
+        })
+    }
+
+    fn provider_name(&self) -> &'static str {
+        "counts-some"
+    }
+
+    fn model_name(&self) -> &str {
+        "counts-some"
+    }
+}
+
+#[tokio::test]
+async fn embed_total_tokens_is_absent_when_any_text_went_uncounted() {
+    use piramid_serving::services::api::EmbedRequest;
+    use piramid_serving::services::embedding::embed_text;
+
+    let data_dir = concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/collection_manager_embed_tokens"
+    );
+    cleanup_dir(data_dir);
+    let mut config = Config::default();
+    config.startup.data_dir = data_dir.to_string();
+    let state = Arc::new(
+        AppState::new(
+            config,
+            piramid_model::embeddings::EmbeddingsManager::with_embedder(Arc::new(CountsSome)),
+        )
+        .unwrap(),
+    );
+    let request = |texts: &[&str]| EmbedRequest {
+        texts: texts.iter().map(|text| text.to_string()).collect(),
+        metadata: Vec::new(),
+    };
+
+    let counted = embed_text(&state, "docs".to_string(), request(&["1 one", "2 two"]))
+        .await
+        .unwrap();
+    assert_eq!(counted.total_tokens, Some(6));
+
+    let mixed = embed_text(&state, "docs".to_string(), request(&["1 one", "two"]))
+        .await
+        .unwrap();
+    assert_eq!(mixed.total_tokens, None);
     cleanup_dir(data_dir);
 }

@@ -16,7 +16,7 @@ __global__ void cosine_rows(const float* query, const float* slab, float* out, u
         norm += candidate[i] * candidate[i];
     }
     float denominator = sqrt(query_norm_sq) * sqrt(norm);
-    out[row] = denominator == 0.0f ? 0.0f : dot / denominator;
+    out[row] = denominator == 0.0f ? nanf("") : dot / denominator;
 }
 
 __global__ void dot_rows(const float* query, const float* slab, float* out, unsigned int dim,
@@ -46,6 +46,21 @@ __global__ void euclidean_rows(const float* query, const float* slab, float* out
         sum += diff * diff;
     }
     out[row] = sqrt(sum);
+}
+
+__global__ void euclidean_squared_rows(const float* query, const float* slab, float* out,
+                            unsigned int dim, unsigned int rows) {
+    unsigned int row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= rows) {
+        return;
+    }
+    const float* candidate = slab + (unsigned long long)row * dim;
+    float sum = 0.0f;
+    for (unsigned int i = 0; i < dim; ++i) {
+        float diff = query[i] - candidate[i];
+        sum += diff * diff;
+    }
+    out[row] = sum;
 }
 
 // One thread per chunk of the input. Each writes the k highest scores of its chunk, in

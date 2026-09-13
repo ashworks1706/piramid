@@ -9,6 +9,7 @@ pub struct EmbedMetrics {
     requests: AtomicU64,
     texts: AtomicU64,
     total_tokens: AtomicU64,
+    requests_with_tokens: AtomicU64,
     total_latency_ns: AtomicU64,
 }
 
@@ -19,18 +20,30 @@ pub struct EmbedMetricsSnapshot {
     pub requests: u64,
     /// Texts embedded across all requests.
     pub texts: u64,
-    /// Tokens the providers reported across all requests.
-    pub total_tokens: u64,
+    /// Tokens the providers reported, summed over the requests that reported a count. None
+    /// before any request reported one.
+    pub total_tokens: Option<u64>,
     /// Mean latency per request in milliseconds. None before any request is recorded.
     pub avg_latency_ms: Option<f32>,
 }
 
 impl EmbedMetrics {
-    /// Add counts and elapsed time to the totals.
-    pub fn record(&self, request_count: u64, text_count: u64, token_count: u64, latency: Duration) {
+    /// Add counts and elapsed time to the totals. token_count is None when the provider reported
+    /// no token count.
+    pub fn record(
+        &self,
+        request_count: u64,
+        text_count: u64,
+        token_count: Option<u64>,
+        latency: Duration,
+    ) {
         self.requests.fetch_add(request_count, Ordering::Relaxed);
         self.texts.fetch_add(text_count, Ordering::Relaxed);
-        self.total_tokens.fetch_add(token_count, Ordering::Relaxed);
+        if let Some(tokens) = token_count {
+            self.total_tokens.fetch_add(tokens, Ordering::Relaxed);
+            self.requests_with_tokens
+                .fetch_add(request_count, Ordering::Relaxed);
+        }
         self.total_latency_ns
             .fetch_add(latency.as_nanos() as u64, Ordering::Relaxed);
     }
@@ -47,8 +60,29 @@ impl EmbedMetrics {
         EmbedMetricsSnapshot {
             requests,
             texts: self.texts.load(Ordering::Relaxed),
-            total_tokens: self.total_tokens.load(Ordering::Relaxed),
+            total_tokens: (self.requests_with_tokens.load(Ordering::Relaxed) > 0)
+                .then(|| self.total_tokens.load(Ordering::Relaxed)),
             avg_latency_ms,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokens_are_absent_until_a_provider_reports_them() {
+        let metrics = EmbedMetrics::default();
+        metrics.record(1, 1, None, Duration::from_millis(1));
+        assert_eq!(metrics.snapshot().total_tokens, None);
+        assert_eq!(metrics.snapshot().requests, 1);
+
+        metrics.record(1, 2, Some(0), Duration::from_millis(1));
+        assert_eq!(metrics.snapshot().total_tokens, Some(0));
+
+        metrics.record(1, 1, Some(7), Duration::from_millis(1));
+        metrics.record(1, 1, None, Duration::from_millis(1));
+        assert_eq!(metrics.snapshot().total_tokens, Some(7));
     }
 }

@@ -94,18 +94,32 @@ pub struct PlannedEntry {
     pub samples: bool,
 }
 
-/// A step ready to run, and the sequences preempted to make room for it.
-#[derive(Debug, Default)]
-pub struct PlannedStep {
+/// A step ready to run, the sequences preempted to make room for it, and the sequences that could
+/// not be planned.
+#[derive(Debug)]
+pub struct PlannedStep<P> {
     /// The batch for the driver.
     pub batch: StepBatch,
     /// One entry per batch sequence, in batch order.
     pub entries: Vec<PlannedEntry>,
     /// Sequences whose pages were released; they return to the front of the queue.
     pub preempted: Vec<u64>,
+    /// Sequences removed from the scheduler with their pages released, and why.
+    pub failed: Vec<(Sequence<P>, InferenceError)>,
 }
 
-impl PlannedStep {
+impl<P> Default for PlannedStep<P> {
+    fn default() -> Self {
+        Self {
+            batch: StepBatch::default(),
+            entries: Vec::new(),
+            preempted: Vec::new(),
+            failed: Vec::new(),
+        }
+    }
+}
+
+impl<P> PlannedStep<P> {
     /// Whether the step computes nothing.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
@@ -192,7 +206,7 @@ impl<P> Scheduler<P> {
     }
 
     /// Plan the next step.
-    pub fn plan(&mut self) -> PlannedStep {
+    pub fn plan(&mut self) -> PlannedStep<P> {
         let mut step = PlannedStep::default();
         let mut budget = self.limits.max_batched_tokens;
 
@@ -206,9 +220,12 @@ impl<P> Scheduler<P> {
             let Some(at) = self.make_room(index, needed, &mut step) else {
                 break;
             };
-            self.push_entry(at, 1, &mut step);
             budget -= 1;
-            index = at + 1;
+            index = if self.push_entry(at, 1, &mut step) {
+                at + 1
+            } else {
+                at
+            };
         }
 
         let mut index = 0;
@@ -228,9 +245,12 @@ impl<P> Scheduler<P> {
                 index += 1;
                 continue;
             };
-            self.push_entry(at, count, &mut step);
             budget -= count;
-            index = at + 1;
+            index = if self.push_entry(at, count, &mut step) {
+                at + 1
+            } else {
+                at
+            };
         }
 
         let admit = self.limits.continuous || self.running.is_empty();
@@ -292,7 +312,7 @@ impl<P> Scheduler<P> {
         &mut self,
         mut index: usize,
         needed: usize,
-        step: &mut PlannedStep,
+        step: &mut PlannedStep<P>,
     ) -> Option<usize> {
         loop {
             let mut table = std::mem::take(&mut self.running[index].table);
@@ -317,12 +337,21 @@ impl<P> Scheduler<P> {
         }
     }
 
-    fn push_entry(&mut self, index: usize, count: usize, step: &mut PlannedStep) {
+    /// Add count tokens of the sequence at index to the step. When its pages cannot take them, the
+    /// sequence is removed from running with its pages released and moved to the step's failed
+    /// list. Returns whether the entry was added.
+    fn push_entry(&mut self, index: usize, count: usize, step: &mut PlannedStep<P>) -> bool {
         let sequence = &mut self.running[index];
         let start = sequence.computed;
         let end = start + count;
-        let Ok(write_slots) = self.allocator.advance(&mut sequence.table, count) else {
-            return;
+        let write_slots = match self.allocator.advance(&mut sequence.table, count) {
+            Ok(write_slots) => write_slots,
+            Err(error) => {
+                let mut sequence = self.running.remove(index);
+                self.allocator.release(std::mem::take(&mut sequence.table));
+                step.failed.push((sequence, error));
+                return false;
+            }
         };
         let context_slots = self.allocator.slots(&sequence.table, 0, end);
         let first_step = !sequence.started;
@@ -342,6 +371,7 @@ impl<P> Scheduler<P> {
             first_step,
             samples,
         });
+        true
     }
 
     /// The running sequence with an id.
@@ -456,7 +486,7 @@ mod tests {
     }
 
     /// Plan a step and append a token to every sampling entry, as a worker would.
-    fn run(scheduler: &mut Scheduler<()>) -> PlannedStep {
+    fn run(scheduler: &mut Scheduler<()>) -> PlannedStep<()> {
         let step = scheduler.plan();
         for entry in &step.entries {
             if entry.samples {
@@ -641,6 +671,30 @@ mod tests {
             }
         }
         assert_eq!(finished, 3);
+    }
+
+    #[test]
+    fn a_sequence_whose_pages_cannot_take_its_tokens_is_failed_with_the_allocator_error() {
+        let mut scheduler = scheduler(limits(), 16);
+        scheduler
+            .submit(Sequence::new(1, prompt(4), 4, ()))
+            .unwrap();
+        scheduler
+            .submit(Sequence::new(2, prompt(3), 4, ()))
+            .unwrap();
+        run(&mut scheduler);
+        scheduler.running[0].computed = 0;
+
+        let step = scheduler.plan();
+        assert_eq!(step.failed.len(), 1);
+        let (sequence, error) = &step.failed[0];
+        assert_eq!(sequence.id, 1);
+        assert!(matches!(error, InferenceError::Runtime(_)), "{error}");
+        assert_eq!(
+            step.entries.iter().map(|e| e.id).collect::<Vec<_>>(),
+            vec![2]
+        );
+        assert_eq!(scheduler.ids(), vec![2]);
     }
 
     #[test]

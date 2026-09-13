@@ -142,10 +142,6 @@ mod with_model {
         fn model_name(&self) -> &str {
             "trigrams"
         }
-
-        fn dimensions(&self) -> Option<usize> {
-            Some(256)
-        }
     }
 
     async fn start_with_model(name: &str) -> (Running, String) {
@@ -168,7 +164,8 @@ mod with_model {
         let model = manager.info().name;
         let state = AppState::new(config, EmbeddingsManager::with_embedder(Arc::new(Trigrams)))
             .unwrap()
-            .with_inference(Arc::new(manager));
+            .with_inference(Arc::new(manager))
+            .unwrap();
         (start(state).await, model)
     }
 

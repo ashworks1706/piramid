@@ -100,7 +100,7 @@ impl App {
         tx: &UnboundedSender<Event>,
     ) -> std::io::Result<Self> {
         let log_writer = LogWriter::new(settings.log_dir_under(&root))?;
-        let units = units::catalog()
+        let units = units::catalog(&settings.serve_url)
             .into_iter()
             .map(|unit| UnitState::new(unit, settings.log_lines))
             .collect();
@@ -183,7 +183,7 @@ impl App {
             Event::Snapshot(result) => {
                 let (host, gpus, budget, inference) = match result.as_ref() {
                     Ok(snapshot) => (
-                        snapshot.metrics.host,
+                        Some(snapshot.metrics.host),
                         snapshot.metrics.gpus.clone(),
                         snapshot.metrics.gpu_budget.clone(),
                         snapshot.metrics.inference.clone(),
@@ -234,14 +234,18 @@ impl App {
                 }
                 Kind::Process | Kind::Task => {
                     let stopped = std::mem::take(&mut state.stopping);
-                    state.status = match code {
-                        Some(code) if !stopped => Status::Exited(code),
-                        _ => Status::Stopped,
+                    let (status, note) = match (code, stopped) {
+                        (_, true) => (Status::Stopped, "stopped".to_owned()),
+                        (Some(code), false) => {
+                            (Status::Exited(code), format!("exited with {code}"))
+                        }
+                        (None, false) => (
+                            Status::Failed("killed by a signal".to_owned()),
+                            "killed by a signal".to_owned(),
+                        ),
                     };
-                    Some(match code {
-                        Some(code) if !stopped => format!("exited with {code}"),
-                        _ => "stopped".to_owned(),
-                    })
+                    state.status = status;
+                    Some(note)
                 }
             };
             let restart_id =
@@ -648,8 +652,8 @@ impl App {
             Command::Just(args) => self.run_adhoc(&args),
             Command::Help => self.help = true,
             Command::Clear => self.current_mut().logs.clear(),
-            Command::Unknown(text) => {
-                self.notice = Some(format!("unknown command {text:?}; try :help"));
+            Command::Unknown(reason) => {
+                self.notice = Some(format!("{reason}; try :help"));
             }
         }
     }
@@ -690,7 +694,7 @@ impl App {
 }
 
 impl UnitState {
-    fn new(unit: Unit, log_lines: usize) -> Self {
+    fn new(unit: Unit, log_lines: std::num::NonZeroUsize) -> Self {
         Self {
             unit,
             status: Status::Stopped,
@@ -710,17 +714,17 @@ impl UnitState {
 pub fn parse_command(text: &str) -> Command {
     let mut words = text.split_whitespace();
     let Some(head) = words.next() else {
-        return Command::Unknown(String::new());
+        return Command::Unknown("empty command".to_owned());
     };
     let rest: Vec<String> = words.map(str::to_owned).collect();
     let argument = rest.join(" ");
     match head {
-        "q" | "quit" => Command::Quit,
+        "q" => Command::Quit,
         "start" if !argument.is_empty() => Command::Start(argument),
         "stop" if !argument.is_empty() => Command::Stop(argument),
         "restart" if !argument.is_empty() => Command::Restart(argument),
-        "just" => Command::Just(rest),
-        "help" | "h" => Command::Help,
+        "start" | "stop" | "restart" => Command::Unknown(format!("{head} needs a unit name")),
+        "help" => Command::Help,
         "clear" => Command::Clear,
         _ => Command::Just(std::iter::once(head.to_owned()).chain(rest).collect()),
     }

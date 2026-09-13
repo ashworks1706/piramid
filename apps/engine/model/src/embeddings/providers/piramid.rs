@@ -64,7 +64,6 @@ pub struct PiramidEmbedder {
     model: Arc<Mutex<QwenModel>>,
     tokenizer: Arc<dyn Tokenizer>,
     name: String,
-    dimensions: usize,
     max_tokens: usize,
 }
 
@@ -72,7 +71,6 @@ impl std::fmt::Debug for PiramidEmbedder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PiramidEmbedder")
             .field("name", &self.name)
-            .field("dimensions", &self.dimensions)
             .finish_non_exhaustive()
     }
 }
@@ -80,16 +78,10 @@ impl std::fmt::Debug for PiramidEmbedder {
 impl PiramidEmbedder {
     /// Load the checkpoint directory named by config.model.
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
-        if config.base_url.is_some() || config.api_key.is_some() {
-            return Err(EmbeddingError::ConfigError(
-                "startup.embedding: the piramid provider takes no base_url or api_key".to_string(),
-            ));
-        }
         let options = PiramidOptions::from_config(config)?;
         let dir = PathBuf::from(&config.model);
         let load = |dir: &Path| -> Result<Self, InferenceError> {
             let spec = ModelSpec::from_dir(dir)?;
-            let dimensions = spec.hidden_size;
             let loaded = load_decoder(dir, spec, &options.device, options.dtype, Dtype::Auto)?;
             let mut model = loaded.model;
             model.allocate_cache(options.max_tokens)?;
@@ -97,7 +89,6 @@ impl PiramidEmbedder {
                 model: Arc::new(Mutex::new(model)),
                 tokenizer: Arc::new(JsonTokenizer::load(dir)?),
                 name: config.model.clone(),
-                dimensions,
                 max_tokens: options.max_tokens,
             })
         };
@@ -127,17 +118,46 @@ fn embed_tokens(model: &mut QwenModel, tokens: Vec<u32>) -> Result<Vec<f32>, Inf
         .pool(pass)?
         .pop()
         .ok_or_else(|| InferenceError::Runtime("the pass pooled no sequence".to_string()))?;
-    normalize(&mut vector);
+    normalize(&mut vector)?;
     Ok(vector)
 }
 
-/// Scale a vector to unit length; a zero vector is left as it is.
-fn normalize(vector: &mut [f32]) {
+/// Scale a vector to unit length. Errors when its norm is zero or not finite.
+fn normalize(vector: &mut [f32]) -> Result<(), InferenceError> {
     let norm = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for value in vector {
-            *value /= norm;
-        }
+    if !(norm.is_finite() && norm > 0.0) {
+        return Err(InferenceError::Runtime(format!(
+            "the pooled hidden state has norm {norm}"
+        )));
+    }
+    for value in vector {
+        *value /= norm;
+    }
+    Ok(())
+}
+
+/// The token count of a text, refusing one with no tokens or more than max_tokens.
+fn token_count(tokens: usize, max_tokens: usize) -> EmbeddingResult<u32> {
+    if tokens == 0 {
+        return Err(EmbeddingError::InvalidInput(
+            "the text has no tokens".to_string(),
+        ));
+    }
+    if tokens > max_tokens {
+        return Err(EmbeddingError::InvalidInput(format!(
+            "the text has {tokens} tokens, more than max_tokens {max_tokens}"
+        )));
+    }
+    u32::try_from(tokens)
+        .map_err(|_| EmbeddingError::InvalidInput(format!("{tokens} tokens exceed u32::MAX")))
+}
+
+/// The embedding error for a model failure: a refused request is invalid input, anything else an
+/// invalid response.
+fn model_error(error: InferenceError) -> EmbeddingError {
+    match error {
+        InferenceError::InvalidRequest(message) => EmbeddingError::InvalidInput(message),
+        other => EmbeddingError::InvalidResponse(other.to_string()),
     }
 }
 
@@ -147,28 +167,14 @@ impl Embedder for PiramidEmbedder {
         let tokens = self
             .tokenizer
             .encode_with_template(text)
-            .map_err(|e| EmbeddingError::RequestFailed(e.to_string()))?;
-        if tokens.is_empty() {
-            return Err(EmbeddingError::RequestFailed(
-                "the text has no tokens".to_string(),
-            ));
-        }
-        if tokens.len() > self.max_tokens {
-            return Err(EmbeddingError::RequestFailed(format!(
-                "the text has {} tokens, more than max_tokens {}",
-                tokens.len(),
-                self.max_tokens
-            )));
-        }
-        let count = u32::try_from(tokens.len()).map_err(|_| {
-            EmbeddingError::RequestFailed(format!("{} tokens exceed u32::MAX", tokens.len()))
-        })?;
+            .map_err(|e| EmbeddingError::InvalidInput(e.to_string()))?;
+        let count = token_count(tokens.len(), self.max_tokens)?;
         let model = Arc::clone(&self.model);
         let embedding =
             tokio::task::spawn_blocking(move || embed_tokens(&mut model.lock(), tokens))
                 .await
-                .map_err(|e| EmbeddingError::RequestFailed(e.to_string()))?
-                .map_err(|e| EmbeddingError::RequestFailed(e.to_string()))?;
+                .map_err(|e| EmbeddingError::ProviderUnavailable(e.to_string()))?
+                .map_err(model_error)?;
         Ok(EmbeddingResponse {
             embedding,
             tokens: Some(count),
@@ -182,10 +188,6 @@ impl Embedder for PiramidEmbedder {
 
     fn model_name(&self) -> &str {
         &self.name
-    }
-
-    fn dimensions(&self) -> Option<usize> {
-        Some(self.dimensions)
     }
 }
 
@@ -220,6 +222,33 @@ mod tests {
         assert!(
             PiramidOptions::from_config(&config(serde_json::json!({"max_tokens": 0}))).is_err()
         );
+    }
+
+    #[test]
+    fn a_zero_or_non_finite_norm_is_an_error() {
+        assert!(normalize(&mut [0.0, 0.0]).is_err());
+        assert!(normalize(&mut [f32::NAN, 1.0]).is_err());
+        assert!(normalize(&mut [f32::INFINITY, 1.0]).is_err());
+        let mut vector = [3.0, 4.0];
+        normalize(&mut vector).unwrap();
+        assert_eq!(vector, [0.6, 0.8]);
+    }
+
+    #[test]
+    fn refused_text_is_invalid_input_and_not_retried() {
+        for error in [
+            token_count(0, 8).unwrap_err(),
+            token_count(9, 8).unwrap_err(),
+            model_error(InferenceError::InvalidRequest("too long".to_string())),
+        ] {
+            assert!(matches!(error, EmbeddingError::InvalidInput(_)), "{error}");
+            assert!(!error.is_recoverable(), "{error}");
+        }
+        assert_eq!(token_count(8, 8).unwrap(), 8);
+        assert!(matches!(
+            model_error(InferenceError::Runtime("norm NaN".to_string())),
+            EmbeddingError::InvalidResponse(_)
+        ));
     }
 
     #[test]

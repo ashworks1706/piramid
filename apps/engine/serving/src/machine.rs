@@ -29,11 +29,17 @@ impl MachineReadings {
     /// Start a sampling thread that takes a reading every interval.
     ///
     /// Every field of the host reading is None, and there is no GPU reading, until the first
-    /// sample lands.
+    /// sample lands. Errors when interval is below the host sampler minimum.
     pub fn start(interval: Duration) -> Result<Self> {
+        if interval < HostSampler::MINIMUM_INTERVAL {
+            return Err(ServerError::Internal(format!(
+                "machine sample interval {interval:?} is below the minimum {:?}",
+                HostSampler::MINIMUM_INTERVAL
+            ))
+            .into());
+        }
         let latest = Arc::new(RwLock::new(Latest::default()));
         let slot = Arc::downgrade(&latest);
-        let interval = interval.max(HostSampler::MINIMUM_INTERVAL);
         std::thread::Builder::new()
             .name("piramid-machine".into())
             .spawn(move || sample_until_dropped(&slot, interval))
@@ -84,6 +90,13 @@ mod tests {
         };
         assert_eq!(machine.host(), HostReading::default());
         assert!(machine.gpus().is_empty());
+    }
+
+    #[test]
+    fn an_interval_below_the_minimum_is_refused() {
+        let error = MachineReadings::start(HostSampler::MINIMUM_INTERVAL / 2)
+            .expect_err("a short interval is refused");
+        assert!(error.to_string().contains("below the minimum"), "{error}");
     }
 
     #[cfg(target_os = "linux")]

@@ -137,7 +137,8 @@ impl InferenceManager {
                 )));
             }
         }
-        let template = ChatTemplate::from_dir(&dir)?;
+        let tokenizer_dir = tokenizer_dir(config, &dir)?;
+        let template = ChatTemplate::from_dir(&tokenizer_dir)?;
         crate::inference::sampling::validate(&config.sampling)
             .map_err(|e| InferenceError::Load(format!("runtime.inference.sampling: {e}")))?;
         let device = match &config.device {
@@ -152,7 +153,16 @@ impl InferenceManager {
             )
         });
         let hook_name = hook.name();
-        let loaded = start(config, &dir, spec, &device, gpu, template.eos_text(), hook)?;
+        let loaded = start(
+            config,
+            &dir,
+            &tokenizer_dir,
+            spec,
+            &device,
+            gpu,
+            template.eos_text(),
+            hook,
+        )?;
         tracing::info!(
             target: "piramid::inference",
             model = %model_name,
@@ -269,6 +279,21 @@ fn checkpoint_dir(config: &InferenceConfig) -> Result<PathBuf, InferenceError> {
     Ok(dir.to_path_buf())
 }
 
+/// The directory tokenizer.json and tokenizer_config.json are read from: tokenizer_path when set,
+/// otherwise the checkpoint directory.
+fn tokenizer_dir(config: &InferenceConfig, checkpoint: &Path) -> Result<PathBuf, InferenceError> {
+    let Some(path) = config.tokenizer_path.as_deref() else {
+        return Ok(checkpoint.to_path_buf());
+    };
+    let dir = Path::new(path);
+    if !dir.is_dir() {
+        return Err(InferenceError::Load(format!(
+            "runtime.inference.tokenizer_path {path} is not a directory"
+        )));
+    }
+    Ok(dir.to_path_buf())
+}
+
 struct Started {
     architecture: Architecture,
     tokenizer: Arc<dyn Tokenizer>,
@@ -280,9 +305,14 @@ struct Started {
 }
 
 #[cfg(not(feature = "inference-candle"))]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "mirrors the inference-candle start"
+)]
 fn start(
     _config: &InferenceConfig,
     _dir: &Path,
+    _tokenizer_dir: &Path,
     _spec: ModelSpec,
     _device: &str,
     _gpu: Option<&GpuManager>,
@@ -295,17 +325,17 @@ fn start(
 }
 
 #[cfg(feature = "inference-candle")]
+#[allow(clippy::too_many_arguments, reason = "one parameter per load input")]
 fn start(
     config: &InferenceConfig,
     dir: &Path,
+    tokenizer_dir: &Path,
     spec: ModelSpec,
     device: &str,
     gpu: Option<&GpuManager>,
     eos_text: Option<&str>,
     hook: Arc<dyn RetrievalHook>,
 ) -> Result<Started, InferenceError> {
-    use std::collections::HashSet;
-
     use piramid_hardware::gpu::MemoryPool;
 
     use piramid_core::config::Preemption;
@@ -324,15 +354,8 @@ fn start(
                 .to_string(),
         ));
     }
-    let tokenizer_path = config
-        .tokenizer_path
-        .as_deref()
-        .map_or_else(|| dir.to_path_buf(), PathBuf::from);
-    let tokenizer: Arc<dyn Tokenizer> = Arc::new(JsonTokenizer::load(&tokenizer_path)?);
-    let mut eos_token_ids: HashSet<u32> = spec.eos_token_ids.iter().copied().collect();
-    if let Some(id) = eos_text.and_then(|text| tokenizer.token_id(text)) {
-        eos_token_ids.insert(id);
-    }
+    let tokenizer: Arc<dyn Tokenizer> = Arc::new(JsonTokenizer::load(tokenizer_dir)?);
+    let eos_token_ids = eos_set(&spec.eos_token_ids, eos_text, tokenizer.as_ref())?;
     let architecture = spec.architecture;
 
     let on_gpu = device.starts_with("cuda:");
@@ -443,6 +466,31 @@ fn start(
     })
 }
 
+/// The token ids that end a generation: those the checkpoint names and the chat template's
+/// eos_token. Errors when the eos_token is not in the vocabulary or the set is empty.
+#[cfg(feature = "inference-candle")]
+fn eos_set(
+    checkpoint: &[u32],
+    eos_text: Option<&str>,
+    tokenizer: &dyn Tokenizer,
+) -> Result<std::collections::HashSet<u32>, InferenceError> {
+    let mut ids: std::collections::HashSet<u32> = checkpoint.iter().copied().collect();
+    if let Some(text) = eos_text {
+        let id = tokenizer.token_id(text).ok_or_else(|| {
+            InferenceError::Load(format!(
+                "tokenizer_config.json eos_token {text} is not in the tokenizer vocabulary"
+            ))
+        })?;
+        ids.insert(id);
+    }
+    if ids.is_empty() {
+        return Err(InferenceError::Load(
+            "the checkpoint names no end-of-sequence token".to_string(),
+        ));
+    }
+    Ok(ids)
+}
+
 /// Bytes the key/value cache may take. On a GPU: device_fraction of free device memory, capped
 /// by what the budget's key/value pool has left and by max_bytes. On the host, max_bytes is
 /// required.
@@ -475,5 +523,56 @@ fn kv_budget(
                     .to_string(),
             )
         }),
+    }
+}
+
+#[cfg(all(test, feature = "inference-candle"))]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "assertions in tests")]
+
+    use super::*;
+
+    struct Vocabulary;
+
+    impl Tokenizer for Vocabulary {
+        fn encode(&self, _text: &str) -> Result<Vec<u32>, InferenceError> {
+            Ok(Vec::new())
+        }
+
+        fn encode_with_template(&self, _text: &str) -> Result<Vec<u32>, InferenceError> {
+            Ok(Vec::new())
+        }
+
+        fn decode(&self, _tokens: &[u32], _skip_special: bool) -> Result<String, InferenceError> {
+            Ok(String::new())
+        }
+
+        fn token_id(&self, token: &str) -> Option<u32> {
+            (token == "<|im_end|>").then_some(9)
+        }
+    }
+
+    #[test]
+    fn the_eos_set_joins_the_checkpoint_ids_and_the_template_token() {
+        let ids = eos_set(&[2], Some("<|im_end|>"), &Vocabulary).unwrap();
+        assert_eq!(ids, [2, 9].into_iter().collect());
+        let ids = eos_set(&[2], None, &Vocabulary).unwrap();
+        assert_eq!(ids, [2].into_iter().collect());
+    }
+
+    #[test]
+    fn an_eos_token_outside_the_vocabulary_is_a_load_error() {
+        let error = eos_set(&[2], Some("</s>"), &Vocabulary).unwrap_err();
+        assert!(matches!(error, InferenceError::Load(_)), "{error}");
+        assert!(error.to_string().contains("</s>"), "{error}");
+    }
+
+    #[test]
+    fn a_checkpoint_with_no_end_of_sequence_token_is_a_load_error() {
+        let error = eos_set(&[], None, &Vocabulary).unwrap_err();
+        assert!(
+            error.to_string().contains("no end-of-sequence token"),
+            "{error}"
+        );
     }
 }

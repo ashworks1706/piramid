@@ -16,8 +16,6 @@ pub struct SearchParams<'a> {
     pub mode: ExecutionMode,
     /// Metadata predicate. When present, the planner overfetches and post-filters.
     pub filter: Option<&'a Filter>,
-    /// Multiplier applied to k when a filter is present, overriding the configured value.
-    pub filter_overfetch_override: Option<usize>,
     /// Recall and speed knobs for this query, overriding the configured value.
     pub search_config_override: Option<SearchConfig>,
     /// Drop hits scoring below this. Applied before k truncates the result set.
@@ -29,7 +27,6 @@ impl Default for SearchParams<'_> {
         Self {
             mode: ExecutionMode::Auto,
             filter: None,
-            filter_overfetch_override: None,
             search_config_override: None,
             min_score: None,
         }
@@ -60,17 +57,15 @@ pub fn search(
     let effective_search = params
         .search_config_override
         .unwrap_or(target.default_config);
+    if effective_search.filter_overfetch == 0 {
+        return Err(IndexError::InvalidConfig("filter_overfetch must be >= 1".into()).into());
+    }
 
     // A metadata filter or a score threshold applies after the index returns, so more than k
     // candidates are requested.
     let post_filtered = params.filter.is_some() || params.min_score.is_some();
-    let base_overfetch = effective_search.filter_overfetch.max(1);
-    let expansion = params
-        .filter_overfetch_override
-        .unwrap_or(base_overfetch)
-        .max(1);
     let search_k = if post_filtered {
-        k.saturating_mul(expansion)
+        k.saturating_mul(effective_search.filter_overfetch)
     } else {
         k
     };
@@ -167,12 +162,30 @@ pub fn search_batch(
     }
 }
 
-/// Sort by score descending and keep the top k.
+/// Drop hits scored NaN, sort by score descending and keep the top k.
 fn rank_top_k(results: &mut Vec<Hit>, k: usize) {
+    results.retain(|hit| !hit.score.is_nan());
     results.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     results.truncate(k);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_nan_score_is_not_ranked() {
+        let hit = |score: f32, text: &str| Hit {
+            score,
+            document: Document::new(vec![1.0], text.to_string()),
+        };
+        let mut results = vec![hit(0.5, "half"), hit(f32::NAN, "nan"), hit(0.9, "high")];
+        rank_top_k(&mut results, 3);
+        let texts: Vec<&str> = results.iter().map(|h| h.document.text.as_str()).collect();
+        assert_eq!(texts, ["high", "half"]);
+    }
 }

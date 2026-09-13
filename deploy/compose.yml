@@ -11,14 +11,13 @@ services:
     volumes:
       - piramid-data:/data
     # PIRAMID_API_KEY must be set in ../.env; the server binds every interface and refuses to
-    # start without a key.
+    # start without a key. PIRAMID__STARTUP__LOGGING__LEVEL in ../.env sets the log level.
     env_file:
       - path: ../.env
         required: false
     environment:
       PIRAMID__STARTUP__BIND: 0.0.0.0:6333
       PIRAMID__STARTUP__DATA_DIR: /data
-      RUST_LOG: ${RUST_LOG:-info}
     restart: unless-stopped
     # Longer than startup.http.drain_timeout_secs.
     stop_grace_period: 45s

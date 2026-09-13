@@ -173,3 +173,19 @@ fn record_written_by_bincode1_reads() {
     assert_eq!(document.id, Uuid::from_u128(ID));
     assert_eq!(document.text, "hello");
 }
+
+#[test]
+fn a_pointer_outside_the_mapping_is_corruption() {
+    let base = scratch_base("outside_mapping");
+    let mut config = CollectionConfig::default();
+    config.memory.use_mmap = true;
+    config.memory.initial_mmap_size = 4096;
+    let store = RecordStore::open(&base, &config, &HashMap::new()).unwrap();
+    let mapped = store.mapped_len().unwrap() as u64;
+
+    let error = store
+        .read_document(&EntryPointer::new(mapped, 16))
+        .unwrap_err();
+
+    assert!(error.to_string().contains("outside the"), "{error}");
+}

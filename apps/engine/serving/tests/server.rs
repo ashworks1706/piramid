@@ -128,6 +128,38 @@ async fn health_is_open_and_every_other_route_needs_the_key() {
 }
 
 #[tokio::test]
+async fn readyz_reports_no_integrity_verdict_it_did_not_check() {
+    let dir = data_dir("readyz");
+    let server = start(config(&dir)).await;
+    let http = reqwest::Client::new();
+
+    let inserted = http
+        .post(server.url("/api/collections/docs/vectors"))
+        .json(&serde_json::json!({"vectors": [[1.0, 0.0, 0.0]], "texts": ["first"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(inserted.status(), 200);
+
+    let body: serde_json::Value = http
+        .get(server.url("/api/readyz"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(body.get("ok").is_none(), "{body}");
+    let docs = &body["collections"][0];
+    assert_eq!(docs["name"], "docs");
+    assert_eq!(docs["loaded"], true);
+    assert!(docs.get("integrity_ok").is_none(), "{docs}");
+    assert!(docs.get("error").is_none(), "{docs}");
+
+    server.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_loopback_server_with_no_key_serves_without_authentication() {
     let dir = data_dir("loopback_open");
     let server = start(config(&dir)).await;

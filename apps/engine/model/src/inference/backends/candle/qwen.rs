@@ -4,6 +4,7 @@
 use candle_core::{DType, Device, Module, Tensor};
 use candle_nn::{Embedding, Linear, RmsNorm};
 use piramid_core::error::InferenceError;
+use piramid_hardware::gpu::Stream;
 
 use crate::fusion::HiddenState;
 use crate::inference::architecture::{
@@ -43,7 +44,7 @@ pub struct QwenModel {
     keys: Vec<Tensor>,
     values: Vec<Tensor>,
     #[cfg(feature = "gpu-cuda")]
-    gpu: Option<piramid_hardware::gpu::Device>,
+    stream: Option<piramid_hardware::gpu::Stream>,
 }
 
 impl std::fmt::Debug for QwenModel {
@@ -181,11 +182,12 @@ impl QwenModel {
         let model_dtype = dtype(precision);
         let (cos, sin) = rotary_tables(&spec, model_dtype, device)?;
         #[cfg(feature = "gpu-cuda")]
-        let gpu = match device.location() {
-            candle_core::DeviceLocation::Cuda { gpu_id } => Some(
-                piramid_hardware::gpu::Device::open(gpu_id)
-                    .map_err(|e| InferenceError::Unavailable(e.to_string()))?,
-            ),
+        let stream = match device.location() {
+            candle_core::DeviceLocation::Cuda { gpu_id } => {
+                let gpu = piramid_hardware::gpu::Device::open(gpu_id)
+                    .map_err(|e| InferenceError::Unavailable(e.to_string()))?;
+                Some(piramid_hardware::gpu::Stream::per_thread(&gpu))
+            }
             _ => None,
         };
         Ok(Self {
@@ -203,7 +205,7 @@ impl QwenModel {
             keys: Vec::new(),
             values: Vec::new(),
             #[cfg(feature = "gpu-cuda")]
-            gpu,
+            stream,
         })
     }
 
@@ -311,9 +313,10 @@ impl QwenModel {
     ) -> Result<Option<()>, InferenceError> {
         use candle_core::cuda_backend::cudarc::driver::DevicePtr;
 
-        let Some(gpu) = &self.gpu else {
+        let Some(stream) = &self.stream else {
             return Ok(None);
         };
+        let gpu = stream.device();
         if !rows.is_contiguous() {
             return Err(InferenceError::Runtime(
                 "hidden rows handed to a device visitor are not contiguous".to_string(),
@@ -341,8 +344,7 @@ impl QwenModel {
             layout.shape().elem_count(),
         )
         .map_err(|e| InferenceError::Runtime(e.to_string()))?;
-        let stream = piramid_hardware::gpu::Stream::per_thread(gpu);
-        visit(HiddenState::Device(&mut buffer), Some(&stream))?;
+        visit(HiddenState::Device(&mut buffer), Some(stream))?;
         Ok(Some(()))
     }
 
@@ -457,6 +459,16 @@ impl DecoderModel for QwenModel {
 
     fn kv_layout(&self) -> KvLayout {
         self.spec.kv_layout(self.kv_precision)
+    }
+
+    #[cfg(feature = "gpu-cuda")]
+    fn stream(&self) -> Option<&Stream> {
+        self.stream.as_ref()
+    }
+
+    #[cfg(not(feature = "gpu-cuda"))]
+    fn stream(&self) -> Option<&Stream> {
+        None
     }
 
     fn allocate_cache(&mut self, slots: usize) -> Result<(), InferenceError> {
@@ -961,7 +973,7 @@ extern "C" __global__ void add_constant(float* rows, unsigned int n, float value
                             module
                                 .launch(
                                     "add_constant",
-                                    LaunchConfig::for_elements(n, 256),
+                                    LaunchConfig::for_elements(n, 256).unwrap(),
                                     stream,
                                     &[
                                         KernelArg::buffer(buffer),

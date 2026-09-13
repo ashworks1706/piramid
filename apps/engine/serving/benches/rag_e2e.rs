@@ -8,7 +8,8 @@
 //! endpoint, placed before prefill.
 //! before-prefill-host: passages from an in-process collection scored by the host strategy.
 //! before-prefill-device: passages from an in-process collection scored on the GPU. Refused
-//! unless the build has the gpu-cuda feature.
+//! unless the build has the gpu-cuda feature and PIRAMID_BENCH_DEVICE is cuda:N, the device
+//! search runs on.
 //!
 //! Environment:
 //!
@@ -16,7 +17,8 @@
 //! PIRAMID_BENCH_DATASET: question file, one JSON object per line with id, question, answers,
 //! and passages of id, text and gold. Required.
 //! PIRAMID_BENCH_EMBEDDING: embedding provider as a JSON object with provider (openai or
-//! ollama), model, base_url and optionally api_key. Required. The response cache is off.
+//! ollama), model and base_url. Required. The response cache is off.
+//! OPENAI_API_KEY: key sent to the openai provider. Unset sends none.
 //! PIRAMID_BENCH_DEVICE: cpu or cuda:N. Default cpu.
 //! PIRAMID_BENCH_QUESTIONS: questions read from the file. Default every question.
 //! PIRAMID_BENCH_K: passages retrieved per question. Default 5.
@@ -112,7 +114,14 @@ fn main() -> Result<(), Failure> {
         || PathBuf::from("rag_e2e.json"),
         |dir| dir.join("rag_e2e.json"),
     );
-    let plan = Plan::from_lookup(|name| std::env::var(name).ok(), default_out)?;
+    let plan = Plan::from_lookup(
+        |name| match std::env::var(name) {
+            Ok(value) => Ok(Some(value)),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(std::env::VarError::NotUnicode(_)) => Err(format!("{name} is not valid UTF-8")),
+        },
+        default_out,
+    )?;
     plan.check_arms(cfg!(feature = "gpu-cuda"))?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -168,7 +177,14 @@ struct ConfigRecord {
 struct HardwareRecord {
     cpu: Option<String>,
     logical_cpus: usize,
-    gpus: Vec<String>,
+    gpus: Vec<GpuRecord>,
+}
+
+/// One GPU the driver enumerates.
+#[derive(Serialize)]
+struct GpuRecord {
+    index: u32,
+    name: Option<String>,
 }
 
 /// The model a run loaded.
@@ -228,7 +244,6 @@ async fn run(plan: &Plan) -> Result<Results, Failure> {
     let sampling = SamplingConfig {
         temperature: 0.0,
         max_new_tokens: plan.max_new_tokens,
-        seed: Some(0),
         ..SamplingConfig::default()
     };
 
@@ -319,10 +334,11 @@ fn open_gpu(plan: &Plan) -> Result<Option<piramid_hardware::gpu::GpuManager>, Fa
         return Ok(None);
     }
     let ordinal = model_ordinal
-        .map(str::parse::<usize>)
-        .transpose()
-        .context("parse PIRAMID_BENCH_DEVICE")?
-        .unwrap_or(0);
+        .ok_or_else(|| {
+            Failure("before-prefill-device needs PIRAMID_BENCH_DEVICE set to cuda:N".to_string())
+        })?
+        .parse::<usize>()
+        .context("parse PIRAMID_BENCH_DEVICE")?;
     let settings = BudgetSettings {
         limit_bytes: None,
         reserve_bytes: 0,
@@ -676,7 +692,10 @@ fn hardware() -> HardwareRecord {
         gpus: GpuSampler::new()
             .sample()
             .into_iter()
-            .map(|gpu| gpu.name.unwrap_or_else(|| format!("GPU {}", gpu.index)))
+            .map(|gpu| GpuRecord {
+                index: gpu.index,
+                name: gpu.name,
+            })
             .collect(),
     }
 }

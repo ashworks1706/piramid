@@ -107,8 +107,10 @@ pub fn metrics(state: &SharedState) -> Result<MetricsResponse> {
 
         let wal_size = optional_file_size(&SidecarManager::at(&collection_guard.path).wal_path())?;
         let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
-        let checkpoint_age_secs = last_checkpoint
-            .and_then(|timestamp| piramid_core::clock::unix_secs().checked_sub(timestamp));
+        let checkpoint_age_secs = match last_checkpoint {
+            Some(timestamp) => piramid_core::clock::unix_secs()?.checked_sub(timestamp),
+            None => None,
+        };
         wal_stats.push(WalStats {
             collection: collection_name,
             last_checkpoint,
@@ -201,8 +203,10 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
         let count = collection_guard.count();
         total_vectors += count;
         let last_checkpoint = collection_guard.checkpoint.last_checkpoint();
-        let checkpoint_age_secs = last_checkpoint
-            .and_then(|timestamp| piramid_core::clock::unix_secs().checked_sub(timestamp));
+        let checkpoint_age_secs = match last_checkpoint {
+            Some(timestamp) => piramid_core::clock::unix_secs()?.checked_sub(timestamp),
+            None => None,
+        };
         let wal_size_bytes =
             optional_file_size(&SidecarManager::at(&collection_guard.path).wal_path())?;
 
@@ -215,12 +219,10 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             checkpoint_age_secs,
             wal_size_bytes,
             schema_version: Some(collection_guard.manifest.schema_version),
-            integrity_ok: Some(true),
-            error: None,
         });
     }
 
-    // Collections load lazily. One present on disk but not yet opened is listed unchecked.
+    // Collections load lazily. One present on disk but not yet opened is listed with loaded false.
     for name in state.collection_manager.discover_on_disk()? {
         if state.collection_manager.contains_loaded(&name) {
             continue;
@@ -234,19 +236,13 @@ pub fn readyz(state: &SharedState) -> Result<ReadyzResponse> {
             checkpoint_age_secs: None,
             wal_size_bytes: None,
             schema_version: None,
-            integrity_ok: None,
-            error: None,
         });
     }
 
     let loaded_collections = state.collection_manager.len();
     let (disk_total_bytes, disk_available_bytes) = crate::disk::stats(&state.data_dir)?;
-    let ok = collections
-        .iter()
-        .all(|collection| collection.integrity_ok != Some(false));
 
     Ok(ReadyzResponse {
-        ok,
         version: env!("CARGO_PKG_VERSION").to_string(),
         data_dir: state.data_dir.clone(),
         total_collections: collections.len(),

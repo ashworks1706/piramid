@@ -21,7 +21,7 @@ pub type Run = Vec<(f64, f64)>;
 pub struct Sample {
     /// When the refresh landed.
     pub at: Instant,
-    /// What the server reported. None for a refresh that failed or a server without host readings.
+    /// What the server reported. None for a refresh that failed.
     pub host: Option<HostMetrics>,
     /// One entry per GPU the server measured. Empty for a refresh that failed or measured none.
     pub gpus: Vec<GpuMetrics>,

@@ -151,12 +151,15 @@ fn batch_search_multi_queries() {
     let mut storage = Collection::open(test_path).unwrap();
     for i in 0..10 {
         storage
-            .insert(Document::new(vec![i as f32, 0.0, 0.0], format!("vec{i}")))
+            .insert(Document::new(
+                vec![i as f32 + 1.0, 0.0, 0.0],
+                format!("vec{i}"),
+            ))
             .unwrap();
     }
 
     let queries = vec![
-        vec![0.0, 0.0, 0.0],
+        vec![1.0, 0.0, 0.0],
         vec![5.0, 0.0, 0.0],
         vec![9.0, 0.0, 0.0],
     ];
@@ -613,7 +616,7 @@ fn a_wal_past_max_log_size_triggers_a_checkpoint() {
     let mut collection = Collection::open_with_options(path, config.into()).unwrap();
     for i in 0..12 {
         collection
-            .insert(Document::new(vec![i as f32, 0.0], format!("doc{i}")))
+            .insert(Document::new(vec![i as f32 + 1.0, 0.0], format!("doc{i}")))
             .unwrap();
     }
 
@@ -871,4 +874,128 @@ fn replacing_a_document_at_the_vector_limit_is_allowed() {
     assert!(collection.update_vector(&id, vec![0.5, 0.5]).unwrap());
     assert_eq!(collection.get(&id).unwrap().unwrap().text, "replaced");
     assert_eq!(collection.count(), 1);
+}
+
+#[test]
+fn inserting_an_id_already_stored_is_refused() {
+    let path = fresh_path("test_insert_existing_id.db");
+    let mut collection = Collection::open(&path).unwrap();
+    let document = Document::new(vec![1.0, 0.0], "first".to_string());
+    collection.insert(document.clone()).unwrap();
+
+    let error = collection.insert(document.clone()).unwrap_err();
+    assert!(error.to_string().contains("already exists"), "{error}");
+
+    let fresh = Document::new(vec![0.0, 1.0], "fresh".to_string());
+    let fresh_id = fresh.id;
+    let error = collection
+        .insert_batch(vec![fresh.clone(), document])
+        .unwrap_err();
+    assert!(error.to_string().contains("already exists"), "{error}");
+
+    let error = collection
+        .insert_batch(vec![fresh.clone(), fresh])
+        .unwrap_err();
+    assert!(error.to_string().contains("more than once"), "{error}");
+
+    assert!(collection.get(&fresh_id).unwrap().is_none());
+    assert_eq!(collection.count(), 1);
+    drop(collection);
+    assert_eq!(Collection::open(&path).unwrap().count(), 1);
+}
+
+#[test]
+fn offsets_without_a_manifest_are_refused_at_open() {
+    let path = fresh_path("test_missing_manifest.db");
+    {
+        let mut collection = Collection::open(&path).unwrap();
+        collection
+            .insert(Document::new(vec![1.0, 0.0], "one".to_string()))
+            .unwrap();
+        collection.checkpoint().unwrap();
+    }
+    fs::remove_file(format!("{path}.manifest.db")).unwrap();
+
+    let error = Collection::open(&path).err().unwrap();
+    assert!(error.to_string().contains("no manifest"), "{error}");
+}
+
+// A missing index sidecar is rebuilt from the stored documents even when the WAL has entries to
+// replay.
+#[test]
+fn a_missing_index_sidecar_is_rebuilt_beside_a_pending_wal() {
+    let path = fresh_path("test_missing_vecindex_with_wal.db");
+    let stored;
+    {
+        let mut collection = Collection::open(&path).unwrap();
+        stored = collection
+            .insert(Document::new(vec![1.0, 0.0], "checkpointed".to_string()))
+            .unwrap();
+        collection.checkpoint().unwrap();
+        collection
+            .insert(Document::new(vec![0.0, 1.0], "logged".to_string()))
+            .unwrap();
+        collection.flush().unwrap();
+    }
+    fs::remove_file(format!("{path}.vecindex.db")).unwrap();
+
+    let collection = Collection::open(&path).unwrap();
+    assert_eq!(collection.count(), 2);
+    assert_eq!(collection.vector_index().stats().total_vectors, 2);
+    let hits = collection
+        .search(&[1.0, 0.0], 2, Metric::Cosine, SearchParams::default())
+        .unwrap();
+    assert!(hits.iter().any(|hit| hit.document.id == stored));
+}
+
+// An index sidecar built with another family or other parameters than the configuration is rebuilt
+// at open.
+#[test]
+fn an_index_built_with_other_settings_is_rebuilt_at_open() {
+    use piramid_core::config::{HnswConfig, IndexConfig};
+
+    let path = fresh_path("test_index_config_changed.db");
+    {
+        let mut collection = Collection::open(&path).unwrap();
+        for i in 0..8 {
+            let angle = i as f32;
+            collection
+                .insert(Document::new(
+                    vec![angle.cos(), angle.sin()],
+                    format!("{i}"),
+                ))
+                .unwrap();
+        }
+        collection.checkpoint().unwrap();
+    }
+
+    let hnsw = |m: usize| CollectionConfig {
+        index: IndexConfig::Hnsw {
+            params: HnswConfig::from_m(m, 100, 100),
+        },
+        ..CollectionConfig::default()
+    };
+
+    let collection = Collection::open_with_options(&path, hnsw(8).into()).unwrap();
+    assert_eq!(
+        collection.vector_index().build_config(),
+        IndexConfig::Hnsw {
+            params: HnswConfig::from_m(8, 100, 100)
+        }
+    );
+    assert_eq!(collection.vector_index().stats().total_vectors, 8);
+    drop(collection);
+
+    let collection = Collection::open_with_options(&path, hnsw(4).into()).unwrap();
+    assert_eq!(
+        collection.vector_index().build_config(),
+        IndexConfig::Hnsw {
+            params: HnswConfig::from_m(4, 100, 100)
+        }
+    );
+    drop(collection);
+
+    // The rebuilt index was saved, so the same configuration opens it unchanged.
+    let collection = Collection::open_with_options(&path, hnsw(4).into()).unwrap();
+    assert_eq!(collection.vector_index().stats().total_vectors, 8);
 }

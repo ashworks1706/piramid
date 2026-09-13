@@ -56,9 +56,10 @@ fn build_entries(req: InsertRequest) -> Result<Vec<Document>> {
 
     let mut metadata = metadata.into_iter();
     let mut entries = Vec::with_capacity(vectors.len());
-    for (vector, text) in vectors.into_iter().zip(texts) {
+    for (i, (vector, text)) in vectors.into_iter().zip(texts).enumerate() {
         let vector = if normalize {
             validation::normalize_vector(&vector)
+                .map_err(|e| ServerError::InvalidRequest(format!("Vector at index {i}: {e}")))?
         } else {
             vector
         };
@@ -205,7 +206,7 @@ pub fn upsert_vector(
     validation::validate_vector(&req.vector)?;
 
     if req.normalize {
-        req.vector = validation::normalize_vector(&req.vector);
+        req.vector = validation::normalize_vector(&req.vector)?;
     }
 
     let collection_handle = state.get_or_create_collection(&collection)?;

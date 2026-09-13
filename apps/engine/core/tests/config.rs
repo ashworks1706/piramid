@@ -28,7 +28,7 @@ fn an_empty_file_is_all_defaults() {
 
     assert_eq!(cfg, Config::default());
     assert_eq!(cfg.startup.bind, "127.0.0.1:6333");
-    assert_eq!(cfg.startup.hardware.profile, HardwareProfile::Auto);
+    assert_eq!(cfg.startup.hardware.profile, HardwareProfile::CpuOnly);
     assert_eq!(cfg.startup.logging.level, LogLevel::Info);
     assert_eq!(cfg.runtime.quantization.stage, QuantizationStage::Disabled);
     assert_eq!(cfg.runtime.search.filter_overfetch, 10);
@@ -97,6 +97,95 @@ fn auto_index_thresholds_are_configurable() {
 }
 
 #[test]
+fn a_misspelled_index_key_is_an_error() {
+    let parse = |yaml: &str| yaml_serde::from_str::<Config>(yaml).map_err(|e| e.to_string());
+
+    let hnsw = "runtime:\n  index:\n    type: hnsw\n    m: 16\n    m_max: 32\n    ef_construction: 200\n    ef_search: 200\n    ml: 0.36\n    metric: cosine\n";
+    parse(hnsw).unwrap();
+    let err = parse(&format!("{hnsw}    ef_serch: 100\n")).unwrap_err();
+    assert!(err.contains("ef_serch"), "{err}");
+
+    let auto = "runtime:\n  index:\n    type: auto\n    metric: cosine\n";
+    parse(auto).unwrap();
+    let err = parse(&format!("{auto}    hnsw_m: 8\n")).unwrap_err();
+    assert!(err.contains("hnsw_m"), "{err}");
+
+    let err =
+        parse("runtime:\n  index:\n    type: flat\n    metric: cosine\n    m: 4\n").unwrap_err();
+    assert!(err.contains("unknown field"), "{err}");
+
+    let err = parse("runtime:\n  index:\n    type: annoy\n").unwrap_err();
+    assert!(err.contains("annoy"), "{err}");
+}
+
+#[test]
+fn the_index_config_round_trips_through_yaml() {
+    for index in [
+        IndexConfig::default(),
+        IndexConfig::Hnsw {
+            params: piramid_core::config::HnswConfig::default(),
+        },
+        IndexConfig::Ivf {
+            params: piramid_core::config::IvfConfig::default(),
+        },
+        IndexConfig::Flat {
+            params: piramid_core::config::FlatConfig::default(),
+        },
+    ] {
+        let yaml = yaml_serde::to_string(&index).unwrap();
+        let parsed: IndexConfig = yaml_serde::from_str(&yaml).unwrap();
+        assert_eq!(parsed, index, "{yaml}");
+    }
+}
+
+#[test]
+fn hnsw_from_m_derives_the_layer_multiplier_from_m() {
+    let cfg = piramid_core::config::HnswConfig::from_m(4, 64, 32);
+    assert_eq!(cfg.m_max, 8);
+    assert!((cfg.ml - 1.0 / 4.0_f32.ln()).abs() < 1e-6, "{}", cfg.ml);
+}
+
+#[test]
+fn auto_index_parameters_are_validated() {
+    let check = |mutate: fn(&mut AutoIndexConfig)| {
+        let mut auto = AutoIndexConfig::default();
+        mutate(&mut auto);
+        IndexConfig::Auto {
+            metric: Metric::Cosine,
+            auto,
+        }
+        .validate()
+    };
+
+    check(|_| {}).unwrap();
+    check(|a| a.ivf_num_clusters = Some(4)).unwrap();
+    check(|a| {
+        a.ivf_num_clusters = Some(4);
+        a.ivf_num_probes = Some(4);
+    })
+    .unwrap();
+
+    let err = check(|a| a.hnsw_m = 1).unwrap_err();
+    assert!(err.contains("hnsw_m"), "{err}");
+    let err = check(|a| a.ivf_num_clusters = Some(0)).unwrap_err();
+    assert!(err.contains("ivf_num_clusters"), "{err}");
+    let err = check(|a| {
+        a.ivf_num_clusters = Some(4);
+        a.ivf_num_probes = Some(0);
+    })
+    .unwrap_err();
+    assert!(err.contains("ivf_num_probes"), "{err}");
+    let err = check(|a| {
+        a.ivf_num_clusters = Some(4);
+        a.ivf_num_probes = Some(10);
+    })
+    .unwrap_err();
+    assert!(err.contains("ivf_num_probes"), "{err}");
+    let err = check(|a| a.ivf_num_probes = Some(2)).unwrap_err();
+    assert!(err.contains("ivf_num_clusters"), "{err}");
+}
+
+#[test]
 fn unimplemented_settings_are_rejected_rather_than_ignored() {
     let mut cfg = Config::default();
 
@@ -127,6 +216,10 @@ fn unimplemented_settings_are_rejected_rather_than_ignored() {
     let mut cfg = Config::default();
     cfg.runtime.inference.fusion.enabled = true;
     assert!(cfg.validate().unwrap_err().contains("not implemented"));
+
+    let mut cfg = Config::default();
+    cfg.runtime.inference.fusion.chunk_tokens = 64;
+    cfg.validate().unwrap();
 }
 
 #[test]
@@ -146,8 +239,16 @@ fn every_unimplemented_subsystem_refuses_to_start() {
                 as Box<dyn Fn(&mut Config)>,
         ),
         (
+            "fusion top_k",
+            Box::new(|c: &mut Config| c.runtime.inference.fusion.top_k = 4),
+        ),
+        (
             "document_kv",
             Box::new(|c: &mut Config| c.runtime.inference.document_kv.enabled = true),
+        ),
+        (
+            "document_kv max_bytes",
+            Box::new(|c: &mut Config| c.runtime.inference.document_kv.max_bytes = Some(1 << 20)),
         ),
         (
             "retrieval bandwidth share",
@@ -235,11 +336,20 @@ fn the_gpu_profile_refuses_a_cpu_execution_mode() {
 
 #[test]
 fn memory_class_profiles_round_trip_through_yaml() {
-    for name in ["auto", "cpu-only", "gpu", "8gb", "16gb", "32gb"] {
+    for name in ["cpu-only", "gpu", "8gb", "16gb", "32gb"] {
         let yaml = format!("startup:\n  hardware:\n    profile: {name}\n");
         let cfg: Config = yaml_serde::from_str(&yaml).unwrap();
         assert_eq!(cfg.startup.hardware.profile.as_str(), name);
     }
+}
+
+#[test]
+fn an_auto_hardware_profile_is_an_unknown_value() {
+    let yaml = "startup:\n  hardware:\n    profile: auto\n";
+    let err = yaml_serde::from_str::<Config>(yaml)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("auto"), "{err}");
 }
 
 #[test]
@@ -328,4 +438,14 @@ fn a_zero_embedding_timeout_is_rejected() {
     let yaml = "startup:\n  embedding:\n    provider: openai\n    model: m\n    timeout: 0\n";
     let cfg: Config = yaml_serde::from_str(yaml).unwrap();
     assert!(cfg.validate().unwrap_err().contains("timeout"));
+}
+
+#[test]
+fn the_piramid_embedding_provider_refuses_a_timeout() {
+    let base = "startup:\n  embedding:\n    provider: piramid\n    model: /models/e\n";
+    let parse = |yaml: &str| yaml_serde::from_str::<Config>(yaml).unwrap().validate();
+    parse(base).unwrap();
+    assert!(parse(&format!("{base}    timeout: 30\n"))
+        .unwrap_err()
+        .contains("startup.embedding.timeout: the piramid provider takes none"));
 }

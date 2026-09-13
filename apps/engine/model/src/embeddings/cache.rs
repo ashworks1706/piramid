@@ -67,8 +67,4 @@ impl<E: Embedder> Embedder for CachedEmbedder<E> {
     fn model_name(&self) -> &str {
         self.inner.model_name()
     }
-
-    fn dimensions(&self) -> Option<usize> {
-        self.inner.dimensions()
-    }
 }

@@ -1,7 +1,7 @@
 //! Model execution: the forward pass, its memory, and how retrieval enters it.
 //!
 //! Fusion and document key/value reuse are not implemented; [InferenceConfig::validate] refuses
-//! turning them on.
+//! any of their settings away from its default, except fusion.chunk_tokens.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,8 @@ pub struct InferenceConfig {
     /// name.
     pub model_name: Option<String>,
 
-    /// Tokenizer location, when it does not sit beside the weights.
+    /// Directory holding tokenizer.json and tokenizer_config.json, when it is not the checkpoint
+    /// directory.
     pub tokenizer_path: Option<String>,
 
     /// Which forked model file drives the pass. None reads it from the checkpoint.
@@ -369,8 +370,8 @@ pub enum DocumentKvStorage {
 impl InferenceConfig {
     /// Reject anything the build cannot honour.
     ///
-    /// Turning on fusion or document key/value reuse is an error naming the roadmap version that
-    /// will implement it.
+    /// A fusion setting other than chunk_tokens, or a document_kv setting, away from its default
+    /// is an error naming the roadmap version that will implement it.
     pub fn validate(&self) -> Result<(), String> {
         if self.enabled && self.model_path.is_none() {
             return Err("runtime.inference.model_path: required when inference is enabled".into());
@@ -404,14 +405,21 @@ impl InferenceConfig {
                     .into(),
             );
         }
-        if self.fusion.enabled {
+        let fusion_defaults = FusionConfig {
+            chunk_tokens: self.fusion.chunk_tokens,
+            ..FusionConfig::default()
+        };
+        if self.fusion != fusion_defaults {
             return Err(
-                "runtime.inference.fusion.enabled: not implemented yet (roadmap v0.6.0)".into(),
+                "runtime.inference.fusion: not implemented yet (roadmap v0.6.0), so every key \
+                 except chunk_tokens must stay at its default"
+                    .into(),
             );
         }
-        if self.document_kv.enabled {
+        if self.document_kv != DocumentKvConfig::default() {
             return Err(
-                "runtime.inference.document_kv.enabled: not implemented yet (roadmap v0.6.0)"
+                "runtime.inference.document_kv: not implemented yet (roadmap v0.6.0), so every \
+                 key must stay at its default"
                     .into(),
             );
         }
@@ -432,22 +440,8 @@ impl InferenceConfig {
                 "runtime.inference.kv_cache.device_fraction: must be within 0.0..=1.0".into(),
             );
         }
-        if self.fusion.top_k == 0 {
-            return Err("runtime.inference.fusion.top_k: must be >= 1".into());
-        }
-        if self.fusion.overfetch == 0 {
-            return Err("runtime.inference.fusion.overfetch: must be >= 1".into());
-        }
         if self.fusion.chunk_tokens == 0 {
             return Err("runtime.inference.fusion.chunk_tokens: must be >= 1".into());
-        }
-        if self.fusion.layer_stride == 0 {
-            return Err("runtime.inference.fusion.layer_stride: must be >= 1".into());
-        }
-        if !(0.0..=1.0).contains(&self.document_kv.recompute_ratio) {
-            return Err(
-                "runtime.inference.document_kv.recompute_ratio: must be within 0.0..=1.0".into(),
-            );
         }
         if self.batching.max_batched_tokens == 0 {
             return Err("runtime.inference.batching.max_batched_tokens: must be >= 1".into());

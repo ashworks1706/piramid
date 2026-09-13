@@ -31,10 +31,6 @@ impl Embedder for MockEmbedder {
     fn model_name(&self) -> &str {
         "mock-model"
     }
-
-    fn dimensions(&self) -> Option<usize> {
-        Some(1)
-    }
 }
 
 #[tokio::test]

@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use crate::services::api::{RangeSearchRequest, SearchRequest, SearchResponse};
+use crate::services::api::{RangeSearchRequest, SearchRequest, SearchResponse, SearchTuning};
 use crate::services::convert::{
     apply_search_overrides, hit_to_response, parse_filter, parse_metric,
 };
@@ -44,7 +44,9 @@ pub fn search_vectors(
         k,
         metric,
         filter,
-        tuning,
+        ef,
+        nprobe,
+        filter_overfetch,
     } = req;
     if vectors.is_empty() {
         return Err(ServerError::InvalidRequest("vectors must not be empty".to_string()).into());
@@ -63,7 +65,14 @@ pub fn search_vectors(
     );
     let metric = parse_metric(metric, collection_guard.vector_index().metric())?;
 
-    let effective_search = apply_search_overrides(collection_guard.config().search, &tuning)?;
+    let effective_search = apply_search_overrides(
+        collection_guard.config().search,
+        &SearchTuning {
+            ef,
+            nprobe,
+            filter_overfetch,
+        },
+    )?;
 
     let span = tracing::Span::current();
     span.record(
@@ -80,7 +89,6 @@ pub fn search_vectors(
     let params = piramid_database::search::SearchParams {
         mode: collection_guard.config().execution,
         filter: filter.as_ref(),
-        filter_overfetch_override: tuning.filter_overfetch,
         search_config_override: Some(effective_search),
         min_score: None,
     };
@@ -142,7 +150,9 @@ pub fn range_search_vectors(
         metric,
         k,
         filter,
-        tuning,
+        ef,
+        nprobe,
+        filter_overfetch,
     } = req;
     if vectors.is_empty() {
         return Err(ServerError::InvalidRequest("vectors must not be empty".to_string()).into());
@@ -161,11 +171,17 @@ pub fn range_search_vectors(
     );
     let metric = parse_metric(metric, collection_guard.vector_index().metric())?;
 
-    let effective_search = apply_search_overrides(collection_guard.config().search, &tuning)?;
+    let effective_search = apply_search_overrides(
+        collection_guard.config().search,
+        &SearchTuning {
+            ef,
+            nprobe,
+            filter_overfetch,
+        },
+    )?;
     let params = piramid_database::search::SearchParams {
         mode: collection_guard.config().execution,
         filter: filter.as_ref(),
-        filter_overfetch_override: tuning.filter_overfetch,
         search_config_override: Some(effective_search),
         min_score: Some(min_score),
     };

@@ -43,6 +43,9 @@ pub enum ServeError {
     /// One or more collections failed to checkpoint at shutdown.
     #[error("checkpoint at shutdown failed for collections: {}", .0.join(", "))]
     Checkpoint(Vec<String>),
+    /// The inference shutdown task did not run to completion.
+    #[error("inference shutdown task: {0}")]
+    InferenceShutdownTask(#[source] tokio::task::JoinError),
 }
 
 /// Refuses a non-loopback listener when no key is set and the operator has not opted out.
@@ -133,17 +136,30 @@ where
         sweeper.abort();
     }
     state.initiate_shutdown();
-    if let Some(manager) = state.inference.clone() {
-        if tokio::task::spawn_blocking(move || manager.shutdown())
-            .await
-            .is_err()
-        {
-            tracing::error!(target: "piramid::shutdown", "inference_shutdown_task_failed");
-        }
+    let inference_shutdown = match state.inference.clone() {
+        Some(manager) => tokio::task::spawn_blocking(move || manager.shutdown()).await,
+        None => Ok(()),
+    };
+    if let Err(error) = &inference_shutdown {
+        tracing::error!(
+            target: "piramid::shutdown",
+            %error,
+            "inference_shutdown_task_failed"
+        );
     }
     let checkpointed = checkpoint(state).await;
+    shutdown_outcome(served, checkpointed, inference_shutdown)
+}
+
+/// The first failure of serving, checkpointing and inference shutdown, in that order.
+fn shutdown_outcome(
+    served: std::io::Result<()>,
+    checkpointed: Result<(), ServeError>,
+    inference_shutdown: Result<(), tokio::task::JoinError>,
+) -> Result<(), ServeError> {
     served?;
-    checkpointed
+    checkpointed?;
+    inference_shutdown.map_err(ServeError::InferenceShutdownTask)
 }
 
 /// Checkpoints and flushes every open collection, logging each failure.
@@ -200,5 +216,27 @@ mod tests {
             ..AuthConfig::default()
         };
         assert!(check_exposure(exposed, &opted_out).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_panicked_inference_shutdown_fails_serve_after_the_checkpoint() {
+        let panicked = || async {
+            let task: tokio::task::JoinHandle<()> =
+                tokio::task::spawn_blocking(|| panic!("shutdown"));
+            task.await
+        };
+        assert!(shutdown_outcome(Ok(()), Ok(()), Ok(())).is_ok());
+        assert!(matches!(
+            shutdown_outcome(Ok(()), Ok(()), panicked().await),
+            Err(ServeError::InferenceShutdownTask(_))
+        ));
+        assert!(matches!(
+            shutdown_outcome(
+                Ok(()),
+                Err(ServeError::Checkpoint(vec![])),
+                panicked().await
+            ),
+            Err(ServeError::Checkpoint(_))
+        ));
     }
 }

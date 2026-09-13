@@ -13,8 +13,8 @@ pub struct EmbeddingConfig {
     /// Model identifier as the provider understands it; for piramid, the checkpoint directory.
     pub model: String,
 
-    /// API key. OPENAI_API_KEY sets it from the environment.
-    #[serde(default)]
+    /// API key for the openai provider. Set from OPENAI_API_KEY only.
+    #[serde(skip)]
     pub api_key: Option<String>,
 
     /// Base URL, for self-hosted or proxied endpoints.
@@ -61,10 +61,22 @@ impl EmbeddingConfig {
             _ => return Err("startup.embedding.options: must be null or a mapping".into()),
         }
         match self.provider.as_str() {
-            "openai" | "ollama" => Ok(()),
+            "openai" => Ok(()),
+            "ollama" => {
+                if self.api_key.is_some() {
+                    return Err("startup.embedding.api_key: the ollama provider takes none".into());
+                }
+                Ok(())
+            }
             "piramid" => {
                 if self.base_url.is_some() {
                     return Err("startup.embedding.base_url: the piramid provider takes none".into());
+                }
+                if self.api_key.is_some() {
+                    return Err("startup.embedding.api_key: the piramid provider takes none".into());
+                }
+                if self.timeout.is_some() {
+                    return Err("startup.embedding.timeout: the piramid provider takes none".into());
                 }
                 if let serde_json::Value::Object(fields) = &self.options {
                     if let Some(unknown) = fields

@@ -5,22 +5,22 @@
 
 use crate::console::types::{Group, Kind, Unit};
 
-/// Everything the console knows how to run.
-pub fn catalog() -> Vec<Unit> {
-    let mut units = processes();
+/// Everything the console knows how to run, with the serve unit at server_url.
+pub fn catalog(server_url: &str) -> Vec<Unit> {
+    let mut units = processes(server_url);
     units.extend(services());
     units.extend(tasks());
     units.extend(deploys());
     units
 }
 
-fn processes() -> Vec<Unit> {
+fn processes(server_url: &str) -> Vec<Unit> {
     vec![
         process(
             "serve",
             &["serve"],
             "the engine and its HTTP surface",
-            Some("http://localhost:6333"),
+            Some(server_url),
         ),
         process(
             "web",

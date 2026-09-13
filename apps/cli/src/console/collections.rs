@@ -24,9 +24,9 @@ pub struct Row {
 }
 
 impl Row {
-    /// Vectors held, or zero for a collection that has not been opened.
-    pub fn vectors(&self) -> usize {
-        self.metrics.as_ref().map_or(0, |m| m.vector_count)
+    /// Vectors held, or None for a collection that has not been opened.
+    pub fn vectors(&self) -> Option<usize> {
+        self.metrics.as_ref().map(|m| m.vector_count)
     }
 
     /// Whether the server has this collection open.
@@ -91,7 +91,7 @@ pub struct Collections {
     /// Server-wide totals from the last successful refresh.
     pub snapshot: Option<Snapshot>,
     /// Why the last refresh failed, if it did.
-    pub error: Option<String>,
+    pub error: Option<ClientError>,
     /// Search latency history in microseconds, by collection.
     pub history: HashMap<String, VecDeque<u64>>,
     /// An action waiting on a yes or no key.
@@ -154,7 +154,7 @@ impl Collections {
                 self.snapshot = Some(snapshot);
             }
             // The last good snapshot stays on screen when a poll fails.
-            Err(e) => self.error = Some(e.to_string()),
+            Err(e) => self.error = Some(e),
         }
     }
 

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use piramid_core::error::{Result, ServerError};
+use piramid_core::error::{Result, ServerError, StorageError};
 use uuid::Uuid;
 
 use crate::storage::vectors::{VectorReader, VectorSlab};
@@ -57,7 +57,7 @@ impl VectorStore {
         }
         let ordinal = match self.ordinals.get(&id) {
             Some(existing) => *existing,
-            None => self.claim_row(id, dim),
+            None => self.claim_row(id, dim)?,
         };
         let start = ordinal as usize * dim;
         self.slab[start..start + dim].copy_from_slice(vector);
@@ -89,40 +89,49 @@ impl VectorStore {
     }
 
     /// A hole if there is one, otherwise a new row at the end.
-    fn claim_row(&mut self, id: Uuid, dim: usize) -> u32 {
+    fn claim_row(&mut self, id: Uuid, dim: usize) -> Result<u32> {
         let ordinal = match self.free.pop() {
             Some(ordinal) => {
                 self.ids[ordinal as usize] = id;
                 ordinal
             }
             None => {
-                let ordinal = u32::try_from(self.ids.len()).unwrap_or(u32::MAX);
+                let ordinal = ordinal_for_row(self.ids.len())?;
                 self.ids.push(id);
                 self.slab.resize(self.slab.len() + dim, 0.0);
                 ordinal
             }
         };
         self.ordinals.insert(id, ordinal);
-        ordinal
+        Ok(ordinal)
     }
 
-    fn row(&self, ordinal: u32) -> &[f32] {
-        let dim = self.dim.unwrap_or(0);
+    fn row(&self, ordinal: u32, dim: usize) -> &[f32] {
         let start = ordinal as usize * dim;
         &self.slab[start..start + dim]
     }
 }
 
+/// The ordinal of the row at index, or an error when it does not fit in a u32.
+fn ordinal_for_row(index: usize) -> Result<u32> {
+    u32::try_from(index)
+        .map_err(|_| StorageError::StorageFull("vector store exceeds u32::MAX rows".into()).into())
+}
+
 impl VectorReader for VectorStore {
     fn get(&self, id: &Uuid) -> Option<&[f32]> {
-        self.ordinals.get(id).map(|ordinal| self.row(*ordinal))
+        let dim = self.dim?;
+        self.ordinals.get(id).map(|ordinal| self.row(*ordinal, dim))
     }
 
     fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (Uuid, &'a [f32])> + 'a> {
+        let Some(dim) = self.dim else {
+            return Box::new(std::iter::empty());
+        };
         Box::new(
             self.ordinals
                 .iter()
-                .map(|(id, ordinal)| (*id, self.row(*ordinal))),
+                .map(move |(id, ordinal)| (*id, self.row(*ordinal, dim))),
         )
     }
 
@@ -260,6 +269,13 @@ mod tests {
         // Clearing allows a new width.
         store.put(Uuid::new_v4(), &[1.0, 2.0, 3.0]).unwrap();
         assert_eq!(VectorReader::dim(&store), Some(3));
+    }
+
+    #[test]
+    fn a_row_past_the_u32_range_is_refused() {
+        assert_eq!(ordinal_for_row(u32::MAX as usize).unwrap(), u32::MAX);
+        let error = ordinal_for_row(u32::MAX as usize + 1).unwrap_err();
+        assert!(error.to_string().contains("u32::MAX rows"), "{error}");
     }
 
     #[test]

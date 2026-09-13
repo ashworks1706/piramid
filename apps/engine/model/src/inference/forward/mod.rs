@@ -109,7 +109,7 @@ impl<M: DecoderModel> Driver<M> {
                 point,
                 tokens: progress.tokens,
                 hidden_dim,
-                stream: None,
+                stream: self.model.stream(),
             })
             .map_err(|e| InferenceError::Runtime(format!("{name} launch: {e}")))?;
         let mut pending = Some(pending);
@@ -271,6 +271,75 @@ mod tests {
             }
             Ok(())
         }
+    }
+
+    /// Stream ids seen at launch and at join, per hook call.
+    type SeenStreams = Arc<Mutex<Vec<(Option<u64>, Option<u64>)>>>;
+
+    struct StreamIds {
+        seen: SeenStreams,
+    }
+
+    struct StreamIdsPending {
+        launched: Option<u64>,
+        seen: SeenStreams,
+    }
+
+    impl RetrievalHook for StreamIds {
+        fn name(&self) -> &'static str {
+            "stream-ids"
+        }
+
+        fn wants(&self, point: RetrievalPoint) -> bool {
+            point == RetrievalPoint::SequenceStart
+        }
+
+        fn launch(&self, request: &RetrievalRequest<'_>) -> CoreResult<Box<dyn PendingRetrieval>> {
+            Ok(Box::new(StreamIdsPending {
+                launched: request.stream.map(|stream| stream.id()),
+                seen: self.seen.clone(),
+            }))
+        }
+    }
+
+    impl PendingRetrieval for StreamIdsPending {
+        fn join(self: Box<Self>, ctx: &mut ForwardContext<'_>) -> CoreResult<()> {
+            self.seen
+                .lock()
+                .unwrap()
+                .push((self.launched, ctx.stream.map(|stream| stream.id())));
+            Ok(())
+        }
+    }
+
+    fn stream_ids_on(device: &candle_core::Device) -> Vec<(Option<u64>, Option<u64>)> {
+        use crate::inference::backends::candle::qwen::testing::tiny_model_on;
+
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let hook = Arc::new(StreamIds { seen: seen.clone() });
+        let tokens = [4u32, 5, 6];
+        let batch = StepBatch {
+            sequences: vec![prefill(&tokens, 0, 0, true)],
+        };
+        let mut driver = Driver::new(tiny_model_on(Architecture::Qwen3, 4, 16, device), hook);
+        driver.step(&batch, &[progress(&tokens, true)]).unwrap();
+        let ids = seen.lock().unwrap().clone();
+        ids
+    }
+
+    #[test]
+    fn launch_on_the_cpu_is_told_there_is_no_model_stream() {
+        assert_eq!(stream_ids_on(&candle_core::Device::Cpu), vec![(None, None)]);
+    }
+
+    #[cfg(feature = "gpu-cuda")]
+    #[test]
+    #[ignore = "needs a CUDA device"]
+    fn launch_on_a_device_is_given_the_stream_join_orders_against() {
+        let ids = stream_ids_on(&candle_core::Device::new_cuda(0).unwrap());
+        assert_eq!(ids.len(), 1);
+        assert!(ids[0].0.is_some());
+        assert_eq!(ids[0].0, ids[0].1);
     }
 
     #[test]

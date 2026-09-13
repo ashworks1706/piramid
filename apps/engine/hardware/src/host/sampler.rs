@@ -84,8 +84,7 @@ impl Default for HostSampler {
 
 /// Converts a percentage of one logical CPU into a percentage of all of them.
 fn share_of_host(percent_of_one_cpu: f32, cpus: usize) -> f32 {
-    let cpus = u16::try_from(cpus).unwrap_or(u16::MAX);
-    percent_of_one_cpu / f32::from(cpus)
+    percent_of_one_cpu / cpus as f32
 }
 
 /// Reads memory, utilisation and temperature of every GPU the driver reports.
@@ -244,5 +243,10 @@ mod tests {
     fn process_use_is_scaled_to_every_cpu_of_the_host() {
         assert!((share_of_host(200.0, 8) - 25.0).abs() < f32::EPSILON);
         assert!((share_of_host(50.0, 1) - 50.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn process_use_is_scaled_by_a_cpu_count_above_the_u16_range() {
+        assert!((share_of_host(700_000.0, 70_000) - 10.0).abs() < 1e-4);
     }
 }

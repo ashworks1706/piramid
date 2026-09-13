@@ -9,10 +9,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum HardwareProfile {
-    /// The CPU.
-    #[default]
-    Auto,
     /// Never touch the GPU.
+    #[default]
     CpuOnly,
     /// Require a GPU; fail to start without one.
     Gpu,
@@ -30,21 +28,20 @@ pub enum HardwareProfile {
 impl HardwareProfile {
     /// Host memory this profile assumes, when it names one.
     ///
-    /// None for auto, cpu-only and gpu.
+    /// None for cpu-only and gpu.
     pub fn memory_class_bytes(&self) -> Option<u64> {
         const GB: u64 = 1024 * 1024 * 1024;
         match self {
             HardwareProfile::Memory8Gb => Some(8 * GB),
             HardwareProfile::Memory16Gb => Some(16 * GB),
             HardwareProfile::Memory32Gb => Some(32 * GB),
-            HardwareProfile::Auto | HardwareProfile::CpuOnly | HardwareProfile::Gpu => None,
+            HardwareProfile::CpuOnly | HardwareProfile::Gpu => None,
         }
     }
 
     /// Stable lowercase name, matching the serde representation.
     pub fn as_str(&self) -> &'static str {
         match self {
-            HardwareProfile::Auto => "auto",
             HardwareProfile::CpuOnly => "cpu-only",
             HardwareProfile::Gpu => "gpu",
             HardwareProfile::Memory8Gb => "8gb",

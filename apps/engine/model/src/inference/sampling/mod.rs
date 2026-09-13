@@ -169,6 +169,22 @@ pub fn validate(config: &SamplingConfig) -> Result<(), InferenceError> {
     if config.max_new_tokens == 0 {
         return invalid("max_new_tokens must be >= 1".to_string());
     }
+    if config.stop.iter().any(String::is_empty) {
+        return invalid("stop strings must not be empty".to_string());
+    }
+    if config.temperature == 0.0 {
+        for (field, set) in [
+            ("top_p", config.top_p.is_some()),
+            ("top_k", config.top_k.is_some()),
+            ("seed", config.seed.is_some()),
+        ] {
+            if set {
+                return invalid(format!(
+                    "{field} requires temperature > 0; temperature 0 is greedy"
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -329,6 +345,62 @@ mod tests {
         }
         let share = counts[1] as f64 / 4000.0;
         assert!((share - 0.75).abs() < 0.03, "share {share}");
+    }
+
+    #[test]
+    fn greedy_refuses_the_settings_only_sampling_reads() {
+        for (settings, field) in [
+            (
+                SamplingConfig {
+                    top_p: Some(0.9),
+                    ..config()
+                },
+                "top_p",
+            ),
+            (
+                SamplingConfig {
+                    top_k: Some(4),
+                    ..config()
+                },
+                "top_k",
+            ),
+            (
+                SamplingConfig {
+                    seed: Some(1),
+                    ..config()
+                },
+                "seed",
+            ),
+        ] {
+            let error = Sampler::new(&settings).unwrap_err();
+            assert!(
+                matches!(error, InferenceError::InvalidRequest(_)),
+                "{error}"
+            );
+            assert!(error.to_string().contains(field), "{error}");
+            assert!(error.to_string().contains("temperature"), "{error}");
+        }
+        let sampling = SamplingConfig {
+            temperature: 0.5,
+            top_p: Some(0.9),
+            top_k: Some(4),
+            seed: Some(1),
+            ..config()
+        };
+        assert!(Sampler::new(&sampling).is_ok());
+    }
+
+    #[test]
+    fn an_empty_stop_string_is_refused() {
+        let settings = SamplingConfig {
+            stop: vec!["end".to_string(), String::new()],
+            ..config()
+        };
+        let error = Sampler::new(&settings).unwrap_err();
+        assert!(
+            error.to_string().contains("stop strings must not be empty"),
+            "{error}"
+        );
     }
 
     #[test]

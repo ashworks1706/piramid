@@ -23,7 +23,7 @@ const SERVICES_INTERVAL: Duration = Duration::from_secs(3);
 
 /// Runs the console over the repo at root.
 pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<()> {
-    let settings = Settings::from_config(config);
+    let settings = Settings::from_config(config).map_err(std::io::Error::other)?;
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {
         let (tx, mut rx) = mpsc::unbounded_channel();

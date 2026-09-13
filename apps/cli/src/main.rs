@@ -12,7 +12,7 @@ mod support;
 use piramid::config::StartupConfig;
 use piramid::observability;
 use piramid::state::AppState;
-use piramid::{embeddings, server};
+use piramid::{embeddings, http};
 use tokio::runtime::Runtime;
 
 #[derive(Parser)]
@@ -87,7 +87,13 @@ fn main() {
         // the server; an installed binary gets the views that need only a server.
         None => {
             let config = piramid::config::loader::load().unwrap_or_else(exit_on_config_error);
-            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let cwd = match std::env::current_dir() {
+                Ok(cwd) => cwd,
+                Err(e) => {
+                    eprintln!("piramid: cannot read the working directory: {e}");
+                    std::process::exit(1);
+                }
+            };
             let (profile, root) = match console::repo_root(&cwd) {
                 Some(root) => (console::Profile::Developer, root),
                 None => (console::Profile::Production, cwd),
@@ -124,34 +130,42 @@ fn support_bundle(
     config: Option<PathBuf>,
     data_dir: Option<PathBuf>,
 ) -> std::io::Result<()> {
-    let config = piramid::config::loader::load_from(&config_source(config, None, data_dir))
-        .unwrap_or_else(exit_on_config_error);
+    let source = config_source(config, None, data_dir);
+    let config = piramid::config::loader::load_from(&source).unwrap_or_else(exit_on_config_error);
     let state = std::sync::Arc::new(
         AppState::new(config.clone(), embeddings::EmbeddingsManager::disabled())
             .map_err(std::io::Error::other)?,
     );
-    preload_collections_for_metrics(&state)?;
+    let failed = preload_collections_for_metrics(&state)?;
 
-    let path = support::write(&config, &state, Some(output))?;
-    println!("wrote {}", path.display());
+    let bundle = support::Bundle {
+        config: &config,
+        config_file: source.file.as_deref(),
+        state: &state,
+        failed_collections: &failed,
+    };
+    support::write(&bundle, &output)?;
+    println!("wrote {}", output.display());
     println!("Review it before sharing — it contains your configuration and collection names.");
     Ok(())
 }
 
-/// Open every collection on disk, naming each one that fails to open.
-fn preload_collections_for_metrics(state: &std::sync::Arc<AppState>) -> std::io::Result<()> {
+/// Open every collection on disk and return the name and error of each one that fails to open.
+fn preload_collections_for_metrics(
+    state: &std::sync::Arc<AppState>,
+) -> std::io::Result<Vec<(String, String)>> {
     let names = state
         .collection_manager
         .discover_on_disk()
         .map_err(std::io::Error::other)?;
+    let mut failed = Vec::new();
     for collection_name in names {
         if let Err(error) = state.get_existing_collection(&collection_name) {
-            eprintln!(
-                "Collection '{collection_name}' failed to open and is not in the bundle: {error}"
-            );
+            eprintln!("Collection '{collection_name}' failed to open: {error}");
+            failed.push((collection_name, error.to_string()));
         }
     }
-    Ok(())
+    Ok(failed)
 }
 
 fn start_server_inline(
@@ -163,7 +177,7 @@ fn start_server_inline(
         let _observability =
             observability::install(config.startup.logging, &config.startup.telemetry)
                 .map_err(std::io::Error::other)?;
-        init_thread_pool(&config.startup);
+        init_thread_pool(&config.startup)?;
         if config.startup.logging.config {
             tracing::info!(
                 target: "piramid::config",
@@ -196,7 +210,7 @@ fn start_server_inline(
             let hardware = config.startup.hardware;
             let device = gpu.clone();
             let manager = tokio::task::spawn_blocking(move || {
-                piramid::InferenceManager::load(
+                piramid::inference::InferenceManager::load(
                     &inference_config,
                     &hardware,
                     device.as_deref(),
@@ -219,7 +233,9 @@ fn start_server_inline(
             state = state.with_gpu(manager);
         }
         if let Some(manager) = inference {
-            state = state.with_inference(manager);
+            state = state
+                .with_inference(manager)
+                .map_err(std::io::Error::other)?;
         }
         let state = std::sync::Arc::new(state);
 
@@ -233,14 +249,16 @@ fn start_server_inline(
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
             .map_err(|e| std::io::Error::other(format!("bind {addr} failed: {e}")))?;
-        server::serve::serve(state, listener, shutdown)
+        http::serve::serve(state, listener, shutdown)
             .await
             .map_err(std::io::Error::other)
     })
 }
 
 /// Open the configured device with its memory budget and serve the gpu execution mode from it.
-fn open_gpu(hardware: &piramid::config::HardwareConfig) -> std::io::Result<piramid::GpuManager> {
+fn open_gpu(
+    hardware: &piramid::config::HardwareConfig,
+) -> std::io::Result<piramid::gpu::GpuManager> {
     let vram = hardware.vram;
     let settings = piramid::gpu::BudgetSettings {
         limit_bytes: hardware.gpu_memory_budget_bytes,
@@ -252,20 +270,20 @@ fn open_gpu(hardware: &piramid::config::HardwareConfig) -> std::io::Result<piram
         }),
     };
     let manager =
-        piramid::GpuManager::open(hardware.gpu.device_ordinal, settings, hardware.gpu.streams)
+        piramid::gpu::GpuManager::open(hardware.gpu.device_ordinal, settings, hardware.gpu.streams)
             .map_err(|e| std::io::Error::other(format!("startup.hardware: {e}")))?;
     install_gpu(&manager, hardware.gpu.distance_block_size)?;
     Ok(manager)
 }
 
 #[cfg(feature = "gpu-cuda")]
-fn install_gpu(manager: &piramid::GpuManager, block_size: u32) -> std::io::Result<()> {
+fn install_gpu(manager: &piramid::gpu::GpuManager, block_size: u32) -> std::io::Result<()> {
     piramid::compute::strategies::install_gpu(manager, block_size)
         .map_err(|e| std::io::Error::other(format!("startup.hardware.gpu: {e}")))
 }
 
 #[cfg(not(feature = "gpu-cuda"))]
-fn install_gpu(_manager: &piramid::GpuManager, _block_size: u32) -> std::io::Result<()> {
+fn install_gpu(_manager: &piramid::gpu::GpuManager, _block_size: u32) -> std::io::Result<()> {
     Err(std::io::Error::other(
         "startup.hardware.profile: gpu needs a build with the gpu-cuda feature",
     ))
@@ -299,14 +317,13 @@ fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
 }
 
 /// Build the global rayon pool. Called once, before any collection opens.
-fn init_thread_pool(startup: &StartupConfig) {
-    let num_threads = startup.num_threads();
-    if let Err(error) = rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
+///
+/// Returns an error if the global pool cannot be built.
+fn init_thread_pool(startup: &StartupConfig) -> std::io::Result<()> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(startup.num_threads())
         .build_global()
-    {
-        tracing::warn!(target: "piramid::config", %error, "thread_pool_already_built");
-    }
+        .map_err(|error| std::io::Error::other(format!("startup.threads: {error}")))
 }
 
 fn animate() {

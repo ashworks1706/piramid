@@ -27,7 +27,7 @@ pub enum RebuildState {
     Running,
     /// The rebuild finished without error.
     Completed,
-    /// The rebuild returned an error.
+    /// The rebuild returned an error or panicked.
     Failed,
 }
 
@@ -126,7 +126,7 @@ impl AppState {
             booted_inference,
             config_source: ConfigSource::default(),
             rebuild_jobs: Arc::new(DashMap::new()),
-            config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs())),
+            config_last_reload: Arc::new(AtomicU64::new(piramid_core::clock::unix_secs()?)),
         })
     }
 
@@ -137,12 +137,11 @@ impl AppState {
         self
     }
 
-    /// Serve generations from a loaded model.
-    #[must_use]
-    pub fn with_inference(mut self, manager: Arc<InferenceManager>) -> Self {
+    /// Serve generations from a loaded model. Errors when the clock reads before 1970.
+    pub fn with_inference(mut self, manager: Arc<InferenceManager>) -> Result<Self> {
         self.inference = Some(manager);
-        self.inference_loaded_at = piramid_core::clock::unix_secs();
-        self
+        self.inference_loaded_at = piramid_core::clock::unix_secs()?;
+        Ok(self)
     }
 
     /// Read reloads from source, the one the process booted from.
@@ -263,7 +262,7 @@ impl AppState {
                 ))
             })?;
         }
-        let now = piramid_core::clock::unix_secs();
+        let now = piramid_core::clock::unix_secs()?;
         self.config_last_reload.store(now, Ordering::Relaxed);
         Ok(new_cfg)
     }
@@ -282,8 +281,8 @@ impl AppState {
         super::disk::free_bytes(&self.data_dir)
     }
 
-    /// Error with 503 when shutting down, or below the free-space floor with read-only on low
-    /// space enabled. Read-only lifts at the first write that finds the space back.
+    /// Error with 503 when shutting down or below the free-space floor. With read-only on low
+    /// space enabled the server stays read-only until the first write that finds the space back.
     pub fn ensure_write_allowed(&self) -> Result<()> {
         self.ensure_available()?;
         let Some(min_free) = self.disk_min_free_bytes() else {
@@ -314,7 +313,10 @@ impl AppState {
                 min_free = min_free,
                 "disk_space_low"
             );
-            return Ok(());
+            return Err(ServerError::ServiceUnavailable(format!(
+                "free disk space {free} bytes is below startup.disk.min_free_bytes {min_free}"
+            ))
+            .into());
         }
         self.read_only.store(true, Ordering::Relaxed);
         Err(

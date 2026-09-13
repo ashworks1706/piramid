@@ -32,8 +32,8 @@ pub struct Version {
 pub struct Metrics {
     pub collections: Vec<CollectionMetrics>,
     pub wal_stats: Vec<WalStats>,
-    /// Host readings. None from a server that predates the host block.
-    pub host: Option<HostMetrics>,
+    /// Host readings.
+    pub host: HostMetrics,
     /// One entry per GPU the server measured. Empty when the server left the list out.
     #[serde(default)]
     pub gpus: Vec<GpuMetrics>,
@@ -349,14 +349,10 @@ pub fn root_cause(error: &reqwest::Error) -> String {
 }
 
 /// An error body trimmed to something that fits on the status line.
-fn summarize(body: &str) -> String {
+pub fn summarize(body: &str) -> String {
     let text = serde_json::from_str::<serde_json::Value>(body)
         .ok()
-        .and_then(|v| {
-            v.get("error")
-                .or_else(|| v.get("message"))
-                .and_then(|m| m.as_str().map(str::to_owned))
-        })
+        .and_then(|v| v.get("error").and_then(|m| m.as_str().map(str::to_owned)))
         .unwrap_or_else(|| body.trim().to_owned());
     text.chars().take(140).collect()
 }

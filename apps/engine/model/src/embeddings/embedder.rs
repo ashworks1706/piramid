@@ -32,7 +32,4 @@ pub trait Embedder: Send + Sync {
 
     /// Model identifier requests are sent with.
     fn model_name(&self) -> &str;
-
-    /// Vector width, when the provider declares one.
-    fn dimensions(&self) -> Option<usize>;
 }

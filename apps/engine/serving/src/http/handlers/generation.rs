@@ -110,7 +110,7 @@ pub async fn openai_chat_completions(
         .is_some_and(|options| options.include_usage);
     let (model, generation) = generation::start_chat(&state, request).await?;
     let id = format!("chatcmpl-{}", generation.id);
-    let created = piramid_core::clock::unix_secs();
+    let created = piramid_core::clock::unix_secs()?;
     if stream_chunks {
         let header = ChunkHeader { id, model, created };
         let chunks = openai_chunks(generation, header, include_usage);

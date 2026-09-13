@@ -6,8 +6,6 @@ services:
   piramid:
     build: !reset null
     image: ghcr.io/ashworks1706/piramid:${PIRAMID_IMAGE_TAG:-main}
-    environment:
-      RUST_LOG: ${RUST_LOG:-info}
     deploy:
       resources:
         limits:

@@ -32,7 +32,6 @@ impl OpenAIEmbedder {
 
     /// A client for the configured model. base_url is the full endpoint URL; unset is the OpenAI
     /// endpoint.
-    // The key reaches config from OPENAI_API_KEY in the loader.
     pub fn new(config: &EmbeddingConfig) -> EmbeddingResult<Self> {
         let base_url = config
             .base_url
@@ -84,11 +83,7 @@ impl Embedder for OpenAIEmbedder {
                 .await
                 .unwrap_or_else(|error| format!("<body unreadable: {error}>"));
 
-            return Err(match status.as_u16() {
-                401 => EmbeddingError::AuthenticationFailed(error_text),
-                429 => EmbeddingError::RateLimitExceeded,
-                _ => EmbeddingError::ApiError(format!("{status}: {error_text}")),
-            });
+            return Err(status_error(status, error_text));
         }
 
         let api_response: OpenAIEmbeddingResponse = response
@@ -114,13 +109,16 @@ impl Embedder for OpenAIEmbedder {
     fn model_name(&self) -> &str {
         &self.model
     }
+}
 
-    fn dimensions(&self) -> Option<usize> {
-        match self.model.as_str() {
-            "text-embedding-3-small" => Some(1536),
-            "text-embedding-3-large" => Some(3072),
-            _ => None,
-        }
+/// The error for a response with a failure status and its body.
+fn status_error(status: reqwest::StatusCode, body: String) -> EmbeddingError {
+    match status.as_u16() {
+        400 | 422 => EmbeddingError::InvalidInput(format!("{status}: {body}")),
+        401 => EmbeddingError::AuthenticationFailed(body),
+        404 => EmbeddingError::InvalidModel(format!("{status}: {body}")),
+        429 => EmbeddingError::RateLimitExceeded,
+        _ => EmbeddingError::ApiError(format!("{status}: {body}")),
     }
 }
 
@@ -162,5 +160,27 @@ mod tests {
         assert_eq!(body["user"], "docs");
         assert_eq!(body["model"], "text-embedding-3-small");
         assert_eq!(body["input"], "hello");
+    }
+
+    #[test]
+    fn refused_input_and_unknown_models_are_not_retried() {
+        let error =
+            |code: u16| status_error(reqwest::StatusCode::from_u16(code).unwrap(), "no".into());
+        for code in [400, 422] {
+            assert!(
+                matches!(error(code), EmbeddingError::InvalidInput(_)),
+                "{code}"
+            );
+            assert!(!error(code).is_recoverable(), "{code}");
+        }
+        assert!(matches!(error(404), EmbeddingError::InvalidModel(_)));
+        assert!(!error(404).is_recoverable());
+        assert!(matches!(
+            error(401),
+            EmbeddingError::AuthenticationFailed(_)
+        ));
+        assert!(matches!(error(429), EmbeddingError::RateLimitExceeded));
+        assert!(matches!(error(503), EmbeddingError::ApiError(_)));
+        assert!(error(503).is_recoverable());
     }
 }

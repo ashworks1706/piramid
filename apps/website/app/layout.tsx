@@ -29,7 +29,6 @@ export const metadata: Metadata = {
   keywords: [
     "vector database",
     "rust",
-    "low latency",
     "HNSW",
     "IVF",
     "flat index",
@@ -62,10 +61,10 @@ export const metadata: Metadata = {
     siteName: "Piramid",
     images: [
       {
-        url: "../public/logo_dark.png",
-        width: 1200,
-        height: 630,
-        alt: "Piramid Vector Database",
+        url: "/logo_dark.png",
+        width: 711,
+        height: 732,
+        alt: "Piramid",
       },
     ],
   },
@@ -74,7 +73,7 @@ export const metadata: Metadata = {
     title: "Piramid – Inference engine for RAG",
     description:
       "A single-binary vector database in Rust, built toward running retrieval and inference in one process.",
-    images: ["../public/logo_dark.png"],
+    images: ["/logo_dark.png"],
     creator: "@piramiddb",
   },
   metadataBase: new URL("https://piramiddb.com"),

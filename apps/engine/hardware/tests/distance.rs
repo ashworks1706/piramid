@@ -7,7 +7,7 @@
 
 use piramid_hardware::compute::strategies::for_mode;
 use piramid_hardware::compute::{
-    cosine_similarity, dot_product, euclidean_distance, euclidean_distance_squared,
+    cosine_similarity, dot_product, euclidean_distance, euclidean_distance_squared, ComputeError,
     DistanceKernels, ExecutionMode, Metric,
 };
 
@@ -18,57 +18,101 @@ fn auto() -> &'static dyn DistanceKernels {
 #[test]
 fn euclidean_distance_basic_cases() {
     let v = vec![1.0, 2.0, 3.0];
-    assert_eq!(euclidean_distance(&v, &v, auto()), 0.0);
+    assert_eq!(euclidean_distance(&v, &v, auto()).unwrap(), 0.0);
 
     let v1 = vec![0.0, 0.0];
     let v2 = vec![3.0, 4.0];
-    let dist = euclidean_distance(&v1, &v2, auto());
+    let dist = euclidean_distance(&v1, &v2, auto()).unwrap();
     assert!((dist - 5.0).abs() < 1e-6);
 
-    let sq = euclidean_distance_squared(&v1, &v2, auto());
+    let sq = euclidean_distance_squared(&v1, &v2, auto()).unwrap();
     assert!((sq - 25.0).abs() < 1e-6);
 }
 
 #[test]
-#[should_panic(expected = "Vectors must have same length")]
 fn euclidean_rejects_mismatched_lengths() {
-    euclidean_distance(&[1.0, 2.0], &[1.0], auto());
+    let error = euclidean_distance(&[1.0, 2.0], &[1.0], auto()).unwrap_err();
+    assert!(matches!(error, ComputeError::ShapeMismatch { .. }));
 }
 
 #[test]
 fn dot_product_basic_cases() {
     let v1 = vec![1.0, 2.0, 3.0];
     let v2 = vec![4.0, 5.0, 6.0];
-    let result = dot_product(&v1, &v2, auto());
+    let result = dot_product(&v1, &v2, auto()).unwrap();
     assert!((result - 32.0).abs() < 1e-6);
 
-    let ortho = dot_product(&[1.0, 0.0], &[0.0, 1.0], auto());
+    let ortho = dot_product(&[1.0, 0.0], &[0.0, 1.0], auto()).unwrap();
     assert!(ortho.abs() < 1e-6);
 }
 
 #[test]
-#[should_panic(expected = "Vectors must have same length")]
 fn dot_rejects_mismatched_lengths() {
-    dot_product(&[1.0, 2.0], &[1.0], auto());
+    let error = dot_product(&[1.0, 2.0], &[1.0], auto()).unwrap_err();
+    assert!(matches!(error, ComputeError::ShapeMismatch { .. }));
+}
+
+/// Every available strategy refuses a pair of different lengths on every pairwise kernel.
+#[test]
+fn every_pairwise_kernel_rejects_mismatched_lengths() {
+    use piramid_hardware::compute::strategies::all;
+
+    for kernels in all().into_iter().filter(|k| k.is_available()) {
+        let (a, b) = ([1.0, 2.0, 3.0], [1.0, 2.0]);
+        assert!(kernels.cosine(&a, &b).is_err(), "{}", kernels.name());
+        assert!(kernels.dot(&a, &b).is_err(), "{}", kernels.name());
+        assert!(kernels.euclidean(&a, &b).is_err(), "{}", kernels.name());
+        assert!(
+            kernels.euclidean_squared(&a, &b).is_err(),
+            "{}",
+            kernels.name()
+        );
+    }
+}
+
+/// Cosine against a zero vector is NaN, not a score, on every available strategy.
+#[test]
+fn cosine_against_a_zero_vector_is_nan() {
+    use piramid_hardware::compute::strategies::all;
+
+    for kernels in all().into_iter().filter(|k| k.is_available()) {
+        let query = [1.0, 2.0, 3.0];
+        let zero = [0.0; 3];
+        assert!(
+            kernels.cosine(&query, &zero).unwrap().is_nan(),
+            "{}",
+            kernels.name()
+        );
+        assert!(
+            kernels.cosine(&zero, &query).unwrap().is_nan(),
+            "{}",
+            kernels.name()
+        );
+        let mut out = [0.0; 2];
+        let slab = [0.0, 0.0, 0.0, 1.0, 2.0, 3.0];
+        kernels.cosine_batch(&query, &slab, 3, &mut out).unwrap();
+        assert!(out[0].is_nan(), "{}", kernels.name());
+        assert!((out[1] - 1.0).abs() < 1e-6, "{}", kernels.name());
+    }
 }
 
 #[test]
 fn metric_calculate_cosine_and_euclidean() {
     let v1 = vec![1.0, 0.0];
     let v2 = vec![0.0, 1.0];
-    assert!(Metric::Cosine.calculate(&v1, &v2, auto()).abs() < 1e-6);
+    assert!(Metric::Cosine.calculate(&v1, &v2, auto()).unwrap().abs() < 1e-6);
 
-    let euclid_sim = Metric::Euclidean.calculate(&v1, &v1, auto());
+    let euclid_sim = Metric::Euclidean.calculate(&v1, &v1, auto()).unwrap();
     assert!((euclid_sim - 1.0).abs() < 1e-6);
 }
 
 #[test]
 fn cosine_similarity_cases() {
     let v = vec![1.0, 2.0, 3.0];
-    let sim_same = cosine_similarity(&v, &v, auto());
+    let sim_same = cosine_similarity(&v, &v, auto()).unwrap();
     assert!((sim_same - 1.0).abs() < 1e-6);
 
-    let sim_orth = cosine_similarity(&[1.0, 0.0], &[0.0, 1.0], auto());
+    let sim_orth = cosine_similarity(&[1.0, 0.0], &[0.0, 1.0], auto()).unwrap();
     assert!(sim_orth.abs() < 1e-6);
 }
 
@@ -136,19 +180,19 @@ fn every_batch_kernel_matches_the_scalar_reference() {
                 (
                     "cosine",
                     |k, q, c, d, o| k.cosine_batch(q, c, d, o),
-                    |s, a, b| s.cosine(a, b),
+                    |s, a, b| s.cosine(a, b).unwrap(),
                     false,
                 ),
                 (
                     "dot",
                     |k, q, c, d, o| k.dot_batch(q, c, d, o),
-                    |s, a, b| s.dot(a, b),
+                    |s, a, b| s.dot(a, b).unwrap(),
                     true,
                 ),
                 (
                     "euclidean",
                     |k, q, c, d, o| k.euclidean_batch(q, c, d, o),
-                    |s, a, b| s.euclidean(a, b),
+                    |s, a, b| s.euclidean(a, b).unwrap(),
                     true,
                 ),
             ];
@@ -158,9 +202,17 @@ fn every_batch_kernel_matches_the_scalar_reference() {
                 for (i, (row, got)) in candidates.chunks_exact(dim).zip(&out).enumerate() {
                     let want = pair(&reference, &query, row);
                     // The rounding bound scales with the magnitude of the summed terms.
-                    let magnitude = reference.dot(&query, &query).sqrt()
-                        * reference.dot(row, row).sqrt()
-                        + reference.euclidean_squared(&query, row);
+                    if name == "cosine" && row.iter().all(|x| *x == 0.0) {
+                        assert!(
+                            got.is_nan(),
+                            "{} cosine dim {dim} row {i}: {got}",
+                            kernels.name()
+                        );
+                        continue;
+                    }
+                    let magnitude = reference.dot(&query, &query).unwrap().sqrt()
+                        * reference.dot(row, row).unwrap().sqrt()
+                        + reference.euclidean_squared(&query, row).unwrap();
                     let tolerance = 1e-5 * if unbounded { magnitude.max(1.0) } else { 1.0 };
                     assert!(
                         (got - want).abs() <= tolerance,

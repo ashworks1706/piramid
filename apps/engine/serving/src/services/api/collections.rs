@@ -26,6 +26,7 @@ pub struct CollectionsResponse {
 
 /// Create a collection, or open it if it already exists.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CreateCollectionRequest {
     /// Collection name, validated against the collection naming rules.
     pub name: String,
@@ -33,8 +34,10 @@ pub struct CreateCollectionRequest {
 
 /// Scan a collection for pairs of near-identical documents.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DuplicateRequest {
-    /// Similarity metric: cosine, euclidean or dot. Cosine when omitted.
+    /// Similarity metric: cosine, euclidean or dot. The metric the collection is indexed by when
+    /// omitted.
     #[serde(default)]
     pub metric: Option<String>,
     /// Minimum score for a pair to be reported. 0.95 when omitted.

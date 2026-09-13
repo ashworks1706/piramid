@@ -6,7 +6,8 @@
 //! Quantized vector encoding and decoding.
 
 use piramid_hardware::compute::quantization::{
-    ProductQuantizedVector, QuantizationConfig, QuantizationKind, QuantizedVector,
+    ProductQuantizedVector, QuantizationConfig, QuantizationKind, QuantizationLevel,
+    QuantizedVector,
 };
 
 fn int8(vector: &[f32]) -> QuantizedVector {
@@ -54,8 +55,26 @@ fn quantization_pq_roundtrip() {
 #[test]
 fn unimplemented_level_is_an_error_not_a_downgrade() {
     let mut cfg = QuantizationConfig::int8();
-    cfg.level = piramid_hardware::compute::quantization::QuantizationLevel::Int4;
+    cfg.level = QuantizationLevel::Int4;
     assert!(QuantizedVector::from_f32(&[1.0, 2.0], &cfg).is_err());
+}
+
+#[test]
+fn the_none_level_is_an_error_not_int8() {
+    let cfg = QuantizationConfig::default();
+    assert_eq!(cfg.level, QuantizationLevel::None);
+    let error = QuantizedVector::from_f32(&[1.0, 2.0], &cfg).unwrap_err();
+    assert!(error.to_string().contains("None"), "{error}");
+}
+
+#[test]
+fn a_pq_block_count_the_vector_cannot_hold_is_an_error() {
+    let vector = [1.0, 2.0, 3.0, 4.0];
+    assert!(QuantizedVector::from_f32(&vector, &QuantizationConfig::pq(0)).is_err());
+    assert!(QuantizedVector::from_f32(&vector, &QuantizationConfig::pq(5)).is_err());
+    assert!(ProductQuantizedVector::from_f32(&vector, 0).is_err());
+    let pq = ProductQuantizedVector::from_f32(&vector, 4).unwrap();
+    assert_eq!(pq.subquantizers, 4);
 }
 
 #[test]

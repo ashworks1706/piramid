@@ -1,7 +1,7 @@
 //! Portable scalar strategy: no intrinsics or threads, the correctness reference for the others.
 
 use crate::compute::error::ComputeResult;
-use crate::compute::kernels::{check_batch_shape, DistanceKernels};
+use crate::compute::kernels::{check_batch_shape, check_pair_shape, DistanceKernels};
 use crate::compute::mode::ExecutionMode;
 
 /// Scalar CPU kernels.
@@ -47,12 +47,12 @@ pub(super) fn euclidean_squared(a: &[f32], b: &[f32]) -> f32 {
     sum_sq
 }
 
-/// Cosine from an inner product and the two sums of squares; 0.0 when either norm is zero.
+/// Cosine from an inner product and the two sums of squares; NaN when either norm is zero.
 #[inline]
 pub(super) fn cosine_from_parts(dot: f32, norm_a: f32, norm_b: f32) -> f32 {
     let denominator = norm_a.sqrt() * norm_b.sqrt();
     if denominator == 0.0 {
-        0.0
+        f32::NAN
     } else {
         dot / denominator
     }
@@ -71,21 +71,25 @@ impl DistanceKernels for ScalarStrategy {
         true
     }
 
-    fn cosine(&self, a: &[f32], b: &[f32]) -> f32 {
+    fn cosine(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
         let (dot, norm_b) = dot_and_norm_squared(a, b);
-        cosine_from_parts(dot, norm_squared(a), norm_b)
+        Ok(cosine_from_parts(dot, norm_squared(a), norm_b))
     }
 
-    fn dot(&self, a: &[f32], b: &[f32]) -> f32 {
-        dot(a, b)
+    fn dot(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
+        Ok(dot(a, b))
     }
 
-    fn euclidean(&self, a: &[f32], b: &[f32]) -> f32 {
-        euclidean_squared(a, b).sqrt()
+    fn euclidean(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
+        Ok(euclidean_squared(a, b).sqrt())
     }
 
-    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> f32 {
-        euclidean_squared(a, b)
+    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
+        Ok(euclidean_squared(a, b))
     }
 
     fn cosine_batch(

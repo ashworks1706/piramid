@@ -26,7 +26,7 @@ pub struct LoggingConfig {
     /// Install a log subscriber. Off emits nothing.
     #[serde(default = "crate::config::default_true")]
     pub enabled: bool,
-    /// Base level. RUST_LOG replaces it when set.
+    /// Base level.
     #[serde(default)]
     pub level: LogLevel,
     /// Emit events on the piramid::config target.

@@ -154,8 +154,9 @@ pub struct EmbeddingMetricsResponse {
     pub requests: u64,
     /// Number of texts embedded.
     pub texts: u64,
-    /// Tokens consumed, as reported by the provider.
-    pub total_tokens: u64,
+    /// Tokens consumed, as reported by the provider. Absent before a provider reports a count.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<u64>,
     /// Mean duration per request, in milliseconds. Absent before any request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_latency_ms: Option<f32>,
@@ -265,7 +266,7 @@ mod tests {
             embedding: EmbeddingMetricsResponse {
                 requests: 0,
                 texts: 0,
-                total_tokens: 0,
+                total_tokens: None,
                 avg_latency_ms: None,
             },
             host: HostMetricsResponse::default(),

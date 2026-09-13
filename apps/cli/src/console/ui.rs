@@ -6,12 +6,12 @@ use ratatui::symbols::{self, Marker};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
     Axis, Block, BorderType, Borders, Chart, Clear, Dataset, GraphType, List, ListItem, ListState,
-    Paragraph, Sparkline,
+    Paragraph, Sparkline, Wrap,
 };
 use ratatui::Frame;
 
 use crate::console::app::{App, UnitState};
-use crate::console::client::{GpuBudget, HostMetrics, InferenceMetrics};
+use crate::console::client::{ClientError, GpuBudget, HostMetrics, InferenceMetrics};
 use crate::console::collections::Row;
 use crate::console::device::{DeviceView, Run};
 use crate::console::types::{
@@ -59,7 +59,7 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
         .rows
         .iter()
         .map(|row| {
-            let count = thousands(row.vectors());
+            let count = row.vectors().map_or_else(|| "-".to_owned(), thousands);
             let name_width = width.saturating_sub(count.len() + 3);
             let (glyph, color) = match (row.problem().is_some(), row.loaded()) {
                 (true, _) => ("!", Color::Red),
@@ -76,7 +76,7 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
     let title = format!(" collections {} ", view.rows.len());
     if items.is_empty() {
         let note: Vec<Line> = match (&view.error, view.snapshot.is_some()) {
-            (Some(_), _) => vec![
+            (Some(ClientError::Unreachable(..)), _) => vec![
                 Line::from(Span::styled(
                     "  no server at",
                     Style::default().fg(Color::Red),
@@ -99,6 +99,10 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
                     Style::default().fg(DIM),
                 )),
             ],
+            (Some(error), _) => vec![Line::from(Span::styled(
+                format!("  {error}"),
+                Style::default().fg(Color::Red),
+            ))],
             (None, true) => vec![Line::from(Span::styled(
                 "  no collections yet",
                 Style::default().fg(DIM),
@@ -108,7 +112,12 @@ fn collections(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(DIM),
             ))],
         };
-        frame.render_widget(Paragraph::new(note).block(pane(&title, true)), left);
+        frame.render_widget(
+            Paragraph::new(note)
+                .wrap(Wrap { trim: false })
+                .block(pane(&title, true)),
+            left,
+        );
     } else {
         let list = List::new(items).block(pane(&title, true)).highlight_style(
             Style::default()

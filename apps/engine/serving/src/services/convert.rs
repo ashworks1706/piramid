@@ -70,6 +70,14 @@ pub fn parse_filter(
                 }
                 "eq" | "ne" | "gt" | "gte" | "lt" | "lte" => {
                     let value = json_to_metadata_value(&field, value)?;
+                    let numeric =
+                        matches!(value, MetadataValue::Integer(_) | MetadataValue::Float(_));
+                    if !numeric && matches!(op.as_str(), "gt" | "gte" | "lt" | "lte") {
+                        return Err(ServerError::InvalidRequest(format!(
+                            "filter '{field}.{op}' expects a number"
+                        ))
+                        .into());
+                    }
                     match op.as_str() {
                         "eq" => filter.eq(&field, value),
                         "ne" => filter.ne(&field, value),

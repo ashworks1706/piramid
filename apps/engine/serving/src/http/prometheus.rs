@@ -128,11 +128,11 @@ pub fn render(metrics: &MetricsResponse) -> String {
         MetricType::Counter,
         metrics.embedding.texts as f64,
     );
-    registry.metric(
+    registry.optional_metric(
         "piramid_embedding_tokens_total",
         "Tokens reported by the embedding provider.",
         MetricType::Counter,
-        metrics.embedding.total_tokens as f64,
+        metrics.embedding.total_tokens.map(|tokens| tokens as f64),
     );
     registry.optional_metric(
         "piramid_embedding_latency_ms",

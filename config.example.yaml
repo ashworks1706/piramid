@@ -1,13 +1,13 @@
 # Piramid configuration.
 #
 # Every value below is the default, so an empty file and this file behave identically. Point the
-# server at one with CONFIG_FILE=config.yaml, and print what resolved with piramid show config.
+# server at one with CONFIG_FILE=config.yaml, and read what resolved from GET /api/config.
 #
 # There are two blocks, split by when a setting takes effect:
 #
-#   startup:  applied once at boot. Changing one needs a restart, and POST /config/reload
+#   startup:  applied once at boot. Changing one needs a restart, and POST /api/config/reload
 #             refuses a file whose startup block differs from the running one.
-#   runtime:  re-read on POST /config/reload. Search, limits, WAL checkpoint thresholds, the
+#   runtime:  re-read on POST /api/config/reload. Search, limits, WAL checkpoint thresholds, the
 #             metadata cache budget and execution reach open collections; a change to anything
 #             read when a collection opens is refused while one is open.
 #
@@ -15,8 +15,8 @@
 # runtime.wal.max_log_size is PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE. Values parse as YAML, so
 # 8, true and null mean what they do here. Environment wins over the file.
 #
-# An unknown or misspelled key is a startup error. So is turning on a setting marked not
-# implemented below.
+# An unknown or misspelled key is a startup error. So is changing a setting marked not
+# implemented below from its default.
 
 startup:
   # address:port to listen on. A non-loopback address, such as 0.0.0.0:6333, needs an API key
@@ -31,7 +31,7 @@ startup:
 
   logging:
     enabled: true
-    # error | warn | info | debug | trace. RUST_LOG overrides this entirely.
+    # error | warn | info | debug | trace
     level: info
     # per-subsystem switches, each one a tracing target
     config: true
@@ -54,9 +54,9 @@ startup:
     span_events: false
 
   hardware:
-    # auto | cpu-only | gpu | 8gb | 16gb | 32gb. gpu requires runtime.execution: gpu. The memory
+    # cpu-only | gpu | 8gb | 16gb | 32gb. gpu requires runtime.execution: gpu. The memory
     # classes set a host memory budget, which is not implemented, so they are refused.
-    profile: auto
+    profile: cpu-only
     # host memory the process will use; null is unbounded. Not implemented; setting it is an error.
     memory_budget_bytes: null
     # device memory to claim before gpu.reserve_bytes is held back; null is the whole device
@@ -105,7 +105,7 @@ startup:
     drain_timeout_secs: 30
 
   # embedding provider, built once at boot; null disables server-side embedding.
-  # The OpenAI key is read from OPENAI_API_KEY.
+  # The openai provider reads its key from OPENAI_API_KEY only; no provider takes one here.
   embedding: null
   #   provider: openai        # openai (or any server speaking that format) | ollama | piramid
   #   model: text-embedding-3-small
@@ -134,11 +134,13 @@ runtime:
       flat_max_vectors: 10000
       # under this many, use IVF; above it, HNSW
       ivf_max_vectors: 100000
-      # IVF: null sizes clusters and probes from the collection
+      # IVF: null sizes clusters from the collection and probes from the cluster count.
+      # ivf_num_probes needs ivf_num_clusters and must not exceed it.
       ivf_num_clusters: null
       ivf_num_probes: null
       ivf_max_iterations: 10
-      # HNSW shape used when auto-selected
+      # HNSW shape used when auto-selected; m_max is 2 * hnsw_m and ml is 1 / ln(hnsw_m), so
+      # hnsw_m must be >= 2
       hnsw_m: 16
       hnsw_ef_construction: 200
       hnsw_ef_search: 200
@@ -225,7 +227,7 @@ runtime:
       max_bytes: null
 
   # auto | scalar | simd | parallel | gpu. The distance strategy for every collection.
-  # gpu is rejected at startup.
+  # gpu needs a build with the gpu-cuda feature and startup.hardware.profile: gpu.
   execution: auto
 
   # Model execution: a Qwen2 or Qwen3 checkpoint served from this process. Needs a build with the
@@ -239,7 +241,7 @@ runtime:
     # name clients address the model by, including the OpenAI model id; null is the model_path
     # directory name
     model_name: null
-    # tokenizer location when it is not beside the weights
+    # directory holding tokenizer.json and tokenizer_config.json when not beside the weights
     tokenizer_path: null
     # qwen2 | qwen3, checked against the checkpoint; null reads it from the checkpoint
     architecture: null
@@ -284,6 +286,7 @@ runtime:
 
     sampling:
       temperature: 0.0  # 0.0 is greedy
+      # top_p, top_k and seed need temperature > 0
       top_p: null
       top_k: null
       # 1.0 is no penalty
@@ -295,7 +298,8 @@ runtime:
       # fixed sampling seed
       seed: null
 
-    # Where retrieval enters the forward pass. Not implemented.
+    # Where retrieval enters the forward pass. Not implemented: every key except chunk_tokens
+    # must stay at its default.
     fusion:
       enabled: false
       # registered name of the hook implementation to install
@@ -328,7 +332,7 @@ runtime:
       adapter_path: null
 
     # Precomputed KV for retrieved documents, reused at prefill with a fraction recomputed.
-    # Not implemented.
+    # Not implemented: every key must stay at its default.
     document_kv:
       enabled: false
       max_bytes: null

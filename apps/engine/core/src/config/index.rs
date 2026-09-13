@@ -1,6 +1,7 @@
 //! Index selection configuration.
 
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::config::{FlatConfig, HnswConfig, IvfConfig};
 use piramid_hardware::compute::Metric;
@@ -62,7 +63,10 @@ impl Default for AutoIndexConfig {
 }
 
 /// Index configuration for a collection.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// The type key names the variant and the remaining keys are its parameters. A key the variant
+/// does not have is an error.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum IndexConfig {
     /// Pick a family from the collection's size, moving to the next family as the collection
@@ -93,6 +97,52 @@ pub enum IndexConfig {
         #[serde(flatten)]
         params: IvfConfig,
     },
+}
+
+/// The keys of the auto variant beside its type key.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AutoFields {
+    #[serde(default)]
+    metric: Metric,
+    #[serde(default)]
+    auto: AutoIndexConfig,
+}
+
+impl<'de> Deserialize<'de> for IndexConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut fields = serde_json::Map::<String, serde_json::Value>::deserialize(deserializer)?;
+        let kind = match fields.remove("type") {
+            Some(serde_json::Value::String(kind)) => kind,
+            Some(other) => {
+                return Err(D::Error::custom(format!(
+                    "index type must be a string, got {other}"
+                )))
+            }
+            None => return Err(D::Error::missing_field("type")),
+        };
+        let rest = serde_json::Value::Object(fields);
+        match kind.as_str() {
+            "auto" => {
+                let AutoFields { metric, auto } =
+                    serde_json::from_value(rest).map_err(D::Error::custom)?;
+                Ok(IndexConfig::Auto { metric, auto })
+            }
+            "flat" => Ok(IndexConfig::Flat {
+                params: serde_json::from_value(rest).map_err(D::Error::custom)?,
+            }),
+            "hnsw" => Ok(IndexConfig::Hnsw {
+                params: serde_json::from_value(rest).map_err(D::Error::custom)?,
+            }),
+            "ivf" => Ok(IndexConfig::Ivf {
+                params: serde_json::from_value(rest).map_err(D::Error::custom)?,
+            }),
+            other => Err(D::Error::unknown_variant(
+                other,
+                &["auto", "flat", "hnsw", "ivf"],
+            )),
+        }
+    }
 }
 
 impl Default for IndexConfig {
@@ -179,10 +229,30 @@ impl IndexConfig {
                         "runtime.index.auto: flat_max_vectors must be <= ivf_max_vectors".into(),
                     );
                 }
-                if auto.ivf_max_iterations == 0 || auto.hnsw_m == 0 {
-                    return Err(
-                        "runtime.index.auto: ivf_max_iterations and hnsw_m must be > 0".into(),
-                    );
+                if auto.ivf_max_iterations == 0 {
+                    return Err("runtime.index.auto: ivf_max_iterations must be > 0".into());
+                }
+                if auto.hnsw_m < 2 {
+                    return Err("runtime.index.auto.hnsw_m: must be >= 2".into());
+                }
+                if auto.ivf_num_clusters == Some(0) {
+                    return Err("runtime.index.auto.ivf_num_clusters: must be > 0".into());
+                }
+                match (auto.ivf_num_clusters, auto.ivf_num_probes) {
+                    (_, Some(0)) => {
+                        return Err("runtime.index.auto.ivf_num_probes: must be > 0".into());
+                    }
+                    (None, Some(_)) => {
+                        return Err(
+                            "runtime.index.auto.ivf_num_probes: requires ivf_num_clusters".into(),
+                        );
+                    }
+                    (Some(clusters), Some(probes)) if probes > clusters => {
+                        return Err(
+                            "runtime.index.auto.ivf_num_probes: must be <= ivf_num_clusters".into(),
+                        );
+                    }
+                    _ => {}
                 }
                 if auto.hnsw_ef_construction == 0 || auto.hnsw_ef_search == 0 {
                     return Err("runtime.index.auto: hnsw ef values must be > 0".into());

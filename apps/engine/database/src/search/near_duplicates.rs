@@ -1,12 +1,12 @@
 //! Finding pairs of documents that are near-copies of each other.
 //!
 //! An all-pairs neighbour scan: ask the index for the neighbours of each document, score each
-//! pair once, and keep the pairs at or above a threshold. Every stored vector is a query.
+//! pair once, and keep the pairs at or above a threshold. Every live document is a query.
 
 use std::collections::HashSet;
 
 use piramid_core::config::SearchConfig;
-use piramid_core::error::Result;
+use piramid_core::error::{Result, ServerError};
 use piramid_hardware::compute::{strategies::for_mode, ExecutionMode, Metric};
 use uuid::Uuid;
 
@@ -37,38 +37,43 @@ pub struct DuplicateParams {
     pub search_config_override: Option<SearchConfig>,
 }
 
-/// Scan a target for pairs of near-identical documents.
+/// Scan the live documents of a target for pairs of near-identical documents.
+///
+/// live_ids are the ids of the documents currently stored. Only they are used as queries and
+/// only they are reported.
 pub fn near_duplicates(
     target: &SearchTarget<'_>,
+    live_ids: &[Uuid],
     metric: Metric,
     mode: ExecutionMode,
     params: DuplicateParams,
 ) -> Result<Vec<DuplicatePair>> {
+    if params.neighbors == 0 {
+        return Err(ServerError::InvalidRequest("k must be >= 1".into()).into());
+    }
     let kernels = for_mode(mode)?;
     let search_config = params
         .search_config_override
         .unwrap_or(target.default_config);
 
-    let ids: Vec<Uuid> = target.vectors.iter().map(|(id, _)| id).collect();
-    let neighbors = params.neighbors.min(ids.len().saturating_sub(1)).max(1);
-
+    let live: HashSet<Uuid> = live_ids.iter().copied().collect();
     let mut seen = HashSet::new();
     let mut pairs = Vec::new();
 
-    for id in &ids {
+    for id in live_ids {
         let Some(vector) = target.vectors.get(id) else {
             continue;
         };
         let found = target.index.search(IndexSearchRequest::new(
             vector,
-            neighbors,
+            params.neighbors,
             target.vectors,
             search_config,
             target.metadata,
         ))?;
 
         for neighbor in found {
-            if neighbor == *id {
+            if neighbor == *id || !live.contains(&neighbor) {
                 continue;
             }
             // Pairs are keyed in canonical order and scored once.
@@ -84,7 +89,7 @@ pub fn near_duplicates(
             else {
                 continue;
             };
-            let score = metric.calculate(a, b, kernels);
+            let score = metric.calculate(a, b, kernels)?;
             if score >= params.threshold {
                 pairs.push(DuplicatePair {
                     id_a: pair.0,

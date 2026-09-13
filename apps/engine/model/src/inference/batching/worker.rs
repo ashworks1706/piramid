@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::inference::architecture::DecoderModel;
 use crate::inference::batching::request::{FinishReason, GenerationEvent, Usage};
-use crate::inference::batching::scheduler::{Scheduler, Sequence};
+use crate::inference::batching::scheduler::{PlannedEntry, Scheduler, Sequence};
 use crate::inference::batching::stop::StopMatcher;
 use crate::inference::forward::{Driver, SequenceProgress};
 use crate::inference::sampling::Sampler;
@@ -126,9 +126,19 @@ pub fn run<M: DecoderModel>(
         }
         cancel_abandoned(&mut scheduler);
 
-        let step = scheduler.plan();
+        let mut step = scheduler.plan();
         for _ in &step.preempted {
             context.metrics.record_preemption();
+        }
+        let failed = std::mem::take(&mut step.failed);
+        let any_failed = !failed.is_empty();
+        for (sequence, error) in failed {
+            tracing::error!(target: "piramid::inference", %error, id = sequence.id, "planning a sequence failed");
+            fail(&context, sequence, error);
+        }
+        if step.is_empty() && any_failed {
+            publish_gauges(&scheduler, &context);
+            continue;
         }
         if step.is_empty() {
             if let Some(sequence) = scheduler.ids().first().and_then(|&id| scheduler.remove(id)) {
@@ -147,26 +157,8 @@ pub fn run<M: DecoderModel>(
         let started = Instant::now();
         let outcome = {
             let chunk = context.chunk_tokens.max(1);
-            let progress: Vec<SequenceProgress<'_>> = step
-                .entries
-                .iter()
-                .map(|entry| {
-                    let (tokens, generated) = scheduler
-                        .running(entry.id)
-                        .map_or((&[][..], 0), |sequence| {
-                            (sequence.tokens.as_slice(), sequence.generated())
-                        });
-                    SequenceProgress {
-                        tokens,
-                        first_step: entry.first_step,
-                        finished_chunk: (entry.samples
-                            && generated > 0
-                            && generated.is_multiple_of(chunk))
-                        .then(|| generated / chunk - 1),
-                    }
-                })
-                .collect();
-            driver.step(&step.batch, &progress)
+            step_progress(&scheduler, &step.entries, chunk)
+                .and_then(|progress| driver.step(&step.batch, &progress))
         };
         let elapsed = started.elapsed();
         let logits = match outcome {
@@ -224,6 +216,29 @@ pub fn run<M: DecoderModel>(
         );
     }
     publish_gauges(&scheduler, &context);
+}
+
+/// Where each planned sequence stands. Errors when a planned sequence is not running.
+fn step_progress<'s>(
+    scheduler: &'s Scheduler<Caller>,
+    entries: &[PlannedEntry],
+    chunk: usize,
+) -> Result<Vec<SequenceProgress<'s>>, InferenceError> {
+    entries
+        .iter()
+        .map(|entry| {
+            let sequence = scheduler.running(entry.id).ok_or_else(|| {
+                InferenceError::Runtime(format!("planned sequence {} is not running", entry.id))
+            })?;
+            let generated = sequence.generated();
+            Ok(SequenceProgress {
+                tokens: sequence.tokens.as_slice(),
+                first_step: entry.first_step,
+                finished_chunk: (entry.samples && generated > 0 && generated.is_multiple_of(chunk))
+                    .then(|| generated / chunk - 1),
+            })
+        })
+        .collect()
 }
 
 fn admit(
@@ -575,6 +590,23 @@ mod tests {
             out.push(handle.await.unwrap());
         }
         out
+    }
+
+    #[test]
+    fn a_planned_sequence_that_is_not_running_fails_the_step() {
+        let scheduler: Scheduler<Caller> =
+            Scheduler::new(limits(), BlockAllocator::new(4, 4, false));
+        let entries = [PlannedEntry {
+            id: 7,
+            tokens: 1,
+            first_step: false,
+            samples: true,
+        }];
+        let error = step_progress(&scheduler, &entries, 32).unwrap_err();
+        assert!(matches!(error, InferenceError::Runtime(_)), "{error}");
+        assert!(error
+            .to_string()
+            .contains("planned sequence 7 is not running"));
     }
 
     #[tokio::test(flavor = "multi_thread")]

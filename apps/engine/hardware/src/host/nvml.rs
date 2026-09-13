@@ -19,19 +19,39 @@ impl Library {
             .map_err(|error| error.to_string())
     }
 
-    /// One reading per device the library can open, or the reason the devices could not be
-    /// counted.
+    /// One reading per device the library counts, or the reason the devices could not be
+    /// counted. A device that cannot be opened is listed with every field absent.
     pub(crate) fn sample(&self) -> Result<Vec<GpuReading>, String> {
         let count = self
             .nvml
             .device_count()
             .map_err(|error| error.to_string())?;
         Ok((0..count)
-            .filter_map(|index| {
-                let device = self.nvml.device_by_index(index).ok()?;
-                Some(read(index, &device))
+            .map(|index| match self.nvml.device_by_index(index) {
+                Ok(device) => read(index, &device),
+                Err(error) => {
+                    tracing::warn!(
+                        target: "piramid::host",
+                        index,
+                        %error,
+                        "GPU device could not be opened"
+                    );
+                    unmeasured(index)
+                }
             })
             .collect())
+    }
+}
+
+/// A device that is present but could not be read.
+fn unmeasured(index: u32) -> GpuReading {
+    GpuReading {
+        index,
+        name: None,
+        memory_used_bytes: None,
+        memory_total_bytes: None,
+        utilization_percent: None,
+        temperature_celsius: None,
     }
 }
 

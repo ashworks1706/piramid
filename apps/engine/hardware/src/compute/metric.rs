@@ -23,12 +23,17 @@ pub enum Metric {
 
 impl Metric {
     /// Score a against b; a higher result means more similar.
-    pub fn calculate(&self, a: &[f32], b: &[f32], kernels: &dyn DistanceKernels) -> f32 {
-        match self {
-            Metric::Cosine => cosine_similarity(a, b, kernels),
-            Metric::Euclidean => 1.0 / (1.0 + euclidean_distance(a, b, kernels)),
-            Metric::DotProduct => dot_product(a, b, kernels),
-        }
+    pub fn calculate(
+        &self,
+        a: &[f32],
+        b: &[f32],
+        kernels: &dyn DistanceKernels,
+    ) -> ComputeResult<f32> {
+        Ok(match self {
+            Metric::Cosine => cosine_similarity(a, b, kernels)?,
+            Metric::Euclidean => 1.0 / (1.0 + euclidean_distance(a, b, kernels)?),
+            Metric::DotProduct => dot_product(a, b, kernels)?,
+        })
     }
 
     /// Score query against every row of the row-major candidates slab, into out.
@@ -109,7 +114,7 @@ mod tests {
                 .unwrap();
 
             for (row, scored) in rows.iter().zip(&batch) {
-                let pairwise = metric.calculate(&query, row, kernels);
+                let pairwise = metric.calculate(&query, row, kernels).unwrap();
                 assert!(
                     (pairwise - scored).abs() < f32::EPSILON,
                     "{metric:?}: batch {scored} != pairwise {pairwise}"

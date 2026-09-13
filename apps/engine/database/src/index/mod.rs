@@ -14,6 +14,7 @@ pub use contract::{
 };
 pub use piramid_core::config::{AutoIndexConfig, IndexConfig, IndexKind};
 pub use selector::create_index;
+pub(crate) use selector::{create_index_of_kind, growth_rank, kind_of};
 pub use serialize::SerializableIndex;
 pub use sidecar::{load_vector_index, save_vector_index};
 pub use stats::{IndexDetails, IndexStats, IndexType};

@@ -5,7 +5,7 @@
 use std::sync::OnceLock;
 
 use crate::compute::error::{ComputeError, ComputeResult};
-use crate::compute::kernels::{check_batch_shape, DistanceKernels};
+use crate::compute::kernels::{check_batch_shape, check_pair_shape, DistanceKernels};
 use crate::compute::mode::ExecutionMode;
 use crate::gpu::kernels::distance::{DistanceLaunch, DistanceModule};
 use crate::gpu::{DeviceBudget, DeviceBuffer, GpuError, GpuManager, MemoryPool, Stream};
@@ -65,6 +65,7 @@ enum Kind {
     Cosine,
     Dot,
     Euclidean,
+    EuclideanSquared,
 }
 
 fn run(
@@ -103,20 +104,16 @@ fn run(
         }
         Kind::Dot => state.module.dot_batch(launch, stream),
         Kind::Euclidean => state.module.euclidean_batch(launch, stream),
+        Kind::EuclideanSquared => state.module.euclidean_squared_batch(launch, stream),
     }
     .map_err(failed)?;
     out_gpu.copy_to_host(out, stream).map_err(failed)
 }
 
-fn pair(kind: Kind, a: &[f32], b: &[f32]) -> f32 {
+fn pair(kind: Kind, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+    check_pair_shape(a, b)?;
     let mut out = [0.0f32];
-    match run(kind, a, b, a.len(), &mut out) {
-        Ok(()) => out[0],
-        Err(error) => {
-            tracing::error!(target: "piramid::compute", %error, "cuda pairwise score failed");
-            f32::NAN
-        }
-    }
+    run(kind, a, b, a.len(), &mut out).map(|()| out[0])
 }
 
 impl DistanceKernels for CudaStrategy {
@@ -132,21 +129,20 @@ impl DistanceKernels for CudaStrategy {
         state().is_ok()
     }
 
-    fn cosine(&self, a: &[f32], b: &[f32]) -> f32 {
+    fn cosine(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
         pair(Kind::Cosine, a, b)
     }
 
-    fn dot(&self, a: &[f32], b: &[f32]) -> f32 {
+    fn dot(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
         pair(Kind::Dot, a, b)
     }
 
-    fn euclidean(&self, a: &[f32], b: &[f32]) -> f32 {
+    fn euclidean(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
         pair(Kind::Euclidean, a, b)
     }
 
-    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> f32 {
-        let distance = pair(Kind::Euclidean, a, b);
-        distance * distance
+    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        pair(Kind::EuclideanSquared, a, b)
     }
 
     fn cosine_batch(

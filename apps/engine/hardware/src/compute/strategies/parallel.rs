@@ -4,7 +4,7 @@
 use rayon::prelude::*;
 
 use crate::compute::error::ComputeResult;
-use crate::compute::kernels::{check_batch_shape, DistanceKernels};
+use crate::compute::kernels::{check_batch_shape, check_pair_shape, DistanceKernels};
 use crate::compute::mode::ExecutionMode;
 use crate::compute::strategies::simd;
 
@@ -33,21 +33,25 @@ impl DistanceKernels for ParallelStrategy {
         cfg!(any(target_arch = "x86_64", target_arch = "aarch64"))
     }
 
-    fn cosine(&self, a: &[f32], b: &[f32]) -> f32 {
+    fn cosine(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
         let (dot, norm_b) = simd::dot_and_norm_squared(a, b);
-        simd::cosine_from_parts(dot, simd::norm_squared(a), norm_b)
+        Ok(simd::cosine_from_parts(dot, simd::norm_squared(a), norm_b))
     }
 
-    fn dot(&self, a: &[f32], b: &[f32]) -> f32 {
-        simd::dot(a, b)
+    fn dot(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
+        Ok(simd::dot(a, b))
     }
 
-    fn euclidean(&self, a: &[f32], b: &[f32]) -> f32 {
-        simd::euclidean_squared(a, b).sqrt()
+    fn euclidean(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
+        Ok(simd::euclidean_squared(a, b).sqrt())
     }
 
-    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> f32 {
-        simd::euclidean_squared(a, b)
+    fn euclidean_squared(&self, a: &[f32], b: &[f32]) -> ComputeResult<f32> {
+        check_pair_shape(a, b)?;
+        Ok(simd::euclidean_squared(a, b))
     }
 
     fn cosine_batch(

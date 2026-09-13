@@ -38,8 +38,7 @@ RUN mkdir -p /data && chown piramid:piramid /data
 USER piramid
 
 ENV PIRAMID__STARTUP__BIND=0.0.0.0:6333 \
-    PIRAMID__STARTUP__DATA_DIR=/data \
-    RUST_LOG=info
+    PIRAMID__STARTUP__DATA_DIR=/data
 
 VOLUME ["/data"]
 EXPOSE 6333

@@ -4,12 +4,9 @@
 
 - [ ] route the IVF posting-list scan through the batch kernels without a gather copy: either a
       batch over the store slab by row index, or posting lists that own their rows
-- [x] a real CUDA device — allocate, upload, run a batch kernel, take the top-k on the device
 - [ ] keep the candidate set device-resident across queries, and measure it against per-call upload
 - [ ] quantize on the device, with recall reported alongside the speedup
 - [ ] choose the index family per device: IVF where a device runs it, HNSW on the host
-- [x] GPU memory, utilisation and temperature beside the host readings, absent when unmeasured
-- [x] GPU readings graphed in the device view
 - [ ] implement the quantization levels or drop them; until then every quantization key is refused
       at its default
 
@@ -19,7 +16,6 @@ One model, one GPU, batch size one, no HTTP.
 
 - [ ] prove the model runtime and our device runtime can share one device with no host round trip
 - [ ] run a model on the same device retrieval uses
-- [x] a forward-pass driver with the retrieval seam wired in from the first commit
 - [ ] the first real `RetrievalHook` implementation, in its own crate
 - [ ] an end-to-end benchmark: embed, search, fetch, prefill, decode — TTFT, tokens/sec, recall
 - [ ] report TTFT, tokens/sec and retrieval-hook latency as metrics, graphed in the device view
@@ -30,11 +26,6 @@ One model, one GPU, batch size one, no HTTP.
 
 Co-located RAG with unmodified models. Also the baseline v0.6 is measured against.
 
-- [x] serve a model and a collection from one command
-- [x] an inference endpoint and an OpenAI-compatible one, both streaming
-- [x] paged KV cache and continuous batching
-- [x] KV cache blocks used and free, evictions, hit rate, queue depth and batch size as metrics,
-      with a KV panel in the device view
 - [ ] embed in-process, reusing the device already held, beside the existing providers
 - [ ] cut the website copy down to what the runtime does by then
 
@@ -58,10 +49,7 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 
 ## Unscheduled
 
-- [x] GPU settings are accepted and read by nothing: `gpu_memory_budget_bytes`, `gpu.*`, `vram.*`
-- [x] inference sub-settings (batching, kv_cache, sampling, fusion, document_kv, dtype, model_path)
-      are accepted while inference is off and read by nothing
-- [ ] the `auto` hardware profile means the same as `cpu-only` until something detects a GPU
+- [x] the `auto` hardware profile means the same as `cpu-only` until something detects a GPU
 - [ ] behind a reverse proxy every client shares one rate-limit bucket; forwarded headers are not
       read
 - [ ] `/api/readyz` is unauthenticated and names the data directory and every collection
@@ -84,8 +72,6 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
       there is no paged-attention kernel
 - [ ] the device hidden state handed to a hook is a converted f32 copy when the weights are not f32,
       written back after the hook returns
-- [x] every forward step copies each scheduled sequence's tokens for the hook, even when no hook
-      point is wanted
 - [ ] a CUDA pairwise score that fails returns NaN, because `DistanceKernels` pairwise methods are
       infallible
 - [ ] candle's CUDA kernels do not build with a host gcc newer than 15; `NVCC_CCBIN` has to name an

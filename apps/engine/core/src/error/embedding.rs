@@ -40,6 +40,10 @@ pub enum EmbeddingError {
     /// The provider does not serve the requested model.
     #[error("Invalid model: {0}")]
     InvalidModel(String),
+
+    /// The provider refused the input, and refuses it again on every retry.
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 impl EmbeddingError {
@@ -52,7 +56,10 @@ impl EmbeddingError {
             | Self::RateLimitExceeded
             | Self::ProviderUnavailable(_)
             | Self::Timeout(_) => true,
-            Self::ConfigError(_) | Self::AuthenticationFailed(_) | Self::InvalidModel(_) => false,
+            Self::ConfigError(_)
+            | Self::AuthenticationFailed(_)
+            | Self::InvalidModel(_)
+            | Self::InvalidInput(_) => false,
         }
     }
 }

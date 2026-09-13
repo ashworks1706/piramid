@@ -163,6 +163,12 @@ fn the_gpu_mode_resolves_to_the_cuda_strategy_and_matches_scalar() {
     for (a, b) in got.iter().zip(&expected) {
         assert!((a - b).abs() < 1e-5);
     }
-    let pair = gpu.cosine(&query, &slab[..dim]);
+    let pair = gpu.cosine(&query, &slab[..dim]).unwrap();
     assert!((pair - expected[0]).abs() < 1e-5);
+    let squared = gpu.euclidean_squared(&query, &slab[..dim]).unwrap();
+    let reference = scalar.euclidean_squared(&query, &slab[..dim]).unwrap();
+    assert!((squared - reference).abs() / reference.max(1.0) < 1e-5);
+    assert!(gpu.cosine(&query, &slab[..dim - 1]).is_err());
+    let zero = vec![0.0f32; dim];
+    assert!(gpu.cosine(&query, &zero).unwrap().is_nan());
 }

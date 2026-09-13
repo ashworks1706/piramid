@@ -36,7 +36,7 @@ pub struct Collection {
 
 impl Collection {
     pub(crate) fn track_operation(&mut self) -> Result<()> {
-        let now = piramid_core::clock::unix_secs();
+        let now = piramid_core::clock::unix_secs()?;
         if self.checkpoint.should_checkpoint(&self.config.wal, now)? {
             super::checkpoint::checkpoint(self)?;
             self.checkpoint.reset_counter();
@@ -223,23 +223,12 @@ impl Collection {
     /// Replace the index with the family an auto configuration picks for the current count, when
     /// the collection has grown past a threshold. A collection that shrinks keeps its family.
     pub(crate) fn grow_index_family(&mut self) -> Result<()> {
-        use crate::index::IndexType;
-        use piramid_core::config::IndexKind;
+        use crate::index::{growth_rank, kind_of};
 
-        let rank_of_kind = |kind: IndexKind| match kind {
-            IndexKind::Flat => 0,
-            IndexKind::Ivf => 1,
-            IndexKind::Hnsw => 2,
-        };
-        let rank_of_type = |kind: IndexType| match kind {
-            IndexType::Flat => 0,
-            IndexType::Ivf => 1,
-            IndexType::Hnsw => 2,
-        };
         let count = self.index.len();
         let wanted = self.config.index.select_type(count);
         let current = self.vector_index.index_type();
-        if rank_of_kind(wanted) <= rank_of_type(current) {
+        if growth_rank(wanted) <= growth_rank(kind_of(current)) {
             return Ok(());
         }
 

@@ -126,24 +126,10 @@ pub async fn start_chat(
         ))
         .into());
     }
+    refuse_unsupported(&request)?;
     let unsupported = |what: &str| -> Result<(String, Generation)> {
         Err(ServerError::InvalidRequest(format!("{what} is not supported")).into())
     };
-    if request.n.is_some_and(|n| n != 1) {
-        return unsupported("n other than 1");
-    }
-    if request.frequency_penalty.is_some_and(|p| p != 0.0) {
-        return unsupported("frequency_penalty");
-    }
-    if request.presence_penalty.is_some_and(|p| p != 0.0) {
-        return unsupported("presence_penalty");
-    }
-    if request.max_tokens.is_some() && request.max_completion_tokens.is_some() {
-        return Err(ServerError::InvalidRequest(
-            "give max_tokens or max_completion_tokens, not both".to_string(),
-        )
-        .into());
-    }
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages {
         if message.name.is_some() {
@@ -186,6 +172,31 @@ pub async fn start_chat(
     let prompt = manager.render_chat(&messages)?;
     let generation = queue(&manager, &prompt, sampling).await?;
     Ok((model_id, generation))
+}
+
+/// Error for a chat completion field set to a value this server does not serve.
+fn refuse_unsupported(request: &ChatCompletionRequest) -> Result<()> {
+    let unsupported =
+        |what: &str| Err(ServerError::InvalidRequest(format!("{what} is not supported")).into());
+    if request.n.is_some_and(|n| n != 1) {
+        return unsupported("n other than 1");
+    }
+    if request.frequency_penalty.is_some_and(|p| p != 0.0) {
+        return unsupported("frequency_penalty");
+    }
+    if request.presence_penalty.is_some_and(|p| p != 0.0) {
+        return unsupported("presence_penalty");
+    }
+    if request.user.is_some() {
+        return unsupported("user");
+    }
+    if request.max_tokens.is_some() && request.max_completion_tokens.is_some() {
+        return Err(ServerError::InvalidRequest(
+            "give max_tokens or max_completion_tokens, not both".to_string(),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 async fn queue(
@@ -309,7 +320,7 @@ async fn retrieve(
     state
         .embeddings
         .metrics()
-        .record(1, 1, u64::from(embedded.tokens.unwrap_or(0)), embed_elapsed);
+        .record(1, 1, embedded.tokens.map(u64::from), embed_elapsed);
 
     let started = Instant::now();
     let hits = {
@@ -426,6 +437,46 @@ mod tests {
             chat_retrieval_query(&retrieval(None), &messages).ok(),
             Some("second")
         );
+    }
+
+    fn chat_request(body: serde_json::Value) -> ChatCompletionRequest {
+        let mut request = serde_json::json!({
+            "model": "m",
+            "messages": [{"role": "user", "content": "hi"}]
+        });
+        if let (Some(request), Some(body)) = (request.as_object_mut(), body.as_object()) {
+            request.extend(body.clone());
+        }
+        serde_json::from_value(request).unwrap()
+    }
+
+    #[test]
+    fn a_chat_request_naming_a_user_is_refused() {
+        assert!(refuse_unsupported(&chat_request(serde_json::json!({}))).is_ok());
+        let error = refuse_unsupported(&chat_request(serde_json::json!({"user": "u1"})))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("user is not supported"), "{error}");
+    }
+
+    #[test]
+    fn a_content_part_with_extra_keys_is_refused() {
+        let part = |extra: serde_json::Value| {
+            let mut part = serde_json::json!({"type": "text", "text": "hi"});
+            if let (Some(part), Some(extra)) = (part.as_object_mut(), extra.as_object()) {
+                part.extend(extra.clone());
+            }
+            serde_json::from_value::<ChatCompletionRequest>(serde_json::json!({
+                "model": "m",
+                "messages": [{"role": "user", "content": [part]}]
+            }))
+        };
+        assert!(part(serde_json::json!({})).is_ok());
+        assert!(part(serde_json::json!({"cache_control": {"type": "ephemeral"}})).is_err());
+        let error = part(serde_json::json!({"image_url": {"url": "u"}}))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unknown field `image_url`"), "{error}");
     }
 
     #[test]

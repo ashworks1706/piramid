@@ -119,6 +119,7 @@ impl VectorIndex for FlatIndex {
         let kernels = for_mode(self.config.mode)?;
         let mut scored = self.score_all(query, vectors, kernels)?;
 
+        scored.retain(|(_, score)| !score.is_nan());
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(scored.into_iter().take(k).map(|(id, _)| id).collect())
@@ -147,6 +148,15 @@ impl VectorIndex for FlatIndex {
 
     fn set_execution(&mut self, mode: piramid_hardware::compute::ExecutionMode) {
         self.config.mode = mode;
+    }
+
+    fn build_config(&self) -> piramid_core::config::IndexConfig {
+        piramid_core::config::IndexConfig::Flat {
+            params: piramid_core::config::FlatConfig {
+                mode: piramid_hardware::compute::ExecutionMode::default(),
+                ..self.config
+            },
+        }
     }
 
     fn to_serializable(&self) -> crate::index::SerializableIndex {

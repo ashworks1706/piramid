@@ -15,7 +15,13 @@ const SELECT_CHUNK: usize = 8192;
 
 const SOURCE: &str = include_str!("distance.cu");
 
-const FUNCTIONS: [&str; 4] = ["cosine_rows", "dot_rows", "euclidean_rows", "select_top_k"];
+const FUNCTIONS: [&str; 5] = [
+    "cosine_rows",
+    "dot_rows",
+    "euclidean_rows",
+    "euclidean_squared_rows",
+    "select_top_k",
+];
 
 /// Arguments for one batched distance launch. The buffers are borrowed, not owned.
 #[derive(Debug)]
@@ -92,7 +98,7 @@ impl DistanceModule {
     }
 
     /// Queue the batched cosine-similarity kernel. query_norm_squared is the sum of squares of
-    /// the query.
+    /// the query. A row scores NaN when it or the query has zero magnitude.
     pub fn cosine_batch(
         &self,
         launch: DistanceLaunch<'_>,
@@ -102,7 +108,7 @@ impl DistanceModule {
         let (dim, rows) = launch.check()?;
         self.module.launch(
             "cosine_rows",
-            LaunchConfig::for_elements(launch.rows, self.block_size),
+            LaunchConfig::for_elements(launch.rows, self.block_size)?,
             stream,
             &[
                 KernelArg::buffer(launch.query),
@@ -125,6 +131,15 @@ impl DistanceModule {
         self.plain("euclidean_rows", launch, stream)
     }
 
+    /// Queue the batched squared L2 distance kernel.
+    pub fn euclidean_squared_batch(
+        &self,
+        launch: DistanceLaunch<'_>,
+        stream: &Stream,
+    ) -> GpuResult<()> {
+        self.plain("euclidean_squared_rows", launch, stream)
+    }
+
     fn plain(
         &self,
         function: &'static str,
@@ -134,7 +149,7 @@ impl DistanceModule {
         let (dim, rows) = launch.check()?;
         self.module.launch(
             function,
-            LaunchConfig::for_elements(launch.rows, self.block_size),
+            LaunchConfig::for_elements(launch.rows, self.block_size)?,
             stream,
             &[
                 KernelArg::buffer(launch.query),
@@ -195,7 +210,7 @@ impl DistanceModule {
             |value: usize| u32::try_from(value).map_err(|e| GpuError::Launch(e.to_string()));
         self.module.launch(
             "select_top_k",
-            LaunchConfig::for_elements(chunks, self.block_size),
+            LaunchConfig::for_elements(chunks, self.block_size)?,
             stream,
             &[
                 KernelArg::buffer(scores),

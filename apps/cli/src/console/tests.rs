@@ -39,14 +39,35 @@ fn an_unrecognised_word_is_handed_to_just() {
             "main".into()
         ])
     );
-    // The start word with no argument is a recipe name, not a malformed start.
-    assert_eq!(parse_command("start"), Command::Just(vec!["start".into()]));
-    assert_eq!(parse_command("   "), Command::Unknown(String::new()));
+    assert_eq!(
+        parse_command("   "),
+        Command::Unknown("empty command".into())
+    );
+}
+
+#[test]
+fn a_unit_command_without_a_unit_is_refused() {
+    for word in ["start", "stop", "restart"] {
+        assert_eq!(
+            parse_command(word),
+            Command::Unknown(format!("{word} needs a unit name"))
+        );
+    }
+}
+
+#[test]
+fn each_command_has_one_spelling() {
+    assert_eq!(parse_command("quit"), Command::Just(vec!["quit".into()]));
+    assert_eq!(parse_command("h"), Command::Just(vec!["h".into()]));
+    assert_eq!(
+        parse_command("just check"),
+        Command::Just(vec!["just".into(), "check".into()])
+    );
 }
 
 #[test]
 fn the_catalog_is_unique_and_every_unit_is_runnable() {
-    let units = catalog();
+    let units = catalog("http://localhost:6333");
     let ids: std::collections::HashSet<&str> = units.iter().map(|u| u.id.as_str()).collect();
     assert_eq!(ids.len(), units.len(), "two units share an id");
     // Every unit is either a compose service or a just recipe.
@@ -89,7 +110,7 @@ fn every_catalog_recipe_exists_in_the_justfile() {
         .map(str::to_owned)
         .collect();
 
-    for unit in catalog() {
+    for unit in catalog("http://localhost:6333") {
         let Some(recipe) = unit.args.first() else {
             continue;
         };
@@ -106,7 +127,7 @@ fn console() -> super::app::App {
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let config = piramid_core::config::Config::default();
     super::app::App::new(
-        Settings::from_config(&config),
+        Settings::from_config(&config).unwrap(),
         Profile::Developer,
         root,
         &tx,
@@ -229,7 +250,7 @@ fn a_log_line_cannot_move_the_cursor_out_of_its_pane() {
 
 #[test]
 fn the_log_buffer_drops_the_oldest_line_and_searches_wrapping() {
-    let mut buffer = LogBuffer::new(3);
+    let mut buffer = LogBuffer::new(std::num::NonZeroUsize::new(3).unwrap());
     for text in ["alpha", "Beta", "gamma", "delta"] {
         buffer.push(LogLine::now(Stream::Out, text));
     }
@@ -268,7 +289,7 @@ fn full_output_is_kept_on_disk_after_the_pane_scrolls_past_it() {
 #[test]
 fn console_settings_come_from_the_one_configuration_file() {
     let config = piramid_core::config::Config::default();
-    let settings = Settings::from_config(&config);
+    let settings = Settings::from_config(&config).unwrap();
 
     // Unset, the console follows the address the server in the same file binds.
     assert_eq!(config.console.base_url, "");
@@ -282,7 +303,7 @@ fn console_settings_come_from_the_one_configuration_file() {
     let mut moved = piramid_core::config::Config::default();
     moved.startup.bind = "0.0.0.0:7000".to_owned();
     assert_eq!(
-        Settings::from_config(&moved).base_url,
+        Settings::from_config(&moved).unwrap().base_url,
         "http://localhost:7000"
     );
 }
@@ -366,7 +387,7 @@ fn console_watching(base_url: &str) -> super::app::App {
     let mut config = piramid_core::config::Config::default();
     config.console.base_url = base_url.to_owned();
     super::app::App::new(
-        Settings::from_config(&config),
+        Settings::from_config(&config).unwrap(),
         Profile::Production,
         root,
         &tx,
@@ -992,15 +1013,16 @@ fn host_fields_the_server_leaves_out_read_as_absent() {
         &metrics_body(r#", "host": {"memory_total_bytes": 4096, "cpu_percent": 0.0}"#),
     )
     .expect("the body decodes");
-    let host = metrics.host.expect("the host block was sent");
+    let host = metrics.host;
     assert_eq!(host.memory_total_bytes, Some(4096));
     assert_eq!(host.cpu_percent, Some(0.0));
     assert_eq!(host.memory_used_bytes, None);
     assert_eq!(host.process_resident_bytes, None);
 
-    // A server that predates the host block has no host readings at all.
-    let older: Metrics = parse("/api/metrics", &metrics_body("")).expect("the body decodes");
-    assert!(older.host.is_none());
+    // The server always sends the host block, so a body without it is a decode error.
+    let error = parse::<Metrics>("/api/metrics", &metrics_body(""))
+        .expect_err("the host block is required");
+    assert!(error.to_string().contains("host"), "{error}");
 }
 
 #[test]
@@ -1018,7 +1040,7 @@ fn a_body_missing_a_field_the_server_always_sends_is_a_decode_error() {
     assert!(parse::<Metrics>("/api/metrics", r#"{"collections": []}"#).is_err());
 
     // A null the server always sends is required as a key, not only as a value.
-    let no_latency = metrics_body("").replace(r#""search_latency_ms": 1.5,"#, "");
+    let no_latency = metrics_body(r#", "host": {}"#).replace(r#""search_latency_ms": 1.5,"#, "");
     let error = parse::<Metrics>("/api/metrics", &no_latency).expect_err("the key is required");
     assert!(error.to_string().contains("search_latency_ms"), "{error}");
 
@@ -1083,7 +1105,7 @@ fn console_with_a_collection() -> super::app::App {
     let mut app = console();
     app.handle(press('2'));
     app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
-        &metrics_body(""),
+        &metrics_body(r#", "host": {}"#),
         READY_BODY,
     )))));
     app
@@ -1233,11 +1255,11 @@ async fn a_rejected_key_is_reported_as_an_authentication_failure_not_as_unreacha
 #[test]
 fn the_console_sends_the_key_the_environment_set() {
     let mut config = piramid_core::config::Config::default();
-    assert!(Settings::from_config(&config).api_key.is_none());
+    assert!(Settings::from_config(&config).unwrap().api_key.is_none());
 
     let key = piramid_core::config::ApiKey::new("from-env".into()).unwrap();
     config.startup.http.auth.api_key = Some(key.clone());
-    assert_eq!(Settings::from_config(&config).api_key, Some(key));
+    assert_eq!(Settings::from_config(&config).unwrap().api_key, Some(key));
 }
 
 #[test]
@@ -1259,4 +1281,153 @@ fn a_server_with_no_model_loaded_gives_the_device_graphs_the_whole_view() {
         .iter()
         .collect();
     assert!(!last_body_row.trim().is_empty(), "{last_body_row:?}");
+}
+
+#[test]
+fn a_unit_killed_by_a_signal_it_was_not_asked_for_is_a_failure() {
+    let mut app = console();
+    app.handle(super::types::Event::Exited {
+        unit: "serve".into(),
+        code: None,
+    });
+    assert_eq!(
+        app.current().status,
+        Status::Failed("killed by a signal".into())
+    );
+
+    app.handle(super::types::Event::Exited {
+        unit: "serve".into(),
+        code: Some(3),
+    });
+    assert_eq!(app.current().status, Status::Exited(3));
+}
+
+#[test]
+fn stopping_a_unit_this_console_did_not_start_is_an_error() {
+    use super::runner::Runner;
+    use super::types::RunnerError;
+
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut runner = Runner::new(std::env::temp_dir(), tx);
+    let serve = catalog("http://localhost:6333")
+        .into_iter()
+        .find(|unit| unit.id == "serve")
+        .expect("the catalog has a serve unit");
+    let error = runner.stop(&serve).expect_err("nothing was started");
+    assert!(
+        matches!(&error, RunnerError::NotTracked { unit } if unit == "serve"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn an_error_body_is_read_from_the_error_key_only() {
+    use super::client::summarize;
+
+    assert_eq!(
+        summarize(r#"{"error": "no such collection"}"#),
+        "no such collection"
+    );
+    assert_eq!(
+        summarize(r#"{"message": "boom"}"#),
+        r#"{"message": "boom"}"#
+    );
+    assert_eq!(summarize(" plain text \n"), "plain text");
+}
+
+#[test]
+fn a_collection_that_is_not_open_has_no_vector_count() {
+    let mut app = console();
+    app.handle(press('2'));
+    let ready = r#"{
+        "ok": true, "version": "0.2.0", "data_dir": "/data", "total_collections": 2,
+        "loaded_collections": 1, "total_vectors": 3,
+        "collections": [
+            {"name": "docs", "loaded": true, "integrity_ok": true},
+            {"name": "cold", "loaded": false}
+        ]
+    }"#;
+    app.handle(super::types::Event::Snapshot(Box::new(Ok(snapshot_from(
+        &metrics_body(r#", "host": {}"#),
+        ready,
+    )))));
+    let cold = app
+        .collections
+        .rows
+        .iter()
+        .find(|row| row.name == "cold")
+        .expect("readiness lists cold");
+    assert_eq!(cold.vectors(), None);
+    let docs = app
+        .collections
+        .rows
+        .iter()
+        .find(|row| row.name == "docs")
+        .expect("readiness lists docs");
+    assert_eq!(docs.vectors(), Some(3));
+
+    let drawn = screen(&mut app);
+    let cold_line = drawn
+        .lines()
+        .find(|line| line.contains(" cold"))
+        .expect("the sidebar lists cold");
+    assert!(cold_line.contains('-'), "{cold_line}");
+    assert!(!cold_line.contains(" 0 "), "{cold_line}");
+}
+
+#[test]
+fn only_an_unreachable_server_gets_the_start_a_server_hint() {
+    use super::client::ClientError;
+
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(super::types::Event::Snapshot(Box::new(Err(
+        ClientError::Unauthorized {
+            path: "/api/metrics".into(),
+            reason: "the server rejected the key".into(),
+        },
+    ))));
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(!drawn.contains("no server at"), "{drawn}");
+    assert!(!drawn.contains("Start one with"), "{drawn}");
+    assert!(drawn.contains("refused"), "{drawn}");
+
+    let mut app = console();
+    app.handle(press('2'));
+    app.handle(super::types::Event::Snapshot(Box::new(Err(
+        ClientError::Unreachable("/api/metrics".into(), "Connection refused".into()),
+    ))));
+    let drawn = screen_of(&mut app, 200, 30);
+    assert!(drawn.contains("no server at"), "{drawn}");
+}
+
+#[test]
+fn the_serve_unit_opens_the_address_the_configuration_binds() {
+    let root = std::env::temp_dir().join(format!("piramid-console-{}", std::process::id()));
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut config = piramid_core::config::Config::default();
+    config.startup.bind = "0.0.0.0:7000".to_owned();
+    config.console.base_url = "https://piramid.internal:6333".to_owned();
+    let app = super::app::App::new(
+        Settings::from_config(&config).unwrap(),
+        Profile::Developer,
+        root,
+        &tx,
+    )
+    .expect("the log directory is creatable");
+    let url = |id: &str| {
+        app.units
+            .iter()
+            .find(|state| state.unit.id == id)
+            .and_then(|state| state.unit.url.clone())
+    };
+    assert_eq!(url("serve").as_deref(), Some("http://localhost:7000"));
+    assert_eq!(url("piramid").as_deref(), Some("http://localhost:6333"));
+}
+
+#[test]
+fn settings_refuse_a_console_section_that_fails_validation() {
+    let mut config = piramid_core::config::Config::default();
+    config.console.log_lines = 0;
+    assert!(Settings::from_config(&config).is_err());
 }

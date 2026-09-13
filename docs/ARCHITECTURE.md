@@ -551,15 +551,16 @@ structures and must stay rebuildable from stored records.
 A write checks the vector width, encodes the document and checks collection limits, logs a WAL
 entry, appends the record, updates the offset index, then the vector cache, the index and the
 metadata cache. After the write, a checkpoint condition on operation count, elapsed time or log size
-may trigger a checkpoint. A checkpoint saves the offset, index and manifest sidecars, and only then
+may trigger a checkpoint. A checkpoint saves the manifest, offset and index sidecars, and only then
 writes a checkpoint entry to the WAL, records the last sequence number and rotates the log.
 Byte-level serialization stays in `storage`, except that an index owns its own sidecar format.
 
 Opening a collection loads the offset sidecar, opens the record store, loads the manifest and the
-index sidecar, refuses an index whose metric differs from the configured one, opens the WAL and
-reads entries past the last checkpoint. A missing index sidecar is rebuilt from the record store
-when there are no entries to replay; replayed entries are inserted into the index as they apply.
-When entries were replayed, the collection checkpoints before it is returned.
+index sidecar, refuses stored documents with no manifest, refuses an index whose metric differs from
+the configured one, opens the WAL and reads entries past the last checkpoint. A missing index
+sidecar, or one built with a different family or parameters than the configured index, is rebuilt
+from the record store before replay; replayed entries are then inserted into the index as they
+apply. When entries were replayed, the collection checkpoints before it is returned.
 
 ## Configuration
 

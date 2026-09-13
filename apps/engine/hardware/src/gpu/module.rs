@@ -3,7 +3,7 @@
 
 use crate::gpu::buffer::DeviceBuffer;
 use crate::gpu::device::Device;
-use crate::gpu::error::GpuResult;
+use crate::gpu::error::{GpuError, GpuResult};
 use crate::gpu::stream::Stream;
 
 /// Grid and block geometry for a single kernel launch.
@@ -18,15 +18,22 @@ pub struct LaunchConfig {
 }
 
 impl LaunchConfig {
-    /// One-dimensional geometry covering n elements at the given threads per block.
-    pub fn for_elements(n: usize, block_size: u32) -> Self {
-        let block_size = block_size.max(1);
-        let blocks = u32::try_from(n.div_ceil(block_size as usize).max(1)).unwrap_or(u32::MAX);
-        Self {
+    /// One-dimensional geometry covering n elements at the given threads per block. A zero block
+    /// size, and a block count that does not fit the grid, are errors.
+    pub fn for_elements(n: usize, block_size: u32) -> GpuResult<Self> {
+        if block_size == 0 {
+            return Err(GpuError::Launch("block size is zero".to_string()));
+        }
+        let blocks = u32::try_from(n.div_ceil(block_size as usize).max(1)).map_err(|e| {
+            GpuError::Launch(format!(
+                "{n} elements at block size {block_size} exceed the grid: {e}"
+            ))
+        })?;
+        Ok(Self {
             grid: (blocks, 1, 1),
             block: (block_size, 1, 1),
             shared_memory_bytes: 0,
-        }
+        })
     }
 }
 
@@ -97,5 +104,38 @@ impl KernelModule {
     /// Device this module is loaded on.
     pub fn device(&self) -> &Device {
         &self.device
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "a failed assertion is the point of a test"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_launch_covers_every_element() {
+        let config = LaunchConfig::for_elements(1000, 256).unwrap();
+        assert_eq!(config.grid, (4, 1, 1));
+        assert_eq!(config.block, (256, 1, 1));
+    }
+
+    #[test]
+    fn a_zero_block_size_is_refused() {
+        assert!(matches!(
+            LaunchConfig::for_elements(10, 0),
+            Err(GpuError::Launch(_))
+        ));
+    }
+
+    #[test]
+    fn a_block_count_beyond_the_grid_is_refused() {
+        let elements = (u32::MAX as usize) * 2;
+        assert!(matches!(
+            LaunchConfig::for_elements(elements, 1),
+            Err(GpuError::Launch(_))
+        ));
     }
 }

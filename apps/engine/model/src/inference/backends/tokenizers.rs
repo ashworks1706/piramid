@@ -13,13 +13,15 @@ pub struct JsonTokenizer {
 }
 
 impl JsonTokenizer {
-    /// Read tokenizer.json from a file or a directory holding it.
+    /// Read tokenizer.json from the directory at path.
     pub fn load(path: &Path) -> Result<Self, InferenceError> {
-        let file = if path.is_dir() {
-            path.join("tokenizer.json")
-        } else {
-            path.to_path_buf()
-        };
+        if !path.is_dir() {
+            return Err(InferenceError::Load(format!(
+                "{}: tokenizer path must be a directory holding tokenizer.json",
+                path.display()
+            )));
+        }
+        let file = path.join("tokenizer.json");
         let inner = tokenizers::Tokenizer::from_file(&file)
             .map_err(|e| InferenceError::Load(format!("{}: {e}", file.display())))?;
         Ok(Self { inner })
@@ -49,5 +51,24 @@ impl Tokenizer for JsonTokenizer {
 
     fn token_id(&self, token: &str) -> Option<u32> {
         self.inner.token_to_id(token)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "assertions in tests")]
+
+    use super::*;
+
+    #[test]
+    fn a_tokenizer_path_that_is_a_file_is_refused() {
+        let file = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));
+        let error = JsonTokenizer::load(file).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must be a directory holding tokenizer.json"),
+            "{error}"
+        );
     }
 }

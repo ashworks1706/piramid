@@ -41,13 +41,13 @@ impl Wal {
     }
 
     /// A WAL that writes nothing, used when logging is disabled.
-    pub fn disabled(path: PathBuf, next_seq: u64) -> Result<Self> {
-        Ok(Wal {
+    pub fn disabled(path: PathBuf, next_seq: u64) -> Self {
+        Wal {
             file: None,
             path,
             next_seq,
             sync_on_write: false,
-        })
+        }
     }
 
     /// Bytes currently on disk, or None when logging is disabled. Errors when the log file

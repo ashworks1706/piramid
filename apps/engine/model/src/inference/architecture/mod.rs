@@ -332,6 +332,9 @@ pub trait DecoderModel: Send {
     /// Shape of the cache as this model stores it.
     fn kv_layout(&self) -> KvLayout;
 
+    /// The stream the model's device work is queued on. None on the CPU.
+    fn stream(&self) -> Option<&Stream>;
+
     /// Allocate cache storage for slots tokens, replacing any held before.
     fn allocate_cache(&mut self, slots: usize) -> Result<(), InferenceError>;
 
