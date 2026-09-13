@@ -233,20 +233,21 @@ runtime:
   # `gpu` is rejected at startup until GPU distance kernels exist.
   execution: auto
 
-  # Model execution. None of this is implemented — the shape is settled so the forward-pass work
-  # lands into a surface that already exists, and every switch below fails at startup rather than
-  # parsing and doing nothing.
+  # Model execution: a Qwen2 or Qwen3 checkpoint served from this process. Needs a build with the
+  # `inference-candle` feature, and `gpu-cuda` to run on a GPU. Read once at startup; a reload that
+  # changes anything here is refused.
   inference:
-    # Not implemented (roadmap v0.4.0).
+    # Load the model at startup and serve /api/generate and /v1/chat/completions.
     enabled: false
+    # Directory holding config.json, tokenizer.json, tokenizer_config.json and the safetensors.
     model_path: null
     # Only needed when the tokenizer does not sit beside the weights.
     tokenizer_path: null
-    # Which forked model file drives the pass. null reads it from the checkpoint.
+    # qwen2 | qwen3, checked against the checkpoint. null reads it from the checkpoint.
     architecture: null
-    # cuda:0, or null to follow startup.hardware.
+    # cpu | cuda:N. null is cuda at hardware.gpu.device_ordinal under the gpu profile, else cpu.
     device: null
-    # auto | fp32 | fp16 | bf16. Weight precision at load.
+    # auto | fp32 | fp16 | bf16. auto is the checkpoint precision on a GPU and fp32 on the cpu.
     dtype: auto
     max_sequence_length: 4096
     # A throwaway pass at boot, so the first real request does not pay for allocation.
@@ -268,17 +269,18 @@ runtime:
       queue_timeout_ms: 30000
 
     kv_cache:
-      # Budget across every live sequence; null is unbounded.
+      # Budget across every live sequence. Required on the cpu; on a GPU it caps device_fraction.
       max_bytes: null
       # Tokens per page: the unit of allocation and eviction.
       page_size: 16
-      # The largest single lever on cache size. A 7B model's 8k cache is ~2 GB at fp16.
-      dtype: fp16
+      # auto | fp32 | fp16 | bf16. auto matches the weights.
+      dtype: auto
       # Fraction of what device memory remains after weights.
       device_fraction: 0.9
       # Share pages between sequences with an identical prefix, such as a common system prompt.
       prefix_sharing: true
-      # recompute | swap. What a preempted sequence does with its pages.
+      # What a preempted sequence does with its pages: recompute them when it resumes. swap is not
+      # implemented and is refused.
       preemption: recompute
 
     sampling:

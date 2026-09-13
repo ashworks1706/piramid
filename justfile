@@ -63,6 +63,14 @@ check-gpu:
 test-gpu:
     cargo test -p piramid-hardware --features gpu-cuda --test gpu -- --ignored
 
+# Generation on a real checkpoint: PIRAMID_TEST_MODEL names a Qwen2.5-0.5B-Instruct directory
+test-model:
+    cargo test --release -p piramid-model --features inference-candle --lib --test generation -- --ignored
+
+# Generation on the local CUDA device as well
+test-model-gpu:
+    cargo test --release -p piramid-model --features inference-candle,gpu-cuda --test generation -- --ignored
+
 # Compile-check the inference backend
 check-inference:
     cargo check --workspace --features inference-candle --all-targets

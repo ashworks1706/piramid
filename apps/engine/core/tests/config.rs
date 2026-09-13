@@ -120,7 +120,7 @@ fn unimplemented_settings_are_rejected_rather_than_ignored() {
     assert!(cfg.validate().is_err());
 
     let mut cfg = Config::default();
-    cfg.runtime.inference.enabled = true;
+    cfg.runtime.inference.kv_cache.preemption = piramid_core::config::Preemption::Swap;
     let err = cfg.validate().unwrap_err();
     assert!(err.contains("not implemented"), "{err}");
 
@@ -141,13 +141,9 @@ fn a_bad_bind_address_is_rejected() {
 fn every_unimplemented_subsystem_refuses_to_start() {
     for (name, mutate) in [
         (
-            "inference",
-            Box::new(|c: &mut Config| c.runtime.inference.enabled = true)
-                as Box<dyn Fn(&mut Config)>,
-        ),
-        (
             "fusion",
-            Box::new(|c: &mut Config| c.runtime.inference.fusion.enabled = true),
+            Box::new(|c: &mut Config| c.runtime.inference.fusion.enabled = true)
+                as Box<dyn Fn(&mut Config)>,
         ),
         (
             "document_kv",
@@ -274,4 +270,24 @@ fn embedding_options_and_cache_are_validated() {
         "{base}    cache:\n      enabled: false\n      entries: 0\n"
     ))
     .unwrap();
+}
+
+#[test]
+fn enabling_inference_needs_a_model_path_and_a_known_device() {
+    let mut cfg = Config::default();
+    cfg.runtime.inference.enabled = true;
+    assert!(cfg.validate().unwrap_err().contains("model_path"));
+
+    cfg.runtime.inference.model_path = Some("/models/qwen".to_string());
+    cfg.validate().unwrap();
+
+    for device in ["gpu", "cuda:", "cuda:x"] {
+        cfg.runtime.inference.device = Some(device.to_string());
+        assert!(cfg
+            .validate()
+            .unwrap_err()
+            .contains("runtime.inference.device"));
+    }
+    cfg.runtime.inference.device = Some("cuda:0".to_string());
+    cfg.validate().unwrap();
 }
