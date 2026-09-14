@@ -2,7 +2,7 @@
 <img width="1912" height="418" alt="image" src="https://github.com/user-attachments/assets/e36cfab2-65ee-4d05-899b-9aef4f1b3cc8" />
 
 <p align="center">
-    <b>unified inference runtime for retreival systems</b>
+    <b>inference runtime for retreival systems</b>
 </p>
 
 <p align="center">
