@@ -1634,3 +1634,65 @@ fn every_key_hint_on_the_bottom_line_is_a_key_the_help_lists() {
     let drawn = screen_of(&mut app, 200, 30);
     assert!(drawn.contains(" R re-read"), "{drawn}");
 }
+
+#[test]
+fn the_splash_trims_every_frame_to_one_size_and_ends_on_the_logo() {
+    use piramid::animation::CLI_FRAMES;
+    use piramid::console::splash::Splash;
+
+    let splash = Splash::default();
+    assert_eq!(splash.len(), CLI_FRAMES.len());
+    let (width, height) = splash.size();
+    assert!(width < 104 && height < 25, "blank margins are trimmed");
+
+    let trimmed = piramid::console::splash::trim(CLI_FRAMES);
+    assert!(trimmed.iter().all(|rows| rows.len() == usize::from(height)));
+    let last = trimmed.last().unwrap().join("\n");
+    assert!(last.contains("██████╗"), "the last frame is the wordmark");
+}
+
+#[test]
+fn the_splash_trims_shared_blank_margins_only() {
+    let frames = ["\n   ab  \n   c   \n", "\n    d  \n       \n"];
+    let trimmed = piramid::console::splash::trim(&frames);
+    assert_eq!(trimmed[0], vec!["ab".to_owned(), "c".to_owned()]);
+    assert_eq!(trimmed[1], vec![" d".to_owned(), String::new()]);
+}
+
+#[test]
+fn the_splash_draws_centred_and_only_where_it_fits() {
+    use piramid::console::splash::{Splash, TAGLINE};
+    use ratatui::backend::TestBackend;
+    use ratatui::layout::Rect;
+    use ratatui::Terminal;
+
+    let splash = Splash::default();
+    let (width, height) = splash.size();
+    assert!(!splash.fits(Rect::new(0, 0, width - 1, height + 2)));
+    assert!(splash.fits(Rect::new(0, 0, width, height + 2)));
+
+    let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    terminal
+        .draw(|frame| splash.draw(frame, splash.len() - 1))
+        .unwrap();
+    let screen: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect();
+    assert!(screen.contains("█"), "the logo is drawn");
+    assert!(
+        screen.contains(TAGLINE),
+        "the settled logo carries the tagline"
+    );
+}
+
+#[test]
+fn the_splash_is_on_by_default_and_follows_the_config() {
+    let mut config = piramid::config::Config::default();
+    assert!(Settings::from_config(&config).unwrap().splash);
+    config.console.splash = false;
+    assert!(!Settings::from_config(&config).unwrap().splash);
+}

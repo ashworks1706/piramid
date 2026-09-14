@@ -78,7 +78,8 @@ The file has three blocks, split by when a setting takes effect. `startup:` is a
 boot, so changing a startup setting needs a restart, and `POST /api/config/reload` refuses a file
 whose startup block differs from the running one. `runtime:` is re-read on reload, from the same
 file and flags the server started with. `console:` is read when `piramid` starts with no
-subcommand and opens the console.
+subcommand and opens the console, which plays the logo animation first; any key skips it, and
+`console.splash: false` turns it off.
 
 Not every runtime setting reaches a collection that is already open. `search.parallel`, `limits`,
 the WAL checkpoint thresholds (`checkpoint_frequency`, `checkpoint_interval_secs`,

@@ -14,6 +14,7 @@ use crate::console::client::Client;
 use crate::console::collections::Pending;
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
+use crate::console::splash::{self, Splash};
 use crate::console::types::{ConfigState, Event, Profile};
 use crate::console::{health, ui};
 use piramid_core::config::Config;
@@ -59,7 +60,14 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             original_hook(info);
         }));
         let mut terminal = ratatui::init();
-        let outcome = drive(&mut terminal, &mut app, &mut rx, &tx, &mut input).await;
+        let outcome = match settings.splash {
+            true => play_splash(&mut terminal, &mut app, &mut rx).await,
+            false => Ok(()),
+        };
+        let outcome = match outcome {
+            Ok(()) => drive(&mut terminal, &mut app, &mut rx, &tx, &mut input).await,
+            Err(e) => Err(e),
+        };
         app.shutdown();
         ratatui::restore();
         outcome
@@ -101,6 +109,44 @@ async fn drive(
         terminal.draw(|frame| ui::draw(frame, app))?;
     }
     Ok(())
+}
+
+/// Plays the logo animation, then holds it. Events that arrive meanwhile are handled as usual; a
+/// key press skips the rest. A terminal too small for the logo shows nothing.
+async fn play_splash(
+    terminal: &mut ratatui::DefaultTerminal,
+    app: &mut App,
+    rx: &mut mpsc::UnboundedReceiver<Event>,
+) -> std::io::Result<()> {
+    let splash = Splash::default();
+    if !splash.fits(terminal.size()?.into()) {
+        return Ok(());
+    }
+    for index in 0..splash.len() {
+        terminal.draw(|frame| splash.draw(frame, index))?;
+        let pause = match index + 1 == splash.len() {
+            true => splash::HOLD,
+            false => splash::FRAME,
+        };
+        if !wait(app, rx, pause).await {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Handles events for the given time. False when a key was pressed or the channel closed.
+async fn wait(app: &mut App, rx: &mut mpsc::UnboundedReceiver<Event>, pause: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + pause;
+    loop {
+        tokio::select! {
+            () = tokio::time::sleep_until(deadline) => return true,
+            event = rx.recv() => match event {
+                Some(Event::Key(_)) | None => return false,
+                Some(event) => app.handle(event),
+            },
+        }
+    }
 }
 
 /// Runs program in the foreground with the terminal it needs, then takes the terminal back.

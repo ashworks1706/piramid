@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
-mod animation;
+use piramid::animation;
 use piramid::config::StartupConfig;
 use piramid::observability;
 use piramid::state::AppState;

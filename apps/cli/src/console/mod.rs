@@ -9,6 +9,7 @@ pub mod logs;
 mod run;
 pub mod runner;
 pub mod settings;
+pub mod splash;
 pub mod types;
 pub mod ui;
 pub mod units;

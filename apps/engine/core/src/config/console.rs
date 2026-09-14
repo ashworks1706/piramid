@@ -16,6 +16,8 @@ pub struct ConsoleConfig {
     pub log_dir: String,
     /// Seconds between health probes and collection refreshes.
     pub refresh_secs: u64,
+    /// Play the logo animation before the console draws; any key skips it.
+    pub splash: bool,
 }
 
 impl Default for ConsoleConfig {
@@ -26,6 +28,7 @@ impl Default for ConsoleConfig {
             log_lines: 5000,
             log_dir: "target/console-logs".into(),
             refresh_secs: 5,
+            splash: true,
         }
     }
 }

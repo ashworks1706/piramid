@@ -23,6 +23,8 @@ pub struct Settings {
     pub refresh: Duration,
     /// Key sent to the server, from PIRAMID_API_KEY.
     pub api_key: Option<ApiKey>,
+    /// Play the logo animation before the console draws.
+    pub splash: bool,
 }
 
 impl Settings {
@@ -46,6 +48,7 @@ impl Settings {
             log_dir: PathBuf::from(&console.log_dir),
             refresh: Duration::from_secs(console.refresh_secs),
             api_key: config.startup.http.auth.api_key.clone(),
+            splash: console.splash,
         })
     }
 

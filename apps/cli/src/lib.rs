@@ -1,5 +1,6 @@
 //! Umbrella crate: re-exports every workspace crate under one namespace.
 
+pub mod animation;
 pub mod console;
 pub mod support;
 

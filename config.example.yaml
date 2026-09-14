@@ -297,3 +297,5 @@ console:
   log_dir: target/console-logs
   # seconds between health probes and collection refreshes
   refresh_secs: 5
+  # play the logo animation before the console draws; any key skips it
+  splash: true
