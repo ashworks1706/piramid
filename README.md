@@ -1,4 +1,5 @@
-<img width="1114" height="191" alt="Piramid Logo" src="https://github.com/user-attachments/assets/efaa4c47-62d1-4397-9899-8bd58d400fc6" />
+<!-- <img width="1114" height="191" alt="Piramid Logo" src="https://github.com/user-attachments/assets/efaa4c47-62d1-4397-9899-8bd58d400fc6" /> -->
+<img width="1912" height="418" alt="image" src="https://github.com/user-attachments/assets/e36cfab2-65ee-4d05-899b-9aef4f1b3cc8" />
 
 <p align="center">
     <b>An inference engine for RAG, in Rust</b>
