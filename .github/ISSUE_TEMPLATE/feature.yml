@@ -1,0 +1,20 @@
+name: Feature
+description: Something Piramid should be able to do
+labels: [feature]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: The task, not the implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you do it today
+  - type: input
+    id: roadmap
+    attributes:
+      label: Roadmap
+      description: The phase in docs/ROADMAP.md this belongs to, if you know it.
