@@ -15,8 +15,9 @@
   --fg: #e6ebf2;
   --fg-dim: #7d8da3;
   /* --font-blocks covers only U+2500-259F; every other glyph comes from --font-mono. */
-  --mono: var(--font-mono), var(--font-blocks), ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
+  --mono:
+    var(--font-mono), var(--font-blocks), ui-monospace, SFMono-Regular, Menlo,
+    Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 html,
@@ -60,14 +61,16 @@ body {
 
 .cli-animation {
   font-family: var(--mono);
-  /* 83 columns at a 0.6em advance are 49.8em wide, capped at 16px; vw is the fallback for cqi. */
-  font-size: min(16px, calc((100vw - 2.5rem) / 49.8));
-  font-size: min(16px, calc(100cqi / 49.8));
+  /* The size before the script measures the glyphs that rendered. 83 columns at a 0.68em
+     advance is the widest monospace fallback worth planning for, so this only ever undershoots
+     and the script grows it to the real fit. vw is the fallback for cqi. */
+  font-size: min(16px, calc((100vw - 2.5rem) / 56.5));
+  font-size: min(16px, calc(100cqi / 56.5));
   line-height: 1.2;
   white-space: pre;
   color: var(--accent);
   margin: 0;
-  
+
   /* Height of the tallest frame. */
   min-height: calc(14 * 1.2em);
 }
@@ -76,6 +79,29 @@ body {
 .cli-animation.is-settled {
   text-shadow: 0 0 26px rgba(34, 211, 238, 0.28);
   transition: text-shadow 0.5s ease;
+}
+
+.cli-stage {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* Measured, never shown. It carries a block bounding every frame so the narrow frames do not
+   shrink the fit, and its size is fixed so a webfont swapping in changes its width and the
+   script measures again. Zero sized and clipped, so it adds nothing to the scrollable area. */
+.cli-probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  min-height: 0;
+  font-size: 100px;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 .landing-tagline {
@@ -112,7 +138,9 @@ body {
   border: 1px solid transparent;
   padding: 0.5rem 0.95rem;
   color: var(--fg-dim);
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .landing-link:hover {
@@ -146,9 +174,15 @@ code {
   animation: fadeUp 0.9s ease forwards;
 }
 
-.delay-1 { animation-delay: 0.12s; }
-.delay-2 { animation-delay: 0.2s; }
-.delay-3 { animation-delay: 0.28s; }
+.delay-1 {
+  animation-delay: 0.12s;
+}
+.delay-2 {
+  animation-delay: 0.2s;
+}
+.delay-3 {
+  animation-delay: 0.28s;
+}
 
 @media (max-width: 640px) {
   .code-block {
@@ -171,15 +205,26 @@ article table {
   -webkit-overflow-scrolling: touch;
 }
 
-
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeInBlog {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Button classes used in MDX. */
@@ -195,7 +240,10 @@ article table {
   border: 1px solid var(--navy-line);
   background: var(--navy);
   color: var(--fg);
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .blog-btn:hover {
@@ -276,12 +324,20 @@ article table {
 
 .blog-card {
   position: relative;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.02)
+  );
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 1rem;
   padding: 1.25rem 1.5rem;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
   cursor: pointer;
   overflow: hidden;
 }
@@ -299,7 +355,7 @@ article table {
 }
 
 .blog-card > a:first-child::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -1.25rem -1.5rem;
   z-index: 0;
@@ -332,7 +388,12 @@ article table {
   height: 1px;
   width: 100%;
   border: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
   margin: 1.5rem 0;
 }
 
@@ -392,7 +453,11 @@ article table {
 .blog-callout {
   border-radius: 0.9rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.02)
+  );
   padding: 0.95rem 1rem;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
 }
@@ -450,7 +515,7 @@ article table {
   background: rgba(234, 179, 8, 0.24);
 }
 
-.blog-badge.danger  {
+.blog-badge.danger {
   border-color: rgba(248, 113, 113, 0.7);
   color: #ffd5db;
   background: rgba(248, 113, 113, 0.22);
@@ -548,7 +613,9 @@ article a:not(.blog-btn):not(.blog-button):hover {
   color: var(--fg);
   font-size: 0.9rem;
   border-bottom: 1px solid transparent;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .blog-index-item:hover {

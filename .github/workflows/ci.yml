@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Gate a branch on demand. A pull request into anything but main runs no other trigger, so a
+  # stacked branch has no gate without this.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -20,9 +23,9 @@ jobs:
     name: Changes
     runs-on: ubuntu-latest
     outputs:
-      rust: ${{ steps.filter.outputs.rust }}
-      docker: ${{ steps.filter.outputs.docker }}
-      website: ${{ steps.filter.outputs.website }}
+      rust: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.rust == 'true' }}
+      docker: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docker == 'true' }}
+      website: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.website == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
