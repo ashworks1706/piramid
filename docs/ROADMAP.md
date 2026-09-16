@@ -13,20 +13,14 @@
 
 One model, one GPU, batch size one, no HTTP.
 
-- [x] prove the model runtime and our device runtime can share one device with no host round trip
-- [x] run a model on the same device retrieval uses
-- [ ] the first real `RetrievalHook` implementation, in its own crate
-- [x] an end-to-end benchmark: embed, search, fetch, prefill, decode, reporting TTFT,
-      tokens/sec and recall
 - [ ] report TTFT, tokens/sec and retrieval-hook latency as metrics, graphed in the device view
 - [ ] measure the configurations that matter against it, with retrieval-before-prefill as control
-- [ ] publish the result
+- [ ] publish the result, make short report on readme
 
 ## v0.5.0: `piramid serve`
 
 Co-located RAG with unmodified models. Also the baseline v0.6 is measured against.
 
-- [x] embed in-process, reusing the device already held, beside the existing providers
 - [ ] cut the website copy down to what the runtime does by then
 
 ## v0.6.0: retrieval during generation
@@ -49,7 +43,6 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 
 ## Unscheduled
 
-- [x] the `auto` hardware profile means the same as `cpu-only` until something detects a GPU
 - [ ] behind a reverse proxy every client shares one rate-limit bucket; forwarded headers are not
       read
 - [ ] `/api/readyz` is unauthenticated and names the data directory and every collection
