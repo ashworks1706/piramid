@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Entry } from "../lib/console";
 
@@ -18,7 +19,7 @@ const REPO = "https://github.com/ashworks1706/piramid";
 type Block = { input: string; output: string[] };
 
 const BANNER = [
-  "piramid 0.2.0 - ask it about itself",
+  "inference runtime for retrieval systems",
   "type help, or a command. tab completes, up and down recall.",
 ];
 
@@ -29,7 +30,13 @@ const BANNER = [
  * answers assembled at build time, so nothing it says can drift from what the repository
  * actually contains.
  */
-export function Console({ entries }: { entries: Entry[] }) {
+export function Console({
+  entries,
+  children,
+}: {
+  entries: Entry[];
+  children?: React.ReactNode;
+}) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [input, setInput] = useState("");
   const [recall, setRecall] = useState(-1);
@@ -131,7 +138,11 @@ export function Console({ entries }: { entries: Entry[] }) {
         <span className="readme-dot" />
         <span className="readme-dot" />
         <span className="readme-dot" />
-        <span className="readme-name">piramid</span>
+        <span className="readme-name">/piramid</span>
+        <span className="console-bar-links">
+          <a href={REPO}>github</a>
+          <Link href="/blogs">blog</Link>
+        </span>
       </header>
       {/* The whole surface focuses the field, the way clicking a terminal does. */}
       <div
@@ -140,11 +151,13 @@ export function Console({ entries }: { entries: Entry[] }) {
         onClick={() => field.current?.focus()}
         role="presentation"
       >
-        {BANNER.map((line) => (
-          <p key={line} className="console-banner">
-            {line}
-          </p>
-        ))}
+        {children ? <div className="console-logo">{children}</div> : null}
+        <p className="console-banner">{BANNER[0]}</p>
+        <p className="console-banner console-install">
+          <span className="console-prompt">$</span>{" "}
+          <span className="select-all">cargo install piramid</span>
+        </p>
+        <p className="console-banner">{BANNER[1]}</p>
         {blocks.map((block, index) => (
           <div key={`${block.input}-${index}`}>
             <p className="console-line">
