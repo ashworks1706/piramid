@@ -14,10 +14,9 @@
   --accent-dim: #0e7490;
   --fg: #e6ebf2;
   --fg-dim: #7d8da3;
-  /* --font-blocks covers only U+2500-259F; every other glyph comes from --font-mono. */
   --mono:
-    var(--font-mono), var(--font-blocks), ui-monospace, SFMono-Regular, Menlo,
-    Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
 }
 
 html,
@@ -45,7 +44,42 @@ body {
   min-height: 100svh;
   display: grid;
   place-items: center;
-  padding: 2rem 1rem;
+  padding: 2rem 1.25rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The wordmark, the tagline and the actions, in that order. `both` holds the first frame through
+   the delay, so nothing flashes at full opacity and then starts. */
+.landing-inner > * {
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-inner > *:nth-child(1) {
+  animation-delay: 80ms;
+}
+
+.landing-inner > *:nth-child(2) {
+  animation-delay: 280ms;
+}
+
+.landing-inner > *:nth-child(3) {
+  animation-delay: 460ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-inner > * {
+    animation: none;
+  }
 }
 
 .landing-inner {
@@ -59,49 +93,24 @@ body {
   max-width: 68rem;
 }
 
-.cli-animation {
-  font-family: var(--mono);
-  /* The size before the script measures the glyphs that rendered. 83 columns at a 0.68em
-     advance is the widest monospace fallback worth planning for, so this only ever undershoots
-     and the script grows it to the real fit. vw is the fallback for cqi. */
-  font-size: min(16px, calc((100vw - 2.5rem) / 56.5));
-  font-size: min(16px, calc(100cqi / 56.5));
-  line-height: 1.2;
-  white-space: pre;
-  color: var(--accent);
-  margin: 0;
-
-  /* Height of the tallest frame. */
-  min-height: calc(14 * 1.2em);
+.cli-logo {
+  /* An SVG with a viewBox has no size of its own, so the width is the whole of it and the
+     height follows the aspect ratio. No measuring, no font, nothing to settle. */
+  width: clamp(17rem, 62vw, 46rem);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 0 32px rgba(34, 211, 238, 0.28));
 }
 
-/* Glow applies once the animation settles. */
-.cli-animation.is-settled {
-  text-shadow: 0 0 26px rgba(34, 211, 238, 0.28);
-  transition: text-shadow 0.5s ease;
+.cli-logo-lit {
+  fill: var(--accent);
 }
 
-.cli-stage {
-  position: relative;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-}
-
-/* Measured, never shown. It carries a block bounding every frame so the narrow frames do not
-   shrink the fit, and its size is fixed so a webfont swapping in changes its width and the
-   script measures again. Zero sized and clipped, so it adds nothing to the scrollable area. */
-.cli-probe {
-  position: absolute;
-  top: 0;
-  left: 0;
-  visibility: hidden;
-  pointer-events: none;
-  min-height: 0;
-  font-size: 100px;
-  width: 0;
-  height: 0;
-  overflow: hidden;
+/* The pyramid is drawn in dark shade rather than full block, so it sits back from the wordmark
+   the way it does in the terminal. */
+.cli-logo-shade {
+  fill: var(--accent);
+  fill-opacity: 0.72;
 }
 
 .landing-tagline {
@@ -648,5 +657,189 @@ article a:not(.blog-btn):not(.blog-button):hover {
   }
   .blog-index-item {
     grid-template-columns: 1rem minmax(0, 1fr);
+  }
+}
+
+/* Above everything the page paints behind it. */
+.page {
+  position: relative;
+  z-index: 1;
+}
+
+/* The README, in a window. It is opaque, so unlike the hero it does not need to keep clear of
+   the fields: it covers them, and can use the width instead. */
+.readme {
+  width: min(60rem, 100%);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 2.5rem) 5rem;
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 560ms;
+}
+
+.readme-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--navy-line);
+  border-bottom: 0;
+  background: var(--bg-raised);
+  padding: 0.6rem 0.85rem;
+  position: relative;
+}
+
+.readme-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 1px solid var(--accent-dim);
+}
+
+.readme-name {
+  margin-left: 0.4rem;
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+}
+
+.readme-body {
+  border: 1px solid var(--navy-line);
+  background: var(--bg);
+  /* A window rather than the rest of the page: the README scrolls inside it. */
+  max-height: 70svh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.readme-prose {
+  padding: 1.6rem 1.5rem 2rem;
+  color: var(--fg-dim);
+  font-size: 0.82rem;
+  line-height: 1.75;
+}
+
+.readme-prose > *:first-child {
+  margin-top: 0;
+}
+
+.readme-prose p,
+.readme-prose ul,
+.readme-prose ol,
+.readme-prose blockquote,
+.readme-prose pre,
+.readme-prose table {
+  margin: 0 0 1.1rem;
+}
+
+.readme-prose h1,
+.readme-prose h2,
+.readme-prose h3 {
+  margin: 2rem 0 0.85rem;
+  color: var(--fg);
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: lowercase;
+}
+
+.readme-prose h1 {
+  font-size: 1rem;
+}
+
+.readme-prose a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-dim);
+}
+
+.readme-prose a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.readme-prose strong {
+  color: var(--fg);
+  font-weight: 400;
+}
+
+.readme-prose code {
+  background: var(--bg);
+  border: 1px solid var(--navy-line);
+  padding: 0.05rem 0.3rem;
+  font-size: 0.95em;
+}
+
+.readme-prose pre {
+  background: var(--bg);
+  border: 1px solid var(--navy-line);
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
+.readme-prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.readme-prose ul,
+.readme-prose ol {
+  padding-left: 1.2rem;
+}
+
+.readme-prose li {
+  margin: 0.3rem 0;
+}
+
+.readme-prose ul {
+  list-style: square;
+}
+
+.readme-prose ol {
+  list-style: decimal;
+}
+
+.readme-prose blockquote {
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 0.9rem;
+  color: var(--fg-dim);
+}
+
+.readme-prose img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Badge rows sit on one line rather than stacking, which is how they read on GitHub. */
+.readme-prose p:has(> a > img) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.readme-prose p:has(> a > img) img {
+  display: inline-block;
+}
+
+.readme-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+}
+
+.readme-prose th,
+.readme-prose td {
+  border: 1px solid var(--navy-line);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.readme-prose hr {
+  border: 0;
+  border-top: 1px solid var(--navy-line);
+  margin: 1.8rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .readme {
+    animation: none;
   }
 }
