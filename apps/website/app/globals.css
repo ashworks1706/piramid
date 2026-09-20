@@ -680,7 +680,7 @@ article a:not(.blog-btn):not(.blog-button):hover {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  border: 1px solid var(--navy-line);
+  border: 1px dashed var(--navy-line);
   border-bottom: 0;
   background: var(--bg-raised);
   padding: 0.6rem 0.85rem;
@@ -701,7 +701,7 @@ article a:not(.blog-btn):not(.blog-button):hover {
 }
 
 .readme-body {
-  border: 1px solid var(--navy-line);
+  border: 1px dashed var(--navy-line);
   background: var(--bg);
   /* A window rather than the rest of the page: the README scrolls inside it. */
   max-height: 70svh;
@@ -760,10 +760,16 @@ article a:not(.blog-btn):not(.blog-button):hover {
 }
 
 .readme-prose code {
-  background: var(--bg);
-  border: 1px solid var(--navy-line);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
   padding: 0.05rem 0.3rem;
   font-size: 0.95em;
+}
+
+/* A link that leaves the site says so, the way a terminal document would. */
+.readme-prose a[href^="http"]::after {
+  content: " \2197";
+  color: var(--accent-dim);
 }
 
 .readme-prose pre {
@@ -855,7 +861,7 @@ article a:not(.blog-btn):not(.blog-button):hover {
 }
 
 .console-body {
-  border: 1px solid var(--navy-line);
+  border: 1px dashed var(--navy-line);
   background: var(--bg);
   height: 24rem;
   overflow-y: auto;
@@ -907,4 +913,42 @@ article a:not(.blog-btn):not(.blog-button):hover {
   .console {
     animation: none;
   }
+}
+
+/* The README's own headings, as a strip between its title bar and its body. */
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.9rem;
+  border-left: 1px dashed var(--navy-line);
+  border-right: 1px dashed var(--navy-line);
+  background: var(--bg-raised);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.72rem;
+}
+
+.toc-label {
+  color: var(--fg-dim);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.toc-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.toc-link:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* A heading the contents list jumped to should not sit against the top of the frame. */
+.readme-prose :is(h1, h2, h3) {
+  scroll-margin-top: 0.8rem;
 }

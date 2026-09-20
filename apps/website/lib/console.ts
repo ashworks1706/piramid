@@ -114,10 +114,13 @@ export function entries(): Entry[] {
       name: "install",
       blurb: "how to get it",
       lines: [
-        "cargo install --git https://github.com/ashworks1706/piramid piramid \\",
-        "  --locked --features inference-candle,gpu-cuda",
+        "cargo install piramid",
         "",
-        "Drop gpu-cuda to build for the CPU.",
+        "That serves collections and search. Running a model is behind two",
+        "cargo features, both off by default:",
+        "",
+        "  cargo install piramid --features inference-candle           # CPU",
+        "  cargo install piramid --features inference-candle,gpu-cuda  # CUDA",
       ],
     },
     {

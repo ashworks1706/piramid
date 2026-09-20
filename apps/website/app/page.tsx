@@ -17,8 +17,7 @@ export default function Home() {
 
           <div className="landing-actions">
             <code className="landing-install select-all">
-              cargo install --git https://github.com/ashworks1706/piramid
-              piramid --locked --features inference-candle,gpu-cuda
+              cargo install piramid
             </code>
             <a
               href="https://github.com/ashworks1706/piramid"
