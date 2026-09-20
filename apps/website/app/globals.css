@@ -106,13 +106,6 @@ body {
   fill: var(--accent);
 }
 
-/* The pyramid is drawn in dark shade rather than full block, so it sits back from the wordmark
-   the way it does in the terminal. */
-.cli-logo-shade {
-  fill: var(--accent);
-  fill-opacity: 0.72;
-}
-
 .landing-tagline {
   margin: 0;
   color: var(--fg-dim);
@@ -853,17 +846,135 @@ article a:not(.blog-btn):not(.blog-button):hover {
 /* The console. It shares the README window's frame, so the page reads as two panels of one
    terminal rather than two unrelated widgets. */
 .console {
-  width: min(60rem, 100%);
+  width: min(78rem, 100%);
   margin: 0 auto;
-  padding: 0 clamp(1rem, 4vw, 2.5rem) 3rem;
+  /* The whole page, and bounded by the viewport: a terminal scrolls its transcript, it does not
+     grow a page under it. min-height would let the body grow with a printed file instead. */
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2.5rem)
+    clamp(1.5rem, 5vh, 3rem);
   animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 620ms;
+  animation-delay: 80ms;
+}
+
+/* The wordmark, drawn into the console the way a program prints its banner. */
+.console-logo {
+  display: flex;
+  justify-content: flex-start;
+  padding: 1.2rem 0 1.6rem;
+}
+
+.console-logo .cli-logo {
+  width: min(100%, 30rem);
+}
+
+/* The opening and the mark sit side by side, which is what the width is for. They stack when
+   there is not enough of it. */
+.console-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 3rem;
+  margin-bottom: 1.4rem;
+}
+
+/* The opening reads as prose, not as terminal output: it is a paragraph of writing that happens
+   to be set in a mono face, so it gets a measure, a line height and space between paragraphs. */
+.console-opening {
+  flex: 1 1 34ch;
+  max-width: 64ch;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.85;
+  color: var(--fg);
+}
+
+.console-opening p {
+  margin: 0 0 1.1rem;
+}
+
+.console-opening p:last-child {
+  margin-bottom: 0;
+}
+
+/* The cursor, while the opening is still being typed. */
+.console-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 0.15em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: caret 1s steps(1, end) infinite;
+}
+
+@keyframes caret {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.console-hint {
+  margin-bottom: 1.1rem;
+  transition: opacity 0.4s ease;
+}
+
+.console-hint.is-waiting {
+  opacity: 0;
+}
+
+/* A page shown by cat, inside the transcript rather than as a wall of text. */
+.console-page {
+  border: 1px dashed var(--navy-line);
+  background: var(--bg-raised);
+  margin: 0.5rem 0 1.4rem;
+  padding: 1.2rem 1.3rem;
+  font-size: 0.8rem;
+}
+
+.console-page > *:first-child {
+  margin-top: 0;
+}
+
+.console-page > *:last-child {
+  margin-bottom: 0;
+}
+
+.console-bar-links {
+  display: flex;
+  gap: 0.9rem;
+  margin-left: auto;
+  font-size: 0.72rem;
+}
+
+.console-bar-links a {
+  color: var(--fg-dim);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.console-bar-links a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent-dim);
+}
+
+.console-install {
+  color: var(--fg);
 }
 
 .console-body {
   border: 1px dashed var(--navy-line);
   background: var(--bg);
-  height: 24rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1rem 1.1rem 1.2rem;
@@ -951,4 +1062,221 @@ article a:not(.blog-btn):not(.blog-button):hover {
 /* A heading the contents list jumped to should not sit against the top of the frame. */
 .readme-prose :is(h1, h2, h3) {
   scroll-margin-top: 0.8rem;
+}
+
+/* An example in the banner runs on a click, so the first command can be taken rather than typed. */
+.console-example {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.console-example:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* One block per command, so a printed file keeps its own indentation and blank lines. */
+pre.console-out {
+  margin: 0;
+  color: var(--fg-dim);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A page that is not the console still sits in the same window. */
+.window {
+  width: min(78rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2.5rem) 4rem;
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.window-body {
+  border: 1px dashed var(--navy-line);
+  border-top: 0;
+  background: var(--bg);
+  padding: 1.6rem 1.5rem 2.4rem;
+  font-size: 0.82rem;
+  line-height: 1.75;
+  color: var(--fg-dim);
+}
+
+.window-home {
+  color: var(--fg-dim);
+  text-decoration: none;
+}
+
+.window-home:hover {
+  color: var(--accent);
+}
+
+/* The path of the page, after the one that goes home. */
+.window-path {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window {
+    animation: none;
+  }
+}
+
+/* The search, drawn like everything else in the bar rather than as a pill. */
+.console-search {
+  border: 1px dashed var(--navy-line);
+  background: none;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.console-search:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.console-search-key {
+  margin-left: 0.45rem;
+  color: var(--accent-dim);
+}
+
+/* A page is markup rather than text, so it cannot print a character at a time. It fades in over
+   about as long as a short answer takes to print. */
+.console-page-in {
+  animation: console-page-in 320ms ease both;
+}
+
+@keyframes console-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The mark, built out of blocks that settle and then keep moving. */
+.pyramid {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+}
+
+.pyramid-grid {
+  --block: clamp(6px, 0.8vw, 12px);
+  display: grid;
+  grid-template-columns: repeat(var(--columns), var(--block));
+  grid-auto-rows: var(--block);
+  gap: 2px;
+}
+
+.pyramid-block {
+  background: var(--accent);
+  opacity: 0;
+  animation:
+    pyramid-in 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    pyramid-drift 3.6s steps(1, end) infinite;
+  /* Built from the bottom up, then each block keeps its own beat. */
+  animation-delay:
+    calc(var(--seed) * 200ms + (var(--rise) - 1) * 46ms),
+    calc(var(--seed) * -3.6s);
+}
+
+@keyframes pyramid-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 0.85;
+    transform: none;
+  }
+}
+
+/* Most of the cycle a block is lit; twice in it, it drops back. Colour rather than opacity, so
+   the two animations own a property each and the build is not overwritten by a cycle that has
+   already started. */
+@keyframes pyramid-drift {
+  0%,
+  62% {
+    background-color: var(--accent);
+  }
+  63%,
+  70% {
+    background-color: #0b3b4a;
+  }
+  71%,
+  88% {
+    background-color: var(--accent);
+  }
+  89%,
+  95% {
+    background-color: var(--accent-dim);
+  }
+  96%,
+  100% {
+    background-color: var(--accent);
+  }
+}
+
+/* Decoration is the first thing to go when the prompt would otherwise fall off the screen. */
+@media (max-width: 52rem) {
+  .pyramid {
+    display: none;
+  }
+
+  .console-logo {
+    padding: 0.4rem 0 0.8rem;
+  }
+
+  .console-logo .cli-logo {
+    width: 68%;
+  }
+
+  .console-intro {
+    margin-bottom: 0.8rem;
+  }
+
+  .console-hint {
+    margin-bottom: 0.7rem;
+  }
+
+  /* A tighter measure on a phone, so the prompt stays on the first screen without the opening
+     losing a word of it. */
+  .console-opening {
+    font-size: 0.82rem;
+    line-height: 1.65;
+  }
+
+  .console-opening p {
+    margin-bottom: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pyramid-block {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .console-caret {
+    animation: none;
+  }
+
+  .console-page-in {
+    animation: none;
+  }
 }

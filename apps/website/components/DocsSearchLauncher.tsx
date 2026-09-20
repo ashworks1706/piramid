@@ -133,12 +133,10 @@ export function DocsSearchLauncher({ entries, className }: Props) {
           setOpen(true);
           requestAnimationFrame(() => inputRef.current?.focus());
         }}
-        className={`rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-zinc-300 hover:border-cyan-300/40 hover:text-white transition-colors ${className ?? ""}`}
+        className={`console-search ${className ?? ""}`}
       >
         Search
-        <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-zinc-400">
-          ⌘K
-        </span>
+        <span className="console-search-key">⌘K</span>
       </button>
 
       {open && (
@@ -193,7 +191,8 @@ export function DocsSearchLauncher({ entries, className }: Props) {
                 </div>
               ) : results.length === 0 ? (
                 <div className="px-4 py-10 text-center text-sm text-zinc-500">
-                  No results for <span className="text-zinc-300">&quot;{q}&quot;</span>
+                  No results for{" "}
+                  <span className="text-zinc-300">&quot;{q}&quot;</span>
                 </div>
               ) : (
                 results.map((res, i) => {
@@ -220,9 +219,7 @@ export function DocsSearchLauncher({ entries, className }: Props) {
                         {res.section && (
                           <>
                             <span>/</span>
-                            <span className="text-zinc-400">
-                              {res.section}
-                            </span>
+                            <span className="text-zinc-400">{res.section}</span>
                           </>
                         )}
                       </div>

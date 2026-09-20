@@ -1,26 +1,30 @@
 "use client";
 
+import Link from "next/link";
+import { PixelPyramid } from "./PixelPyramid";
 import { useEffect, useRef, useState } from "react";
-import type { Entry } from "../lib/console";
-
-/** Where a document named by `open` lives. */
-const DOCS: Record<string, string> = {
-  architecture: "docs/ARCHITECTURE.md",
-  roadmap: "docs/ROADMAP.md",
-  setup: "docs/SETUP.md",
-  decisions: "docs/decisions/",
-  readme: "README.md",
-};
+import type { Entry, File } from "../lib/console";
 
 const REPO = "https://github.com/ashworks1706/piramid";
 
-/** One block in the transcript: what was typed, and what came back. */
-type Block = { input: string; output: string[] };
+/** What the banner suggests trying, in the order it suggests them. */
+const EXAMPLES = ["help", "ls", "cat readme", "cat blogs/history"];
 
-const BANNER = [
-  "piramid 0.2.0 - ask it about itself",
-  "type help, or a command. tab completes, up and down recall.",
-];
+/** Characters added per frame while the opening types itself. */
+const SPEED = 4;
+
+/** The same, for the answer to a command, which prints faster than the opening. */
+const OUTPUT_SPEED = 9;
+
+/** Milliseconds between frames of either. */
+const FRAME = 16;
+
+/** One block in the transcript: what was asked, and what came back. */
+type Block = {
+  input: string;
+  output: string[];
+  page?: { title: string; html: string };
+};
 
 /**
  * A console that answers out of the repository.
@@ -29,26 +33,94 @@ const BANNER = [
  * answers assembled at build time, so nothing it says can drift from what the repository
  * actually contains.
  */
-export function Console({ entries }: { entries: Entry[] }) {
+export function Console({
+  entries,
+  files,
+  children,
+}: {
+  entries: Entry[];
+  files: File[];
+  children?: React.ReactNode;
+}) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [input, setInput] = useState("");
   const [recall, setRecall] = useState(-1);
+  /** How much of the opening has been typed. It types itself; nothing is entered for it. */
+  const [shown, setShown] = useState(0);
+  /** How much of the newest answer has been printed. Every answer prints rather than appears. */
+  const [printed, setPrinted] = useState(0);
   const field = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+
+  /** The opening: what the page says before anyone touches it, as one run of text. */
+  const script = (
+    entries.find((entry) => entry.name === "about")?.lines ?? []
+  ).join("\n\n");
+  const done = shown >= script.length;
+
+  useEffect(() => {
+    if (done) {
+      return;
+    }
+    // Reduced motion gets the whole opening at once, but still from the callback: a setState in
+    // the body of an effect cascades a render.
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => setShown((at) => (reduce ? script.length : at + SPEED)),
+      reduce ? 0 : FRAME,
+    );
+    return () => window.clearTimeout(timer);
+  }, [shown, done, script.length]);
+
+  /** The newest answer, which is the only one still printing. The ones above it are whole. */
+  const latest = blocks.length
+    ? blocks[blocks.length - 1].output.join("\n")
+    : "";
+  const printing = printed < latest.length;
+
+  useEffect(() => {
+    if (!printing) {
+      return;
+    }
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => setPrinted((at) => (reduce ? latest.length : at + OUTPUT_SPEED)),
+      reduce ? 0 : FRAME,
+    );
+    return () => window.clearTimeout(timer);
+  }, [printed, printing, latest.length]);
 
   const typed = blocks.map((block) => block.input).filter(Boolean);
   const names = [
     ...entries.map((entry) => entry.name),
+    ...files.map((file) => `cat ${file.name}`),
     "help",
     "clear",
+    "ls",
+    "cat",
     "open",
   ];
 
   useEffect(() => {
     const box = scroller.current;
-    if (box) {
-      box.scrollTop = box.scrollHeight;
+    // The last block, not the last child: the input line is always last.
+    const last = box?.querySelector(":scope > div:last-of-type");
+    if (!box || !last) {
+      return;
     }
+    // A long file should start at its first line, not its last, so the newest command is put at
+    // the top of the view rather than the bottom. Measured against the box rather than read off
+    // offsetTop, which is relative to whichever ancestor happens to be positioned.
+    const delta =
+      last.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTop = Math.min(
+      box.scrollTop + delta,
+      box.scrollHeight - box.clientHeight,
+    );
   }, [blocks]);
 
   function answer(line: string): string[] {
@@ -60,22 +132,44 @@ export function Console({ entries }: { entries: Entry[] }) {
       return [
         "commands",
         ...entries.map((entry) => `  ${entry.name.padEnd(14)}${entry.blurb}`),
-        `  ${"open <doc>".padEnd(14)}open a document on GitHub`,
+        `  ${"ls".padEnd(14)}list the files here`,
+        `  ${"cat <file>".padEnd(14)}print one of them`,
+        `  ${"open <file>".padEnd(14)}open it on GitHub instead`,
         `  ${"clear".padEnd(14)}empty the transcript`,
       ];
     }
     if (command === "clear") {
       return [];
     }
-    if (command === "open") {
-      const path = DOCS[argument ?? ""];
-      if (!path) {
+    if (command === "ls") {
+      const width = Math.max(...files.map((file) => file.name.length)) + 2;
+      const group = (of: File[]) =>
+        of.map((file) => `  ${file.name.padEnd(width)}${file.path}`);
+      const posts = files.filter((file) => file.name.startsWith("blogs/"));
+      return [
+        ...group(files.filter((file) => !file.name.startsWith("blogs/"))),
+        ...(posts.length ? ["", "blog", ...group(posts)] : []),
+      ];
+    }
+    if (command === "cat" || command === "open") {
+      const file = files.find((candidate) => candidate.name === argument);
+      if (!file) {
         return [
-          `no document called ${argument ?? ""}. try: ${Object.keys(DOCS).join(", ")}`,
+          argument
+            ? `${argument}: no such file. try ls.`
+            : `${command}: which file? try ls.`,
         ];
       }
-      window.open(`${REPO}/blob/main/${path}`, "_blank", "noopener,noreferrer");
-      return [`opening ${path}`];
+      if (command === "open") {
+        // A post has a page of its own; a repository file does not, so that one goes to GitHub.
+        const href = file.name.startsWith("blogs/")
+          ? file.path
+          : `${REPO}/blob/main/${file.path}`;
+        window.open(href, "_blank", "noopener,noreferrer");
+        return [`opening ${href}`];
+      }
+      // cat is answered by submit, which attaches the rendered page to the block.
+      return [];
     }
     const entry = entries.find((candidate) => candidate.name === command);
     if (entry) {
@@ -87,14 +181,30 @@ export function Console({ entries }: { entries: Entry[] }) {
   function submit(line: string) {
     if (line.trim() === "clear") {
       setBlocks([]);
-    } else {
-      setBlocks((current) => [
-        ...current,
-        { input: line, output: answer(line) },
-      ]);
+      setInput("");
+      setRecall(-1);
+      setPrinted(0);
+      return;
     }
+    const [command, argument] = line.trim().split(/\s+/, 2);
+    // cat shows the page itself rather than the text of the file it came from.
+    const file =
+      command === "cat"
+        ? files.find((candidate) => candidate.name === argument)
+        : undefined;
+    setBlocks((current) => [
+      ...current,
+      file
+        ? {
+            input: line,
+            output: [],
+            page: { title: file.title, html: file.html },
+          }
+        : { input: line, output: answer(line) },
+    ]);
     setInput("");
     setRecall(-1);
+    setPrinted(0);
   }
 
   function onKey(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -131,7 +241,11 @@ export function Console({ entries }: { entries: Entry[] }) {
         <span className="readme-dot" />
         <span className="readme-dot" />
         <span className="readme-dot" />
-        <span className="readme-name">piramid</span>
+        <span className="readme-name">/piramid</span>
+        <span className="console-bar-links">
+          <a href={REPO}>github</a>
+          <Link href="/blogs">blog</Link>
+        </span>
       </header>
       {/* The whole surface focuses the field, the way clicking a terminal does. */}
       <div
@@ -140,23 +254,66 @@ export function Console({ entries }: { entries: Entry[] }) {
         onClick={() => field.current?.focus()}
         role="presentation"
       >
-        {BANNER.map((line) => (
-          <p key={line} className="console-banner">
-            {line}
-          </p>
-        ))}
-        {blocks.map((block, index) => (
-          <div key={`${block.input}-${index}`}>
-            <p className="console-line">
-              <span className="console-prompt">&gt;</span> {block.input}
-            </p>
-            {block.output.map((line, at) => (
-              <p key={`${line}-${at}`} className="console-line console-out">
-                {line || " "}
-              </p>
-            ))}
+        {children ? <div className="console-logo">{children}</div> : null}
+        <div className="console-intro">
+          <div className="console-opening">
+            {script
+              .slice(0, shown)
+              .split("\n\n")
+              .map((paragraph, at, all) => (
+                <p key={at}>
+                  {paragraph}
+                  {!done && at === all.length - 1 ? (
+                    <span className="console-caret" />
+                  ) : null}
+                </p>
+              ))}
           </div>
-        ))}
+          <PixelPyramid />
+        </div>
+        <p
+          className={`console-banner console-hint${done ? "" : " is-waiting"}`}
+        >
+          {"try "}
+          {EXAMPLES.map((example, at) => (
+            <span key={example}>
+              {at ? ", " : ""}
+              <button
+                type="button"
+                className="console-example"
+                onClick={() => submit(example)}
+              >
+                {example}
+              </button>
+            </span>
+          ))}
+          {", or type below."}
+        </p>
+        {blocks.map((block, index) => {
+          const last = index === blocks.length - 1;
+          const text = block.output.join("\n");
+          return (
+            <div key={`${block.input}-${index}`}>
+              <p className="console-line">
+                <span className="console-prompt">&gt;</span> {block.input}
+              </p>
+              {text ? (
+                <pre className="console-out">
+                  {last ? text.slice(0, printed) : text}
+                  {last && printing ? <span className="console-caret" /> : null}
+                </pre>
+              ) : null}
+              {block.page ? (
+                <article
+                  // A page is markup, so it arrives whole and fades rather than printing.
+                  className="console-page console-page-in readme-prose"
+                  // Rendered at build time from a file in this repository, never from a request.
+                  dangerouslySetInnerHTML={{ __html: block.page.html }}
+                />
+              ) : null}
+            </div>
+          );
+        })}
         <p className="console-line">
           <label className="console-prompt" htmlFor="console-input">
             &gt;

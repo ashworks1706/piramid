@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { marked } from "marked";
+import { listBlogs } from "./blogs";
 
 /** The repository root, three levels above apps/website. */
 const ROOT = join(process.cwd(), "..", "..");
@@ -8,6 +10,89 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 /** One thing the console can be asked. */
 export type Entry = { name: string; blurb: string; lines: string[] };
+
+/** One page the console can show, already rendered. */
+export type File = { name: string; path: string; title: string; html: string };
+
+/** What `ls` lists and `cat` prints, in the order `ls` shows them. */
+const FILES: { name: string; path: string }[] = [
+  { name: "readme", path: "README.md" },
+  { name: "architecture", path: "docs/ARCHITECTURE.md" },
+  { name: "roadmap", path: "docs/ROADMAP.md" },
+  { name: "setup", path: "docs/SETUP.md" },
+  { name: "config", path: "config.example.yaml" },
+  { name: "contributing", path: "CONTRIBUTING.md" },
+  { name: "agents", path: "AGENTS.md" },
+];
+
+/** Where a link that points inside the repository goes once it is off GitHub. */
+const REPO = "https://github.com/ashworks1706/piramid";
+const BLOB = `${REPO}/blob/main/`;
+const RAW = "https://raw.githubusercontent.com/ashworks1706/piramid/main/";
+
+/**
+ * Repository-relative links and images, pointed back where they resolve.
+ *
+ * A README is written to be read on GitHub, where `docs/ARCHITECTURE.md` resolves. Served from
+ * this site it resolves to nothing. A path already absolute, a fragment, or a site-root path
+ * from a post's own assets is left alone.
+ */
+function absolute(html: string) {
+  return html.replace(
+    /(href|src)="([^"]+)"/g,
+    (whole, attribute: string, target: string) => {
+      if (/^([a-z]+:|\/\/|\/|#)/i.test(target)) {
+        return whole;
+      }
+      const base = attribute === "src" ? RAW : BLOB;
+      return `${attribute}="${base}${target.replace(/^\.?\//, "")}"`;
+    },
+  );
+}
+
+/** Front matter, which is metadata for the page rather than something to print. */
+function withoutFrontMatter(raw: string) {
+  if (!raw.startsWith("---")) {
+    return raw;
+  }
+  const end = raw.indexOf("\n---", 3);
+  return end === -1 ? raw : raw.slice(raw.indexOf("\n", end + 1) + 1);
+}
+
+/**
+ * The files, as the console prints them.
+ *
+ * Read whole rather than summarised, so `cat` means what it says. The one thing taken out is any
+ * line carrying an `<img>` tag, commented out or not: a terminal cannot show a picture, and the
+ * markup around one reads as noise.
+ */
+export function files(): File[] {
+  const render = (raw: string, rewrite: boolean) => {
+    const html = marked.parse(withoutFrontMatter(raw), {
+      async: false,
+      gfm: true,
+    });
+    return rewrite ? absolute(html) : html;
+  };
+
+  const repo = FILES.map(({ name, path }) => ({
+    name,
+    path,
+    title: path,
+    html: render(read(path), true),
+  }));
+
+  // The posts, under blogs/, so a slug cannot collide with a file at the repository root. Their
+  // images are already site-root paths, so nothing is rewritten.
+  const posts = listBlogs().map((blog) => ({
+    name: `blogs/${blog.slug.join("/")}`,
+    path: `/blogs/${blog.slug.join("/")}`,
+    title: blog.title,
+    html: render(readFileSync(blog.filePath, "utf8"), false),
+  }));
+
+  return [...repo, ...posts];
+}
 
 /**
  * The body of one `##` section of a markdown file, with its images and its own heading dropped.
@@ -24,7 +109,7 @@ function section(markdown: string, heading: string) {
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => line.startsWith("## "));
   return (end === -1 ? rest : rest.slice(0, end)).filter(
-    (line) => !line.trimStart().startsWith("<img"),
+    (line) => !/<img\b/.test(line),
   );
 }
 
