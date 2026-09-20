@@ -19,8 +19,10 @@ const HY = [7, 11];
 
 type Rect = [number, number, number, number];
 
-/** A full cell, and a cell of dark shade, which the pyramid is built from. */
+/** A full cell. */
 const SOLID = "█";
+
+/** A cell of dark shade. The mark beside the wordmark is drawn in these, and only it is. */
 const SHADE = "▓";
 
 /**
@@ -64,28 +66,40 @@ const BOX: Record<string, Rect[]> = {
   ],
 };
 
-const LINES = LOGO.split("\n");
+/**
+ * The wordmark on its own.
+ *
+ * The frame carries the mark beside the letters, drawn in shade and nothing else, so dropping
+ * every shade cell leaves the letters. What is then blank on every side is trimmed, which is what
+ * lets the wordmark sit flush against the edge it is aligned to.
+ */
+const LINES = (() => {
+  const rows = LOGO.split("\n").map((line) =>
+    [...line].map((glyph) => (glyph === SHADE ? " " : glyph)).join(""),
+  );
+  while (rows.length && !rows[0].trim()) rows.shift();
+  while (rows.length && !rows[rows.length - 1].trim()) rows.pop();
+  const first = Math.min(
+    ...rows.filter((row) => row.trim()).map((row) => row.search(/\S/)),
+  );
+  return rows.map((row) => row.slice(first).trimEnd());
+})();
+
 const COLUMNS = Math.max(...LINES.map((line) => line.length));
 
 const lit: Rect[] = [];
-const shade: Rect[] = [];
 
 LINES.forEach((line, y) => {
   let x = 0;
   while (x < line.length) {
     const glyph = line[x];
-    if (glyph === SOLID || glyph === SHADE) {
+    if (glyph === SOLID) {
       const start = x;
       while (x < line.length && line[x] === glyph) {
         x += 1;
       }
       // One rectangle per unbroken run, rather than one per cell.
-      (glyph === SOLID ? lit : shade).push([
-        start * W,
-        y * H,
-        (x - start) * W,
-        H,
-      ]);
+      lit.push([start * W, y * H, (x - start) * W, H]);
       continue;
     }
     for (const [rx, ry, rw, rh] of BOX[glyph] ?? []) {
@@ -126,7 +140,6 @@ export function CliLogo() {
       shapeRendering="crispEdges"
     >
       <g className="cli-logo-lit">{draw(lit)}</g>
-      <g className="cli-logo-shade">{draw(shade)}</g>
     </svg>
   );
 }

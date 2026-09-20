@@ -106,13 +106,6 @@ body {
   fill: var(--accent);
 }
 
-/* The pyramid is drawn in dark shade rather than full block, so it sits back from the wordmark
-   the way it does in the terminal. */
-.cli-logo-shade {
-  fill: var(--accent);
-  fill-opacity: 0.72;
-}
-
 .landing-tagline {
   margin: 0;
   color: var(--fg-dim);
@@ -869,12 +862,12 @@ article a:not(.blog-btn):not(.blog-button):hover {
 /* The wordmark, drawn into the console the way a program prints its banner. */
 .console-logo {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 1.2rem 0 1.6rem;
 }
 
 .console-logo .cli-logo {
-  width: min(100%, 34rem);
+  width: min(100%, 30rem);
 }
 
 /* The opening and the mark sit side by side, which is what the width is for. They stack when
@@ -1166,9 +1159,9 @@ pre.console-out {
 }
 
 .pyramid-grid {
-  --block: clamp(7px, 0.9vw, 13px);
+  --block: clamp(6px, 0.8vw, 12px);
   display: grid;
-  grid-template-columns: repeat(17, var(--block));
+  grid-template-columns: repeat(var(--columns), var(--block));
   grid-auto-rows: var(--block);
   gap: 2px;
 }
@@ -1181,7 +1174,7 @@ pre.console-out {
     pyramid-drift 3.6s steps(1, end) infinite;
   /* Built from the bottom up, then each block keeps its own beat. */
   animation-delay:
-    calc(var(--seed) * 260ms + (8 - var(--row)) * 70ms),
+    calc(var(--seed) * 200ms + (var(--rise) - 1) * 46ms),
     calc(var(--seed) * -3.6s);
 }
 
@@ -1196,27 +1189,29 @@ pre.console-out {
   }
 }
 
-/* Most of the cycle a block is lit; twice in it, it drops back. */
+/* Most of the cycle a block is lit; twice in it, it drops back. Colour rather than opacity, so
+   the two animations own a property each and the build is not overwritten by a cycle that has
+   already started. */
 @keyframes pyramid-drift {
   0%,
   62% {
-    opacity: 0.85;
+    background-color: var(--accent);
   }
   63%,
   70% {
-    opacity: 0.3;
+    background-color: #0b3b4a;
   }
   71%,
   88% {
-    opacity: 0.85;
+    background-color: var(--accent);
   }
   89%,
   95% {
-    opacity: 0.5;
+    background-color: var(--accent-dim);
   }
   96%,
   100% {
-    opacity: 0.85;
+    background-color: var(--accent);
   }
 }
 
