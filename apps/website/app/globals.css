@@ -680,7 +680,7 @@ article a:not(.blog-btn):not(.blog-button):hover {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  border: 1px solid var(--navy-line);
+  border: 1px dashed var(--navy-line);
   border-bottom: 0;
   background: var(--bg-raised);
   padding: 0.6rem 0.85rem;
@@ -701,7 +701,7 @@ article a:not(.blog-btn):not(.blog-button):hover {
 }
 
 .readme-body {
-  border: 1px solid var(--navy-line);
+  border: 1px dashed var(--navy-line);
   background: var(--bg);
   /* A window rather than the rest of the page: the README scrolls inside it. */
   max-height: 70svh;
@@ -760,10 +760,16 @@ article a:not(.blog-btn):not(.blog-button):hover {
 }
 
 .readme-prose code {
-  background: var(--bg);
-  border: 1px solid var(--navy-line);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--fg);
   padding: 0.05rem 0.3rem;
   font-size: 0.95em;
+}
+
+/* A link that leaves the site says so, the way a terminal document would. */
+.readme-prose a[href^="http"]::after {
+  content: " \2197";
+  color: var(--accent-dim);
 }
 
 .readme-prose pre {
@@ -842,4 +848,107 @@ article a:not(.blog-btn):not(.blog-button):hover {
   .readme {
     animation: none;
   }
+}
+
+/* The console. It shares the README window's frame, so the page reads as two panels of one
+   terminal rather than two unrelated widgets. */
+.console {
+  width: min(60rem, 100%);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 2.5rem) 3rem;
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 620ms;
+}
+
+.console-body {
+  border: 1px dashed var(--navy-line);
+  background: var(--bg);
+  height: 24rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem 1.1rem 1.2rem;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  cursor: text;
+}
+
+.console-banner {
+  margin: 0;
+  color: var(--fg-dim);
+}
+
+.console-banner:last-of-type {
+  margin-bottom: 0.9rem;
+}
+
+.console-line {
+  margin: 0;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console-out {
+  color: var(--fg-dim);
+}
+
+.console-prompt {
+  color: var(--accent);
+  user-select: none;
+}
+
+/* The caret is the input's own; everything else about it is the surrounding text. */
+.console-input {
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  width: calc(100% - 1.5rem);
+  margin-left: 0.35rem;
+  caret-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console {
+    animation: none;
+  }
+}
+
+/* The README's own headings, as a strip between its title bar and its body. */
+.toc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.9rem;
+  border-left: 1px dashed var(--navy-line);
+  border-right: 1px dashed var(--navy-line);
+  background: var(--bg-raised);
+  padding: 0.7rem 0.9rem;
+  font-size: 0.72rem;
+}
+
+.toc-label {
+  color: var(--fg-dim);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.toc-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.toc-link:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* A heading the contents list jumped to should not sit against the top of the frame. */
+.readme-prose :is(h1, h2, h3) {
+  scroll-margin-top: 0.8rem;
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { marked } from "marked";
+import { Toc } from "./Toc";
 
 /** The repository's own README, three levels above apps/website. */
 const SOURCE = join(process.cwd(), "..", "..", "README.md");
@@ -30,6 +31,18 @@ function absolute(html: string) {
   );
 }
 
+/** The `##` headings, in order, as the contents list reads them. */
+export type Heading = { id: string; text: string };
+
+/** A slug of a heading, matching the ids GitHub gives its own. */
+function slug(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 /**
  * The README, rendered into a panel.
  *
@@ -39,15 +52,28 @@ function absolute(html: string) {
  */
 export function Readme() {
   const markdown = readFileSync(SOURCE, "utf8");
-  const html = absolute(marked.parse(markdown, { async: false, gfm: true }));
+  const headings: Heading[] = [];
+  const renderer = new marked.Renderer();
+  renderer.heading = function heading({ tokens, depth }) {
+    const text = this.parser.parseInline(tokens);
+    const id = slug(text.replace(/<[^>]*>/g, ""));
+    if (depth === 2) {
+      headings.push({ id, text: text.replace(/<[^>]*>/g, "") });
+    }
+    return `<h${depth} id="${id}">${text}</h${depth}>\n`;
+  };
+  const html = absolute(
+    marked.parse(markdown, { async: false, gfm: true, renderer }),
+  );
   return (
     <section className="readme" aria-label="README">
       <header className="readme-bar">
         <span className="readme-dot" />
         <span className="readme-dot" />
         <span className="readme-dot" />
-        <span className="readme-name">README.md</span>
+        <span className="readme-name">/readme</span>
       </header>
+      <Toc headings={headings} />
       <div className="readme-body">
         <article
           className="readme-prose"
