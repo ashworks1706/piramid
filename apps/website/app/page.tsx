@@ -1,16 +1,13 @@
 import { CliLogo } from "../components/CliLogo";
 import { Console } from "../components/Console";
-import { Readme } from "../components/Readme";
-import { entries } from "../lib/console";
+import { entries, files } from "../lib/console";
 
 export default function Home() {
   return (
     <main className="page">
-      <Console entries={entries()}>
+      <Console entries={entries()} files={files()}>
         <CliLogo />
       </Console>
-
-      <Readme />
     </main>
   );
 }

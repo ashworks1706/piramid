@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { listBlogs } from "./blogs";
 
 /** The repository root, three levels above apps/website. */
 const ROOT = join(process.cwd(), "..", "..");
@@ -8,6 +9,93 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 /** One thing the console can be asked. */
 export type Entry = { name: string; blurb: string; lines: string[] };
+
+/** One file the console can print. */
+export type File = { name: string; path: string; lines: string[] };
+
+/** What `ls` lists and `cat` prints, in the order `ls` shows them. */
+const FILES: { name: string; path: string }[] = [
+  { name: "readme", path: "README.md" },
+  { name: "architecture", path: "docs/ARCHITECTURE.md" },
+  { name: "roadmap", path: "docs/ROADMAP.md" },
+  { name: "setup", path: "docs/SETUP.md" },
+  { name: "config", path: "config.example.yaml" },
+  { name: "contributing", path: "CONTRIBUTING.md" },
+  { name: "agents", path: "AGENTS.md" },
+];
+
+/**
+ * A markdown file as a terminal should print it.
+ *
+ * The markdown itself is left alone, because it is readable as text and is what the file says.
+ * The HTML around it is not: a centred `<p>` and an `<a href>` carry no meaning without a
+ * renderer, and a page of them is what stands between the reader and the first paragraph. Tags
+ * are dropped and the text inside them kept, except inside a fenced code block, where an angle
+ * bracket belongs to the example rather than to the document.
+ */
+function readable(lines: string[]) {
+  const out: string[] = [];
+  let fenced = false;
+  for (const line of lines) {
+    if (line.trimStart().startsWith("```")) {
+      fenced = !fenced;
+      out.push(line);
+      continue;
+    }
+    if (fenced) {
+      out.push(line);
+      continue;
+    }
+    if (/<img\b/.test(line)) {
+      continue;
+    }
+    const text = line.replace(/<[^>]+>/g, "").trimEnd();
+    // A line that was only markup leaves nothing behind, and a run of those leaves a gap.
+    if (!text.trim() && line.trim()) {
+      continue;
+    }
+    if (!text.trim() && !out.at(-1)?.trim()) {
+      continue;
+    }
+    out.push(text);
+  }
+  return out;
+}
+
+/** Front matter, which is metadata for the page rather than something to print. */
+function withoutFrontMatter(raw: string) {
+  if (!raw.startsWith("---")) {
+    return raw;
+  }
+  const end = raw.indexOf("\n---", 3);
+  return end === -1 ? raw : raw.slice(raw.indexOf("\n", end + 1) + 1);
+}
+
+/**
+ * The files, as the console prints them.
+ *
+ * Read whole rather than summarised, so `cat` means what it says. The one thing taken out is any
+ * line carrying an `<img>` tag, commented out or not: a terminal cannot show a picture, and the
+ * markup around one reads as noise.
+ */
+export function files(): File[] {
+  const strip = (raw: string) => readable(withoutFrontMatter(raw).split("\n"));
+
+  const repo = FILES.map(({ name, path }) => ({
+    name,
+    path,
+    lines: strip(read(path)),
+  }));
+
+  // The posts, under blogs/, so a slug cannot collide with a file at the repository root.
+  const posts = listBlogs().map((blog) => ({
+    name: `blogs/${blog.slug.join("/")}`,
+    path: blog.title,
+    lines: strip(readFileSync(blog.filePath, "utf8")),
+  }));
+
+  return [...repo, ...posts];
+}
 
 /**
  * The body of one `##` section of a markdown file, with its images and its own heading dropped.
@@ -24,7 +112,7 @@ function section(markdown: string, heading: string) {
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => line.startsWith("## "));
   return (end === -1 ? rest : rest.slice(0, end)).filter(
-    (line) => !line.trimStart().startsWith("<img"),
+    (line) => !/<img\b/.test(line),
   );
 }
 

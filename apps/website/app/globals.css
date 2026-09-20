@@ -855,8 +855,13 @@ article a:not(.blog-btn):not(.blog-button):hover {
 .console {
   width: min(60rem, 100%);
   margin: 0 auto;
-  /* The first thing on the page, so it clears the viewport rather than sitting under a hero. */
-  padding: clamp(3rem, 12vh, 7rem) clamp(1rem, 4vw, 2.5rem) 3rem;
+  /* The whole page, and bounded by the viewport: a terminal scrolls its transcript, it does not
+     grow a page under it. min-height would let the body grow with a printed file instead. */
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2.5rem)
+    clamp(1.5rem, 5vh, 3rem);
   animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: 80ms;
 }
@@ -895,7 +900,8 @@ article a:not(.blog-btn):not(.blog-button):hover {
 .console-body {
   border: 1px dashed var(--navy-line);
   background: var(--bg);
-  height: min(28rem, 52svh);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1rem 1.1rem 1.2rem;
@@ -983,4 +989,28 @@ article a:not(.blog-btn):not(.blog-button):hover {
 /* A heading the contents list jumped to should not sit against the top of the frame. */
 .readme-prose :is(h1, h2, h3) {
   scroll-margin-top: 0.8rem;
+}
+
+/* An example in the banner runs on a click, so the first command can be taken rather than typed. */
+.console-example {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.console-example:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* One block per command, so a printed file keeps its own indentation and blank lines. */
+pre.console-out {
+  margin: 0;
+  color: var(--fg-dim);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

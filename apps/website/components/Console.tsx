@@ -2,26 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import type { Entry } from "../lib/console";
-
-/** Where a document named by `open` lives. */
-const DOCS: Record<string, string> = {
-  architecture: "docs/ARCHITECTURE.md",
-  roadmap: "docs/ROADMAP.md",
-  setup: "docs/SETUP.md",
-  decisions: "docs/decisions/",
-  readme: "README.md",
-};
+import type { Entry, File } from "../lib/console";
 
 const REPO = "https://github.com/ashworks1706/piramid";
 
+/** What the banner suggests trying, in the order it suggests them. */
+const EXAMPLES = ["help", "ls", "about", "cat readme", "cat blogs/history"];
+
 /** One block in the transcript: what was typed, and what came back. */
 type Block = { input: string; output: string[] };
-
-const BANNER = [
-  "inference runtime for retrieval systems",
-  "type help, or a command. tab completes, up and down recall.",
-];
 
 /**
  * A console that answers out of the repository.
@@ -32,9 +21,11 @@ const BANNER = [
  */
 export function Console({
   entries,
+  files,
   children,
 }: {
   entries: Entry[];
+  files: File[];
   children?: React.ReactNode;
 }) {
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -53,9 +44,20 @@ export function Console({
 
   useEffect(() => {
     const box = scroller.current;
-    if (box) {
-      box.scrollTop = box.scrollHeight;
+    // The last block, not the last child: the input line is always last.
+    const last = box?.querySelector(":scope > div:last-of-type");
+    if (!box || !last) {
+      return;
     }
+    // A long file should start at its first line, not its last, so the newest command is put at
+    // the top of the view rather than the bottom. Measured against the box rather than read off
+    // offsetTop, which is relative to whichever ancestor happens to be positioned.
+    const delta =
+      last.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTop = Math.min(
+      box.scrollTop + delta,
+      box.scrollHeight - box.clientHeight,
+    );
   }, [blocks]);
 
   function answer(line: string): string[] {
@@ -67,22 +69,43 @@ export function Console({
       return [
         "commands",
         ...entries.map((entry) => `  ${entry.name.padEnd(14)}${entry.blurb}`),
-        `  ${"open <doc>".padEnd(14)}open a document on GitHub`,
+        `  ${"ls".padEnd(14)}list the files here`,
+        `  ${"cat <file>".padEnd(14)}print one of them`,
+        `  ${"open <file>".padEnd(14)}open it on GitHub instead`,
         `  ${"clear".padEnd(14)}empty the transcript`,
       ];
     }
     if (command === "clear") {
       return [];
     }
-    if (command === "open") {
-      const path = DOCS[argument ?? ""];
-      if (!path) {
+    if (command === "ls") {
+      const width = Math.max(...files.map((file) => file.name.length)) + 2;
+      const group = (of: File[]) =>
+        of.map((file) => `  ${file.name.padEnd(width)}${file.path}`);
+      const posts = files.filter((file) => file.name.startsWith("blogs/"));
+      return [
+        ...group(files.filter((file) => !file.name.startsWith("blogs/"))),
+        ...(posts.length ? ["", "blog", ...group(posts)] : []),
+      ];
+    }
+    if (command === "cat" || command === "open") {
+      const file = files.find((candidate) => candidate.name === argument);
+      if (!file) {
         return [
-          `no document called ${argument ?? ""}. try: ${Object.keys(DOCS).join(", ")}`,
+          argument
+            ? `${argument}: no such file. try ls.`
+            : `${command}: which file? try ls.`,
         ];
       }
-      window.open(`${REPO}/blob/main/${path}`, "_blank", "noopener,noreferrer");
-      return [`opening ${path}`];
+      if (command === "open") {
+        window.open(
+          `${REPO}/blob/main/${file.path}`,
+          "_blank",
+          "noopener,noreferrer",
+        );
+        return [`opening ${file.path}`];
+      }
+      return file.lines;
     }
     const entry = entries.find((candidate) => candidate.name === command);
     if (entry) {
@@ -152,22 +175,37 @@ export function Console({
         role="presentation"
       >
         {children ? <div className="console-logo">{children}</div> : null}
-        <p className="console-banner">{BANNER[0]}</p>
+        <p className="console-banner">
+          inference runtime for retrieval systems
+        </p>
         <p className="console-banner console-install">
           <span className="console-prompt">$</span>{" "}
           <span className="select-all">cargo install piramid</span>
         </p>
-        <p className="console-banner">{BANNER[1]}</p>
+        <p className="console-banner">
+          {"try "}
+          {EXAMPLES.map((example, at) => (
+            <span key={example}>
+              {at ? ", " : ""}
+              <button
+                type="button"
+                className="console-example"
+                onClick={() => submit(example)}
+              >
+                {example}
+              </button>
+            </span>
+          ))}
+          {". tab completes, up and down recall."}
+        </p>
         {blocks.map((block, index) => (
           <div key={`${block.input}-${index}`}>
             <p className="console-line">
               <span className="console-prompt">&gt;</span> {block.input}
             </p>
-            {block.output.map((line, at) => (
-              <p key={`${line}-${at}`} className="console-line console-out">
-                {line || " "}
-              </p>
-            ))}
+            {block.output.length ? (
+              <pre className="console-out">{block.output.join("\n")}</pre>
+            ) : null}
           </div>
         ))}
         <p className="console-line">
