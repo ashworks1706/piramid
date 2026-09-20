@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { marked } from "marked";
 import { listBlogs } from "./blogs";
 
 /** The repository root, three levels above apps/website. */
@@ -10,8 +11,8 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 /** One thing the console can be asked. */
 export type Entry = { name: string; blurb: string; lines: string[] };
 
-/** One file the console can print. */
-export type File = { name: string; path: string; lines: string[] };
+/** One page the console can show, already rendered. */
+export type File = { name: string; path: string; title: string; html: string };
 
 /** What `ls` lists and `cat` prints, in the order `ls` shows them. */
 const FILES: { name: string; path: string }[] = [
@@ -24,42 +25,29 @@ const FILES: { name: string; path: string }[] = [
   { name: "agents", path: "AGENTS.md" },
 ];
 
+/** Where a link that points inside the repository goes once it is off GitHub. */
+const REPO = "https://github.com/ashworks1706/piramid";
+const BLOB = `${REPO}/blob/main/`;
+const RAW = "https://raw.githubusercontent.com/ashworks1706/piramid/main/";
+
 /**
- * A markdown file as a terminal should print it.
+ * Repository-relative links and images, pointed back where they resolve.
  *
- * The markdown itself is left alone, because it is readable as text and is what the file says.
- * The HTML around it is not: a centred `<p>` and an `<a href>` carry no meaning without a
- * renderer, and a page of them is what stands between the reader and the first paragraph. Tags
- * are dropped and the text inside them kept, except inside a fenced code block, where an angle
- * bracket belongs to the example rather than to the document.
+ * A README is written to be read on GitHub, where `docs/ARCHITECTURE.md` resolves. Served from
+ * this site it resolves to nothing. A path already absolute, a fragment, or a site-root path
+ * from a post's own assets is left alone.
  */
-function readable(lines: string[]) {
-  const out: string[] = [];
-  let fenced = false;
-  for (const line of lines) {
-    if (line.trimStart().startsWith("```")) {
-      fenced = !fenced;
-      out.push(line);
-      continue;
-    }
-    if (fenced) {
-      out.push(line);
-      continue;
-    }
-    if (/<img\b/.test(line)) {
-      continue;
-    }
-    const text = line.replace(/<[^>]+>/g, "").trimEnd();
-    // A line that was only markup leaves nothing behind, and a run of those leaves a gap.
-    if (!text.trim() && line.trim()) {
-      continue;
-    }
-    if (!text.trim() && !out.at(-1)?.trim()) {
-      continue;
-    }
-    out.push(text);
-  }
-  return out;
+function absolute(html: string) {
+  return html.replace(
+    /(href|src)="([^"]+)"/g,
+    (whole, attribute: string, target: string) => {
+      if (/^([a-z]+:|\/\/|\/|#)/i.test(target)) {
+        return whole;
+      }
+      const base = attribute === "src" ? RAW : BLOB;
+      return `${attribute}="${base}${target.replace(/^\.?\//, "")}"`;
+    },
+  );
 }
 
 /** Front matter, which is metadata for the page rather than something to print. */
@@ -79,19 +67,28 @@ function withoutFrontMatter(raw: string) {
  * markup around one reads as noise.
  */
 export function files(): File[] {
-  const strip = (raw: string) => readable(withoutFrontMatter(raw).split("\n"));
+  const render = (raw: string, rewrite: boolean) => {
+    const html = marked.parse(withoutFrontMatter(raw), {
+      async: false,
+      gfm: true,
+    });
+    return rewrite ? absolute(html) : html;
+  };
 
   const repo = FILES.map(({ name, path }) => ({
     name,
     path,
-    lines: strip(read(path)),
+    title: path,
+    html: render(read(path), true),
   }));
 
-  // The posts, under blogs/, so a slug cannot collide with a file at the repository root.
+  // The posts, under blogs/, so a slug cannot collide with a file at the repository root. Their
+  // images are already site-root paths, so nothing is rewritten.
   const posts = listBlogs().map((blog) => ({
     name: `blogs/${blog.slug.join("/")}`,
-    path: blog.title,
-    lines: strip(readFileSync(blog.filePath, "utf8")),
+    path: `/blogs/${blog.slug.join("/")}`,
+    title: blog.title,
+    html: render(readFileSync(blog.filePath, "utf8"), false),
   }));
 
   return [...repo, ...posts];

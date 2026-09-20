@@ -868,11 +868,44 @@ article a:not(.blog-btn):not(.blog-button):hover {
 
 /* The wordmark, drawn into the console the way a program prints its banner. */
 .console-logo {
-  padding: 0.4rem 0 1.1rem;
+  display: flex;
+  justify-content: center;
+  padding: 1.2rem 0 1.6rem;
 }
 
 .console-logo .cli-logo {
   width: min(100%, 34rem);
+}
+
+/* The opening, and the hint under it, which appears once the opening has finished. */
+.console-opening {
+  margin-bottom: 0.9rem;
+}
+
+.console-hint {
+  margin-bottom: 1.1rem;
+  transition: opacity 0.4s ease;
+}
+
+.console-hint.is-waiting {
+  opacity: 0;
+}
+
+/* A page shown by cat, inside the transcript rather than as a wall of text. */
+.console-page {
+  border: 1px dashed var(--navy-line);
+  background: var(--bg-raised);
+  margin: 0.5rem 0 1.4rem;
+  padding: 1.2rem 1.3rem;
+  font-size: 0.8rem;
+}
+
+.console-page > *:first-child {
+  margin-top: 0;
+}
+
+.console-page > *:last-child {
+  margin-bottom: 0;
 }
 
 .console-bar-links {
@@ -1013,4 +1046,66 @@ pre.console-out {
   font: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* A page that is not the console still sits in the same window. */
+.window {
+  width: min(60rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2.5rem) 4rem;
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.window-body {
+  border: 1px dashed var(--navy-line);
+  border-top: 0;
+  background: var(--bg);
+  padding: 1.6rem 1.5rem 2.4rem;
+  font-size: 0.82rem;
+  line-height: 1.75;
+  color: var(--fg-dim);
+}
+
+.window-home {
+  color: var(--fg-dim);
+  text-decoration: none;
+}
+
+.window-home:hover {
+  color: var(--accent);
+}
+
+/* The path of the page, after the one that goes home. */
+.window-path {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window {
+    animation: none;
+  }
+}
+
+/* The search, drawn like everything else in the bar rather than as a pill. */
+.console-search {
+  border: 1px dashed var(--navy-line);
+  background: none;
+  color: var(--fg-dim);
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.console-search:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.console-search-key {
+  margin-left: 0.45rem;
+  color: var(--accent-dim);
 }

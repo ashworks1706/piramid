@@ -7,10 +7,17 @@ import type { Entry, File } from "../lib/console";
 const REPO = "https://github.com/ashworks1706/piramid";
 
 /** What the banner suggests trying, in the order it suggests them. */
-const EXAMPLES = ["help", "ls", "about", "cat readme", "cat blogs/history"];
+const EXAMPLES = ["help", "ls", "cat readme", "cat blogs/history"];
 
-/** One block in the transcript: what was typed, and what came back. */
-type Block = { input: string; output: string[] };
+/** How long between two lines of the opening, in milliseconds. */
+const BEAT = 95;
+
+/** One block in the transcript: what was asked, and what came back. */
+type Block = {
+  input: string;
+  output: string[];
+  page?: { title: string; html: string };
+};
 
 /**
  * A console that answers out of the repository.
@@ -31,14 +38,45 @@ export function Console({
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [input, setInput] = useState("");
   const [recall, setRecall] = useState(-1);
+  /** How much of the opening has printed. It prints itself; nothing has to be typed for it. */
+  const [shown, setShown] = useState(0);
   const field = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+
+  /** The opening: what the page says before anyone touches it. */
+  const opening = [
+    "inference runtime for retrieval systems",
+    "",
+    ...(entries.find((entry) => entry.name === "about")?.lines ?? []),
+    "",
+    "$ cargo install piramid",
+  ];
+  const done = shown >= opening.length;
+
+  useEffect(() => {
+    if (done) {
+      return;
+    }
+    // Reduced motion gets the whole opening at once, but still from the callback: a setState in
+    // the body of an effect cascades a render.
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => setShown((at) => (reduce ? opening.length : at + 1)),
+      reduce ? 0 : BEAT,
+    );
+    return () => window.clearTimeout(timer);
+  }, [shown, done, opening.length]);
 
   const typed = blocks.map((block) => block.input).filter(Boolean);
   const names = [
     ...entries.map((entry) => entry.name),
+    ...files.map((file) => `cat ${file.name}`),
     "help",
     "clear",
+    "ls",
+    "cat",
     "open",
   ];
 
@@ -98,14 +136,15 @@ export function Console({
         ];
       }
       if (command === "open") {
-        window.open(
-          `${REPO}/blob/main/${file.path}`,
-          "_blank",
-          "noopener,noreferrer",
-        );
-        return [`opening ${file.path}`];
+        // A post has a page of its own; a repository file does not, so that one goes to GitHub.
+        const href = file.name.startsWith("blogs/")
+          ? file.path
+          : `${REPO}/blob/main/${file.path}`;
+        window.open(href, "_blank", "noopener,noreferrer");
+        return [`opening ${href}`];
       }
-      return file.lines;
+      // cat is answered by submit, which attaches the rendered page to the block.
+      return [];
     }
     const entry = entries.find((candidate) => candidate.name === command);
     if (entry) {
@@ -117,12 +156,26 @@ export function Console({
   function submit(line: string) {
     if (line.trim() === "clear") {
       setBlocks([]);
-    } else {
-      setBlocks((current) => [
-        ...current,
-        { input: line, output: answer(line) },
-      ]);
+      setInput("");
+      setRecall(-1);
+      return;
     }
+    const [command, argument] = line.trim().split(/\s+/, 2);
+    // cat shows the page itself rather than the text of the file it came from.
+    const file =
+      command === "cat"
+        ? files.find((candidate) => candidate.name === argument)
+        : undefined;
+    setBlocks((current) => [
+      ...current,
+      file
+        ? {
+            input: line,
+            output: [],
+            page: { title: file.title, html: file.html },
+          }
+        : { input: line, output: answer(line) },
+    ]);
     setInput("");
     setRecall(-1);
   }
@@ -175,14 +228,19 @@ export function Console({
         role="presentation"
       >
         {children ? <div className="console-logo">{children}</div> : null}
-        <p className="console-banner">
-          inference runtime for retrieval systems
-        </p>
-        <p className="console-banner console-install">
-          <span className="console-prompt">$</span>{" "}
-          <span className="select-all">cargo install piramid</span>
-        </p>
-        <p className="console-banner">
+        <div className="console-opening">
+          {opening.slice(0, shown).map((line, at) => (
+            <p
+              key={`${line}-${at}`}
+              className={`console-banner${line.startsWith("$ ") ? " console-install select-all" : ""}`}
+            >
+              {line || "\u00a0"}
+            </p>
+          ))}
+        </div>
+        <p
+          className={`console-banner console-hint${done ? "" : " is-waiting"}`}
+        >
           {"try "}
           {EXAMPLES.map((example, at) => (
             <span key={example}>
@@ -196,7 +254,7 @@ export function Console({
               </button>
             </span>
           ))}
-          {". tab completes, up and down recall."}
+          {", or type below."}
         </p>
         {blocks.map((block, index) => (
           <div key={`${block.input}-${index}`}>
@@ -205,6 +263,13 @@ export function Console({
             </p>
             {block.output.length ? (
               <pre className="console-out">{block.output.join("\n")}</pre>
+            ) : null}
+            {block.page ? (
+              <article
+                className="console-page readme-prose"
+                // Rendered at build time from a file in this repository, never from a request.
+                dangerouslySetInnerHTML={{ __html: block.page.html }}
+              />
             ) : null}
           </div>
         ))}
