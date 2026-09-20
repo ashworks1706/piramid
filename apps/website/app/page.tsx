@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CliLogo } from "../components/CliLogo";
+import { Console } from "../components/Console";
 import { Readme } from "../components/Readme";
+import { entries } from "../lib/console";
 
 export default function Home() {
   return (
@@ -30,6 +32,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <Console entries={entries()} />
 
       <Readme />
     </main>
