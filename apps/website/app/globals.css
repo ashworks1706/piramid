@@ -853,7 +853,7 @@ article a:not(.blog-btn):not(.blog-button):hover {
 /* The console. It shares the README window's frame, so the page reads as two panels of one
    terminal rather than two unrelated widgets. */
 .console {
-  width: min(60rem, 100%);
+  width: min(78rem, 100%);
   margin: 0 auto;
   /* The whole page, and bounded by the viewport: a terminal scrolls its transcript, it does not
      grow a page under it. min-height would let the body grow with a printed file instead. */
@@ -877,9 +877,56 @@ article a:not(.blog-btn):not(.blog-button):hover {
   width: min(100%, 34rem);
 }
 
-/* The opening, and the hint under it, which appears once the opening has finished. */
+/* The opening and the mark sit side by side, which is what the width is for. They stack when
+   there is not enough of it. */
+.console-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 3rem;
+  margin-bottom: 1.4rem;
+}
+
+/* The opening reads as prose, not as terminal output: it is a paragraph of writing that happens
+   to be set in a mono face, so it gets a measure, a line height and space between paragraphs. */
 .console-opening {
-  margin-bottom: 0.9rem;
+  flex: 1 1 34ch;
+  max-width: 64ch;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.85;
+  color: var(--fg);
+}
+
+.console-opening p {
+  margin: 0 0 1.1rem;
+}
+
+.console-opening p:last-child {
+  margin-bottom: 0;
+}
+
+/* The cursor, while the opening is still being typed. */
+.console-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 0.15em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: caret 1s steps(1, end) infinite;
+}
+
+@keyframes caret {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0.15;
+  }
 }
 
 .console-hint {
@@ -1050,7 +1097,7 @@ pre.console-out {
 
 /* A page that is not the console still sits in the same window. */
 .window {
-  width: min(60rem, 100%);
+  width: min(78rem, 100%);
   margin: 0 auto;
   padding: clamp(1.5rem, 5vh, 3rem) clamp(1rem, 4vw, 2.5rem) 4rem;
   animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -1108,4 +1155,112 @@ pre.console-out {
 .console-search-key {
   margin-left: 0.45rem;
   color: var(--accent-dim);
+}
+
+/* The mark, built out of blocks that settle and then keep moving. */
+.pyramid {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+}
+
+.pyramid-grid {
+  --block: clamp(7px, 0.9vw, 13px);
+  display: grid;
+  grid-template-columns: repeat(17, var(--block));
+  grid-auto-rows: var(--block);
+  gap: 2px;
+}
+
+.pyramid-block {
+  background: var(--accent);
+  opacity: 0;
+  animation:
+    pyramid-in 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    pyramid-drift 3.6s steps(1, end) infinite;
+  /* Built from the bottom up, then each block keeps its own beat. */
+  animation-delay:
+    calc(var(--seed) * 260ms + (8 - var(--row)) * 70ms),
+    calc(var(--seed) * -3.6s);
+}
+
+@keyframes pyramid-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 0.85;
+    transform: none;
+  }
+}
+
+/* Most of the cycle a block is lit; twice in it, it drops back. */
+@keyframes pyramid-drift {
+  0%,
+  62% {
+    opacity: 0.85;
+  }
+  63%,
+  70% {
+    opacity: 0.3;
+  }
+  71%,
+  88% {
+    opacity: 0.85;
+  }
+  89%,
+  95% {
+    opacity: 0.5;
+  }
+  96%,
+  100% {
+    opacity: 0.85;
+  }
+}
+
+/* Decoration is the first thing to go when the prompt would otherwise fall off the screen. */
+@media (max-width: 52rem) {
+  .pyramid {
+    display: none;
+  }
+
+  .console-logo {
+    padding: 0.4rem 0 0.8rem;
+  }
+
+  .console-logo .cli-logo {
+    width: 68%;
+  }
+
+  .console-intro {
+    margin-bottom: 0.8rem;
+  }
+
+  .console-hint {
+    margin-bottom: 0.7rem;
+  }
+
+  /* A tighter measure on a phone, so the prompt stays on the first screen without the opening
+     losing a word of it. */
+  .console-opening {
+    font-size: 0.82rem;
+    line-height: 1.65;
+  }
+
+  .console-opening p {
+    margin-bottom: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pyramid-block {
+    animation: none;
+    opacity: 0.85;
+  }
+
+  .console-caret {
+    animation: none;
+  }
 }

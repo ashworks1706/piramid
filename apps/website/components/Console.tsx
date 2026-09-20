@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PixelPyramid } from "./PixelPyramid";
 import { useEffect, useRef, useState } from "react";
 import type { Entry, File } from "../lib/console";
 
@@ -9,8 +10,11 @@ const REPO = "https://github.com/ashworks1706/piramid";
 /** What the banner suggests trying, in the order it suggests them. */
 const EXAMPLES = ["help", "ls", "cat readme", "cat blogs/history"];
 
-/** How long between two lines of the opening, in milliseconds. */
-const BEAT = 95;
+/** Characters added per frame while the opening types itself. */
+const SPEED = 4;
+
+/** Milliseconds between frames of it. */
+const FRAME = 16;
 
 /** One block in the transcript: what was asked, and what came back. */
 type Block = {
@@ -38,20 +42,16 @@ export function Console({
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [input, setInput] = useState("");
   const [recall, setRecall] = useState(-1);
-  /** How much of the opening has printed. It prints itself; nothing has to be typed for it. */
+  /** How much of the opening has been typed. It types itself; nothing is entered for it. */
   const [shown, setShown] = useState(0);
   const field = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
-  /** The opening: what the page says before anyone touches it. */
-  const opening = [
-    "inference runtime for retrieval systems",
-    "",
-    ...(entries.find((entry) => entry.name === "about")?.lines ?? []),
-    "",
-    "$ cargo install piramid",
-  ];
-  const done = shown >= opening.length;
+  /** The opening: what the page says before anyone touches it, as one run of text. */
+  const script = (
+    entries.find((entry) => entry.name === "about")?.lines ?? []
+  ).join("\n\n");
+  const done = shown >= script.length;
 
   useEffect(() => {
     if (done) {
@@ -63,11 +63,11 @@ export function Console({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const timer = window.setTimeout(
-      () => setShown((at) => (reduce ? opening.length : at + 1)),
-      reduce ? 0 : BEAT,
+      () => setShown((at) => (reduce ? script.length : at + SPEED)),
+      reduce ? 0 : FRAME,
     );
     return () => window.clearTimeout(timer);
-  }, [shown, done, opening.length]);
+  }, [shown, done, script.length]);
 
   const typed = blocks.map((block) => block.input).filter(Boolean);
   const names = [
@@ -228,15 +228,21 @@ export function Console({
         role="presentation"
       >
         {children ? <div className="console-logo">{children}</div> : null}
-        <div className="console-opening">
-          {opening.slice(0, shown).map((line, at) => (
-            <p
-              key={`${line}-${at}`}
-              className={`console-banner${line.startsWith("$ ") ? " console-install select-all" : ""}`}
-            >
-              {line || "\u00a0"}
-            </p>
-          ))}
+        <div className="console-intro">
+          <div className="console-opening">
+            {script
+              .slice(0, shown)
+              .split("\n\n")
+              .map((paragraph, at, all) => (
+                <p key={at}>
+                  {paragraph}
+                  {!done && at === all.length - 1 ? (
+                    <span className="console-caret" />
+                  ) : null}
+                </p>
+              ))}
+          </div>
+          <PixelPyramid />
         </div>
         <p
           className={`console-banner console-hint${done ? "" : " is-waiting"}`}
