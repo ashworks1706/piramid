@@ -13,7 +13,10 @@ const EXAMPLES = ["help", "ls", "cat readme", "cat blogs/history"];
 /** Characters added per frame while the opening types itself. */
 const SPEED = 4;
 
-/** Milliseconds between frames of it. */
+/** The same, for the answer to a command, which prints faster than the opening. */
+const OUTPUT_SPEED = 9;
+
+/** Milliseconds between frames of either. */
 const FRAME = 16;
 
 /** One block in the transcript: what was asked, and what came back. */
@@ -44,6 +47,8 @@ export function Console({
   const [recall, setRecall] = useState(-1);
   /** How much of the opening has been typed. It types itself; nothing is entered for it. */
   const [shown, setShown] = useState(0);
+  /** How much of the newest answer has been printed. Every answer prints rather than appears. */
+  const [printed, setPrinted] = useState(0);
   const field = useRef<HTMLInputElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -68,6 +73,26 @@ export function Console({
     );
     return () => window.clearTimeout(timer);
   }, [shown, done, script.length]);
+
+  /** The newest answer, which is the only one still printing. The ones above it are whole. */
+  const latest = blocks.length
+    ? blocks[blocks.length - 1].output.join("\n")
+    : "";
+  const printing = printed < latest.length;
+
+  useEffect(() => {
+    if (!printing) {
+      return;
+    }
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => setPrinted((at) => (reduce ? latest.length : at + OUTPUT_SPEED)),
+      reduce ? 0 : FRAME,
+    );
+    return () => window.clearTimeout(timer);
+  }, [printed, printing, latest.length]);
 
   const typed = blocks.map((block) => block.input).filter(Boolean);
   const names = [
@@ -158,6 +183,7 @@ export function Console({
       setBlocks([]);
       setInput("");
       setRecall(-1);
+      setPrinted(0);
       return;
     }
     const [command, argument] = line.trim().split(/\s+/, 2);
@@ -178,6 +204,7 @@ export function Console({
     ]);
     setInput("");
     setRecall(-1);
+    setPrinted(0);
   }
 
   function onKey(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -262,23 +289,31 @@ export function Console({
           ))}
           {", or type below."}
         </p>
-        {blocks.map((block, index) => (
-          <div key={`${block.input}-${index}`}>
-            <p className="console-line">
-              <span className="console-prompt">&gt;</span> {block.input}
-            </p>
-            {block.output.length ? (
-              <pre className="console-out">{block.output.join("\n")}</pre>
-            ) : null}
-            {block.page ? (
-              <article
-                className="console-page readme-prose"
-                // Rendered at build time from a file in this repository, never from a request.
-                dangerouslySetInnerHTML={{ __html: block.page.html }}
-              />
-            ) : null}
-          </div>
-        ))}
+        {blocks.map((block, index) => {
+          const last = index === blocks.length - 1;
+          const text = block.output.join("\n");
+          return (
+            <div key={`${block.input}-${index}`}>
+              <p className="console-line">
+                <span className="console-prompt">&gt;</span> {block.input}
+              </p>
+              {text ? (
+                <pre className="console-out">
+                  {last ? text.slice(0, printed) : text}
+                  {last && printing ? <span className="console-caret" /> : null}
+                </pre>
+              ) : null}
+              {block.page ? (
+                <article
+                  // A page is markup, so it arrives whole and fades rather than printing.
+                  className="console-page console-page-in readme-prose"
+                  // Rendered at build time from a file in this repository, never from a request.
+                  dangerouslySetInnerHTML={{ __html: block.page.html }}
+                />
+              ) : null}
+            </div>
+          );
+        })}
         <p className="console-line">
           <label className="console-prompt" htmlFor="console-input">
             &gt;

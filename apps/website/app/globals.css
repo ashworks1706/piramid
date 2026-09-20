@@ -1150,6 +1150,23 @@ pre.console-out {
   color: var(--accent-dim);
 }
 
+/* A page is markup rather than text, so it cannot print a character at a time. It fades in over
+   about as long as a short answer takes to print. */
+.console-page-in {
+  animation: console-page-in 320ms ease both;
+}
+
+@keyframes console-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* The mark, built out of blocks that settle and then keep moving. */
 .pyramid {
   flex: 0 0 auto;
@@ -1256,6 +1273,10 @@ pre.console-out {
   }
 
   .console-caret {
+    animation: none;
+  }
+
+  .console-page-in {
     animation: none;
   }
 }
