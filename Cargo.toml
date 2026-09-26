@@ -70,7 +70,7 @@ wide = "1.7"
 rayon = "1.10"
 num_cpus = "1.16"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
-rand = "0.9.4"
+rand = "0.10.2"
 
 # device and model runtimes, each confined to its backend module
 candle-core = "0.11"
