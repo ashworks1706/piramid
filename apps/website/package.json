@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "github-slugger": "^2.0.0",
-    "katex": "^0.18.7",
-    "marked": "^18.0.11",
-    "next": "^16.3.5",
+    "katex": "^0.18.9",
+    "marked": "^18.0.14",
+    "next": "^16.3.6",
     "next-mdx-remote": "^6.0.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -27,9 +27,9 @@
     "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "baseline-browser-mapping": "^2.11.25",
-    "eslint": "^10.10.0",
-    "eslint-config-next": "16.3.5",
+    "baseline-browser-mapping": "^2.11.26",
+    "eslint": "^10.11.0",
+    "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
     "typescript": "^7.0.2"
   }
