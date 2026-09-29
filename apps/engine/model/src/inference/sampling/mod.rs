@@ -4,8 +4,8 @@ use std::collections::HashSet;
 
 use piramid_core::config::SamplingConfig;
 use piramid_core::error::InferenceError;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::rngs::{StdRng, SysRng};
+use rand::{RngExt, SeedableRng};
 
 /// Draws tokens for one sequence under one sampling configuration.
 #[derive(Debug)]
@@ -25,10 +25,18 @@ impl Sampler {
     /// A sampler for the given settings. A seed makes the draws reproducible.
     pub fn new(config: &SamplingConfig) -> Result<Self, InferenceError> {
         config.validate().map_err(InferenceError::InvalidRequest)?;
-        let rng = match config.seed {
-            Some(seed) => StdRng::seed_from_u64(seed),
-            None => StdRng::from_entropy(),
+
+        let rng: StdRng = match config.seed {
+            Some(seed) => {
+                let mut seed_bytes = [0u8; 32];
+                seed_bytes[..8].copy_from_slice(&seed.to_le_bytes());
+                StdRng::from_seed(seed_bytes)
+            }
+            None => StdRng::try_from_rng(&mut SysRng).map_err(|_| {
+                InferenceError::InvalidRequest("Failed to initialize system RNG".to_string())
+            })?,
         };
+
         Ok(Self {
             temperature: config.temperature,
             top_p: config.top_p,
@@ -107,7 +115,7 @@ impl Sampler {
             }
         }
 
-        let draw: f64 = self.rng.gen();
+        let draw: f64 = self.rng.random();
         let mut cumulative = 0.0f64;
         for (&(token, _), probability) in candidates.iter().zip(probabilities.iter()) {
             cumulative += probability;
