@@ -2,6 +2,7 @@
 
 ## v0.3.0: a retrieval path worth measuring
 
+- [ ] migrate to new nvidia's native cuda rust library, write kernels directly in rust
 - [ ] keep a collection's vectors resident on the device across queries, so the exact scan does not
       upload them on every call, and measure it against per-call upload
 - [ ] quantize the resident vectors on the device, with recall against the unquantized exact scan

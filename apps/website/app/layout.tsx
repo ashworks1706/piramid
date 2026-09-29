@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
-import localFont from "next/font/local";
 import "./globals.css";
 import "katex/dist/katex.min.css";
 
@@ -11,18 +10,10 @@ const mono = JetBrains_Mono({
   variable: "--font-mono",
 });
 
-// JetBrains Mono box-drawing and block glyphs, U+2500-259F, which the latin subset lacks.
-const blocks = localFont({
-  src: "./fonts/jetbrains-mono-blocks.woff2",
-  display: "block",
-  variable: "--font-blocks",
-  declarations: [{ prop: "unicode-range", value: "U+2500-259F" }],
-});
-
 export const metadata: Metadata = {
   title: {
     template: "%s | Piramid",
-    default: "Piramid – Inference engine for RAG",
+    default: "Piramid – inference runtime for retrieval systems",
   },
   description:
     "Piramid is an inference engine for RAG on one GPU, written in Rust. Documents, model weights and the KV cache live in one process, so retrieval runs in the same process as generation. It stores and searches your documents with exact search and metadata filters, and serves generation over HTTP with piramid serve.",
@@ -54,7 +45,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://piramiddb.com",
-    title: "Piramid – Inference engine for RAG",
+    title: "Piramid – inference runtime for retrieval systems",
     description:
       "An inference engine for RAG on one GPU, in Rust, with retrieval in the same process as generation.",
     siteName: "Piramid",
@@ -69,7 +60,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Piramid – Inference engine for RAG",
+    title: "Piramid – inference runtime for retrieval systems",
     description:
       "An inference engine for RAG on one GPU, in Rust, with retrieval in the same process as generation.",
     images: ["/logo_dark.png"],
@@ -88,7 +79,11 @@ export default function RootLayout({
 }>) {
   return (
     // Hydration warnings are suppressed on the html element only.
-    <html lang="en" className={`dark ${mono.variable} ${blocks.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`dark ${mono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="antialiased">{children}</body>
     </html>
   );
