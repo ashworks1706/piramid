@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { marked } from "marked";
-import { listBlogs } from "./blogs";
 
 /** The repository root, three levels above apps/website. */
 const ROOT = join(process.cwd(), "..", "..");
@@ -67,31 +66,20 @@ function withoutFrontMatter(raw: string) {
  * markup around one reads as noise.
  */
 export function files(): File[] {
-  const render = (raw: string, rewrite: boolean) => {
+  const render = (raw: string) => {
     const html = marked.parse(withoutFrontMatter(raw), {
       async: false,
       gfm: true,
     });
-    return rewrite ? absolute(html) : html;
+    return absolute(html);
   };
 
-  const repo = FILES.map(({ name, path }) => ({
+  return FILES.map(({ name, path }) => ({
     name,
     path,
     title: path,
-    html: render(read(path), true),
+    html: render(read(path)),
   }));
-
-  // The posts, under blogs/, so a slug cannot collide with a file at the repository root. Their
-  // images are already site-root paths, so nothing is rewritten.
-  const posts = listBlogs().map((blog) => ({
-    name: `blogs/${blog.slug.join("/")}`,
-    path: `/blogs/${blog.slug.join("/")}`,
-    title: blog.title,
-    html: render(readFileSync(blog.filePath, "utf8"), false),
-  }));
-
-  return [...repo, ...posts];
 }
 
 /**
