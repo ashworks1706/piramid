@@ -1,8 +1,9 @@
 # Piramid: agent guide
 
-An inference engine for RAG on one GPU, in Rust, used mainly through `piramid serve`: one process
-holding documents, model weights and the KV cache on one device, so retrieval can run during
-generation rather than once before it. The documents live in collections searched by an exact scan.
+An inference engine for retrieval systems on one GPU, in Rust, used mainly through
+`piramid serve`: one process holding documents, model weights and the KV cache on one device, so
+retrieval can run during generation rather than once before it. The documents live in collections
+searched by an exact scan.
 
 Read `docs/ARCHITECTURE.md` for crate boundaries and invariants, `docs/ROADMAP.md` for what we're
 building and in what order. Don't contradict either; propose an edit to the doc instead. Keep both

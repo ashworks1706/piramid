@@ -22,10 +22,10 @@
 
 ## What this is
 
-Piramid is an inference engine for RAG (retrieval-augmented generation: answering a question with
-a language model after looking up relevant documents). It runs on one GPU, or on the CPU, as a
-single process that holds three things together: the documents, the model weights, and the KV
-cache (the attention state the model keeps for every sequence it is generating).
+Piramid is an inference engine for retrieval systems. It treats retrieval as part of inference
+rather than a service called before it. It runs on one GPU, or on the CPU, as a single process that
+holds three things together: the documents, the model weights, and the KV cache (the attention
+state the model keeps for every sequence it is generating).
 
 <img width="2816" height="1358" alt="image" src="https://github.com/user-attachments/assets/08f7c7b7-7e89-45a4-97d9-5f211995cb55" />
 
@@ -36,7 +36,8 @@ generates the answer, all in the same process. The same model is also served thr
 OpenAI-compatible `/v1/chat/completions` endpoint.
 
 Today retrieval runs once, before the model reads the prompt. Keeping everything in one process is
-what will let retrieval run during generation instead; see
+what will let retrieval run during generation instead, with the model's attention reaching the
+documents directly rather than through prompt text; see
 [Where this is going](#where-this-is-going).
 
 https://github.com/user-attachments/assets/487cbc0f-c279-4a15-a160-9acd4666fbe6
@@ -343,6 +344,14 @@ Retrieval before the model reads the prompt needs only one service call, so it d
 single process. Retrieval inside a generation does: it happens many times, runs alongside the
 model's computation, and works against state that never leaves the device.
 
+Two things follow if it works. The first is grounding. A model that reads retrieved passages as
+prompt text can still answer from its weights and ignore them. A model whose attention reaches the
+document state directly, at every step it generates, conditions on the evidence rather than on a
+paraphrase of it, and each answer can be traced to the documents it drew on. Hallucination becomes
+something measured against what was retrieved, not only against a reference answer. The second is
+context length. Documents reached through the hook never become prompt tokens, so what a model can
+draw on is bounded by what the device holds, not by its context window.
+
 Piramid commits to the point where retrieval enters the model rather than to a particular way of
 combining it. `model::fusion::RetrievalHook` says when retrieval may happen and what it may touch,
 not how retrieved data gets combined. Chunked cross-attention, residual-stream gating and learned
@@ -358,9 +367,21 @@ over HTTP, retrieval from an in-process collection scored on the CPU, and the sa
 GPU. Each is reported with time to first token, decode tokens per second, p50 and p95 latency for
 every stage, recall at `k`, and exact match against the dataset's answers.
 
-Retrieval-before-prefill is the control. The arms still to come run retrieval on its own device
-stream, overlapped with the model's computation. The result gets published whichever way it goes.
-[docs/ROADMAP.md](docs/ROADMAP.md) has the plan.
+The dataset today is HotpotQA (dev, distractor setting). Retrieval-before-prefill is the control.
+The arms still to come run retrieval on its own device stream, overlapped with the model's
+computation, and then inside the decoder layers.
+
+Once retrieval reaches the attention, speed stops being the only question, and three more sets of
+benchmarks come in:
+
+- **Grounding.** Whether answers stay faithful to the retrieved passages: RAGTruth, FaithEval and
+  FACTS Grounding.
+- **Long context.** The same documents placed in the prompt against the same documents reached
+  through the hook, at equal token budget: RULER, LongBench v2 and HELMET.
+- **Knowledge-intensive QA.** Multi-hop and open-domain questions beyond HotpotQA: MuSiQue,
+  2WikiMultiHopQA and Natural Questions.
+
+Each result gets published whichever way it goes. [docs/ROADMAP.md](docs/ROADMAP.md) has the plan.
 
 ## Working on Piramid
 

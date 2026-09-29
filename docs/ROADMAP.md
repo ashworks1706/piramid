@@ -15,11 +15,13 @@ One model, one GPU, batch size one, no HTTP.
 
 - [ ] report TTFT, tokens/sec and retrieval-hook latency as metrics, graphed in the device view
 - [ ] measure the configurations that matter against it, with retrieval-before-prefill as control
+- [ ] run `bench-rag` on MuSiQue, 2WikiMultiHopQA and Natural Questions as well as HotpotQA, so the
+      control is not one dataset's result
 - [ ] publish the result, make short report on readme
 
 ## v0.5.0: `piramid serve`
 
-Co-located RAG with unmodified models. Also the baseline v0.6 is measured against.
+Retrieval and generation in one process, with unmodified models. Also the baseline v0.6 is measured against.
 
 - [ ] cut the website copy down to what the runtime does by then
 
@@ -31,6 +33,10 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 - [ ] take tokenization off the hot path, and reuse document KV state where that is sound
 - [ ] a scheduler dividing the device between document vectors, weights and KV under load, with that
       split shown in the device view
+- [ ] measure grounding against the v0.5 baseline: faithfulness to the retrieved passages on
+      RAGTruth, FaithEval and FACTS Grounding, and how often an answer is unsupported by them
+- [ ] measure long context: the same documents in the prompt against the same documents through
+      the hook, at equal token budget, on RULER, LongBench v2 and HELMET
 
 ## v0.7.0+: beyond one model
 
@@ -38,7 +44,8 @@ Co-located RAG with unmodified models. Also the baseline v0.6 is measured agains
 - [ ] fuse retrieval and attention into fewer launches, once profiling says it is worth it
 - [ ] a layout for document vectors co-designed for the attention access pattern
 - [ ] half precision end to end, no upcasting on the hot path
-- [ ] retrieval over the model's own KV history rather than external documents
+- [ ] retrieval over the model's own KV history rather than external documents, measured on the
+      same long-context suites as v0.6
 - [ ] block-diffusion decoding, where a block is the retrieval unit
 
 ## Unscheduled

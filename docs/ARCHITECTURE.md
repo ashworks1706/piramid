@@ -5,7 +5,7 @@ and what has to stay true.
 
 ## What the shape is for
 
-Piramid is an inference engine for retrieval-augmented generation. One process holds the documents,
+Piramid is an inference engine for retrieval systems. One process holds the documents,
 the model weights and the KV cache on one device. The KV cache is the per-token attention keys and
 values a model keeps so it does not recompute earlier tokens. Keeping all three together is meant to
 let retrieval run during generation, not only once before it.

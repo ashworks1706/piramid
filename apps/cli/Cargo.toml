@@ -1,6 +1,6 @@
 [package]
 name = "piramid"
-description = "Inference engine for RAG on one GPU: documents, model weights and the KV cache in one process, served over HTTP."
+description = "Inference engine for retrieval systems on one GPU: documents, model weights and the KV cache in one process, served over HTTP."
 readme = "../../README.md"
 keywords = ["rag", "llm", "embeddings", "search", "inference"]
 categories = ["database-implementations", "command-line-utilities"]
