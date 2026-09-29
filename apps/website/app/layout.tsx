@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import "katex/dist/katex.min.css";
 
 // Self-hosted by next/font.
 const mono = JetBrains_Mono({

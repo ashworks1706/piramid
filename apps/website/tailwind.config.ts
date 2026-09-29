@@ -4,8 +4,6 @@ const config: Config = {
   content: [
     "./app/**/*.{ts,tsx,mdx}",
     "./components/**/*.{ts,tsx}",
-    "./mdx-components.tsx",
-    "../blogs/**/*.{md,mdx}",
   ],
 };
 

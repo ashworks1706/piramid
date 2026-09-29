@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { PixelPyramid } from "./PixelPyramid";
 import { useEffect, useRef, useState } from "react";
 import type { Entry, File } from "../lib/console";
@@ -8,7 +7,7 @@ import type { Entry, File } from "../lib/console";
 const REPO = "https://github.com/ashworks1706/piramid";
 
 /** What the banner suggests trying, in the order it suggests them. */
-const EXAMPLES = ["help", "ls", "cat readme", "cat blogs/history"];
+const EXAMPLES = ["help", "ls", "cat readme", "cat architecture"];
 
 /** Characters added per frame while the opening types itself. */
 const SPEED = 4;
@@ -143,13 +142,7 @@ export function Console({
     }
     if (command === "ls") {
       const width = Math.max(...files.map((file) => file.name.length)) + 2;
-      const group = (of: File[]) =>
-        of.map((file) => `  ${file.name.padEnd(width)}${file.path}`);
-      const posts = files.filter((file) => file.name.startsWith("blogs/"));
-      return [
-        ...group(files.filter((file) => !file.name.startsWith("blogs/"))),
-        ...(posts.length ? ["", "blog", ...group(posts)] : []),
-      ];
+      return files.map((file) => `  ${file.name.padEnd(width)}${file.path}`);
     }
     if (command === "cat" || command === "open") {
       const file = files.find((candidate) => candidate.name === argument);
@@ -161,10 +154,8 @@ export function Console({
         ];
       }
       if (command === "open") {
-        // A post has a page of its own; a repository file does not, so that one goes to GitHub.
-        const href = file.name.startsWith("blogs/")
-          ? file.path
-          : `${REPO}/blob/main/${file.path}`;
+        // A repository file has no page of its own, so it opens on GitHub.
+        const href = `${REPO}/blob/main/${file.path}`;
         window.open(href, "_blank", "noopener,noreferrer");
         return [`opening ${href}`];
       }
@@ -244,7 +235,6 @@ export function Console({
         <span className="readme-name">/piramid</span>
         <span className="console-bar-links">
           <a href={REPO}>github</a>
-          <Link href="/blogs">blog</Link>
         </span>
       </header>
       {/* The whole surface focuses the field, the way clicking a terminal does. */}
