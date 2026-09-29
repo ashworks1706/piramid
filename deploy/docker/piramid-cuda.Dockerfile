@@ -1,6 +1,6 @@
 # CUDA image. Run with --gpus all and the NVIDIA container toolkit.
 
-FROM nvidia/cuda:13.3.1-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:13.4.1-devel-ubuntu22.04 AS builder
 
 ARG RUST_VERSION=stable
 RUN apt-get update \
@@ -14,7 +14,7 @@ WORKDIR /app
 COPY . .
 RUN cargo build --release --locked --bin piramid --features gpu-cuda
 
-FROM nvidia/cuda:13.3.1-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:13.4.1-runtime-ubuntu22.04 AS runtime
 
 LABEL org.opencontainers.image.title="Piramid (CUDA)" \
       org.opencontainers.image.description="Inference engine for retrieval systems, CUDA build." \
