@@ -89,6 +89,27 @@ one of them is refused while any collection is open. `search.metric` is copied i
 when it is created and stored with it, so changing it affects only collections created afterwards.
 `inference` is read once at startup, and a reload that changes it is refused.
 
+### Embeddings from a shared local server
+
+Any server speaking the OpenAI embeddings format works, including a local llama-swap that
+serves every model on one endpoint. `base_url` is the full embeddings endpoint, not the
+API root. Keep it in a gitignored `config.local.yaml`:
+
+```yaml
+startup:
+  embedding:
+    provider: openai
+    model: nomic-embed-text          # 768-dim; qwen3-embedding is 1024-dim
+    base_url: http://127.0.0.1:8100/v1/embeddings
+```
+
+```bash
+OPENAI_API_KEY=<server key> piramid serve --config config.local.yaml
+```
+
+A collection's dimension is fixed by the model that first fills it, so pick one model per
+collection. With a host-wide server you don't need the compose `ollama` profile.
+
 Any key can also be set from the environment, spelled from its path: `runtime.wal.max_log_size`
 is `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`. Values parse as YAML, so `8`, `true` and `null` mean what
 they do in the file. `PIRAMID_API_KEY` and `OPENAI_API_KEY` are the settings that are
