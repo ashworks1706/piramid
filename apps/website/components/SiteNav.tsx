@@ -12,7 +12,6 @@ export function SiteNav() {
       </Link>
       <nav className="site-nav-links" aria-label="Main">
         <Link href="/docs">docs</Link>
-        <Link href="/docs/python">python</Link>
         <a href={`${PUBLIC_REPO}/releases`}>releases</a>
         <a href={PUBLIC_REPO}>github</a>
       </nav>
