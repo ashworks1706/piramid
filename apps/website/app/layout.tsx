@@ -51,7 +51,7 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/logo_dark.png",
-        width: 711,
+        width: 732,
         height: 732,
         alt: "Piramid",
       },

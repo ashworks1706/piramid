@@ -42,16 +42,7 @@ Images are published by `.github/workflows/cd.yml` on every push to `main`, as
 
 ## Serving a model
 
-The published images are built without the `inference-candle` feature. They serve collections and
-search, and a configuration with `runtime.inference.enabled: true` is refused at startup. To serve
-generation from a container, build the CUDA image with the feature. In
-`docker/piramid-cuda.Dockerfile`, change the build line to
-`cargo build --release --locked --bin piramid --features gpu-cuda,inference-candle`, then build from
-the repository root:
-
-```bash
-docker build -f deploy/docker/piramid-cuda.Dockerfile -t piramid-cuda-inference .
-```
+Both published images include model execution; the CUDA one runs it on the GPU.
 
 Put the model checkpoint in a directory on the host, for example
 `models/Qwen2.5-0.5B-Instruct` holding `config.json`, `tokenizer.json`, `tokenizer_config.json`
@@ -81,7 +72,7 @@ docker run --gpus all -p 6333:6333 \
   -v "$PWD/piramid.yaml:/config/piramid.yaml:ro" \
   -e CONFIG_FILE=/config/piramid.yaml \
   -e PIRAMID_API_KEY -e OPENAI_API_KEY \
-  piramid-cuda-inference
+  ghcr.io/ashworks1706/piramid-cuda:main
 ```
 
 The server runs as uid 10001, so the mounted files must be readable by that user. An `-e` flag
@@ -102,9 +93,8 @@ curl -X POST http://localhost:6333/api/generate \
 The response carries the answer in `text` and the passages it used in `retrieval`. The
 OpenAI-compatible endpoints are served at `/v1/chat/completions` and `/v1/models` on the same port,
 with the key sent as the client's API key. They do not retrieve; use `/api/generate` with
-`retrieval` when the answer should draw on a collection. The
-[README quickstart](../README.md#quickstart) walks through the same requests in more detail,
-including metadata, streaming and an OpenAI client.
+`retrieval` when the answer should draw on a collection. [the user docs](https://piramiddb.com/docs) covers
+the rest of the API, including metadata and streaming.
 
 ## Compose
 

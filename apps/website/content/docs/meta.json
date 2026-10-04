@@ -1,0 +1,12 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "configuration",
+    "embedding",
+    "http-api",
+    "python",
+    "network",
+    "console"
+  ]
+}

@@ -16,6 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  # candle-kernels asks nvidia-smi for the compute capability unless this is set, and runners have no GPU.
+  CUDA_COMPUTE_CAP: "80"
 
 jobs:
   # Path filters decide which jobs run.
@@ -137,18 +139,6 @@ jobs:
       - run: cargo doc --workspace --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
-
-  # Fails on a missing include or an unversioned path dependency.
-  package:
-    name: Package
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo package --workspace --no-verify --allow-dirty
 
   docker:
     name: Docker

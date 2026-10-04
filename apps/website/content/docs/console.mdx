@@ -1,0 +1,12 @@
+---
+title: Console
+description: The terminal UI over a running server, and support bundles.
+---
+
+`piramid` with no subcommand opens a terminal UI over a running server. `1 collections` shows each
+collection's dimension, memory, latencies, last checkpoint and WAL size; `c` compacts the selected
+one. `2 config` shows the resolved configuration, `3 device` graphs the host, each GPU, the device
+memory budget and generation. `?` lists every key. Settings live under `console:`, and
+`console.base_url` follows `startup.bind` by default.
+
+`piramid support-bundle` writes diagnostics for a bug report, with credentials redacted.

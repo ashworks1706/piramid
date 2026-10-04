@@ -1,0 +1,51 @@
+---
+title: Python client
+description: The piramid package, a typed client for the HTTP API.
+---
+
+```bash
+pip install piramid
+```
+
+The package talks to a running server; it does not include the engine. Python 3.9 or newer.
+
+```python
+from piramid import Piramid
+
+db = Piramid("http://localhost:6333")  # api_key=..., or PIRAMID_API_KEY
+
+db.embed("notes", ["first", "second"], metadata=[{"topic": "a"}, {"topic": "b"}])
+hits = db.search_text("notes", "crash safety", k=5, filter={"topic": {"eq": "a"}})
+
+answer = db.generate(
+    messages=[{"role": "user", "content": "What happens to deleted documents?"}],
+    collection="notes",
+    k=2,
+    max_new_tokens=128,
+)
+print(answer["text"])
+```
+
+## Streaming
+
+`stream` yields one `retrieval` event, a `token` event per token, then `done`:
+
+```python
+for event in db.stream(prompt="Summarise the notes.", collection="notes"):
+    if event["event"] == "token":
+        print(event["data"]["text"], end="", flush=True)
+```
+
+## Methods
+
+| Method | What it does |
+|---|---|
+| `health`, `version`, `model` | server state |
+| `collections`, `create_collection`, `collection`, `delete_collection`, `count`, `compact` | collections |
+| `embed` | embed texts with the server's provider and store them |
+| `insert`, `upsert` | store vectors computed by the caller |
+| `get`, `list`, `delete` | documents by id |
+| `search`, `search_text` | exact search by vectors or by text |
+| `generate`, `stream` | generation, with retrieval when `collection` is given |
+
+A non-2xx response raises `PiramidError`, carrying the server's message and the HTTP `status`.

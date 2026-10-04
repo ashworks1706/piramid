@@ -18,7 +18,9 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
 
-# Builds a tag's binaries, images, SBOMs and GitHub release. release-plz publishes to crates.io.
+# Builds a tag's binaries, images and SBOMs, and publishes the binaries as a release of the
+# public piramid-sdk repository, where install.sh downloads them. PUBLIC_RELEASE_TOKEN is a
+# fine-grained token with contents write access to that repository.
 
 jobs:
   resolve:
@@ -36,8 +38,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
-      attestations: write
-      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -82,7 +82,7 @@ jobs:
       - name: Build
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
-        run: cargo build --release --locked --target ${{ matrix.target }} --bin piramid
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin piramid --features inference-candle
 
       - name: Package (unix)
         if: matrix.os != 'windows-latest'
@@ -102,10 +102,6 @@ jobs:
           path: ${{ matrix.asset }}.${{ matrix.archive }}
           if-no-files-found: error
 
-      - uses: actions/attest-build-provenance@v4
-        with:
-          subject-path: ${{ matrix.asset }}.${{ matrix.archive }}
-
   images:
     name: Image (${{ matrix.name }})
     needs: resolve
@@ -113,8 +109,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
-      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +143,6 @@ jobs:
           labels: |
             org.opencontainers.image.title=Piramid
             org.opencontainers.image.description=Inference engine for retrieval systems.
-            org.opencontainers.image.licenses=Apache-2.0
       - id: build
         uses: docker/build-push-action@v7
         with:
@@ -161,11 +154,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=release-${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=release-${{ matrix.name }}
-      - uses: actions/attest-build-provenance@v4
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}${{ matrix.suffix }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
       - uses: anchore/sbom-action@v0
         with:
           image: ${{ env.REGISTRY }}/${{ github.repository }}${{ matrix.suffix }}@${{ steps.build.outputs.digest }}
@@ -201,10 +189,14 @@ jobs:
           done
           printf 'Piramid %s\n' "$tag" > body.md
 
+      - run: cp config.example.yaml assets/
+
       - uses: softprops/action-gh-release@v3
         with:
+          repository: ashworks1706/piramid-sdk
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: Piramid ${{ needs.resolve.outputs.tag }}
           body_path: body.md
-          generate_release_notes: true
+          make_latest: true
           files: assets/*

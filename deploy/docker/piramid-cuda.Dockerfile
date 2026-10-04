@@ -10,16 +10,19 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# The build has no GPU to ask, so candle compiles its kernels for this compute capability.
+ARG CUDA_COMPUTE_CAP=75
+ENV CUDA_COMPUTE_CAP=${CUDA_COMPUTE_CAP}
+
 WORKDIR /app
 COPY . .
-RUN cargo build --release --locked --bin piramid --features gpu-cuda
+RUN cargo build --release --locked --bin piramid --features gpu-cuda,inference-candle
 
 FROM nvidia/cuda:13.3.1-runtime-ubuntu22.04 AS runtime
 
 LABEL org.opencontainers.image.title="Piramid (CUDA)" \
       org.opencontainers.image.description="Inference engine for retrieval systems, CUDA build." \
-      org.opencontainers.image.source="https://github.com/ashworks1706/piramid" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.source="https://github.com/ashworks1706/piramid"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \

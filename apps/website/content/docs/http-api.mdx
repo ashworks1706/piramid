@@ -1,0 +1,50 @@
+---
+title: HTTP API
+description: Collections, search, generation and operational routes.
+---
+
+The server listens on `127.0.0.1:6333` and stores collections under `./data`.
+
+## Collections
+
+```bash
+# Embed texts with the configured provider and store them; creates the collection
+curl -X POST localhost:6333/api/collections/docs/embed -H 'Content-Type: application/json' \
+  -d '{"texts": ["first", "second"], "metadata": [{"topic": "a"}, {"topic": "b"}]}'
+
+# Store vectors you computed yourself
+curl -X POST localhost:6333/api/collections/notes/vectors -H 'Content-Type: application/json' \
+  -d '{"vectors": [[0.1, 0.2, 0.3, 0.4]], "texts": ["hello"], "metadata": [{"kind": "greeting"}]}'
+
+# Search by text, or by vectors (one result list per query vector)
+curl -X POST localhost:6333/api/collections/docs/search/text -H 'Content-Type: application/json' \
+  -d '{"query": "crash safety", "k": 5, "filter": {"topic": {"eq": "a"}}}'
+curl -X POST localhost:6333/api/collections/notes/search -H 'Content-Type: application/json' \
+  -d '{"vectors": [[0.1, 0.2, 0.3, 0.4]], "k": 5}'
+```
+
+Lists are positional. Search is an exact scan; a filter maps a metadata field to `eq`, `ne`, `gt`,
+`gte`, `lt`, `lte` or `in`.
+
+## Generation
+
+```bash
+curl -X POST localhost:6333/api/generate -H 'Content-Type: application/json' \
+  -d '{"messages": [{"role": "user", "content": "What happens to deleted documents?"}],
+       "retrieval": {"collection": "docs", "k": 2}, "max_new_tokens": 128}'
+```
+
+With `retrieval`, the server embeds the last user message, adds the `k` closest documents to the
+system message and generates. The response carries `text`, `finish_reason`, `usage` (token counts,
+time to first token, total time) and `retrieval` (the passages and embed and search times).
+`prompt` instead of `messages` skips the chat template. `"stream": true` returns server-sent events:
+`retrieval`, one `token` per token, then `done`, or `error`.
+
+`/v1/chat/completions` and `/v1/models` follow the OpenAI format and do not retrieve. The model id
+is the model directory name unless `runtime.inference.model_name` sets it. Unsupported fields are
+refused, not ignored.
+
+## Operations
+
+`GET /api/model`, `/api/health`, `/api/readyz`, `/api/version`, `/api/metrics` (JSON) and
+`/metrics` (Prometheus).

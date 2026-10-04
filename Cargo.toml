@@ -12,10 +12,8 @@ members = [
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-license = "Apache-2.0"
-repository = "https://github.com/ashworks1706/piramid"
 homepage = "https://piramiddb.com"
-documentation = "https://docs.rs/piramid"
+publish = false
 rust-version = "1.87"  # usize::is_multiple_of and next_multiple_of, used by compute::kernels
 
 [workspace.dependencies]

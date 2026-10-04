@@ -14,17 +14,16 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 # Cached unless a manifest changes.
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --features inference-candle
 COPY . .
-RUN cargo build --release --locked --bin piramid
+RUN cargo build --release --locked --bin piramid --features inference-candle
 
 FROM debian:bookworm-slim AS runtime
 
 LABEL org.opencontainers.image.title="Piramid" \
       org.opencontainers.image.description="Inference engine for retrieval systems." \
       org.opencontainers.image.source="https://github.com/ashworks1706/piramid" \
-      org.opencontainers.image.url="https://piramiddb.com" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.url="https://piramiddb.com"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
