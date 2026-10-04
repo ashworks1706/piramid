@@ -28,12 +28,40 @@ allow = [
   "CDLA-Permissive-2.0",
   "CC0-1.0",
   "Zlib",
+  "LicenseRef-Piramid",
 ]
 exceptions = []
 
-# Workspace crates are unpublished and carry no licence.
-[licenses.private]
-ignore = true
+# The workspace crates carry the proprietary LICENSE file, which has no SPDX identifier.
+[[licenses.clarify]]
+crate = "piramid"
+expression = "LicenseRef-Piramid"
+license-files = [{ path = "../../LICENSE", hash = 0x4a6e3276 }]
+
+[[licenses.clarify]]
+crate = "piramid-core"
+expression = "LicenseRef-Piramid"
+license-files = [{ path = "../../../LICENSE", hash = 0x4a6e3276 }]
+
+[[licenses.clarify]]
+crate = "piramid-hardware"
+expression = "LicenseRef-Piramid"
+license-files = [{ path = "../../../LICENSE", hash = 0x4a6e3276 }]
+
+[[licenses.clarify]]
+crate = "piramid-database"
+expression = "LicenseRef-Piramid"
+license-files = [{ path = "../../../LICENSE", hash = 0x4a6e3276 }]
+
+[[licenses.clarify]]
+crate = "piramid-model"
+expression = "LicenseRef-Piramid"
+license-files = [{ path = "../../../LICENSE", hash = 0x4a6e3276 }]
+
+[[licenses.clarify]]
+crate = "piramid-serving"
+expression = "LicenseRef-Piramid"
+license-files = [{ path = "../../../LICENSE", hash = 0x4a6e3276 }]
 
 [bans]
 multiple-versions = "warn"

@@ -1,0 +1,18 @@
+# release-plz owns versioning, changelogs and crates.io publishing in dependency order. Tags and
+# GitHub releases come from release.yml, so install.sh always finds the binaries in the latest one.
+
+[workspace]
+# One version across every crate.
+dependencies_update = false
+git_release_enable = false
+git_tag_enable = false
+publish_features = []
+
+# Conventional-commit sections for the generated changelog.
+[changelog]
+sort_commits = "oldest"
+
+[[package]]
+name = "piramid"
+# The umbrella crate carries the README users see on crates.io.
+readme_update = false

@@ -8,7 +8,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PATH="/root/.cargo/bin:${PATH}" \
+    RUSTUP_TOOLCHAIN=${RUST_VERSION}
 
 # The build has no GPU to ask, so candle compiles its kernels for this compute capability.
 ARG CUDA_COMPUTE_CAP=75

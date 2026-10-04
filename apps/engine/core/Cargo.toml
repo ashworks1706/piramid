@@ -4,7 +4,8 @@ description = "Shared foundation for Piramid: errors, configuration, metadata, v
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+license-file.workspace = true
+repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 
