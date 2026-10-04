@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { CLI_FRAMES } from "../lib/cli-frames";
 
 /** Time each frame is shown, the pace the CLI plays the same frames at. */
@@ -27,6 +27,11 @@ const SOLID = "█";
 
 /** A cell of dark shade. The mark beside the wordmark is drawn in these, and only it is. */
 const SHADE = "▓";
+
+/** The block lattice a shade cell is drawn as: two columns and three rows of blocks per cell. */
+const STEP_X = W / 2;
+const STEP_Y = H / 3;
+const GAP = 1;
 
 /**
  * The double box-drawing glyphs, as the strokes they are made of.
@@ -165,6 +170,7 @@ export function CliLogo() {
   }, [index, last]);
 
   const frame = FRAMES[Math.min(index, last)];
+  const shade = useId();
 
   return (
     <svg
@@ -174,7 +180,21 @@ export function CliLogo() {
       aria-label="Piramid"
       shapeRendering="crispEdges"
     >
-      <g className="cli-logo-shade">{draw(frame.shade)}</g>
+      <defs>
+        <pattern
+          id={shade}
+          width={STEP_X}
+          height={STEP_Y}
+          patternUnits="userSpaceOnUse"
+        >
+          <rect
+            className="cli-logo-shade"
+            width={STEP_X - GAP}
+            height={STEP_Y - GAP}
+          />
+        </pattern>
+      </defs>
+      <g fill={`url(#${shade})`}>{draw(frame.shade)}</g>
       <g className="cli-logo-lit">{draw(frame.lit)}</g>
     </svg>
   );

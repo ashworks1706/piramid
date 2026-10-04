@@ -109,7 +109,6 @@ body {
 
 .cli-logo-shade {
   fill: var(--accent);
-  opacity: 0.45;
 }
 
 .landing-tagline {
