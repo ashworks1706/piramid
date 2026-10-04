@@ -80,7 +80,7 @@ jobs:
       - name: Build
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
-        run: cargo build --release --locked --target ${{ matrix.target }} --bin piramid
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin piramid --features inference-candle
 
       - name: Package (unix)
         if: matrix.os != 'windows-latest'

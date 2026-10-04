@@ -73,7 +73,8 @@ body {
 }
 
 .landing-inner > *:nth-child(3),
-.landing-inner > *:nth-child(4) {
+.landing-inner > *:nth-child(4),
+.landing-inner > *:nth-child(5) {
   animation-delay: 460ms;
 }
 
@@ -670,4 +671,137 @@ article a:not(.blog-btn):not(.blog-button):hover {
   color: var(--fg-dim);
   font-size: 0.78rem;
   text-align: center;
+}
+
+/* The docs: a contents list beside the page, stacked above it on a narrow screen. */
+.docs {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 46rem);
+  gap: 3rem;
+  justify-content: center;
+  padding: 3rem 1.25rem 5rem;
+}
+
+.docs-nav {
+  position: sticky;
+  top: 3rem;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.docs-home {
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.2em;
+}
+
+.docs-link {
+  color: var(--fg-dim);
+}
+
+.docs-link:hover,
+.docs-body a:hover {
+  color: var(--accent);
+}
+
+.docs-body {
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.docs-body h1 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+.docs-body h2 {
+  font-size: 1.05rem;
+  color: var(--accent);
+  margin: 2.5rem 0 0.75rem;
+  scroll-margin-top: 2rem;
+}
+
+.docs-body h3 {
+  font-size: 0.95rem;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.docs-body p,
+.docs-body ul,
+.docs-body ol,
+.docs-body table,
+.docs-body pre {
+  margin: 0 0 1rem;
+}
+
+.docs-body ol,
+.docs-body ul {
+  padding-left: 1.25rem;
+}
+
+.docs-body ol {
+  list-style: decimal;
+}
+
+.docs-body ul {
+  list-style: disc;
+}
+
+.docs-body code {
+  color: var(--accent);
+  font-size: 0.85em;
+}
+
+.docs-body pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--navy-line);
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.docs-body pre code {
+  color: var(--fg);
+}
+
+.docs-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.docs-body th,
+.docs-body td {
+  border: 1px solid var(--navy-line);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.docs-body th {
+  background: var(--navy);
+}
+
+@media (max-width: 52rem) {
+  .docs {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    padding-top: 2rem;
+  }
+
+  .docs-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+  }
+
+  .docs-home {
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
 }

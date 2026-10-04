@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CliLogo } from "../components/CliLogo";
 
 export default function Home() {
@@ -12,6 +13,11 @@ export default function Home() {
           process, so retrieval can run during generation instead of once
           before it.
         </p>
+        <div className="landing-actions">
+          <Link href="/docs" className="landing-link">
+            docs
+          </Link>
+        </div>
         <p className="landing-status">
           In active research. Results and write-ups will be published here.
         </p>

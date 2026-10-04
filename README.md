@@ -53,7 +53,7 @@ curl -X POST localhost:6333/api/generate -H 'Content-Type: application/json' \
 
 | | |
 |---|---|
-| [docs/USAGE.md](docs/USAGE.md) | configuration, embedding providers, the HTTP API, the console |
+| [User docs](apps/website/content/docs.md) | configuration, providers, HTTP API, console; served at piramiddb.com/docs |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | crates, seams, request flows, KV cache, durability |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | direction, milestones, what is out of scope |
 | [docs/SETUP.md](docs/SETUP.md) | contributor setup, tests, benchmarks, PR rules |

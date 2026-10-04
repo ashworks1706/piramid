@@ -1,27 +1,32 @@
-# Usage
+# Docs
 
-Running `piramid serve`, configuring it, and the HTTP API. [`config.example.yaml`](../config.example.yaml)
-lists every setting at its default.
+Running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, shipped with each
+release, lists every setting at its default.
 
-## Builds
+## Install
 
-Model execution is behind two Cargo features, both off by default. `inference-candle` runs the
-model; `gpu-cuda` runs it, and search, on a CUDA device. A build without them serves collections and
-search but refuses `runtime.inference.enabled: true`.
+Docker, CPU or CUDA (needs the NVIDIA container toolkit):
 
 ```bash
-cargo install --path apps/cli --locked --features inference-candle,gpu-cuda   # GPU, needs a CUDA toolkit
-cargo install --path apps/cli --locked --features inference-candle            # CPU
+docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:main
+docker run --gpus all -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid-cuda:main
 ```
 
+Prebuilt binaries for Linux, macOS and Windows run models on the CPU. The images bind
+`0.0.0.0`, so they need `PIRAMID_API_KEY`; see [Serving on a network](#serving-on-a-network).
+
 Piramid runs Qwen2 and Qwen3 checkpoints (Qwen2.5 included). The model directory holds
-`config.json`, `tokenizer.json`, `tokenizer_config.json` and the `.safetensors` weights.
+`config.json`, `tokenizer.json`, `tokenizer_config.json` and the `.safetensors` weights:
+
+```bash
+hf download Qwen/Qwen2.5-0.5B-Instruct --local-dir ./models/Qwen2.5-0.5B-Instruct
+```
 
 ## Configuration
 
 Settings resolve in this order, later winning:
 
-1. defaults in `apps/engine/core/src/config`
+1. defaults
 2. a YAML or JSON file, from `piramid serve --config` or `CONFIG_FILE`
 3. `PIRAMID__` environment variables, spelled from the path: `runtime.wal.max_log_size` is
    `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`
@@ -56,7 +61,7 @@ runtime:
 | `provider` | What it talks to |
 |---|---|
 | `openai` | OpenAI with `OPENAI_API_KEY`, or any server speaking the format (TEI, vLLM, llama.cpp, llama-swap) when `base_url` is the full embeddings endpoint |
-| `ollama` | an Ollama server; `just up ollama` starts one beside the server |
+| `ollama` | an Ollama server |
 | `piramid` | a Qwen3 embedding checkpoint run in-process; `model` is the directory, `options` takes `device` (`cpu` or `cuda:N`), `dtype` and `max_tokens` |
 
 ```yaml
@@ -122,8 +127,8 @@ route except `/api/health` and `/api/readyz` requires `Authorization: Bearer <ke
 `startup.http.auth.allow_unauthenticated: true` opens a port on purpose. Each client IP gets a token
 bucket (`startup.http.rate_limit`, 100 per second, burst 200). On SIGINT or SIGTERM the server
 drains for up to `startup.http.drain_timeout_secs`, checkpoints every open collection and exits.
-[SECURITY.md](../SECURITY.md) has the threat model; [deploy/README.md](../deploy/README.md) covers
-containers.
+Run it on a trusted network or behind a gateway that terminates TLS: there is no transport
+encryption, CORS is open, and one key grants everything.
 
 ## Console
 

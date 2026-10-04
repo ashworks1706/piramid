@@ -1,7 +1,7 @@
 # Setup
 
 Working on Piramid: Linux, macOS, or Windows through WSL2. For running it, see
-[USAGE.md](USAGE.md).
+[the user docs](../apps/website/content/docs.md).
 
 ## Prerequisites
 

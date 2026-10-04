@@ -14,9 +14,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 # Cached unless a manifest changes.
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json --features inference-candle
 COPY . .
-RUN cargo build --release --locked --bin piramid
+RUN cargo build --release --locked --bin piramid --features inference-candle
 
 FROM debian:bookworm-slim AS runtime
 
