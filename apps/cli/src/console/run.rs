@@ -12,15 +12,11 @@ use tokio::task::JoinHandle;
 use crate::console::app::App;
 use crate::console::client::Client;
 use crate::console::collections::Pending;
-use crate::console::runner::Runner;
 use crate::console::settings::Settings;
 use crate::console::splash::{self, Splash};
 use crate::console::types::{ConfigState, Event, Profile};
 use crate::console::{health, ui};
 use piramid_core::config::Config;
-
-/// How often docker compose ps is re-read.
-const SERVICES_INTERVAL: Duration = Duration::from_secs(3);
 
 /// Runs the console over the repo at root.
 pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<()> {
@@ -46,10 +42,6 @@ pub fn run(config: &Config, profile: Profile, root: PathBuf) -> std::io::Result<
             profile == Profile::Developer,
             tx.clone(),
         ));
-        // Compose is polled only inside a checkout.
-        if profile == Profile::Developer {
-            tokio::spawn(services(root, tx.clone()));
-        }
         tokio::spawn(ticker(tx.clone()));
         let mut input = tokio::spawn(keys(tx.clone()));
 
@@ -171,16 +163,6 @@ fn resume_terminal(terminal: &mut ratatui::DefaultTerminal) -> std::io::Result<(
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(std::io::stdout(), crossterm::terminal::EnterAlternateScreen)?;
     terminal.clear()
-}
-
-async fn services(root: PathBuf, tx: UnboundedSender<Event>) {
-    loop {
-        let states = Runner::service_states(&root).await;
-        if tx.send(Event::Services(states)).is_err() {
-            return;
-        }
-        tokio::time::sleep(SERVICES_INTERVAL).await;
-    }
 }
 
 /// Redraws on a timer, advancing the elapsed-time counters while nothing else happens.

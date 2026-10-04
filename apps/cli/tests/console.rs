@@ -5,27 +5,20 @@
     reason = "assertions in tests"
 )]
 
-use std::collections::HashMap;
-
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use piramid::console::app::parse_command;
 use piramid::console::logs::{LogBuffer, LogWriter};
-use piramid::console::runner::{parse_ps, sanitize_line};
+use piramid::console::runner::sanitize_line;
 use piramid::console::settings::{repo_root, Settings};
-use piramid::console::types::{
-    Command, Group, LogLine, Profile, ServiceState, Status, Stream, View,
-};
+use piramid::console::types::{Command, Group, LogLine, Profile, Status, Stream, View};
 use piramid::console::units::catalog;
 
 #[test]
 fn commands_parse_into_actions() {
     assert_eq!(parse_command("q"), Command::Quit);
     assert_eq!(parse_command("start serve"), Command::Start("serve".into()));
-    assert_eq!(
-        parse_command("stop  ollama"),
-        Command::Stop("ollama".into())
-    );
+    assert_eq!(parse_command("stop  web"), Command::Stop("web".into()));
     assert_eq!(parse_command("restart web"), Command::Restart("web".into()));
     assert_eq!(parse_command("help"), Command::Help);
     assert_eq!(parse_command("clear"), Command::Clear);
@@ -77,10 +70,8 @@ fn the_catalog_is_unique_and_every_unit_is_runnable() {
     let units = catalog("http://localhost:6333");
     let ids: std::collections::HashSet<&str> = units.iter().map(|u| u.id.as_str()).collect();
     assert_eq!(ids.len(), units.len(), "two units share an id");
-    // Every unit is either a compose service or a just recipe.
-    assert!(units
-        .iter()
-        .all(|u| u.service().is_some() || !u.args.is_empty()));
+    // Every unit is a just recipe.
+    assert!(units.iter().all(|u| !u.args.is_empty()));
     assert!(units.iter().any(|u| u.id == "serve"));
     // A named task is identified by its name, not its command line.
     let bundle = units
@@ -97,10 +88,7 @@ fn the_catalog_is_unique_and_every_unit_is_runnable() {
     assert!(units.iter().any(|u| u.id == "check"));
     assert!(units
         .iter()
-        .any(|u| u.id == "prod-up" && u.group == Group::Deploy));
-    assert!(units
-        .iter()
-        .any(|u| u.id == "ollama" && u.group == Group::Containers));
+        .any(|u| u.id == "serve" && u.group == Group::Apps));
 }
 
 #[test]
@@ -208,50 +196,14 @@ fn stopping_something_that_is_not_running_says_so_instead_of_signalling() {
 }
 
 #[test]
-fn compose_states_map_onto_statuses() {
-    let state = |state: &str, health: &str, exit_code| ServiceState {
-        state: state.into(),
-        health: health.into(),
-        exit_code,
-    };
-    assert_eq!(state("running", "healthy", 0).status(), Status::Running);
-    assert_eq!(state("running", "", 0).status(), Status::Running);
-    assert_eq!(state("running", "starting", 0).status(), Status::Starting);
-    assert_eq!(
-        state("running", "unhealthy", 0).status(),
-        Status::Failed("unhealthy".into())
-    );
-    assert_eq!(state("exited", "", 0).status(), Status::Stopped);
-    assert_eq!(state("exited", "", 137).status(), Status::Exited(137));
-}
-
-#[test]
-fn ps_output_parses_as_an_array_or_as_lines() {
-    let array = r#"[{"Service":"piramid","State":"running","Health":"healthy","ExitCode":0}]"#;
-    assert_eq!(parse_ps(array).unwrap()["piramid"].health, "healthy");
-    let lines = "{\"Service\":\"piramid\",\"State\":\"exited\",\"Health\":\"\",\"ExitCode\":1}\n{\"Service\":\"ollama\",\"State\":\"running\",\"Health\":\"\",\"ExitCode\":0}\n";
-    let parsed: HashMap<_, _> = parse_ps(lines).unwrap();
-    assert_eq!(parsed["piramid"].exit_code, 1);
-    assert_eq!(parsed["ollama"].status(), Status::Running);
-    assert!(parse_ps("").is_ok_and(|m| m.is_empty()));
-    // A failed query returns an error.
-    assert!(parse_ps("not json").is_err());
-    // A row without an exit code is refused.
-    assert!(parse_ps(r#"{"Service":"piramid","State":"exited","Health":""}"#).is_err());
-}
-
-#[test]
 fn a_log_line_cannot_move_the_cursor_out_of_its_pane() {
     assert_eq!(
         sanitize_line("\x1b[32m   Compiling\x1b[0m piramid"),
         "   Compiling piramid"
     );
     assert_eq!(sanitize_line("plain"), "plain");
-    // Carriage returns in compose progress lines are stripped.
-    assert_eq!(
-        sanitize_line("Container deploy-piramid-1  Recreated\r"),
-        "Container deploy-piramid-1  Recreated"
-    );
+    // Carriage returns in progress lines are stripped.
+    assert_eq!(sanitize_line("Compiling piramid\r"), "Compiling piramid");
     assert_eq!(sanitize_line("a\rb\x08c\x07"), "abc");
     assert_eq!(sanitize_line("keeps\ttabs"), "keeps\ttabs");
 }
@@ -328,7 +280,7 @@ fn the_repo_root_is_found_from_a_nested_directory() {
 
 #[test]
 fn a_production_console_hides_the_views_that_need_a_checkout() {
-    // The units view drives just recipes and compose, neither of which exists outside a checkout.
+    // The units view drives just recipes, which do not exist outside a checkout.
     assert_eq!(
         Profile::Production.views(),
         [View::Collections, View::Config, View::Device]
@@ -1497,7 +1449,6 @@ fn the_serve_unit_opens_the_address_the_configuration_binds() {
             .and_then(|state| state.unit.url.clone())
     };
     assert_eq!(url("serve").as_deref(), Some("http://localhost:7000"));
-    assert_eq!(url("piramid").as_deref(), Some("http://localhost:6333"));
 }
 
 #[test]
@@ -1592,7 +1543,6 @@ fn the_catalog_offers_the_model_recipes_and_says_what_serve_builds() {
             .unwrap_or_else(|| panic!("the catalog has {id}"))
     };
     assert!(hint("serve").contains("no model backend"));
-    assert!(hint("piramid").contains("no model backend"));
     assert!(hint("bench-rag").contains("PIRAMID_BENCH_MODEL"));
     assert!(hint("test-model").contains("PIRAMID_TEST_MODEL"));
     assert!(hint("test-model-gpu").contains("CUDA"));

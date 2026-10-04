@@ -1,7 +1,5 @@
 //! What the console passes between its modules: units, statuses, log lines, modes, events.
 
-use std::collections::HashMap;
-
 use chrono::{DateTime, Local};
 
 /// Sidebar section a unit belongs to.
@@ -9,12 +7,8 @@ use chrono::{DateTime, Local};
 pub enum Group {
     /// Long-running host processes: the server, the website.
     Apps,
-    /// Docker compose services.
-    Containers,
     /// Recipes that run to completion.
     Tasks,
-    /// Compose stacks and images, the recipes a deploy host uses.
-    Deploy,
 }
 
 impl Group {
@@ -22,30 +16,12 @@ impl Group {
     pub fn title(self) -> &'static str {
         match self {
             Self::Apps => "apps",
-            Self::Containers => "containers",
             Self::Tasks => "tasks",
-            Self::Deploy => "deploy",
         }
     }
 
     /// Display order.
-    pub const ALL: [Self; 4] = [Self::Apps, Self::Containers, Self::Tasks, Self::Deploy];
-}
-
-/// How a unit is run and stopped.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Kind {
-    /// A docker compose service. The profile field gates the optional ones.
-    Service {
-        /// Compose service name.
-        service: String,
-        /// Compose profile, if the service needs one.
-        profile: Option<String>,
-    },
-    /// A long-running host process started through a just recipe.
-    Process,
-    /// A just recipe that runs to completion.
-    Task,
+    pub const ALL: [Self; 2] = [Self::Apps, Self::Tasks];
 }
 
 /// Something the console can start, stop and watch.
@@ -55,24 +31,12 @@ pub struct Unit {
     pub id: String,
     /// Sidebar section.
     pub group: Group,
-    /// How to run it.
-    pub kind: Kind,
-    /// Arguments passed to just, for processes and tasks.
+    /// Arguments passed to just.
     pub args: Vec<String>,
     /// One-line description.
     pub hint: String,
     /// Where it listens, if it does.
     pub url: Option<String>,
-}
-
-impl Unit {
-    /// Compose service name, for services.
-    pub fn service(&self) -> Option<&str> {
-        match &self.kind {
-            Kind::Service { service, .. } => Some(service),
-            _ => None,
-        }
-    }
 }
 
 /// Where a unit is in its lifecycle.
@@ -158,7 +122,7 @@ impl LogLine {
 pub enum Profile {
     /// Started inside a checkout. Every view is available, including the repo units.
     Developer,
-    /// Started from an installed binary. Views that drive just recipes and compose are absent.
+    /// Started from an installed binary. Views that drive just recipes are absent.
     Production,
 }
 
@@ -175,7 +139,7 @@ impl Profile {
 /// One screen of the console.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
-    /// Repo units: the server, the website, containers, recipes.
+    /// Repo units: the server, the website, recipes.
     Units,
     /// Collections on a running server, with dimension, memory, latency and durability.
     Collections,
@@ -215,31 +179,6 @@ pub enum Focus {
     Units,
     /// The log pane.
     Logs,
-}
-
-/// One row of docker compose ps.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServiceState {
-    /// One of running, exited, created, restarting, paused, dead.
-    pub state: String,
-    /// One of healthy, unhealthy, starting, or empty without a healthcheck.
-    pub health: String,
-    /// Last exit code.
-    pub exit_code: i32,
-}
-
-impl ServiceState {
-    /// Maps a compose row onto a console status.
-    pub fn status(&self) -> Status {
-        match (self.state.as_str(), self.health.as_str()) {
-            ("running", "unhealthy") => Status::Failed("unhealthy".into()),
-            ("running", "starting") | ("created" | "restarting", _) => Status::Starting,
-            ("running", _) => Status::Running,
-            ("exited", _) if self.exit_code == 0 => Status::Stopped,
-            ("exited" | "dead", _) => Status::Exited(self.exit_code),
-            (other, _) => Status::Failed(other.to_owned()),
-        }
-    }
 }
 
 /// Result of one probe.
@@ -310,8 +249,6 @@ pub enum Event {
         /// Exit code, if the process was not killed by a signal.
         code: Option<i32>,
     },
-    /// Fresh compose service states by service name, or why docker compose ps failed.
-    Services(Result<HashMap<String, ServiceState>, String>),
     /// Fresh probes.
     Health(Box<Health>),
     /// The probes cannot run, with the reason.

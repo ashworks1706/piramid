@@ -12,12 +12,6 @@ const METHODS: Method[] = [
     command: "curl -fsSL https://piramiddb.com/install.sh | sh",
   },
   {
-    id: "docker",
-    label: "docker",
-    command:
-      "docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:latest",
-  },
-  {
     id: "cargo",
     label: "cargo",
     command: "cargo install piramid --locked --features inference-candle",

@@ -5,7 +5,7 @@
 **Decision.** The repository stays public and its licence is all rights reserved. The crates are
 published to crates.io under that licence by release-plz, so `cargo install piramid` works. Releases
 also ship as binaries on this repository's GitHub releases, which `piramiddb.com/install.sh`
-downloads, and as images on GHCR.
+downloads. There are no container images.
 The Python client in `apps/sdk/python` is published to PyPI as `piramid` under MIT. Retrieval
 strategies that come out of the research live in a private crate implementing `RetrievalHook` and
 are linked into release builds; this repository carries the engine and the seam.

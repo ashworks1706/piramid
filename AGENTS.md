@@ -15,9 +15,9 @@ detail that the code already carries.
 `just` is the entrypoint for working on the repo. Run `just` on its own to list recipes. Install
 from https://just.systems.
 
-It is contributor tooling, not the product. Nothing shipped depends on it: the Dockerfiles call
-cargo directly, and the published `piramid` binary knows nothing about it. When writing docs aimed
-at someone *using* Piramid, show `piramid ...` or `docker ...`, never `just ...`.
+It is contributor tooling, not the product. Nothing shipped depends on it: the release workflow
+calls cargo directly, and the published `piramid` binary knows nothing about it. When writing docs
+aimed at someone *using* Piramid, show `piramid ...`, `cargo ...` or `pip ...`, never `just ...`.
 
 ```
 just doctor | env | hooks | bootstrap   first run
@@ -37,7 +37,6 @@ just audit              cargo-deny: advisories, bans, licences, sources
 just web                dev server for the site on :3000
 just web-preview        build and serve what actually deploys
 just web-shots          headless screenshots into target/screenshots
-just up | down | logs   docker compose
 ```
 
 A change isn't done until `just check` passes. CI and the pre-commit hook run the same recipes, so
@@ -77,7 +76,6 @@ apps/cli                    the piramid binary and the umbrella piramid facade c
 apps/website                piramiddb.com; /docs is Fumadocs over content/docs/*.mdx
 apps/sdk                    npm and python clients
 docs/                       ARCHITECTURE.md, ROADMAP.md, SETUP.md, decisions/
-deploy/                     compose and one Dockerfile per image
 ```
 
 One folder per crate, no grouping folders. The layering is the dependency rule below, which

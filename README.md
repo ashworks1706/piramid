@@ -59,7 +59,6 @@ curl -X POST localhost:6333/api/generate -H 'Content-Type: application/json' \
 | [docs/SETUP.md](docs/SETUP.md) | contributor setup, tests, benchmarks, PR rules |
 | [docs/decisions/](docs/decisions/) | why the shape is what it is |
 | [apps/sdk/python](apps/sdk/python) | the Python client, `pip install piramid` |
-| [deploy/README.md](deploy/README.md) | images and compose |
 | [AGENTS.md](AGENTS.md) | layout, dependency rule, conventions |
 | [config.example.yaml](config.example.yaml) | every setting at its default |
 

@@ -169,29 +169,6 @@ web-shots:
       echo "  $out/$name.png"
     done
 
-# ---------- containers ----------
-
-up *ARGS:
-    docker compose -f deploy/compose.yml up -d {{ARGS}}
-
-down:
-    docker compose -f deploy/compose.yml down
-
-logs *ARGS:
-    docker compose -f deploy/compose.yml logs -f {{ARGS}}
-
-# Production images from GHCR (PIRAMID_IMAGE_TAG=main|sha-<short>)
-prod-up *ARGS:
-    docker compose -f deploy/compose.yml -f deploy/compose.prod.yml pull
-    docker compose -f deploy/compose.yml -f deploy/compose.prod.yml up -d {{ARGS}}
-
-prod-down:
-    docker compose -f deploy/compose.yml -f deploy/compose.prod.yml down
-
-# Build images locally
-images:
-    docker build -f deploy/docker/piramid.Dockerfile -t piramid .
-
 # ---------- cleanup ----------
 
 clean:

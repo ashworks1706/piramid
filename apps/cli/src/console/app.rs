@@ -1,6 +1,5 @@
 //! Console state and the key map. Drawing is in ui; processes are in runner.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::time::Instant;
@@ -15,8 +14,7 @@ use crate::console::logs::{LogBuffer, LogWriter};
 use crate::console::runner::Runner;
 use crate::console::settings::Settings;
 use crate::console::types::{
-    Command, ConfigState, Event, Focus, Health, Kind, LogLine, Mode, Profile, ServiceState, Status,
-    Stream, Unit, View,
+    Command, ConfigState, Event, Focus, Health, LogLine, Mode, Profile, Status, Stream, Unit, View,
 };
 use crate::console::units;
 
@@ -176,8 +174,6 @@ impl App {
             Event::Tick | Event::Resize => {}
             Event::Log { unit, line } => self.log(&unit, line),
             Event::Exited { unit, code } => self.exited(&unit, code),
-            Event::Services(Ok(states)) => self.services(&states),
-            Event::Services(Err(why)) => self.notice = Some(why),
             Event::Health(health) => self.health = *health,
             Event::ProbesStopped(why) => self.probes_stopped = Some(why),
             Event::Snapshot(result) => {
@@ -223,53 +219,23 @@ impl App {
             let Some(state) = self.units.iter_mut().find(|state| state.unit.id == unit) else {
                 return;
             };
-            let note = match state.unit.kind {
-                // Container state arrives from the compose ps poll, not this exit code.
-                Kind::Service { .. } => {
-                    if let Some(code) = code.filter(|code| *code != 0) {
-                        state.status = Status::Failed(format!("compose exited {code}"));
-                    }
-                    None
-                }
-                Kind::Process | Kind::Task => {
-                    let stopped = std::mem::take(&mut state.stopping);
-                    let (status, note) = match (code, stopped) {
-                        (_, true) => (Status::Stopped, "stopped".to_owned()),
-                        (Some(code), false) => {
-                            (Status::Exited(code), format!("exited with {code}"))
-                        }
-                        (None, false) => (
-                            Status::Failed("killed by a signal".to_owned()),
-                            "killed by a signal".to_owned(),
-                        ),
-                    };
-                    state.status = status;
-                    Some(note)
-                }
+            let stopped = std::mem::take(&mut state.stopping);
+            let (status, note) = match (code, stopped) {
+                (_, true) => (Status::Stopped, "stopped".to_owned()),
+                (Some(code), false) => (Status::Exited(code), format!("exited with {code}")),
+                (None, false) => (
+                    Status::Failed("killed by a signal".to_owned()),
+                    "killed by a signal".to_owned(),
+                ),
             };
+            state.status = status;
             let restart_id =
                 std::mem::take(&mut state.restart_pending).then(|| state.unit.id.clone());
             (note, restart_id)
         };
-        if let Some(note) = note {
-            self.log(unit, LogLine::now(Stream::Meta, note));
-        }
+        self.log(unit, LogLine::now(Stream::Meta, note));
         if let Some(id) = restart_id {
             self.start_by_id(&id);
-        }
-    }
-
-    fn services(&mut self, states: &HashMap<String, ServiceState>) {
-        for state in &mut self.units {
-            let Some(service) = state.unit.service() else {
-                continue;
-            };
-            match states.get(service) {
-                Some(observed) => state.status = observed.status(),
-                // A service asked to start but not yet visible to compose stays Starting.
-                None if state.status == Status::Starting => {}
-                None => state.status = Status::Stopped,
-            }
         }
     }
 
@@ -506,19 +472,9 @@ impl App {
         };
     }
 
-    /// Follows the container logs of a running service when selected.
+    /// Clears the search position when the selection changes.
     fn on_select(&mut self) {
         self.search_hit = None;
-        let state = self.current();
-        if state.status != Status::Running {
-            return;
-        }
-        let Some(service) = state.unit.service().map(str::to_owned) else {
-            return;
-        };
-        if let Err(e) = self.runner.follow(&service) {
-            self.notice = Some(e.to_string());
-        }
     }
 
     fn open_url(&mut self) {
@@ -606,10 +562,7 @@ impl App {
         match self.runner.start(&unit) {
             Ok(()) => {
                 let state = &mut self.units[index];
-                state.status = match unit.kind {
-                    Kind::Service { .. } => Status::Starting,
-                    Kind::Process | Kind::Task => Status::Running,
-                };
+                state.status = Status::Running;
                 state.started_at = Some(Instant::now());
                 state.follow = true;
                 self.notice = Some(format!("started {id}"));

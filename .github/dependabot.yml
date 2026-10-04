@@ -33,19 +33,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: docker
-    directory: /deploy/docker
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:30"
-      timezone: UTC
-    open-pull-requests-limit: 5
-    groups:
-      docker-images:
-        patterns:
-          - "*"
-
   - package-ecosystem: npm
     directory: /apps/website
     schedule:
