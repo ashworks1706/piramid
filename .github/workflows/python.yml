@@ -1,0 +1,53 @@
+name: Python
+
+# Tests the Python client, and publishes it to PyPI on a python-v* tag.
+
+on:
+  push:
+    branches: [main]
+    tags: ["python-v*"]
+  pull_request:
+    paths: ["apps/sdk/python/**", ".github/workflows/python.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.13"]
+    defaults:
+      run:
+        working-directory: apps/sdk/python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e '.[test]'
+      - run: pytest
+
+  publish:
+    # Trusted publishing: the PyPI project trusts this workflow, so no token is stored.
+    if: startsWith(github.ref, 'refs/tags/python-v')
+    needs: test
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Check the tag matches the package version
+        working-directory: apps/sdk/python
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          test "python-v$version" = "$GITHUB_REF_NAME"
+      - run: pip install build && python -m build apps/sdk/python
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: apps/sdk/python/dist

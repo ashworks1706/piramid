@@ -4,6 +4,7 @@ target/
 **/.next/
 .git/
 apps/website/
+apps/sdk/
 docs/
 deploy/
 .github/

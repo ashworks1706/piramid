@@ -38,6 +38,7 @@ apps/                     everything we author
   cli/                    the piramid binary, and a library with the console, the support
                           bundle and the piramid umbrella re-exports
   website/                piramiddb.com and its docs, built from content/ alone
+  sdk/                    npm and python clients
 
 deploy/  docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
 ```

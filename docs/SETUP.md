@@ -12,6 +12,7 @@ Working on Piramid: Linux, macOS, or Windows through WSL2. For running it, see
 | `jq` | `scripts/check-deps.sh` |
 | Docker | `just up` |
 | Node 20+ | the website |
+| Python 3.9+ | the Python client in `apps/sdk/python` |
 | CUDA toolkit | `--features gpu-cuda` only |
 | `hf` (Hugging Face CLI) | downloading checkpoints |
 

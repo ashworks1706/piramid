@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 /** Where the binaries and the client source are published. */
-export const PUBLIC_REPO = "https://github.com/ashworks1706/piramid-sdk";
+export const PUBLIC_REPO = "https://github.com/ashworks1706/piramid";
 
 /** The bar across the top of the landing page. */
 export function SiteNav() {
