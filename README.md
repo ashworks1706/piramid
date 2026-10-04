@@ -15,7 +15,8 @@ search over a collection, puts the best passages in the prompt and generates, al
 
 ```bash
 curl -fsSL https://piramiddb.com/install.sh | sh     # prebuilt, CPU
-# or build with CUDA: cargo install --path apps/cli --locked --features inference-candle,gpu-cuda
+# or from source, with CUDA:
+cargo install --git https://github.com/ashworks1706/piramid piramid --locked --features inference-candle,gpu-cuda
 
 hf download Qwen/Qwen2.5-0.5B-Instruct --local-dir ./models/Qwen2.5-0.5B-Instruct
 ```

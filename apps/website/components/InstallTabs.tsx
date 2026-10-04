@@ -17,6 +17,12 @@ const METHODS: Method[] = [
     command:
       "docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:latest",
   },
+  {
+    id: "cargo",
+    label: "cargo",
+    command:
+      "cargo install --git https://github.com/ashworks1706/piramid piramid --locked --features inference-candle",
+  },
   { id: "python", label: "python client", command: "pip install piramid" },
 ];
 
