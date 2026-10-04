@@ -12,8 +12,9 @@ members = [
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
+license-file = "LICENSE"
+repository = "https://github.com/ashworks1706/piramid"
 homepage = "https://piramiddb.com"
-publish = false
 rust-version = "1.87"  # usize::is_multiple_of and next_multiple_of, used by compute::kernels
 
 [workspace.dependencies]

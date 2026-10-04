@@ -1,6 +1,6 @@
 ---
 title: Install
-description: Install piramid from a binary, source or Docker, fetch a model and start the server.
+description: Install piramid from a binary, cargo or Docker, fetch a model and start the server.
 ---
 
 This covers running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, attached
@@ -18,17 +18,17 @@ The script installs `piramid` to `~/.local/bin`. `PIRAMID_INSTALL_DIR` changes t
 `PIRAMID_VERSION` picks a release tag. The binaries run models on the CPU. Windows builds and every
 archive are on the [releases page](https://github.com/ashworks1706/piramid/releases).
 
-## From source
+## Cargo
 
 Rust 1.87 or newer. `inference-candle` runs models; add `gpu-cuda` for CUDA, which needs the CUDA
 toolkit at build time:
 
 ```bash
-cargo install --git https://github.com/ashworks1706/piramid piramid --locked --features inference-candle
-cargo install --git https://github.com/ashworks1706/piramid piramid --locked --features inference-candle,gpu-cuda
+cargo install piramid --locked --features inference-candle
+cargo install piramid --locked --features inference-candle,gpu-cuda
 ```
 
-Piramid is not on crates.io after 0.2.0, so `cargo install piramid` gets that older release.
+Without `inference-candle` the server stores and searches collections but cannot generate.
 
 ## Docker
 

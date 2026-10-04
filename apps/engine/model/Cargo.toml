@@ -4,7 +4,8 @@ description = "Model execution and the embedding providers that feed it."
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
-publish.workspace = true
+license-file.workspace = true
+repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 
@@ -34,7 +35,8 @@ gpu-cuda = ["piramid-hardware/gpu-cuda", "candle-core?/cuda", "candle-nn?/cuda"]
 test-support = []
 
 [dev-dependencies]
-piramid-model = { workspace = true, features = ["test-support"] }
+# Path only, so the published manifest drops it.
+piramid-model = { path = ".", features = ["test-support"] }
 
 [lints]
 workspace = true

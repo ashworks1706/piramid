@@ -140,6 +140,18 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+  # Fails on a missing include or an unversioned path dependency.
+  package:
+    name: Package
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo package --workspace --no-verify --allow-dirty
+
   docker:
     name: Docker
     needs: changes
