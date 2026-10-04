@@ -1,5 +1,20 @@
 # Roadmap
 
+## Direction
+
+Retrieval before the prompt is one service call and needs no shared process. Retrieval inside a
+generation runs many times, alongside the model's computation, against state that stays on the
+device, and that does. Two things follow if it works. Grounding: a model whose attention reaches
+the documents at every step conditions on the evidence rather than a paraphrase of it, and each
+answer can be traced to what was retrieved. Context length: documents reached through the hook
+never become prompt tokens, so what the model can draw on is bounded by device memory, not the
+context window.
+
+`model::fusion::RetrievalHook` fixes where retrieval enters the model, not how it is combined.
+Chunked cross-attention, residual-stream gating and learned routing are all implementations of it.
+Retrieval-before-prefill is the control every arm is measured against, and each result is
+published whichever way it goes.
+
 ## v0.3.0: a retrieval path worth measuring
 
 - [ ] migrate to new nvidia's native cuda rust library, write kernels directly in rust

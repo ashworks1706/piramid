@@ -102,9 +102,8 @@ curl -X POST http://localhost:6333/api/generate \
 The response carries the answer in `text` and the passages it used in `retrieval`. The
 OpenAI-compatible endpoints are served at `/v1/chat/completions` and `/v1/models` on the same port,
 with the key sent as the client's API key. They do not retrieve; use `/api/generate` with
-`retrieval` when the answer should draw on a collection. The
-[README quickstart](../README.md#quickstart) walks through the same requests in more detail,
-including metadata, streaming and an OpenAI client.
+`retrieval` when the answer should draw on a collection. [docs/USAGE.md](../docs/USAGE.md) covers
+the rest of the API, including metadata and streaming.
 
 ## Compose
 

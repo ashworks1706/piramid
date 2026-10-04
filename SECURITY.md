@@ -2,16 +2,8 @@
 
 ## Reporting
 
-Report vulnerabilities through
-[GitHub Security Advisories](https://github.com/ashworks1706/piramid/security/advisories/new).
-Please don't open a public issue for something exploitable.
-
-Include what an attacker gains, how to reproduce it, and the affected version. Expect an
-acknowledgement within a week.
-
-## Supported versions
-
-Pre-1.0, so only the latest release gets fixes.
+Report vulnerabilities privately to the maintainer, never in an issue. Include what an attacker
+gains, how to reproduce it, and the affected version. Only the latest version gets fixes.
 
 ## Threat model
 

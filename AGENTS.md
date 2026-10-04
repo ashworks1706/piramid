@@ -76,7 +76,7 @@ apps/engine/serving         http (axum only, handlers and routes, /api and OpenA
 apps/cli                    the piramid binary and the umbrella piramid facade crate
 apps/website                piramiddb.com, a static page that reads nothing from the repository
 apps/sdk                    npm and python clients
-docs/                       ARCHITECTURE.md, ROADMAP.md, decisions/
+docs/                       ARCHITECTURE.md, ROADMAP.md, USAGE.md, SETUP.md, decisions/
 deploy/                     compose and one Dockerfile per image
 ```
 
