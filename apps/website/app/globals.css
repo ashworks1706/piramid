@@ -74,9 +74,7 @@ body {
   animation-delay: 280ms;
 }
 
-.landing-inner > *:nth-child(3),
-.landing-inner > *:nth-child(4),
-.landing-inner > *:nth-child(5) {
+.landing-inner > *:nth-child(n + 3) {
   animation-delay: 460ms;
 }
 
@@ -673,6 +671,152 @@ article a:not(.blog-btn):not(.blog-button):hover {
   color: var(--fg-dim);
   font-size: 0.78rem;
   text-align: center;
+}
+
+/* The bar across the top of the landing page. */
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--navy);
+  background: rgba(5, 7, 12, 0.85);
+  backdrop-filter: blur(8px);
+  font-size: 0.8rem;
+}
+
+.site-nav-brand {
+  color: var(--fg);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.site-nav-links {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.site-nav-links a {
+  color: var(--fg-dim);
+  transition: color 0.15s ease;
+}
+
+.site-nav-links a:hover,
+.site-nav-brand:hover {
+  color: var(--accent);
+}
+
+/* The install command with its tabs. */
+.install {
+  width: 100%;
+  max-width: 44rem;
+  font-size: 0.8rem;
+}
+
+.install-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.install-tab {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: var(--fg-dim);
+  background: none;
+  cursor: pointer;
+}
+
+.install-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-color: var(--navy-line);
+  background: var(--navy);
+}
+
+.install-line {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0.95rem;
+  border: 1px solid var(--navy-line);
+  background: var(--navy);
+}
+
+.install-line code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.install-line code::before {
+  content: "$ ";
+  color: var(--accent);
+}
+
+.install-copy {
+  flex: none;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--navy-line);
+  color: var(--fg-dim);
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.install-copy:hover {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+/* Three short points on what Piramid does. */
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  width: 100%;
+  max-width: 60rem;
+}
+
+.feature {
+  padding: 1.1rem;
+  border: 1px solid var(--navy);
+  background: var(--bg-raised);
+}
+
+.feature h2 {
+  margin: 0 0 0.5rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.feature p {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The Python example and the links under it. */
+.example {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 44rem;
+}
+
+.example pre {
+  margin: 0;
 }
 
 /* The docs theme in the site palette. */

@@ -18,7 +18,9 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
 
-# Builds a tag's binaries, images, SBOMs and GitHub release.
+# Builds a tag's binaries, images and SBOMs, and publishes the binaries as a release of the
+# public piramid-sdk repository, where install.sh downloads them. PUBLIC_RELEASE_TOKEN is a
+# fine-grained token with contents write access to that repository.
 
 jobs:
   resolve:
@@ -187,10 +189,14 @@ jobs:
           done
           printf 'Piramid %s\n' "$tag" > body.md
 
+      - run: cp config.example.yaml assets/
+
       - uses: softprops/action-gh-release@v3
         with:
+          repository: ashworks1706/piramid-sdk
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: Piramid ${{ needs.resolve.outputs.tag }}
           body_path: body.md
-          generate_release_notes: true
+          make_latest: true
           files: assets/*

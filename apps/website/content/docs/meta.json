@@ -5,6 +5,7 @@
     "configuration",
     "embedding",
     "http-api",
+    "python",
     "network",
     "console"
   ]

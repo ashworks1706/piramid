@@ -16,3 +16,8 @@ material on every build.
 along with 0.1.0 and 0.1.1. Build provenance attestations and dependency review are gone, because
 GitHub offers them on private repositories only on paid plans; `cargo deny` still covers
 advisories, licences and sources.
+
+**The public surface.** The public repository `ashworks1706/piramid-sdk` holds the MIT-licensed
+clients and takes issues, and its releases carry the engine binaries, uploaded by `release.yml`.
+`piramiddb.com/install.sh` downloads them, and the GHCR images stay public. The Python client is
+published to PyPI as `piramid` from that repository.

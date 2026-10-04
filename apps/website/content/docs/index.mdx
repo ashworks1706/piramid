@@ -1,20 +1,35 @@
 ---
 title: Install
-description: Run piramid serve from a Docker image or a prebuilt binary, and fetch a model.
+description: Install piramid, fetch a model and start the server.
 ---
 
-This covers running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, shipped with each
-release, lists every setting at its default.
+This covers running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, attached
+to each release, lists every setting at its default.
 
-Docker, CPU or CUDA (needs the NVIDIA container toolkit):
+## Binary
+
+Linux and macOS, x86_64 or arm64:
 
 ```bash
-docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:main
-docker run --gpus all -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid-cuda:main
+curl -fsSL https://piramiddb.com/install.sh | sh
 ```
 
-Prebuilt binaries for Linux, macOS and Windows run models on the CPU. The images bind
-`0.0.0.0`, so they need `PIRAMID_API_KEY`; see [Serving on a network](/docs/network).
+The script installs `piramid` to `~/.local/bin`. `PIRAMID_INSTALL_DIR` changes the directory and
+`PIRAMID_VERSION` picks a release tag. The binaries run models on the CPU. Windows builds and every
+archive are on the [releases page](https://github.com/ashworks1706/piramid-sdk/releases).
+
+## Docker
+
+CPU, or CUDA with the NVIDIA container toolkit:
+
+```bash
+docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:latest
+docker run --gpus all -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid-cuda:latest
+```
+
+The images bind `0.0.0.0`, so they need `PIRAMID_API_KEY`; see [Serving on a network](/docs/network).
+
+## Model
 
 Piramid runs Qwen2 and Qwen3 checkpoints (Qwen2.5 included). The model directory holds
 `config.json`, `tokenizer.json`, `tokenizer_config.json` and the `.safetensors` weights:
@@ -22,3 +37,27 @@ Piramid runs Qwen2 and Qwen3 checkpoints (Qwen2.5 included). The model directory
 ```bash
 hf download Qwen/Qwen2.5-0.5B-Instruct --local-dir ./models/Qwen2.5-0.5B-Instruct
 ```
+
+## Run
+
+```yaml title="piramid.yaml"
+startup:
+  embedding:
+    provider: openai
+    model: text-embedding-3-small
+
+runtime:
+  inference:
+    enabled: true
+    model_path: ./models/Qwen2.5-0.5B-Instruct
+    kv_cache:
+      max_bytes: 2147483648
+```
+
+```bash
+export OPENAI_API_KEY=...
+piramid serve --config piramid.yaml
+```
+
+The server listens on `127.0.0.1:6333`. [Configuration](/docs/configuration) covers GPU settings
+and every other block; [HTTP API](/docs/http-api) and [Python client](/docs/python) show how to use it.
