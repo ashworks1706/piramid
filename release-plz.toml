@@ -11,8 +11,3 @@ publish_features = []
 # Conventional-commit sections for the generated changelog.
 [changelog]
 sort_commits = "oldest"
-
-[[package]]
-name = "piramid"
-# The umbrella crate carries the README users see on crates.io.
-readme_update = false
