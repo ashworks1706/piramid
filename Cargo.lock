@@ -2767,7 +2767,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "piramid"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "clap",
@@ -2791,7 +2791,7 @@ dependencies = [
 
 [[package]]
 name = "piramid-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bincode",
  "num_cpus",
@@ -2812,7 +2812,7 @@ dependencies = [
 
 [[package]]
 name = "piramid-database"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bincode",
  "criterion",
@@ -2831,7 +2831,7 @@ dependencies = [
 
 [[package]]
 name = "piramid-hardware"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "cudarc 0.19.9",
@@ -2848,7 +2848,7 @@ dependencies = [
 
 [[package]]
 name = "piramid-model"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "candle-core",
@@ -2871,7 +2871,7 @@ dependencies = [
 
 [[package]]
 name = "piramid-serving"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "axum",
