@@ -107,10 +107,6 @@ body {
   fill: var(--accent);
 }
 
-.cli-logo-shade {
-  fill: var(--accent);
-}
-
 .landing-tagline {
   margin: 0;
   text-align: center;

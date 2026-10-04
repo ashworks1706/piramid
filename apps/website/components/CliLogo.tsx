@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { CLI_FRAMES } from "../lib/cli-frames";
 
 /** Time each frame is shown, the pace the CLI plays the same frames at. */
@@ -27,11 +27,6 @@ const SOLID = "█";
 
 /** A cell of dark shade. The mark beside the wordmark is drawn in these, and only it is. */
 const SHADE = "▓";
-
-/** The block lattice a shade cell is drawn as: two columns and three rows of blocks per cell. */
-const STEP_X = W / 2;
-const STEP_Y = H / 3;
-const GAP = 1;
 
 /**
  * The double box-drawing glyphs, as the strokes they are made of.
@@ -75,10 +70,12 @@ const BOX: Record<string, Rect[]> = {
 };
 
 /**
- * Every frame split into rows, cut to the rows and columns any frame uses, as the CLI trims them.
+ * Every frame without the mark, split into rows and cut to the rows and columns any frame uses.
  */
 const GRIDS = (() => {
-  const grids = CLI_FRAMES.map((frame) => frame.split("\n"));
+  const grids = CLI_FRAMES.map((frame) =>
+    frame.split("\n").map((row) => row.replaceAll(SHADE, " ")),
+  );
   const height = Math.max(...grids.map((rows) => rows.length));
   const used = (row: number) =>
     grids.some((rows) => (rows[row] ?? "").trim() !== "");
@@ -102,21 +99,20 @@ const ROWS = GRIDS[0]?.length ?? 0;
 
 const COLUMNS = Math.max(...GRIDS.flat().map((row) => row.length));
 
-/** The rectangles one frame draws, lit and shaded. */
+/** The rectangles one frame draws. */
 function rectangles(rows: string[][]) {
   const lit: Rect[] = [];
-  const shade: Rect[] = [];
   rows.forEach((row, y) => {
     let x = 0;
     while (x < row.length) {
       const glyph = row[x];
-      if (glyph === SOLID || glyph === SHADE) {
+      if (glyph === SOLID) {
         const start = x;
         while (x < row.length && row[x] === glyph) {
           x += 1;
         }
         // One rectangle per unbroken run, rather than one per cell.
-        (glyph === SOLID ? lit : shade).push([start * W, y * H, (x - start) * W, H]);
+        lit.push([start * W, y * H, (x - start) * W, H]);
         continue;
       }
       for (const [rx, ry, rw, rh] of BOX[glyph] ?? []) {
@@ -125,7 +121,7 @@ function rectangles(rows: string[][]) {
       x += 1;
     }
   });
-  return { lit, shade };
+  return lit;
 }
 
 const FRAMES = GRIDS.map(rectangles);
@@ -143,7 +139,7 @@ function draw(rects: Rect[]) {
 }
 
 /**
- * The CLI logo animation, played once at the CLI's pace and held on its last frame.
+ * The CLI wordmark animation, played once at the CLI's pace and held on its last frame.
  *
  * The CLI has one font and a fixed cell, so blocks, box-drawing glyphs and spaces line up there.
  * A browser has neither: the blocks and the box come from one font and the spaces from another,
@@ -170,7 +166,6 @@ export function CliLogo() {
   }, [index, last]);
 
   const frame = FRAMES[Math.min(index, last)];
-  const shade = useId();
 
   return (
     <svg
@@ -180,22 +175,7 @@ export function CliLogo() {
       aria-label="Piramid"
       shapeRendering="crispEdges"
     >
-      <defs>
-        <pattern
-          id={shade}
-          width={STEP_X}
-          height={STEP_Y}
-          patternUnits="userSpaceOnUse"
-        >
-          <rect
-            className="cli-logo-shade"
-            width={STEP_X - GAP}
-            height={STEP_Y - GAP}
-          />
-        </pattern>
-      </defs>
-      <g fill={`url(#${shade})`}>{draw(frame.shade)}</g>
-      <g className="cli-logo-lit">{draw(frame.lit)}</g>
+      <g className="cli-logo-lit">{draw(frame)}</g>
     </svg>
   );
 }
