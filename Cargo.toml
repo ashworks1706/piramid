@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 homepage = "https://piramiddb.com"
 publish = false
@@ -18,11 +18,11 @@ rust-version = "1.87"  # usize::is_multiple_of and next_multiple_of, used by com
 
 [workspace.dependencies]
 # in-repo crates
-piramid-core = { path = "apps/engine/core", version = "0.2.0" }
-piramid-hardware = { path = "apps/engine/hardware", version = "0.2.0" }
-piramid-database = { path = "apps/engine/database", version = "0.2.0" }
-piramid-model = { path = "apps/engine/model", version = "0.2.0" }
-piramid-serving = { path = "apps/engine/serving", version = "0.2.0" }
+piramid-core = { path = "apps/engine/core", version = "0.3.0" }
+piramid-hardware = { path = "apps/engine/hardware", version = "0.3.0" }
+piramid-database = { path = "apps/engine/database", version = "0.3.0" }
+piramid-model = { path = "apps/engine/model", version = "0.3.0" }
+piramid-serving = { path = "apps/engine/serving", version = "0.3.0" }
 
 # serialization
 serde = { version = "1.0", features = ["derive"] }
