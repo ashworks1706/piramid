@@ -1,0 +1,33 @@
+---
+title: Configuration
+description: Where settings come from and what each block controls.
+---
+
+Settings resolve in this order, later winning:
+
+1. defaults
+2. a YAML or JSON file, from `piramid serve --config` or `CONFIG_FILE`
+3. `PIRAMID__` environment variables, spelled from the path: `runtime.wal.max_log_size` is
+   `PIRAMID__RUNTIME__WAL__MAX_LOG_SIZE`
+4. `--port` and `--data-dir`
+
+`PIRAMID_API_KEY` and `OPENAI_API_KEY` are environment-only. An unknown, misspelled or
+unimplemented key fails startup with a message naming it.
+
+The file has three blocks. `startup:` applies once at boot. `runtime:` is re-read by
+`POST /api/config/reload`, except that `inference` is fixed at startup, and `quantization`,
+`memory`, `wal.enabled` and `wal.sync_on_write` cannot change while a collection is open.
+`search.metric` is copied into a collection when it is created. `console:` configures the console.
+
+On a GPU, set `startup.hardware.profile: gpu` and `runtime.execution: gpu`; the model loads onto
+`cuda:N` at `startup.hardware.gpu.device_ordinal`. On the CPU, leave both out and set a KV cache
+budget:
+
+```yaml
+runtime:
+  inference:
+    enabled: true
+    model_path: ./models/Qwen2.5-0.5B-Instruct
+    kv_cache:
+      max_bytes: 2147483648
+```

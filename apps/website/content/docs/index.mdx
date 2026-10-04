@@ -1,0 +1,24 @@
+---
+title: Install
+description: Run piramid serve from a Docker image or a prebuilt binary, and fetch a model.
+---
+
+This covers running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, shipped with each
+release, lists every setting at its default.
+
+Docker, CPU or CUDA (needs the NVIDIA container toolkit):
+
+```bash
+docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:main
+docker run --gpus all -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid-cuda:main
+```
+
+Prebuilt binaries for Linux, macOS and Windows run models on the CPU. The images bind
+`0.0.0.0`, so they need `PIRAMID_API_KEY`; see [Serving on a network](/docs/network).
+
+Piramid runs Qwen2 and Qwen3 checkpoints (Qwen2.5 included). The model directory holds
+`config.json`, `tokenizer.json`, `tokenizer_config.json` and the `.safetensors` weights:
+
+```bash
+hf download Qwen/Qwen2.5-0.5B-Instruct --local-dir ./models/Qwen2.5-0.5B-Instruct
+```

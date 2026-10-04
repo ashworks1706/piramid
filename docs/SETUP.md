@@ -1,7 +1,7 @@
 # Setup
 
 Working on Piramid: Linux, macOS, or Windows through WSL2. For running it, see
-[the user docs](../apps/website/content/docs.md).
+[the user docs](../apps/website/content/docs/).
 
 ## Prerequisites
 
@@ -86,7 +86,9 @@ pin. Optional variables are listed above the recipe in the justfile.
 
 ## Website
 
-Next.js on React, TypeScript and Tailwind; not part of the workspace build.
+Next.js on React, TypeScript and Tailwind; not part of the workspace build. The user docs are
+MDX pages in `apps/website/content/docs/`, rendered by Fumadocs at `/docs`; `meta.json` sets their
+order.
 
 ```bash
 just web-setup      # npm ci, once

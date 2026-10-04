@@ -1,0 +1,12 @@
+---
+title: Serving on a network
+description: Authentication, rate limits, shutdown and what is not protected.
+---
+
+The default bind serves without a key. Any other bind needs `PIRAMID_API_KEY`, after which every
+route except `/api/health` and `/api/readyz` requires `Authorization: Bearer <key>`;
+`startup.http.auth.allow_unauthenticated: true` opens a port on purpose. Each client IP gets a token
+bucket (`startup.http.rate_limit`, 100 per second, burst 200). On SIGINT or SIGTERM the server
+drains for up to `startup.http.drain_timeout_secs`, checkpoints every open collection and exits.
+Run it on a trusted network or behind a gateway that terminates TLS: there is no transport
+encryption, CORS is open, and one key grants everything.

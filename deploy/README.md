@@ -93,7 +93,7 @@ curl -X POST http://localhost:6333/api/generate \
 The response carries the answer in `text` and the passages it used in `retrieval`. The
 OpenAI-compatible endpoints are served at `/v1/chat/completions` and `/v1/models` on the same port,
 with the key sent as the client's API key. They do not retrieve; use `/api/generate` with
-`retrieval` when the answer should draw on a collection. [the user docs](../apps/website/content/docs.md) covers
+`retrieval` when the answer should draw on a collection. [the user docs](https://piramiddb.com/docs) covers
 the rest of the API, including metadata and streaming.
 
 ## Compose
