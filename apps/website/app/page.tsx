@@ -1,13 +1,21 @@
 import { CliLogo } from "../components/CliLogo";
-import { Console } from "../components/Console";
-import { entries, files } from "../lib/console";
 
 export default function Home() {
   return (
-    <main className="page">
-      <Console entries={entries()} files={files()}>
+    <main className="landing">
+      <div className="landing-inner">
         <CliLogo />
-      </Console>
+        <p className="landing-tagline">INFERENCE RUNTIME FOR RETRIEVAL SYSTEMS</p>
+        <p className="landing-copy">
+          Piramid is an inference engine for retrieval systems on one GPU. It
+          holds the documents, the model weights and the KV cache in a single
+          process, so retrieval can run during generation instead of once
+          before it.
+        </p>
+        <p className="landing-status">
+          In active research. Results and write-ups will be published here.
+        </p>
+      </div>
     </main>
   );
 }

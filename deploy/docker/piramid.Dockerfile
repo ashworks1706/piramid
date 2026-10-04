@@ -23,8 +23,7 @@ FROM debian:bookworm-slim AS runtime
 LABEL org.opencontainers.image.title="Piramid" \
       org.opencontainers.image.description="Inference engine for retrieval systems." \
       org.opencontainers.image.source="https://github.com/ashworks1706/piramid" \
-      org.opencontainers.image.url="https://piramiddb.com" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.url="https://piramiddb.com"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \

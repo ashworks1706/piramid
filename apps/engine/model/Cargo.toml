@@ -4,8 +4,7 @@ description = "Model execution and the embedding providers that feed it."
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
-repository.workspace = true
+publish.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 

@@ -77,12 +77,3 @@ jobs:
             exit 1
           fi
           echo "unsafe audit ok — expected sites only"
-
-  dependency-review:
-    name: Dependency review
-    needs: changes
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && needs.changes.outputs.deps == 'true'
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/dependency-review-action@v5

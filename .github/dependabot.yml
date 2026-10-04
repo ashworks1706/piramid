@@ -59,6 +59,12 @@ updates:
       semver-major-days: 14
       semver-minor-days: 7
       semver-patch-days: 2
+    # eslint-config-next and typescript-eslint do not support these majors yet.
+    ignore:
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       website-dependencies:
         patterns:

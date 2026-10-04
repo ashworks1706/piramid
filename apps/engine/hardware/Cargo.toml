@@ -4,8 +4,7 @@ description = "The machine: distance kernels and strategy dispatch, device runti
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
-repository.workspace = true
+publish.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
 

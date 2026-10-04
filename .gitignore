@@ -73,3 +73,6 @@ env/
 
 # Machine-local config overrides (e.g. a shared local embedding server)
 config.local.yaml
+
+# local environment
+.env

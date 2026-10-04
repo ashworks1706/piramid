@@ -29,6 +29,10 @@ allow = [
 ]
 exceptions = []
 
+# Workspace crates are unpublished and carry no licence.
+[licenses.private]
+ignore = true
+
 [bans]
 multiple-versions = "warn"
 wildcards = "allow"

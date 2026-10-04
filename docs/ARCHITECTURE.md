@@ -37,7 +37,7 @@ apps/                     everything we author
     serving/              http, services, state, machine, disk
   cli/                    the piramid binary, and a library with the console, the support
                           bundle and the piramid umbrella re-exports
-  website/                piramiddb.com, with blog content and images inside it
+  website/                piramiddb.com, a static page that reads nothing from the repository
   sdk/                    npm and python clients
 
 deploy/  docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
