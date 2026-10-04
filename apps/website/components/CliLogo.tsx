@@ -1,7 +1,10 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { CLI_FRAMES } from "../lib/cli-frames";
 
-/** The frame the CLI settles on. */
-const LOGO = CLI_FRAMES[CLI_FRAMES.length - 1];
+/** Time each frame is shown, the pace the CLI plays the same frames at. */
+const FRAME_MS = 45;
 
 /**
  * A character cell, in the proportion a terminal draws one.
@@ -67,47 +70,60 @@ const BOX: Record<string, Rect[]> = {
 };
 
 /**
- * The wordmark on its own.
- *
- * The frame carries the mark beside the letters, drawn in shade and nothing else, so dropping
- * every shade cell leaves the letters. What is then blank on every side is trimmed, which is what
- * lets the wordmark sit flush against the edge it is aligned to.
+ * Every frame split into rows, cut to the rows and columns any frame uses, as the CLI trims them.
  */
-const LINES = (() => {
-  const rows = LOGO.split("\n").map((line) =>
-    [...line].map((glyph) => (glyph === SHADE ? " " : glyph)).join(""),
+const GRIDS = (() => {
+  const grids = CLI_FRAMES.map((frame) => frame.split("\n"));
+  const height = Math.max(...grids.map((rows) => rows.length));
+  const used = (row: number) =>
+    grids.some((rows) => (rows[row] ?? "").trim() !== "");
+  let top = 0;
+  while (top < height && !used(top)) top += 1;
+  let bottom = height;
+  while (bottom > top && !used(bottom - 1)) bottom -= 1;
+  const cells = grids.map((rows) =>
+    Array.from({ length: bottom - top }, (_, y) => [...(rows[top + y] ?? "")]),
   );
-  while (rows.length && !rows[0].trim()) rows.shift();
-  while (rows.length && !rows[rows.length - 1].trim()) rows.pop();
-  const first = Math.min(
-    ...rows.filter((row) => row.trim()).map((row) => row.search(/\S/)),
+  const left = Math.min(
+    ...cells.flat().map((row) => {
+      const at = row.findIndex((glyph) => glyph !== " ");
+      return at === -1 ? Infinity : at;
+    }),
   );
-  return rows.map((row) => row.slice(first).trimEnd());
+  return cells.map((rows) => rows.map((row) => row.slice(left)));
 })();
 
-const COLUMNS = Math.max(...LINES.map((line) => line.length));
+const ROWS = GRIDS[0]?.length ?? 0;
 
-const lit: Rect[] = [];
+const COLUMNS = Math.max(...GRIDS.flat().map((row) => row.length));
 
-LINES.forEach((line, y) => {
-  let x = 0;
-  while (x < line.length) {
-    const glyph = line[x];
-    if (glyph === SOLID) {
-      const start = x;
-      while (x < line.length && line[x] === glyph) {
-        x += 1;
+/** The rectangles one frame draws, lit and shaded. */
+function rectangles(rows: string[][]) {
+  const lit: Rect[] = [];
+  const shade: Rect[] = [];
+  rows.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+      const glyph = row[x];
+      if (glyph === SOLID || glyph === SHADE) {
+        const start = x;
+        while (x < row.length && row[x] === glyph) {
+          x += 1;
+        }
+        // One rectangle per unbroken run, rather than one per cell.
+        (glyph === SOLID ? lit : shade).push([start * W, y * H, (x - start) * W, H]);
+        continue;
       }
-      // One rectangle per unbroken run, rather than one per cell.
-      lit.push([start * W, y * H, (x - start) * W, H]);
-      continue;
+      for (const [rx, ry, rw, rh] of BOX[glyph] ?? []) {
+        lit.push([x * W + rx, y * H + ry, rw, rh]);
+      }
+      x += 1;
     }
-    for (const [rx, ry, rw, rh] of BOX[glyph] ?? []) {
-      lit.push([x * W + rx, y * H + ry, rw, rh]);
-    }
-    x += 1;
-  }
-});
+  });
+  return { lit, shade };
+}
+
+const FRAMES = GRIDS.map(rectangles);
 
 function draw(rects: Rect[]) {
   return rects.map(([x, y, width, height]) => (
@@ -122,24 +138,44 @@ function draw(rects: Rect[]) {
 }
 
 /**
- * The wordmark, as the shape the CLI draws rather than as the text it draws it with.
+ * The CLI logo animation, played once at the CLI's pace and held on its last frame.
  *
  * The CLI has one font and a fixed cell, so blocks, box-drawing glyphs and spaces line up there.
  * A browser has neither: the blocks and the box come from one font and the spaces from another,
  * and the moment their advances disagree, or one of them arrives late, every row shifts by a
- * different amount and the letters come apart. Drawing the frame as rectangles removes the
+ * different amount and the letters come apart. Drawing each frame as rectangles removes the
  * question, and an SVG with a viewBox takes whatever size the stylesheet gives it.
  */
 export function CliLogo() {
+  const [index, setIndex] = useState(0);
+  const last = FRAMES.length - 1;
+
+  useEffect(() => {
+    if (index >= last) {
+      return;
+    }
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = window.setTimeout(
+      () => setIndex((at) => (reduce ? last : at + 1)),
+      reduce ? 0 : FRAME_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [index, last]);
+
+  const frame = FRAMES[Math.min(index, last)];
+
   return (
     <svg
       className="cli-logo"
-      viewBox={`0 0 ${COLUMNS * W} ${LINES.length * H}`}
+      viewBox={`0 0 ${COLUMNS * W} ${ROWS * H}`}
       role="img"
       aria-label="Piramid"
       shapeRendering="crispEdges"
     >
-      <g className="cli-logo-lit">{draw(lit)}</g>
+      <g className="cli-logo-shade">{draw(frame.shade)}</g>
+      <g className="cli-logo-lit">{draw(frame.lit)}</g>
     </svg>
   );
 }

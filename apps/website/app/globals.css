@@ -107,8 +107,14 @@ body {
   fill: var(--accent);
 }
 
+.cli-logo-shade {
+  fill: var(--accent);
+  opacity: 0.45;
+}
+
 .landing-tagline {
   margin: 0;
+  text-align: center;
   color: var(--fg-dim);
   font-size: 0.82rem;
   letter-spacing: 0.3em;
