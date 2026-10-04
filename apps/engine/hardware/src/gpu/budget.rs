@@ -194,17 +194,21 @@ impl DeviceBudget {
                 accounts.capacity[pool.index()],
             )
         };
-        counter
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                current.checked_add(bytes).filter(|next| *next <= limit)
-            })
-            .map_err(|current| {
-                GpuError::Allocation(format!(
+        let mut current = counter.load(Ordering::Relaxed);
+        loop {
+            let Some(next) = current.checked_add(bytes).filter(|next| *next <= limit) else {
+                return Err(GpuError::Allocation(format!(
                     "{bytes} bytes requested from the {} pool with {} available",
                     pool.as_str(),
                     limit.saturating_sub(current)
-                ))
-            })?;
+                )));
+            };
+            match counter.compare_exchange_weak(current, next, Ordering::Relaxed, Ordering::Relaxed)
+            {
+                Ok(_) => break,
+                Err(actual) => current = actual,
+            }
+        }
         if accounts.shared {
             accounts.used[pool.index()].fetch_add(bytes, Ordering::Relaxed);
         } else {
