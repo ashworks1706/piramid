@@ -16,6 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  # candle-kernels asks nvidia-smi for the compute capability unless this is set, and runners have no GPU.
+  CUDA_COMPUTE_CAP: "80"
 
 jobs:
   # Path filters decide which jobs run.

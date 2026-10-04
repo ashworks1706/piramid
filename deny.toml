@@ -7,6 +7,8 @@ yanked = "warn"
 ignore = [
   # bincode is unmaintained with no patched release; the advisory is informational.
   "RUSTSEC-2025-0141",
+  # paste is unmaintained with no patched release; candle pulls it in through gemm.
+  "RUSTSEC-2024-0436",
 ]
 
 [licenses]
