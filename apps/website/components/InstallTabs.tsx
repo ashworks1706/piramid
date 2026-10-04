@@ -14,7 +14,7 @@ const METHODS: Method[] = [
   {
     id: "cargo",
     label: "cargo",
-    command: "cargo install piramid --locked --features inference-candle",
+    command: "cargo install piramid",
   },
   { id: "python", label: "python client", command: "pip install piramid" },
 ];
