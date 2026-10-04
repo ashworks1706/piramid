@@ -17,7 +17,6 @@ command -v jq   >/dev/null && ok "jq"    || bad "jq — needed by scripts/check-
 
 echo
 echo "optional"
-command -v docker >/dev/null && ok "docker" || warn "docker — needed for 'just up'"
 command -v node   >/dev/null && ok "node $(node --version)" || warn "node — needed for the website"
 command -v cargo-deny >/dev/null && ok "cargo-deny" || warn "cargo-deny — 'just audit' (cargo install --locked cargo-deny)"
 command -v nvcc >/dev/null && ok "nvcc $(nvcc --version | grep -oP 'release \K[0-9.]+')" \

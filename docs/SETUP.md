@@ -10,7 +10,6 @@ Working on Piramid: Linux, macOS, or Windows through WSL2. For running it, see
 | Rust 1.87+ with rustfmt and clippy | everything |
 | [`just`](https://just.systems) | every task |
 | `jq` | `scripts/check-deps.sh` |
-| Docker | `just up` |
 | Node 20+ | the website |
 | Python 3.9+ | the Python client in `apps/sdk/python` |
 | CUDA toolkit | `--features gpu-cuda` only |
@@ -25,7 +24,7 @@ just doctor       # ok, warn or miss per tool
 ## Daily loop
 
 ```bash
-just cli            # the console with a units view: server, site, compose, every recipe
+just cli            # the console with a units view: server, site, every recipe
 just serve          # the server on 127.0.0.1:6333
 just check          # the gate: fmt, clippy, tests, layering, website
 just check-rust     # Rust only

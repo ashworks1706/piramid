@@ -1,6 +1,6 @@
 ---
 title: Install
-description: Install piramid from a binary, cargo or Docker, fetch a model and start the server.
+description: Install piramid from a binary or cargo, fetch a model and start the server.
 ---
 
 This covers running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, attached
@@ -29,17 +29,6 @@ cargo install piramid --locked --features inference-candle,gpu-cuda
 ```
 
 Without `inference-candle` the server stores and searches collections but cannot generate.
-
-## Docker
-
-CPU, or CUDA with the NVIDIA container toolkit:
-
-```bash
-docker run -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid:latest
-docker run --gpus all -p 6333:6333 -v piramid-data:/data -e PIRAMID_API_KEY=<key> ghcr.io/ashworks1706/piramid-cuda:latest
-```
-
-The images bind `0.0.0.0`, so they need `PIRAMID_API_KEY`; see [Serving on a network](/docs/network).
 
 ## Model
 

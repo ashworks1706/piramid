@@ -40,7 +40,7 @@ apps/                     everything we author
   website/                piramiddb.com and its docs, built from content/ alone
   sdk/                    npm and python clients
 
-deploy/  docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
+docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
 ```
 
 There is one binary, but the engine is five crates and `apps/cli` links them into one executable.
@@ -710,7 +710,6 @@ generation arrive as a `Failed` event and are rendered inside the stream.
 | A retrieval hook that searches a collection | a new crate depending on `model` and `database`, added to `scripts/check-deps.sh` and this document |
 | Shared vocabulary: errors, config, metadata | `core` |
 | A site or a client library | `apps/` |
-| A container image or compose file | `deploy/` |
 
 If a change touches three or more crates, start at the service boundary and make the data flow
 explicit before writing anything.

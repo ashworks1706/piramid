@@ -53,7 +53,7 @@ The bundle still contains your configuration and collection names. Read it befor
 ## Handling secrets
 
 `PIRAMID_API_KEY`, `OPENAI_API_KEY` and other provider credentials come from the environment and
-belong in `.env`, which is gitignored. They're never logged. Don't put them in a compose file or an image.
+belong in `.env`, which is gitignored. They're never logged. Don't put them in `config.yaml` or commit them.
 
 ## Dependencies
 

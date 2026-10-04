@@ -17,7 +17,7 @@ fail() {
 case "$(uname -s)" in
   Linux) os=linux ;;
   Darwin) os=macos ;;
-  *) fail "unsupported OS $(uname -s); on Windows download piramid-windows-amd64.zip from https://github.com/$REPO/releases or use Docker" ;;
+  *) fail "unsupported OS $(uname -s); on Windows download piramid-windows-amd64.zip from https://github.com/$REPO/releases" ;;
 esac
 
 case "$(uname -m)" in
