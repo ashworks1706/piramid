@@ -5,7 +5,7 @@
 
 set -eu
 
-REPO="ashworks1706/piramid-sdk"
+REPO="ashworks1706/piramid"
 VERSION="${PIRAMID_VERSION:-latest}"
 INSTALL_DIR="${PIRAMID_INSTALL_DIR:-$HOME/.local/bin}"
 

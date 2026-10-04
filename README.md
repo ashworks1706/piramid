@@ -14,8 +14,8 @@ search over a collection, puts the best passages in the prompt and generates, al
 ## Quickstart
 
 ```bash
-# Build with model execution on CUDA (drop gpu-cuda for a CPU build)
-cargo install --path apps/cli --locked --features inference-candle,gpu-cuda
+curl -fsSL https://piramiddb.com/install.sh | sh     # prebuilt, CPU
+# or build with CUDA: cargo install --path apps/cli --locked --features inference-candle,gpu-cuda
 
 hf download Qwen/Qwen2.5-0.5B-Instruct --local-dir ./models/Qwen2.5-0.5B-Instruct
 ```
@@ -58,6 +58,7 @@ curl -X POST localhost:6333/api/generate -H 'Content-Type: application/json' \
 | [docs/ROADMAP.md](docs/ROADMAP.md) | direction, milestones, what is out of scope |
 | [docs/SETUP.md](docs/SETUP.md) | contributor setup, tests, benchmarks, PR rules |
 | [docs/decisions/](docs/decisions/) | why the shape is what it is |
+| [apps/sdk/python](apps/sdk/python) | the Python client, `pip install piramid` |
 | [deploy/README.md](deploy/README.md) | images and compose |
 | [AGENTS.md](AGENTS.md) | layout, dependency rule, conventions |
 | [config.example.yaml](config.example.yaml) | every setting at its default |
