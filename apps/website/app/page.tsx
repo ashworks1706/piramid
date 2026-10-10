@@ -23,13 +23,13 @@ export default function Home() {
         <div className="landing-inner">
           <CliLogo />
           <p className="landing-tagline">
-            INFERENCE RUNTIME FOR RETRIEVAL SYSTEMS
+            Memory Native Inference
           </p>
           <p className="landing-copy">
-            Piramid is an inference engine for retrieval systems on one GPU. It
-            holds the documents, the model weights and the KV cache in a single
-            process, so retrieval can run during generation instead of once
-            before it.
+            Piramid is an inference systems project investigating how language models can access and use external information directly during computation.
+          </p>
+          <p className="landing-copy">
+            The long term goal is to move beyond prompt-based retrieval by investigating how external information can be represented, retained, and integrated into transformer computation.
           </p>
           <InstallTabs />
           <section className="example" aria-label="Example">
