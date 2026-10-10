@@ -4,12 +4,11 @@
 
 <h1 align="center">Piramid</h1>
 
-<p align="center"><b>inference runtime for retrieval systems</b></p>
+Piramid is a Rust-based AI inference systems project investigating how language models can access and use external information directly during computation.
 
-Piramid is an inference engine for retrieval-augmented generation on one GPU, written in Rust. One
-process holds the documents, the model weights and the KV cache, so retrieval can run during
-generation instead of once before it. Today `piramid serve` embeds the question, runs an exact
-search over a collection, puts the best passages in the prompt and generates, all in one process.
+It combines low-level systems engineering with research into model-native knowledge integration, including GPU memory management, KV-cache reuse, retrieval-aware execution, and attention-level integration.
+
+The longer-term goal is to move beyond prompt-based retrieval by investigating how external information can be represented, retained, and integrated into transformer computation.
 
 ## Quickstart
 
