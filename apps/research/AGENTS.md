@@ -7,7 +7,8 @@ results.
 
 ## Tools
 
-- `louped mcp`, registered in `.mcp.json`, drives the running app. Start `louped serve` first.
+- `louped mcp`, registered in the repository root's `.mcp.json`, drives the running app. Start
+  `louped serve` first.
   Work started through it shows in the app.
   - To read: `experiments`, `runs`, `run`, `samples`, `figures`, `compare`.
   - To act: `new_experiment`, `launch`, `job`, `submit_job`, `export_job`, `import_result`,
@@ -17,13 +18,14 @@ results.
   - `ui_page`, `set_part`, `set_layout` and `set_preset` change what the app's pages show.
   - The person Shift+clicks any part of a page. `ui_selection` gives you those parts with their
     data, numbered as the app's tray numbers them. Call it when they say "this", "these" or
-    `@sel 2`. In Claude Code, new picks also come with their message (the hook in
-    `.claude/settings.json`).
+    `@sel 2`. In Claude Code, new picks also come with their message (the hook in the
+    repository root's `.claude/settings.json`).
   - `ui_show` points the person at parts, with a note.
   - `cohort` reads a run's conditions on a set of items, with paired intervals. `save_cohort` saves
     them for a run.py's `--cohort`.
-- Skills in `.claude/skills/`: `new-experiment`, `read-results`, `run-elsewhere`, `write-report`,
-  `ground-claims`, `add-plugin`, `change-ui`.
+- Skills in the repository root's `.claude/skills/`, with paths relative to this folder:
+  `new-experiment`, `read-results`, `run-elsewhere`, `write-report`, `ground-claims`, `add-plugin`,
+  `change-ui`.
 - The CLI does the same steps: `louped new`, `louped push`, `louped pull`, `louped --help`.
 - Never ask for a Hugging Face token in chat. If push or pull says one is missing, ask the person
   to press Connect on Runs or to run `louped push` in a terminal. Both ask for the token and keep

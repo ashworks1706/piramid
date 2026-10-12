@@ -37,5 +37,18 @@
       "Read(.env)",
       "Read(.env.*)"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v louped >/dev/null && louped picks --hook || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }
