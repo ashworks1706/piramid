@@ -169,6 +169,12 @@ web-shots:
       echo "  $out/$name.png"
     done
 
+# ---------- research ----------
+
+# The louped app over apps/research, http://127.0.0.1:8000. Needs pip install louped.
+research:
+    cd apps/research && louped serve
+
 # ---------- cleanup ----------
 
 clean:

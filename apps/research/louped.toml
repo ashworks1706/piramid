@@ -1,0 +1,38 @@
+# A louped research project. This file marks the project's root: louped commands run from any
+# folder under it read experiments/ here and keep their state in .louped/ here.
+
+# Where `louped push` and `louped pull` share runs. Runs → Connect, or a first `louped push`,
+# sets it up: a private Hugging Face bucket of your own unless you name another (a folder here,
+# or s3://... for R2).
+# remote = "hf://buckets/<user>/<name>"
+
+# The domains an experiment's README can name, each on an axis (behavior, efficiency or checks),
+# in the order the Experiments page shows them. Without this table a project has louped's own:
+# mechanisms, honesty, conditioning, agents (behavior); context, inference, specialisation
+# (efficiency); reproduction (checks). This project lists its own.
+
+[domains.fusion]
+axis = "efficiency"
+title = "Retrieved documents inside the forward pass"
+
+[domains.cost]
+axis = "efficiency"
+title = "Latency and memory on one GPU"
+
+[domains.grounding]
+axis = "behavior"
+title = "Answer quality and grounding"
+
+[domains.reproduction]
+axis = "checks"
+title = "Reproducing known results"
+
+# The app's look: token values over its defaults. radius for both modes; colours (the names in
+# the docs' Customize page: border, muted-foreground, ...) under [theme.light] and [theme.dark].
+# What each page shows is layout.json, which your agent edits (the change-ui skill).
+#
+# [theme]
+# radius = "0.25rem"
+#
+# [theme.dark]
+# border = "oklch(1 0 0 / 15%)"

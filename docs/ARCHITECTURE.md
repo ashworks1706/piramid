@@ -39,6 +39,7 @@ apps/                     everything we author
                           bundle and the piramid umbrella re-exports
   website/                piramiddb.com and its docs, built from content/ alone
   sdk/                    npm and python clients
+  research/               the louped research project, outside the workspace and the gate
 
 docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
 ```

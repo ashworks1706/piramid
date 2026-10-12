@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [{ "type": "command", "command": "louped picks --hook", "timeout": 10 }]
+      }
+    ]
+  }
+}
