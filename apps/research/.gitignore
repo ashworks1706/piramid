@@ -1,2 +1,10 @@
-# louped's state: runs, eval logs, jobs, vendored harnesses. Rebuilt from experiments/ by running them.
-.louped/
+# louped's state is committed: runs, eval logs, jobs and the tracking database.
+# Weights, caches, previews, the trash and this machine's hosts stay out.
+.louped/models/
+.louped/adapters/
+.louped/remote-cache/
+.louped/staging/
+.louped/previews/
+.louped/serve/
+.louped/trash/
+.louped/hosts.json
