@@ -37,6 +37,7 @@ just audit              cargo-deny: advisories, bans, licences, sources
 just web                dev server for the site on :3000
 just web-preview        build and serve what actually deploys
 just web-shots          headless screenshots into target/screenshots
+just research           louped serve over apps/research on :8000 (needs pip install louped)
 ```
 
 A change isn't done until `just check` passes. CI and the pre-commit hook run the same recipes, so
@@ -75,6 +76,7 @@ apps/engine/serving         http (axum only, handlers and routes, /api and OpenA
 apps/cli                    the piramid binary and the umbrella piramid facade crate
 apps/website                piramiddb.com; /docs is Fumadocs over content/docs/*.mdx
 apps/sdk                    npm and python clients
+apps/research               the louped research project: experiments that measure the engine
 docs/                       ARCHITECTURE.md, ROADMAP.md, SETUP.md, decisions/
 ```
 
