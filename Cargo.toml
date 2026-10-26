@@ -74,15 +74,15 @@ rand = "0.10.2"
 # device and model runtimes, each confined to its backend module
 candle-core = "0.11"
 candle-nn = "0.11"
-minijinja = { version = "2", features = ["json", "loop_controls"] }
-minijinja-contrib = { version = "2", features = ["pycompat"] }
+minijinja = { version = "3", features = ["json", "loop_controls"] }
+minijinja-contrib = { version = "3", features = ["pycompat"] }
 tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
 cudarc = { version = "0.19.8", default-features = false, features = ["std", "driver", "nvrtc", "cuda-version-from-build-system", "dynamic-linking"] }
 nvml-wrapper = "0.13"
 
 # storage + concurrency
 memmap2 = "0.9.11"
-lru = "0.18.2"
+lru = "0.19.0"
 dashmap = "6.0"
 parking_lot = "0.12"
 libc = "0.2"
