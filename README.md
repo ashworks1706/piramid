@@ -10,6 +10,8 @@ It combines low-level systems engineering with research into model-native knowle
 
 The longer-term goal is to move beyond prompt-based retrieval by investigating how external information can be represented, retained, and integrated into transformer computation.
 
+Research direction: under a fixed memory and compute budget, which information should a model retain or retrieve to perform future tasks accurately? This is an open hypothesis, not a shipped feature. The [research plan](docs/ROADMAP.md#exploratory-research-learned-memory) defines controls and measurements; the existing retrieval and inference runtime remains the baseline.
+
 ## Quickstart
 
 ```bash
