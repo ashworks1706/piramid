@@ -15,6 +15,19 @@ Chunked cross-attention, residual-stream gating and learned routing are all impl
 Retrieval-before-prefill is the control every arm is measured against, and each result is
 published whichever way it goes.
 
+## Exploratory research: learned memory
+
+Question: at a fixed memory and inference-compute budget, can a learned policy for retaining, updating, or retrieving information improve downstream task accuracy over existing retrieval policies?
+
+- **Control:** retrieval-before-prefill and the current retrieval-during-generation design when it is implemented. Use identical model weights, information sources, evaluation tasks, and memory/token budgets.
+- **Baselines:** no external memory, recency or heuristic selection, and standard embedding retrieval. Only compare a learned selector after these controls are measured.
+- **Hypothesis to test:** learned memory selection preserves task-relevant evidence more effectively than heuristic selection at the same storage and compute budgets.
+- **Measures:** held-out answer accuracy and evidence faithfulness; retained bytes/tokens; retrieval and generation latency; GPU memory; compute and cost per request.
+- **Failure criteria:** no reliable quality gain at matched resources, performance limited to seen task templates, or overhead that erases the benefit.
+- **Scope:** a small offline experiment first; no new serving API, runtime dependency, or claim of continual learning or world-model capability until supported by results.
+
+This is research alongside the inference roadmap, not a replacement for its v0.3–v0.7 milestones.
+
 ## v0.3.0: a retrieval path worth measuring
 
 - [ ] migrate to new nvidia's native cuda rust library, write kernels directly in rust
