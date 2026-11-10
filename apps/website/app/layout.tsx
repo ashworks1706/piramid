@@ -12,12 +12,13 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: {
     template: "%s | Piramid",
-    default: "Piramid – inference runtime for retrieval systems",
+    default: "Piramid – inference runtime and vector database",
   },
   description:
-    "Piramid is an inference engine for RAG on one GPU, written in Rust. Documents, model weights and the KV cache live in one process, so retrieval runs in the same process as generation. It stores and searches your documents with exact search and metadata filters, and serves generation over HTTP with piramid serve.",
+    "Piramid is an experimental LLM inference runtime and vector database written in Rust. Execute supported checkpoints, manage generation and KV state, and store and search durable document collections with metadata filters.",
   keywords: [
-    "inference engine",
+    "inference runtime",
+    "vector database",
     "RAG",
     "retrieval-augmented generation",
     "rust",
@@ -44,9 +45,9 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://piramiddb.com",
-    title: "Piramid – inference runtime for retrieval systems",
+    title: "Piramid – inference runtime and vector database",
     description:
-      "An inference engine for RAG on one GPU, in Rust, with retrieval in the same process as generation.",
+      "An experimental LLM inference runtime and vector database written in Rust.",
     siteName: "Piramid",
     images: [
       {
@@ -59,9 +60,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Piramid – inference runtime for retrieval systems",
+    title: "Piramid – inference runtime and vector database",
     description:
-      "An inference engine for RAG on one GPU, in Rust, with retrieval in the same process as generation.",
+      "An experimental LLM inference runtime and vector database written in Rust.",
     images: ["/logo_dark.png"],
     creator: "@piramiddb",
   },
@@ -87,3 +88,4 @@ export default function RootLayout({
     </html>
   );
 }
+

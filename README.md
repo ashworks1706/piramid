@@ -4,13 +4,26 @@
 
 <h1 align="center">Piramid</h1>
 
-Piramid is a Rust-based AI inference systems project investigating how language models can access and use external information directly during computation.
+Piramid is an experimental LLM inference runtime and vector database written in Rust.
 
-It combines low-level systems engineering with research into model-native knowledge integration, including GPU memory management, KV-cache reuse, retrieval-aware execution, and attention-level integration.
+The runtime executes supported language-model checkpoints, manages generation and the KV cache,
+and serves requests over HTTP. The database stores documents, embeddings, and metadata in durable
+collections with exact vector search and metadata filtering. Collections remain searchable with
+no generation model loaded.
 
-The longer-term goal is to move beyond prompt-based retrieval by investigating how external information can be represented, retained, and integrated into transformer computation.
+## Status and direction
 
-Research direction: under a fixed memory and compute budget, which information should a model retain or retrieve to perform future tasks accurately? This is an open hypothesis, not a shipped feature. The [research plan](docs/ROADMAP.md#exploratory-research-learned-memory) defines controls and measurements; the existing retrieval and inference runtime remains the baseline.
+- **Implemented:** persistent collections, exact vector search on CPU or CUDA, embedding providers,
+  and generation with supported Qwen2 and Qwen3 checkpoints through Candle.
+- **Systems work:** profiling, GPU memory use, KV-cache management, batching, scheduling, and
+  execution overhead, measured on stated workloads.
+- **Experimental direction:** retrieving and integrating information during generation. The
+  forward-pass hook exists, but its current implementation is a no-op; retrieval for generation
+  currently happens before prefill. See [the roadmap](docs/ROADMAP.md).
+
+Piramid runs existing compatible checkpoints. It does not require a project-specific model.
+Support for another architecture belongs in an execution backend; model training is only relevant
+to an experiment when the mechanism being tested requires it.
 
 ## Quickstart
 
@@ -74,3 +87,4 @@ just cli         # the console, plus a units view over the repo
 ## License
 
 Proprietary. All rights reserved; see [LICENSE](LICENSE).
+

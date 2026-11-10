@@ -5,17 +5,21 @@ and what has to stay true.
 
 ## What the shape is for
 
-Piramid is an inference engine for retrieval systems. One process holds the documents,
-the model weights and the KV cache on one device. The KV cache is the per-token attention keys and
-values a model keeps so it does not recompute earlier tokens. Keeping all three together is meant to
-let retrieval run during generation, not only once before it.
+Piramid combines an inference runtime and a vector database in one process. The database owns
+durable document collections, exact vector search, and metadata filters. The runtime owns model
+execution, KV-cache state, scheduling, and generation. The database works without a generation
+model loaded, and the model crate does not depend on the database crate.
+
+One experimental direction is to let retrieval run during generation, rather than only before it.
+That direction motivates the existing forward-pass hook; it does not require a project-specific
+model or replace the independent runtime and database responsibilities.
 
 Generation has two phases. Prefill runs the prompt through the model and fills the KV cache for
 every prompt token. Decode then produces one new token per step, reading the cache. Retrieval before
 prefill needs no special structure: search, put the passages in the prompt, generate. Retrieval
 during decode runs many times per sequence, is meant to overlap model compute, and reads and writes
-state that lives on the device. A network hop and a host copy on every one of those calls would cost
-more than the retrieval itself, which is why everything runs in one process.
+state that lives on the device. Keeping those operations in one process is intended to reduce communication and copying.
+Whether that improves end-to-end performance must be measured on the target workload.
 
 Today the engine retrieves before prefill. The seam for retrieval inside the forward pass is wired
 into the driver and called at every point it defines, but the only hook is one that does nothing.
@@ -39,7 +43,6 @@ apps/                     everything we author
                           bundle and the piramid umbrella re-exports
   website/                piramiddb.com and its docs, built from content/ alone
   sdk/                    npm and python clients
-  research/               the louped research project, outside the workspace and the gate
 
 docs/  scripts/  .claude/  .github/     how it is built, shipped and explained
 ```
@@ -714,3 +717,4 @@ generation arrive as a `Failed` event and are rendered inside the stream.
 
 If a change touches three or more crates, start at the service boundary and make the data flow
 explicit before writing anything.
+

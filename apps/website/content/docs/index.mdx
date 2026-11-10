@@ -3,6 +3,9 @@ title: Install
 description: Install piramid from a binary or cargo, fetch a model and start the server.
 ---
 
+Piramid is an experimental LLM inference runtime and vector database. Collections store documents,
+embeddings, and metadata, and can be searched without a generation model loaded.
+
 This covers running `piramid serve`, configuring it, and the HTTP API. `config.example.yaml`, attached
 to each release, lists every setting at its default.
 
@@ -62,3 +65,4 @@ piramid serve --config piramid.yaml
 
 The server listens on `127.0.0.1:6333`. [Configuration](/docs/configuration) covers GPU settings
 and every other block; [HTTP API](/docs/http-api) and [Python client](/docs/python) show how to use it.
+

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { CliLogo } from "../components/CliLogo";
 import { InstallTabs } from "../components/InstallTabs";
 import { SiteNav } from "../components/SiteNav";
@@ -23,13 +22,13 @@ export default function Home() {
         <div className="landing-inner">
           <CliLogo />
           <p className="landing-tagline">
-            Memory Native Inference
+            Inference runtime + vector database
           </p>
           <p className="landing-copy">
-            Piramid is an inference systems project investigating how language models can access and use external information directly during computation.
+            An experimental LLM inference runtime and vector database written in Rust. Execute supported models, store documents and embeddings, and search durable collections.
           </p>
           <p className="landing-copy">
-            The long term goal is to move beyond prompt-based retrieval by investigating how external information can be represented, retained, and integrated into transformer computation.
+            Systems work focuses on model execution, GPU memory, KV-cache management, and scheduling. Retrieval during generation is an experimental direction.
           </p>
           <InstallTabs />
           <section className="example" aria-label="Example">
@@ -38,10 +37,11 @@ export default function Home() {
             </pre>
           </section>
           <p className="landing-status">
-            In active research. Results and write-ups will be published here.
+            In development. Generation currently retrieves before prefill; integration during generation is planned.
           </p>
         </div>
       </main>
     </>
   );
 }
+

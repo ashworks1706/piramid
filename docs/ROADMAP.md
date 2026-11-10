@@ -2,31 +2,30 @@
 
 ## Direction
 
-Retrieval before the prompt is one service call and needs no shared process. Retrieval inside a
-generation runs many times, alongside the model's computation, against state that stays on the
-device, and that does. Two things follow if it works. Grounding: a model whose attention reaches
-the documents at every step conditions on the evidence rather than a paraphrase of it, and each
-answer can be traced to what was retrieved. Context length: documents reached through the hook
-never become prompt tokens, so what the model can draw on is bounded by device memory, not the
-context window.
+Piramid is an inference runtime and vector database. The runtime owns model execution,
+KV-cache management, scheduling, and serving. The database owns durable collections, document
+lifecycle, exact vector search, and metadata filtering. Each remains useful independently.
 
-`model::fusion::RetrievalHook` fixes where retrieval enters the model, not how it is combined.
-Chunked cross-attention, residual-stream gating and learned routing are all implementations of it.
-Retrieval-before-prefill is the control every arm is measured against, and each result is
-published whichever way it goes.
+Work starts from a measured bottleneck. Report latency, throughput, peak memory, and resource cost
+on a fixed workload; include output quality and retrieval quality when a change can affect them.
+Use supported existing checkpoints as the baseline. A custom model is not a dependency of the
+runtime roadmap.
 
-## Exploratory research: learned memory
+## Retrieval during generation: an experiment
 
-Question: at a fixed memory and inference-compute budget, can a learned policy for retaining, updating, or retrieving information improve downstream task accuracy over existing retrieval policies?
+Today generation retrieves passages before prefill. A forward-pass hook exists, but its current
+implementation is a no-op. Retrieving during generation is planned work, not a shipped capability.
 
-- **Control:** retrieval-before-prefill and the current retrieval-during-generation design when it is implemented. Use identical model weights, information sources, evaluation tasks, and memory/token budgets.
-- **Baselines:** no external memory, recency or heuristic selection, and standard embedding retrieval. Only compare a learned selector after these controls are measured.
-- **Hypothesis to test:** learned memory selection preserves task-relevant evidence more effectively than heuristic selection at the same storage and compute budgets.
-- **Measures:** held-out answer accuracy and evidence faithfulness; retained bytes/tokens; retrieval and generation latency; GPU memory; compute and cost per request.
-- **Failure criteria:** no reliable quality gain at matched resources, performance limited to seen task templates, or overhead that erases the benefit.
-- **Scope:** a small offline experiment first; no new serving API, runtime dependency, or claim of continual learning or world-model capability until supported by results.
+The experiment asks whether keeping retrieval and generation in one process, with shared access
+to device resources, can improve quality or resource use over retrieval before prefill. The
+RetrievalHook seam permits alternative integration mechanisms without selecting one in advance.
 
-This is research alongside the inference roadmap, not a replacement for its v0.3–v0.7 milestones.
+Compare with retrieval-before-prefill using the same checkpoint, corpus, tasks, and stated token,
+memory, and compute budgets. Report retrieval overhead, generation performance, and answer quality.
+Reject a mechanism if overhead erases its benefit or quality does not hold. Publish negative results.
+
+Model modifications or targeted training are optional parts of a specific integration experiment.
+General model architecture and pretraining research are outside the runtime roadmap.
 
 ## v0.3.0: a retrieval path worth measuring
 
@@ -113,4 +112,5 @@ Retrieval and generation in one process, with unmodified models. Also the baseli
 - approximate nearest neighbour index families such as HNSW and IVF
 - multi-node clustering and routing
 - near-duplicate search and range search
-- general vector database features that do not serve retrieval for generation
+- vector database features beyond the current durable-collection and exact-search scope
+

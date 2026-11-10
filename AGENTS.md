@@ -1,9 +1,13 @@
 # Piramid: agent guide
 
-An inference engine for retrieval systems on one GPU, in Rust, used mainly through
-`piramid serve`: one process holding documents, model weights and the KV cache on one device, so
-retrieval can run during generation rather than once before it. The documents live in collections
-searched by an exact scan.
+An experimental LLM inference runtime and vector database in Rust. The runtime executes
+supported checkpoints and manages generation, KV state, scheduling, and serving. The database
+stores documents and embeddings in durable collections with exact vector search and metadata
+filters, and stays queryable without a generation model.
+
+Retrieval during generation is an experiment: the forward-pass seam exists, but the current
+hook is a no-op. Do not describe planned integration as shipped or require a custom trained model
+to make progress on the runtime.
 
 Read `docs/ARCHITECTURE.md` for crate boundaries and invariants, `docs/ROADMAP.md` for what we're
 building and in what order. Don't contradict either; propose an edit to the doc instead. Keep both
@@ -37,7 +41,6 @@ just audit              cargo-deny: advisories, bans, licences, sources
 just web                dev server for the site on :3000
 just web-preview        build and serve what actually deploys
 just web-shots          headless screenshots into target/screenshots
-just research           louped serve over apps/research on :8000 (needs pip install louped)
 ```
 
 A change isn't done until `just check` passes. CI and the pre-commit hook run the same recipes, so
@@ -76,7 +79,6 @@ apps/engine/serving         http (axum only, handlers and routes, /api and OpenA
 apps/cli                    the piramid binary and the umbrella piramid facade crate
 apps/website                piramiddb.com; /docs is Fumadocs over content/docs/*.mdx
 apps/sdk                    npm and python clients
-apps/research               the louped research project: experiments that measure the engine
 docs/                       ARCHITECTURE.md, ROADMAP.md, SETUP.md, decisions/
 ```
 
@@ -192,5 +194,6 @@ decision. `/check` is the gate.
 ## Out of scope
 
 See the same section in `docs/ROADMAP.md`: approximate nearest neighbour indexes, clustering,
-near-duplicate and range search, and other vector database features that do not serve retrieval
-for generation. Don't build toward those without an explicit decision.
+near-duplicate and range search, and vector database features beyond the current durable-collection
+and exact-search scope. Don't build toward those without an explicit decision.
+
