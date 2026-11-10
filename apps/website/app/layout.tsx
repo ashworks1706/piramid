@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
+import { DESCRIPTION, TAGLINE } from "../lib/site";
 import "./globals.css";
 
 // Self-hosted by next/font.
@@ -12,10 +13,9 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: {
     template: "%s | Piramid",
-    default: "Piramid – inference runtime and vector database",
+    default: `Piramid – ${TAGLINE}`,
   },
-  description:
-    "Piramid is an experimental LLM inference runtime and vector database written in Rust. Execute supported checkpoints, manage generation and KV state, and store and search durable document collections with metadata filters.",
+  description: DESCRIPTION,
   keywords: [
     "inference runtime",
     "vector database",
@@ -45,9 +45,8 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "https://piramiddb.com",
-    title: "Piramid – inference runtime and vector database",
-    description:
-      "An experimental LLM inference runtime and vector database written in Rust.",
+    title: `Piramid – ${TAGLINE}`,
+    description: DESCRIPTION,
     siteName: "Piramid",
     images: [
       {
@@ -60,9 +59,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Piramid – inference runtime and vector database",
-    description:
-      "An experimental LLM inference runtime and vector database written in Rust.",
+    title: `Piramid – ${TAGLINE}`,
+    description: DESCRIPTION,
     images: ["/logo_dark.png"],
     creator: "@piramiddb",
   },

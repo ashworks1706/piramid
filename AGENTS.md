@@ -1,6 +1,7 @@
 # Piramid: agent guide
 
-An experimental LLM inference runtime and vector database in Rust. The runtime executes
+A memory-efficient inference engine in Rust, combining an LLM runtime and a vector database.
+The tagline is: Make every byte count. The runtime executes
 supported checkpoints and manages generation, KV state, scheduling, and serving. The database
 stores documents and embeddings in durable collections with exact vector search and metadata
 filters, and stays queryable without a generation model.

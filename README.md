@@ -4,7 +4,11 @@
 
 <h1 align="center">Piramid</h1>
 
-Piramid is an experimental LLM inference runtime and vector database written in Rust.
+**Make every byte count.**
+
+A memory-efficient inference engine.
+
+Piramid is written in Rust and combines an LLM inference runtime with a vector database.
 
 The runtime executes supported language-model checkpoints, manages generation and the KV cache,
 and serves requests over HTTP. The database stores documents, embeddings, and metadata in durable

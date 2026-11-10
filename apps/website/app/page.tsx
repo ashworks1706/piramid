@@ -1,6 +1,7 @@
 import { CliLogo } from "../components/CliLogo";
 import { InstallTabs } from "../components/InstallTabs";
 import { SiteNav } from "../components/SiteNav";
+import { DESCRIPTION, TAGLINE } from "../lib/site";
 
 const EXAMPLE = `from piramid import Piramid
 
@@ -22,13 +23,13 @@ export default function Home() {
         <div className="landing-inner">
           <CliLogo />
           <p className="landing-tagline">
-            Inference runtime + vector database
+            {TAGLINE}
           </p>
           <p className="landing-copy">
-            An experimental LLM inference runtime and vector database written in Rust. Execute supported models, store documents and embeddings, and search durable collections.
+            {DESCRIPTION}
           </p>
           <p className="landing-copy">
-            Systems work focuses on model execution, GPU memory, KV-cache management, and scheduling. Retrieval during generation is an experimental direction.
+            Written in Rust, Piramid combines model execution, GPU memory and KV-cache management with durable vector storage and search.
           </p>
           <InstallTabs />
           <section className="example" aria-label="Example">
