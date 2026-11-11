@@ -4,10 +4,6 @@
 
 <h1 align="center">Piramid</h1>
 
-**Make every byte count.**
-
-A memory-efficient inference engine.
-
 Piramid is written in Rust and combines an LLM inference runtime with a vector database.
 
 The runtime executes supported language-model checkpoints, manages generation and the KV cache,
