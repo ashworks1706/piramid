@@ -76,3 +76,6 @@ config.local.yaml
 
 # local environment
 .env
+
+# Local research workspace (louped): experiments, notes and runs about Piramid. Kept out of the repo.
+research/
